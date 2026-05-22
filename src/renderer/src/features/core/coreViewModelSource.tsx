@@ -410,11 +410,13 @@ function usePreloadCoreSource(): CoreViewModelSource {
       const result = await window.hcb.settings.update(request);
 
       if (result.ok) {
+        const nativeResult = await window.hcb.native.capabilities();
         setLoadState((current) => ({
           ...current,
           snapshot: {
             ...current.snapshot,
-            settings: result.data
+            settings: result.data,
+            ...(nativeResult.ok ? { native: nativeResult.data } : {})
           }
         }));
         setSettingsMutation({ pending: false });
@@ -1186,7 +1188,11 @@ function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[
       detail: "Google account connection state",
       rows: [
         { id: "state", label: "State", value: account?.state ?? "signed_out" },
-        { id: "account", label: "Account", value: account?.email ?? "Not connected" },
+        {
+          id: "account",
+          label: "Account",
+          value: account?.state === "connected" ? "Connected account" : "Not connected"
+        },
         {
           id: "scopes",
           label: "Missing scopes",

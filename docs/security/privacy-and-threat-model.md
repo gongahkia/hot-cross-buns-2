@@ -143,7 +143,7 @@ Controls:
 - No sharing local notes with Google or MCP clients unless explicitly requested by the user/tool.
 - MCP is opt-in and local-only.
 
-Diagnostics and performance reports expose counts, timings, status states, query-plan summaries, and redaction guarantees. They do not include raw Google payloads, OAuth credentials, MCP bearer tokens, local note bodies, task notes, calendar descriptions, guest lists, or full mutation payloads.
+Diagnostics and performance reports expose counts, timings, status states, query-plan summaries, and redaction guarantees. They do not include raw Google payloads, OAuth credentials, MCP bearer tokens, local note bodies, task notes, calendar descriptions, guest lists, or full mutation payloads. Copyable diagnostics also omit account identifiers, account email/display names, and task-list/calendar identifiers or titles; selected-resource rows use stable placeholders only. If the user disables performance diagnostics, copied summaries and the diagnostics performance endpoint omit timing samples.
 
 ## Required Security Tests
 

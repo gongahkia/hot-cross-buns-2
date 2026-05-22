@@ -1,7 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SearchResultItem, TaskDetail } from "@shared/ipc/contracts";
+import type {
+  NativeCapabilitiesResponse,
+  SearchResultItem,
+  SettingsSnapshot,
+  TaskDetail
+} from "@shared/ipc/contracts";
 import type { HcbApi } from "@shared/ipc/preloadApi";
 import { err, ok } from "@shared/ipc/result";
 import App from "./App";
@@ -41,6 +46,72 @@ function installHcb(api: HcbApi | undefined): void {
     configurable: true,
     value: api
   });
+}
+
+function testSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
+  return {
+    theme: "system",
+    startOnLogin: false,
+    selectedTaskListIds: [],
+    selectedCalendarIds: [],
+    syncMode: "balanced",
+    quickCaptureShortcut: null,
+    showTrayIcon: true,
+    trayClickAction: "toggle-window",
+    notificationsEnabled: false,
+    notificationLeadMinutes: 10,
+    mcpEnabled: false,
+    mcpPermissionMode: "confirm-writes",
+    mcpPort: 0,
+    diagnosticsIncludePerformance: true,
+    ...overrides
+  };
+}
+
+function testNativeCapabilities(
+  overrides: Partial<NativeCapabilitiesResponse> = {}
+): NativeCapabilitiesResponse {
+  return {
+    platform: "darwin",
+    notifications: true,
+    globalShortcuts: true,
+    tray: true,
+    deepLinks: true,
+    trayStatus: {
+      state: "ready",
+      message: "Menu bar item is ready."
+    },
+    quickCaptureShortcut: {
+      accelerator: "Ctrl+Space",
+      registered: true,
+      state: "ready",
+      message: "Quick capture shortcut is registered."
+    },
+    notificationsStatus: {
+      permission: "prompt",
+      scheduledCount: 0,
+      state: "disabled",
+      message: "Local notifications are disabled in Settings."
+    },
+    deepLinkStatus: {
+      scheme: "hotcrossbuns",
+      registered: true,
+      state: "ready",
+      message: "Protocol handler is registered."
+    },
+    updaterStatus: {
+      state: "unsupported",
+      message: "Preview update checks are not configured."
+    },
+    mcpStatus: {
+      state: "disabled",
+      message: "MCP local agent access is disabled."
+    },
+    deferredStartup: {
+      state: "complete"
+    },
+    ...overrides
+  };
 }
 
 function seededTaskDetail(id: string, overrides: Partial<TaskDetail> = {}): TaskDetail {
@@ -804,6 +875,41 @@ describe("App shell", () => {
     await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
     expect(screen.getByRole("button", { name: /Copy diagnostics/ })).toBeInTheDocument();
     expect(screen.getByText("Credentials")).toBeInTheDocument();
+  });
+
+  it("refreshes native status after settings changes", async () => {
+    const api = seededHcb();
+    api.settings.get = vi.fn(async () => ok(testSettings({ showTrayIcon: true })));
+    api.settings.update = vi.fn(async (request) =>
+      ok(testSettings({ showTrayIcon: request.showTrayIcon ?? true }))
+    );
+    api.native.capabilities = vi
+      .fn()
+      .mockResolvedValueOnce(ok(testNativeCapabilities()))
+      .mockResolvedValueOnce(
+        ok(
+          testNativeCapabilities({
+            trayStatus: {
+              state: "disabled",
+              message: "Menu bar icon is disabled in Settings."
+            }
+          })
+        )
+      );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
+    await user.click(within(settingsSupport).getByRole("button", { name: /Tray/ }));
+    await user.click(screen.getByLabelText("Show menu bar icon"));
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ showTrayIcon: false });
+      expect(api.native.capabilities).toHaveBeenCalledTimes(2);
+      expect(within(settingsSupport).getByRole("button", { name: /Tray Disabled/ })).toBeInTheDocument();
+    });
   });
 
   it("requires confirmation before destructive local data recovery actions", async () => {

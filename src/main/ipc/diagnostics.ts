@@ -7,6 +7,7 @@ import {
   type DiagnosticsPerformanceRequest,
   type LocalPerformanceTiming
 } from "@shared/ipc/contracts";
+import { DIAGNOSTIC_OMITTED_VALUE } from "@shared/redaction";
 import { getStartupTimings, markStartupTiming } from "../startupTiming";
 import type { ServiceContainer } from "../services/serviceContainer";
 import type { IpcHandlerDefinition, IpcMetricsRecorder } from "./registry";
@@ -78,9 +79,16 @@ export function createDiagnosticsIpcHandlers(
     },
     {
       contract: ipcContracts.diagnostics.performance,
-      handle: (request) => ({
-        timings: [...(performanceTimings?.listRecent((request as DiagnosticsPerformanceRequest).limit ?? 50) ?? [])]
-      })
+      handle: async (request) => {
+        const includePerformance =
+          (await services?.domain.settings.get())?.diagnosticsIncludePerformance ?? true;
+
+        return {
+          timings: includePerformance
+            ? [...(performanceTimings?.listRecent((request as DiagnosticsPerformanceRequest).limit ?? 50) ?? [])]
+            : []
+        };
+      }
     },
     {
       contract: ipcContracts.diagnostics.summary,
@@ -191,6 +199,7 @@ async function diagnosticsSummary(
   const pendingMutations = services.localData.syncRepository.pendingMutationDiagnostics();
   const selectedResources = services.localData.syncRepository.selectedResourceDiagnostics(settings);
   const mcpRequestCounts = zeroMcpRequestCounts();
+  const includePerformance = settings.diagnosticsIncludePerformance;
 
   return {
     status: "ok",
@@ -198,9 +207,6 @@ async function diagnosticsSummary(
     account: account
       ? {
           state: account.connectionState,
-          accountId: account.accountId,
-          ...(account.email === undefined ? {} : { email: account.email }),
-          ...(account.displayName === undefined ? {} : { displayName: account.displayName }),
           grantedScopeCount: account.grantedScopes.length,
           missingScopeCount: account.missingScopes.length,
           ...(account.lastAuthenticatedAt === undefined
@@ -222,7 +228,7 @@ async function diagnosticsSummary(
       migrationVersion: services.localData.migrations.version,
       migrationDurationMs: services.localData.migrations.durationMs
     },
-    selectedResources,
+    selectedResources: sanitizeSelectedResources(selectedResources),
     checkpoints,
     pendingMutations,
     mcp: {
@@ -240,10 +246,12 @@ async function diagnosticsSummary(
     },
     build,
     performance: {
-      startup,
-      migrationDurationMs: services.localData.migrations.durationMs,
-      ...(syncStatus.lastDurationMs === undefined ? {} : { lastSyncDurationMs: syncStatus.lastDurationMs }),
-      slowQuerySamples: performanceTimings?.listSlowSqliteQueries?.(10) ?? [],
+      startup: includePerformance ? startup : {},
+      migrationDurationMs: includePerformance ? services.localData.migrations.durationMs : 0,
+      ...(includePerformance && syncStatus.lastDurationMs !== undefined
+        ? { lastSyncDurationMs: syncStatus.lastDurationMs }
+        : {}),
+      slowQuerySamples: includePerformance ? performanceTimings?.listSlowSqliteQueries?.(10) ?? [] : [],
       pendingMutationCounts: {
         totalCount: pendingMutations.totalCount,
         failedCount: pendingMutations.failedCount
@@ -251,6 +259,23 @@ async function diagnosticsSummary(
       mcpRequestCounts
     },
     redaction: redactionGuarantees()
+  };
+}
+
+function sanitizeSelectedResources(
+  selectedResources: DiagnosticsSummaryResponse["selectedResources"]
+): DiagnosticsSummaryResponse["selectedResources"] {
+  return {
+    taskLists: selectedResources.taskLists.map((resource, index) => ({
+      id: `task-list-${index + 1}`,
+      title: DIAGNOSTIC_OMITTED_VALUE,
+      selected: resource.selected
+    })),
+    calendars: selectedResources.calendars.map((resource, index) => ({
+      id: `calendar-${index + 1}`,
+      title: DIAGNOSTIC_OMITTED_VALUE,
+      selected: resource.selected
+    }))
   };
 }
 

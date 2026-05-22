@@ -1,3 +1,4 @@
+import { nativeActionSchema } from "@shared/ipc/contracts";
 import type {
   NativeAction,
   NativeCapabilitiesResponse,
@@ -5,6 +6,7 @@ import type {
   NativeNotificationPermissionResponse,
   SettingsSnapshot
 } from "@shared/ipc/contracts";
+import { redactDiagnosticText } from "@shared/redaction";
 import type { NativeDomainService } from "../services/domainInterfaces";
 import {
   HCB_DEEP_LINK_SCHEME,
@@ -544,34 +546,59 @@ export function parseHotCrossBunsDeepLink(rawUrl: string): NativeAction | null {
   }
 
   const host = parsed.hostname.toLowerCase();
-  const id = decodeURIComponent(parsed.pathname.replace(/^\/+/, "")).trim();
+  const decodedId = safeDecodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+  const id = decodedId?.trim() ?? null;
   const query = parsed.searchParams.get("q")?.trim();
 
+  if (id === null) {
+    return null;
+  }
+
   if (host === "today" || host === "") {
-    return { type: "openRoute", route: { kind: "today" } };
+    return safeNativeAction({ type: "openRoute", route: { kind: "today" } });
   }
 
   if (host === "settings") {
-    return { type: "openSettings" };
+    return safeNativeAction({ type: "openSettings" });
   }
 
   if (host === "search") {
-    return query ? { type: "openRoute", route: { kind: "search", query } } : null;
+    return query ? safeNativeAction({ type: "openRoute", route: { kind: "search", query } }) : null;
   }
 
   if (host === "task" || host === "tasks") {
-    return id ? { type: "openRoute", route: { kind: "task", id } } : { type: "openRoute", route: { kind: "tasks" } };
+    return id
+      ? safeNativeAction({ type: "openRoute", route: { kind: "task", id } })
+      : safeNativeAction({ type: "openRoute", route: { kind: "tasks" } });
   }
 
   if (host === "event" || host === "calendar") {
-    return id ? { type: "openRoute", route: { kind: "event", id } } : { type: "openRoute", route: { kind: "calendar" } };
+    return id
+      ? safeNativeAction({ type: "openRoute", route: { kind: "event", id } })
+      : safeNativeAction({ type: "openRoute", route: { kind: "calendar" } });
   }
 
   if (host === "note" || host === "notes") {
-    return id ? { type: "openRoute", route: { kind: "note", id } } : { type: "openRoute", route: { kind: "notes" } };
+    return id
+      ? safeNativeAction({ type: "openRoute", route: { kind: "note", id } })
+      : safeNativeAction({ type: "openRoute", route: { kind: "notes" } });
   }
 
   return null;
+}
+
+function safeNativeAction(action: NativeAction): NativeAction | null {
+  const parsed = nativeActionSchema.safeParse(action);
+
+  return parsed.success ? parsed.data : null;
+}
+
+function safeDecodeURIComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 function initialStatus(
@@ -649,7 +676,9 @@ function statusFromResult(
 ) {
   return {
     state: result.ok ? successState : result.state ?? "error",
-    message: result.message ?? (result.ok ? successMessage : "Native adapter operation failed.")
+    message: sanitizedNativeMessage(
+      result.message ?? (result.ok ? successMessage : "Native adapter operation failed.")
+    )
   };
 }
 
@@ -660,7 +689,13 @@ function dateFromIso(value: string): Date | null {
 }
 
 function messageFromError(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() ? error.message.slice(0, 500) : fallback;
+  return sanitizedNativeMessage(
+    error instanceof Error && error.message.trim() ? error.message : fallback
+  );
+}
+
+function sanitizedNativeMessage(message: string): string {
+  return redactDiagnosticText(message).slice(0, 500);
 }
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {

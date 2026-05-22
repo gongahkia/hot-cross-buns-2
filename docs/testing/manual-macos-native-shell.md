@@ -8,6 +8,12 @@ Use this checklist for release PRs or local verification when tray, hotkey, noti
 - Use a temporary app data directory when testing destructive settings changes.
 - Keep Console open only if you need logs; do not copy task titles, event details, note bodies, tokens, or local file paths into PR notes.
 
+## Current Release Pass - 2026-05-22
+
+- Automated native service coverage passes for deferred tray startup, hotkey registration and conflicts, settings-driven tray/hotkey/notification/MCP status updates, sanitized native status messages, and deep-link parsing.
+- Automated renderer coverage passes for refreshing native status after settings changes.
+- Real macOS manual verification is still required before release for menu bar behavior, global shortcut conflicts, notification permission prompts/click-through, and `hotcrossbuns://` links in a running packaged or dev app.
+
 ## Tray / Menu Bar
 
 - App launches to the main window before native deferred startup finishes.

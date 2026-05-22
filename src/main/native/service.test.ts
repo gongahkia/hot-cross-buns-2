@@ -56,6 +56,11 @@ class FakeNativeAdapter implements NativePlatformAdapter {
     state: "ready",
     message: "registered"
   };
+  trayResult: NativeOperationResult = {
+    ok: true,
+    state: "ready",
+    message: "tray"
+  };
   trayActions: NativeTrayActions | undefined;
   appMenuActions: NativeTrayActions | undefined;
   registeredShortcuts: string[] = [];
@@ -77,7 +82,7 @@ class FakeNativeAdapter implements NativePlatformAdapter {
   createTray(actions: NativeTrayActions): NativeOperationResult {
     this.trayActions = actions;
     this.trayCreateCount += 1;
-    return { ok: true, state: "ready", message: "tray" };
+    return this.trayResult;
   }
 
   destroyTray(): void {
@@ -278,6 +283,9 @@ describe("native shell service", () => {
       }
     });
     expect(parseHotCrossBunsDeepLink("https://example.com/task/task-1")).toBeNull();
+    expect(parseHotCrossBunsDeepLink("hotcrossbuns://task/%E0%A4%A")).toBeNull();
+    expect(parseHotCrossBunsDeepLink(`hotcrossbuns://task/${"a".repeat(257)}`)).toBeNull();
+    expect(parseHotCrossBunsDeepLink(`hotcrossbuns://search?q=${"a".repeat(201)}`)).toBeNull();
 
     const dispatch = vi.fn();
     const { service } = createService({ dispatch });
@@ -314,5 +322,76 @@ describe("native shell service", () => {
         scheduledCount: 0
       }
     });
+  });
+
+  it("applies settings changes to tray, hotkey, notifications, and MCP status", async () => {
+    const { adapter, service, settings } = createService();
+
+    service.startDeferredStartup();
+    await flushNativeStartup();
+
+    settings.current = defaultSettings({
+      quickCaptureShortcut: "Alt+Space",
+      showTrayIcon: false,
+      notificationsEnabled: false,
+      mcpEnabled: true,
+      mcpPort: 7331
+    });
+    service.applySettings(settings.current);
+
+    expect(adapter.unregisteredShortcuts).toEqual(["Ctrl+Space"]);
+    expect(adapter.registeredShortcuts).toEqual(["Ctrl+Space", "Alt+Space"]);
+    expect(adapter.trayDestroyCount).toBe(1);
+    expect(service.capabilities()).toMatchObject({
+      quickCaptureShortcut: {
+        accelerator: "Alt+Space",
+        registered: true,
+        state: "ready"
+      },
+      trayStatus: {
+        state: "disabled"
+      },
+      notificationsStatus: {
+        state: "disabled",
+        scheduledCount: 0
+      },
+      mcpStatus: {
+        state: "pending"
+      }
+    });
+
+    settings.current = defaultSettings({
+      quickCaptureShortcut: null,
+      showTrayIcon: true,
+      notificationsEnabled: false
+    });
+    service.applySettings(settings.current);
+
+    expect(adapter.unregisteredShortcuts).toEqual(["Ctrl+Space", "Alt+Space"]);
+    expect(adapter.trayCreateCount).toBe(2);
+    expect(service.capabilities().quickCaptureShortcut).toMatchObject({
+      accelerator: null,
+      registered: false,
+      state: "disabled"
+    });
+  });
+
+  it("redacts native adapter status messages before exposing them", async () => {
+    const adapter = new FakeNativeAdapter();
+    adapter.trayResult = {
+      ok: false,
+      state: "error",
+      message: "access_token=fake-token failed under /Users/example/Library"
+    };
+    const { service } = createService({ adapter });
+
+    service.startDeferredStartup();
+    await flushNativeStartup();
+
+    const message = service.capabilities().trayStatus.message ?? "";
+
+    expect(message).not.toContain("fake-token");
+    expect(message).not.toContain("/Users/example");
+    expect(message).toContain("[REDACTED]");
   });
 });

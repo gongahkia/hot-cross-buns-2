@@ -2305,6 +2305,12 @@ function SettingsView(): JSX.Element {
     setRecoveryMessage("Diagnostics summary copied without credentials, raw Google payloads, MCP bearer tokens, or sensitive bodies.");
   }
 
+  function requestNotificationPermission(): void {
+    void window.hcb?.native.requestNotificationPermission().then(() => {
+      source.refresh();
+    });
+  }
+
   function renderSectionControls(): JSX.Element {
     if (selectedSection.id === "google") {
       return (
@@ -2508,7 +2514,7 @@ function SettingsView(): JSX.Element {
             defaultValue={String(settings.notificationLeadMinutes)}
             type="number"
           />
-          <Button onClick={() => void window.hcb?.native.requestNotificationPermission()} variant="ghost">
+          <Button onClick={requestNotificationPermission} variant="ghost">
             Request permission
           </Button>
         </div>
