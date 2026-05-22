@@ -29,6 +29,7 @@ export interface NativePlatformCapabilities {
 
 export interface NativeTrayActions {
   primaryClick: () => void;
+  openMainWindow: () => void;
   showOrHideMainWindow: () => void;
   quickCapture: () => void;
   refresh: () => void;

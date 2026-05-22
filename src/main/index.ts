@@ -2,6 +2,7 @@ import { app, BrowserWindow, session } from "electron";
 import { join } from "node:path";
 import { IPC_CHANNELS, type NativeAction } from "@shared/ipc/contracts";
 import { registerHcbIpc } from "./ipc";
+import { brandAssetPath } from "./native/brandAssets";
 import { createElectronMacNativeAdapter } from "./native/electronMacAdapter";
 import { configureNavigationLockdown, configureSessionHardening } from "./security";
 import { createServiceContainer, type ServiceContainer } from "./services/serviceContainer";
@@ -86,6 +87,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 620,
     show: false,
     title: "Hot Cross Buns 2",
+    icon: brandAssetPath("app-icon.png"),
     backgroundColor: "#1e1e2e",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),

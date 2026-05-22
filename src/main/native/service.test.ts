@@ -270,6 +270,59 @@ describe("native shell service", () => {
     });
   });
 
+  it("builds an adaptive menu bar snapshot from cached tasks and events", async () => {
+    const { adapter, service } = createService({
+      tasks: [
+        {
+          id: "task-overdue",
+          listId: "inbox",
+          title: "File overdue report",
+          status: "active",
+          dueAt: "2026-05-21T01:00:00.000Z",
+          updatedAt: now.toISOString(),
+          priority: "high"
+        },
+        {
+          id: "task-today",
+          listId: "inbox",
+          title: "Send launch notes",
+          status: "active",
+          dueAt: "2026-05-22T02:00:00.000Z",
+          updatedAt: now.toISOString(),
+          priority: "none"
+        }
+      ],
+      events: [
+        {
+          id: "event-today",
+          calendarId: "cal-1",
+          title: "Release sync",
+          startsAt: "2026-05-22T13:00:00.000Z",
+          endsAt: "2026-05-22T13:30:00.000Z",
+          allDay: false,
+          updatedAt: now.toISOString(),
+          reminderMinutes: []
+        }
+      ]
+    });
+
+    service.startDeferredStartup();
+    await flushNativeStartup();
+
+    const snapshot = adapter.trayActions?.snapshot();
+
+    expect(snapshot).toMatchObject({
+      panelStyle: "adaptive",
+      primaryClickAction: "open-menu",
+      title: "1 overdue",
+      badgeLabel: "1"
+    });
+    expect(snapshot?.sections.map((section) => section.title)).toContain("Needs Attention");
+    expect(snapshot?.sections.flatMap((section) => section.items.map((item) => item.label))).toEqual(
+      expect.arrayContaining(["File overdue report", "Release sync", "Send launch notes"])
+    );
+  });
+
   it("parses and dispatches custom protocol deep links safely", () => {
     expect(parseHotCrossBunsDeepLink("hotcrossbuns://task/task-1")).toEqual({
       type: "openRoute",

@@ -210,6 +210,7 @@ export class NativeShellService implements NativeDomainService {
   private actions() {
     return {
       primaryClick: () => this.handleTrayPrimaryAction(),
+      openMainWindow: this.options.windows.showMainWindow,
       showOrHideMainWindow: this.options.windows.showOrHideMainWindow,
       quickCapture: () => {
         this.options.windows.showMainWindow();
@@ -693,15 +694,13 @@ function menuBarSections(
     ].slice(0, 8)
   });
 
-  if (style !== "compact") {
-    sections.push({
-      title: "Tomorrow",
-      items: [
-        ...menuBarEventItems(data.tomorrowEvents),
-        ...menuBarTaskItems(data.tomorrowTasks, "Due tomorrow")
-      ].slice(0, 8)
-    });
-  }
+  sections.push({
+    title: "Tomorrow",
+    items: [
+      ...menuBarEventItems(data.tomorrowEvents),
+      ...menuBarTaskItems(data.tomorrowTasks, "Due tomorrow")
+    ].slice(0, 8)
+  });
 
   return sections.map((section) =>
     section.items.length > 0

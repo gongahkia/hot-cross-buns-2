@@ -1,3 +1,15 @@
+## Improvement Docs For Every Prompt
+
+Before running any prompt below, use the improvement docs as Electron-specific parity guidance:
+
+- `docs/improvements/01-user-facing-feature-parity.md`
+- `docs/improvements/02-backend-optimizations.md`
+- `docs/improvements/03-database-optimizations.md`
+- `docs/improvements/04-test-coverage-parity.md`
+- `docs/improvements/05-general-parity-and-release-polish.md`
+
+These docs compare Hot Cross Buns 2 with the legacy Swift app, but they are not instructions to port Swift APIs directly. Preserve the Electron, React, TypeScript, SQLite, and platform-adapter architecture. Treat Swift-only surfaces as reference behavior only, then decide whether each parity item belongs in Electron platform code, shared backend code, docs, tests, manual QA, or explicit backlog.
+
 ## Future Platform Prompts
 
 Run these only after Mac v1 is stable. Do not run Linux and Windows port work in parallel for the first pass. Linux is the first non-Mac port; Windows follows after the Linux adapter lessons are incorporated.
@@ -23,12 +35,18 @@ Read first:
 - docs/performance/performance-strategy.md
 - docs/performance/build-and-test-performance.md
 - docs/testing/qa-plan.md
+- docs/improvements/01-user-facing-feature-parity.md
+- docs/improvements/02-backend-optimizations.md
+- docs/improvements/03-database-optimizations.md
+- docs/improvements/04-test-coverage-parity.md
+- docs/improvements/05-general-parity-and-release-polish.md
 
 Implement:
 - Identify current Mac-only assumptions in platform paths, credentials, tray, menu, shortcuts, notifications, custom protocol, autostart, updater, diagnostics, OAuth, MCP, packaging, and tests.
 - Create or refine shared adapter interfaces for the platform capabilities listed in docs/ports/cross-platform-porting.md.
 - Add capability-report DTOs exposed through preload/settings where appropriate.
 - Add adapter contract tests that can run without Linux or Windows.
+- Use docs/improvements/ to classify parity items as platform implementation, shared backend/database work, tests, release docs, manual QA, or backlog.
 - Update docs if the adapter contract changes.
 
 Do not:
@@ -63,12 +81,17 @@ Read first:
 - docs/performance/performance-strategy.md
 - docs/performance/build-and-test-performance.md
 - docs/testing/qa-plan.md
+- docs/improvements/01-user-facing-feature-parity.md
+- docs/improvements/02-backend-optimizations.md
+- docs/improvements/04-test-coverage-parity.md
+- docs/improvements/05-general-parity-and-release-polish.md
 
 Implement:
 - Linux adapter implementations or stubs for app paths, credentials, tray/status area, global shortcuts, notifications, custom protocol, autostart, updater metadata, external open behavior, and diagnostics.
 - Capability detection for Secret Service/libsecret availability, tray support, X11 vs Wayland, portal global shortcut availability where feasible, notification support, and protocol registration status.
 - Linux settings/diagnostics surfaces that show capability status and caveats.
 - Linux-specific automated tests that can run on non-Linux via adapter mocks, plus Linux-only tests where appropriate.
+- Use the improvement docs to keep feature parity Electron-native and to separate platform blockers from shared backend blockers.
 - Documentation updates for any implementation choices that differ from docs/ports/linux-port.md.
 
 Do not:
@@ -102,6 +125,9 @@ Read first:
 - docs/performance/build-and-test-performance.md
 - docs/performance/performance-strategy.md
 - docs/testing/qa-plan.md
+- docs/improvements/02-backend-optimizations.md
+- docs/improvements/04-test-coverage-parity.md
+- docs/improvements/05-general-parity-and-release-polish.md
 
 Implement:
 - electron-builder Linux config for AppImage first.
@@ -110,6 +136,7 @@ Implement:
 - Linux install/run/uninstall notes in release docs.
 - Linux manual QA checklist document under docs/release or docs/ports if it does not already exist.
 - Linux performance smoke instructions for AppImage and installed package paths.
+- Reference the improvement docs when adding release, updater, native lifecycle, test, or manual QA instructions.
 - Optional DEB/RPM docs only if AppImage baseline is already clear.
 
 Do not:
@@ -145,12 +172,17 @@ Read first:
 - docs/performance/performance-strategy.md
 - docs/performance/build-and-test-performance.md
 - docs/testing/qa-plan.md
+- docs/improvements/01-user-facing-feature-parity.md
+- docs/improvements/02-backend-optimizations.md
+- docs/improvements/04-test-coverage-parity.md
+- docs/improvements/05-general-parity-and-release-polish.md
 
 Implement:
 - Windows adapter implementations or stubs for app paths, credential storage, tray, global shortcuts, notifications, custom protocol, autostart, updater metadata, external open behavior, and diagnostics.
 - Stable AppUserModelID/app identity wiring early in startup.
 - Windows settings/diagnostics surfaces that show tray, shortcut, notifications, protocol, updater, signing, and SmartScreen status where known.
 - Windows-specific automated tests that can run on non-Windows via adapter mocks, plus Windows-only tests where appropriate.
+- Use the improvement docs to keep feature parity Electron-native and to separate platform blockers from shared backend blockers.
 - Documentation updates for any implementation choices that differ from docs/ports/windows-port.md.
 
 Do not:
@@ -185,6 +217,9 @@ Read first:
 - docs/performance/build-and-test-performance.md
 - docs/performance/performance-strategy.md
 - docs/testing/qa-plan.md
+- docs/improvements/02-backend-optimizations.md
+- docs/improvements/04-test-coverage-parity.md
+- docs/improvements/05-general-parity-and-release-polish.md
 
 Implement:
 - electron-builder Windows config for NSIS first.
@@ -193,6 +228,7 @@ Implement:
 - Signing plan documentation covering unsigned internal preview, Microsoft Store MSIX option, Azure Artifact Signing/Trusted Signing, OV certificate, and self-signed dev-only behavior.
 - Windows manual QA checklist document under docs/release or docs/ports if it does not already exist.
 - Windows performance smoke instructions for installed NSIS builds.
+- Reference the improvement docs when adding release, updater, native lifecycle, test, or manual QA instructions.
 
 Do not:
 - Commit certificates, passwords, tokens, or signing secrets.
@@ -228,6 +264,9 @@ Read first:
 - docs/security/privacy-and-threat-model.md
 - docs/performance/performance-strategy.md
 - docs/testing/qa-plan.md
+- docs/improvements/02-backend-optimizations.md
+- docs/improvements/04-test-coverage-parity.md
+- docs/improvements/05-general-parity-and-release-polish.md
 
 Tasks:
 - Audit platform adapters for duplicated logic, drift, unsafe fallbacks, and renderer platform branching.
@@ -235,6 +274,7 @@ Tasks:
 - Verify install/update/uninstall docs match actual package behavior.
 - Verify performance smoke reports exist or are explicitly blocked per platform.
 - Verify manual QA checklists exist for macOS, Linux, and Windows.
+- Use the improvement docs to classify unresolved parity work as shared backend, tests, release polish, platform caveat, or explicit backlog.
 - Update roadmap/docs to distinguish supported, technical preview, and unsupported features by platform.
 
 Do not:

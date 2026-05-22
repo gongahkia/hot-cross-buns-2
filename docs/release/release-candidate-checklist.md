@@ -13,19 +13,20 @@ Automated unit, typecheck, production build, Electron smoke, performance smoke, 
 |---|---|---|
 | `pnpm test` | PASS | 24 Vitest files, 115 tests passed in 16.93s. |
 | `pnpm typecheck` | PASS | `tsc --noEmit` completed. |
-| `pnpm build` | PASS | Main 382.68 kB, preload 154.64 kB, renderer JS 424.26 kB, sidebar icon asset 4.55 kB. |
-| `pnpm test:smoke` | PASS | 1 Playwright Electron smoke passed in 9.0s. |
+| `pnpm build` | PASS | Main 394.27 kB, preload 154.92 kB, renderer JS 425.90 kB, sidebar icon asset 4.55 kB. |
+| `pnpm test:smoke` | PASS | 1 Playwright Electron smoke passed in 10.2s. |
+| `pnpm exec vitest run --config vitest.config.ts src/main/native/service.test.ts src/main/services/sqliteDomainServices.test.ts src/renderer/src/App.test.tsx` | PASS | 3 files, 37 tests passed; includes adaptive menu-bar snapshot coverage. |
 | `pnpm test:perf` | PASS | Report-only perf smoke wrote `artifacts/perf/latest.json` and `.md`. |
 | `pnpm release:review-bundle` | PASS | No issues; no external main/preload requires; renderer 441.3 KiB. |
 | `pnpm release:mac:preview` | PASS | Tests, release build, bundle review, unsigned DMG/zip, and checksums completed. |
-| `pnpm pack:mac:preview` | PASS | Rebuilt unsigned preview package after wiring legacy icon/logo assets. |
+| `pnpm pack:mac:preview` | PASS | Rebuilt unsigned preview package after menu-bar/logo verification and regenerated checksums. |
 | `shasum -a 256 -c SHASUMS256.txt` | PASS | DMG and zip checksums verified. |
 | `git diff --check` | PASS | No whitespace errors. |
 | `rg` secret-pattern scans over source and diff | PASS | Only fake test fixtures and documentation references found. |
 | `git ls-files \| rg` and `git diff \| rg` Swift/Xcode scans | PASS | No Swift source, Xcode project, or runtime dependency found. |
 | `rg` renderer/preload privileged-import scans | PASS | Only test-only boundary checks import Node modules; bundle review found no issues. |
-| `git status`, `git diff --stat`, and focused `git diff` inspections | PASS | Current tracked changes are docs/report/ignore-rule only. |
-| `plutil -p release/mac-arm64/Hot\ Cross\ Buns\ 2.app/Contents/Info.plist` | PASS | Bundle id, version, and `hotcrossbuns` protocol entry inspected. |
+| `git status`, `git diff --stat`, and focused `git diff` inspections | PASS | New changes are scoped to menu-bar/app-icon behavior, tests, and related docs; unrelated `prompts-to-run-23-may.md` was left untouched. |
+| `plutil -p release/mac-arm64/Hot\ Cross\ Buns\ 2.app/Contents/Info.plist` | PASS | Bundle id, version, `CFBundleIconFile => icon.icns`, and `hotcrossbuns` protocol entry inspected. |
 | `codesign -dv --verbose=4 ...` | PASS | Signature metadata inspected; app is ad-hoc/linker-signed with no TeamIdentifier. |
 | `.gitignore` audit for report visibility | PASS | Root release artifact ignore is anchored as `/release/` so `docs/release/` reports are trackable. |
 | `codesign --verify --deep --strict --verbose=2 release/mac-arm64/Hot\ Cross\ Buns\ 2.app` | FAIL EXPECTED | Unsigned preview/ad-hoc app is not notarization-ready. |
@@ -35,8 +36,8 @@ Packaging artifacts:
 
 | Artifact | Size | Checksum |
 |---|---:|---|
-| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.dmg` | 94 MiB | `ffd56a88fe9d3ca6bb637a8bdfc40f4b634d3aec24ce92655ca926ecbcb75dca` |
-| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.zip` | 91 MiB | `0e780f8039a1a21b86388383c19b113e3a771d318843973be2ac905800041f39` |
+| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.dmg` | 94 MiB | `94a822ac57da220767809e1e2335d8bbcda83d269eed7c28dd27fe2514667fe5` |
+| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.zip` | 91 MiB | `04af322d90d979c8c4d2e7ef36f2e9f6645e0b7f885ffbabeb511cfd53e09e5b` |
 
 Packaging caveats: `electron-builder` reported missing `package.json` author, skipped signing because `mac.identity: null`, and generated blockmap/latest metadata that must not be uploaded for the unsigned preview flow. The macOS package now uses `build/icon.icns` generated from the legacy app icon set.
 
@@ -98,7 +99,9 @@ Docs updated during this QA pass:
 - `.gitignore`: anchored generated release artifacts as `/release/` so `docs/release/` reports are not ignored.
 - `assets/brand/` and `build/icon.icns`: copied legacy logo/icon assets and generated the macOS package icon.
 - `electron-builder.yml`: wired the macOS package icon and copied brand assets into packaged resources.
-- `src/main/native/electronMacAdapter.ts`: uses the copied menu bar icon and app icon assets.
+- `src/main/index.ts`: applies the copied app icon to the Electron browser window.
+- `src/main/native/electronMacAdapter.ts`: uses the copied menu bar icon/app icon assets and exposes left-click panel plus right-click utility menu behavior.
+- `src/main/native/service.ts`: provides menu-bar agenda snapshots from cached tasks/events.
 - `src/renderer/src/App.tsx`: uses the copied app icon in the sidebar header.
 - `docs/design/design-system.md`: records the copied asset locations and usage.
 - `docs/release/distribution.md`: clarified generated `app-update.yml` does not mean updater support.

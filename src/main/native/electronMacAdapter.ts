@@ -3,7 +3,9 @@ import {
   Tray,
   app,
   globalShortcut,
+  nativeImage,
   Menu,
+  type NativeImage,
   type MenuItemConstructorOptions
 } from "electron";
 import {
@@ -264,18 +266,12 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
   }
 }
 
-function trayIconImage() {
+function trayIconImage(): NativeImage {
   const image = brandImage("menubar-template.png");
 
   return image.isEmpty()
-    ? brandImageFromDataUrl(`data:image/png;base64,${fallbackTrayIconBase64}`)
+    ? nativeImage.createFromDataURL(`data:image/png;base64,${fallbackTrayIconBase64}`)
     : image;
-}
-
-function brandImageFromDataUrl(dataUrl: string) {
-  return brandImage("__missing__").isEmpty()
-    ? require("electron").nativeImage.createFromDataURL(dataUrl)
-    : brandImage("__missing__");
 }
 
 function menuBarPanelMenu(actions: NativeTrayActions, snapshot: NativeMenuBarSnapshot): Menu {
@@ -312,7 +308,7 @@ function menuBarPanelMenu(actions: NativeTrayActions, snapshot: NativeMenuBarSna
     },
     {
       label: "Open Hot Cross Buns 2",
-      click: actions.showOrHideMainWindow
+      click: actions.openMainWindow
     },
     {
       label: "Settings",
@@ -332,7 +328,7 @@ function trayUtilityMenu(actions: NativeTrayActions): Menu {
   return Menu.buildFromTemplate([
     {
       label: "Open Hot Cross Buns 2",
-      click: actions.showOrHideMainWindow
+      click: actions.openMainWindow
     },
     {
       label: "Quick Capture",
@@ -376,7 +372,7 @@ function menuItemFromSnapshotItem(
       } else if (item.action === "openSettings") {
         actions.openSettings();
       } else if (item.action === "showWindow") {
-        actions.showOrHideMainWindow();
+        actions.openMainWindow();
       }
     }
   };
