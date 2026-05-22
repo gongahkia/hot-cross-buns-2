@@ -1,4 +1,5 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
+import { IPC_CHANNELS } from "@shared/ipc/contracts";
 import type { ServiceContainer } from "../services/serviceContainer";
 import { createCoreIpcHandlers } from "./coreHandlers";
 import { createDiagnosticsIpcHandlers } from "./diagnostics";
@@ -9,9 +10,18 @@ export function registerHcbIpc(services: ServiceContainer): void {
 
   registerIpcDispatcher(
     ipcMain,
-    [...createDiagnosticsIpcHandlers(metrics), ...createCoreIpcHandlers(services.domain)],
+    [
+      ...createDiagnosticsIpcHandlers(metrics, services.performance),
+      ...createCoreIpcHandlers(services.domain)
+    ],
     {
       metrics
     }
   );
+
+  services.domain.sync.subscribeStatus?.((status) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(IPC_CHANNELS.syncStatus, status);
+    }
+  });
 }
