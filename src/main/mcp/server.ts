@@ -577,17 +577,7 @@ function safeArgumentsObject(params: Record<string, unknown>): Record<string, un
 }
 
 function originIsAllowed(origin: string | undefined): boolean {
-  if (!origin) {
-    return true;
-  }
-
-  try {
-    const parsed = new URL(origin);
-    const host = parsed.hostname.toLowerCase();
-    return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
-  } catch {
-    return false;
-  }
+  return origin === undefined || origin.trim().length === 0;
 }
 
 function clientDescriptionForRequest(

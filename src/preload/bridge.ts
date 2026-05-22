@@ -2,6 +2,7 @@ import {
   HCB_IPC_VERSION,
   IPC_CHANNELS,
   ipcContracts,
+  nativeActionSchema,
   resultSchemaForContract,
   syncStatusResponseSchema,
   type IpcContract
@@ -239,7 +240,26 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           ipcContracts.native.requestNotificationPermission,
           {},
           "Notification permission request failed"
-        )
+        ),
+      subscribeAction: (listener) => {
+        if (!ipc.on || !ipc.removeListener) {
+          return () => undefined;
+        }
+
+        const eventListener = (_event: unknown, payload: unknown): void => {
+          const parsed = nativeActionSchema.safeParse(payload);
+
+          if (parsed.success) {
+            listener(parsed.data);
+          }
+        };
+
+        ipc.on(IPC_CHANNELS.nativeAction, eventListener);
+
+        return () => {
+          ipc.removeListener?.(IPC_CHANNELS.nativeAction, eventListener);
+        };
+      }
     },
     diagnostics: {
       health: () =>

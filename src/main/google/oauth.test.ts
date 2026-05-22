@@ -5,7 +5,11 @@ import {
   MemoryGoogleOAuthAccountStatusStore,
   type GoogleOAuthAuthorizationCodeTransport
 } from "./oauth";
-import { GOOGLE_CALENDAR_SCOPE, GOOGLE_TASKS_SCOPE } from "./types";
+import {
+  GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_TASKS_SCOPE,
+  sanitizeGoogleAccountConnectionStatus
+} from "./types";
 
 describe("desktop Google OAuth boundary", () => {
   it("delegates token storage and returns sanitized connection status", async () => {
@@ -73,5 +77,27 @@ describe("desktop Google OAuth boundary", () => {
     expect(JSON.stringify(status)).not.toContain("fake-access-token");
     expect(JSON.stringify(status)).not.toContain("fake-refresh-token");
     expect(JSON.stringify(await accountStatusStore.listStatuses())).not.toContain("fake-access-token");
+  });
+
+  it("strips token-shaped properties from OAuth status DTOs", () => {
+    const status = sanitizeGoogleAccountConnectionStatus({
+      accountId: "google:google-user-1",
+      email: "user@example.com",
+      connectionState: "connected",
+      grantedScopes: [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE],
+      updatedAt: "2026-05-22T10:00:00.000Z",
+      accessToken: "fake-access-token",
+      refreshToken: "fake-refresh-token",
+      clientSecret: "fake-client-secret"
+    } as never);
+
+    expect(status).toMatchObject({
+      accountId: "google:google-user-1",
+      connectionState: "connected",
+      missingScopes: []
+    });
+    expect(JSON.stringify(status)).not.toMatch(
+      /fake-access-token|fake-refresh-token|fake-client-secret|accessToken|refreshToken|clientSecret/
+    );
   });
 });

@@ -32,6 +32,35 @@ export interface CalendarEventWriteOptions {
   now: string;
 }
 
+export interface GoogleCacheDiagnostics {
+  taskListCount: number;
+  taskCount: number;
+  calendarCount: number;
+  eventCount: number;
+  noteCount: number;
+  performanceSampleCount: number;
+}
+
+export interface GoogleCheckpointDiagnostics {
+  totalCount: number;
+  tasksCount: number;
+  calendarCount: number;
+  lastUpdatedAt?: string;
+}
+
+export interface PendingMutationDiagnostics {
+  totalCount: number;
+  pendingCount: number;
+  applyingCount: number;
+  failedCount: number;
+  byResourceType: Array<{ resourceType: string; count: number }>;
+}
+
+export interface SelectedResourceDiagnostics {
+  taskLists: Array<{ id: string; title: string; selected: boolean }>;
+  calendars: Array<{ id: string; title: string; selected: boolean }>;
+}
+
 export class GoogleSyncRepository {
   private readonly connection: SqliteConnection;
 
@@ -640,6 +669,183 @@ export class GoogleSyncRepository {
         : { lastDurationMs: latest.duration_ms })
     };
   }
+
+  cacheDiagnostics(): GoogleCacheDiagnostics {
+    return {
+      taskListCount: countRows(
+        this.connection,
+        "SELECT COUNT(*) AS count FROM google_task_lists WHERE deleted_at IS NULL;"
+      ),
+      taskCount: countRows(
+        this.connection,
+        "SELECT COUNT(*) AS count FROM google_tasks WHERE deleted_at IS NULL;"
+      ),
+      calendarCount: countRows(
+        this.connection,
+        `SELECT COUNT(*) AS count
+         FROM google_calendar_lists
+         WHERE deleted_at IS NULL AND is_hidden = 0;`
+      ),
+      eventCount: countRows(
+        this.connection,
+        `SELECT COUNT(*) AS count
+         FROM google_calendar_events
+         WHERE deleted_at IS NULL AND status != 'cancelled';`
+      ),
+      noteCount: countRows(
+        this.connection,
+        "SELECT COUNT(*) AS count FROM local_notes WHERE deleted_at IS NULL;"
+      ),
+      performanceSampleCount: countRows(
+        this.connection,
+        "SELECT COUNT(*) AS count FROM local_performance_timings;"
+      )
+    };
+  }
+
+  checkpointDiagnostics(): GoogleCheckpointDiagnostics {
+    const row = this.connection.get<{
+      totalCount: number;
+      tasksCount: number;
+      calendarCount: number;
+      lastUpdatedAt: string | null;
+    }>(
+      `SELECT
+         COUNT(*) AS totalCount,
+         COALESCE(SUM(CASE WHEN resource_type = 'tasks' OR resource_type = 'task_list' THEN 1 ELSE 0 END), 0) AS tasksCount,
+         COALESCE(SUM(CASE WHEN resource_type = 'calendar' THEN 1 ELSE 0 END), 0) AS calendarCount,
+         MAX(updated_at) AS lastUpdatedAt
+       FROM google_sync_checkpoints;`
+    );
+
+    return {
+      totalCount: row?.totalCount ?? 0,
+      tasksCount: row?.tasksCount ?? 0,
+      calendarCount: row?.calendarCount ?? 0,
+      ...(row?.lastUpdatedAt ? { lastUpdatedAt: row.lastUpdatedAt } : {})
+    };
+  }
+
+  pendingMutationDiagnostics(): PendingMutationDiagnostics {
+    const totals = this.connection.get<{
+      totalCount: number;
+      pendingCount: number;
+      applyingCount: number;
+      failedCount: number;
+    }>(
+      `SELECT
+         COUNT(*) AS totalCount,
+         COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pendingCount,
+         COALESCE(SUM(CASE WHEN status = 'applying' THEN 1 ELSE 0 END), 0) AS applyingCount,
+         COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failedCount
+       FROM google_pending_mutations
+       WHERE status IN ('pending', 'applying', 'failed');`
+    );
+    const byResourceType = this.connection.query<{ resourceType: string; count: number }>(
+      `SELECT resource_type AS resourceType, COUNT(*) AS count
+       FROM google_pending_mutations
+       WHERE status IN ('pending', 'applying', 'failed')
+       GROUP BY resource_type
+       ORDER BY resource_type ASC
+       LIMIT 20;`
+    );
+
+    return {
+      totalCount: totals?.totalCount ?? 0,
+      pendingCount: totals?.pendingCount ?? 0,
+      applyingCount: totals?.applyingCount ?? 0,
+      failedCount: totals?.failedCount ?? 0,
+      byResourceType
+    };
+  }
+
+  selectedResourceDiagnostics(settings: {
+    selectedTaskListIds: readonly string[];
+    selectedCalendarIds: readonly string[];
+  }): SelectedResourceDiagnostics {
+    const taskListSelection = new Set(settings.selectedTaskListIds);
+    const calendarSelection = new Set(settings.selectedCalendarIds);
+    const taskLists = this.connection
+      .query<{ id: string; title: string }>(
+        `SELECT id, title
+         FROM google_task_lists
+         WHERE deleted_at IS NULL
+         ORDER BY sort_order ASC, title COLLATE NOCASE ASC, id ASC
+         LIMIT 100;`
+      )
+      .map((row) => ({
+        id: row.id,
+        title: row.title,
+        selected: taskListSelection.size === 0 || taskListSelection.has(row.id)
+      }));
+    const calendars = this.connection
+      .query<{ id: string; title: string; selected: number }>(
+        `SELECT id, summary AS title, is_selected AS selected
+         FROM google_calendar_lists
+         WHERE deleted_at IS NULL AND is_hidden = 0
+         ORDER BY is_primary DESC, summary COLLATE NOCASE ASC, id ASC
+         LIMIT 100;`
+      )
+      .map((row) => ({
+        id: row.id,
+        title: row.title,
+        selected: calendarSelection.size === 0 ? row.selected === 1 : calendarSelection.has(row.id)
+      }));
+
+    return {
+      taskLists,
+      calendars
+    };
+  }
+
+  clearAllCheckpoints(): void {
+    this.connection.run("DELETE FROM google_sync_checkpoints;");
+  }
+
+  clearLocalGoogleCache(now = new Date().toISOString()): void {
+    this.connection.executeTransaction([
+      {
+        kind: "run",
+        sql: "DELETE FROM google_sync_checkpoints;"
+      },
+      {
+        kind: "run",
+        sql: "DELETE FROM google_sync_progress_events;"
+      },
+      {
+        kind: "run",
+        sql: "DELETE FROM google_sync_diagnostics;"
+      },
+      {
+        kind: "run",
+        sql: "DELETE FROM google_calendar_event_instances;"
+      },
+      {
+        kind: "run",
+        sql: "DELETE FROM google_calendar_events;"
+      },
+      {
+        kind: "run",
+        sql: "DELETE FROM google_calendar_lists;"
+      },
+      {
+        kind: "run",
+        sql: "DELETE FROM google_tasks;"
+      },
+      {
+        kind: "run",
+        sql: "DELETE FROM google_task_lists;"
+      },
+      {
+        kind: "run",
+        sql: `INSERT INTO google_sync_diagnostics (
+          run_id, account_id, state, resources_json, started_at, completed_at, duration_ms,
+          last_error_code, retry_after_ms, task_list_count, task_count, calendar_list_count, event_count
+        ) VALUES (?, ?, 'idle', ?, ?, ?, 0, NULL, NULL, 0, 0, 0, 0);`,
+        params: [`cache-clear:${now}`, "local-google-account", JSON.stringify([]), now, now]
+      }
+    ]);
+  }
 }
 
 function parseJsonStringArray(value: string): string[] {
@@ -652,6 +858,10 @@ function parseJsonStringArray(value: string): string[] {
   } catch {
     return [];
   }
+}
+
+function countRows(connection: SqliteConnection, sql: string): number {
+  return connection.get<{ count: number }>(sql)?.count ?? 0;
 }
 
 export function taskListLocalId(accountId: string, googleId: string): string {

@@ -205,6 +205,49 @@ describe("preload bridge", () => {
     );
   });
 
+  it("subscribes to sanitized native action events only", () => {
+    const listeners = new Map<string, (event: unknown, payload: unknown) => void>();
+    const ipc: IpcBridge = {
+      invoke: vi.fn(),
+      on: vi.fn((channel, listener) => {
+        listeners.set(channel, listener);
+      }),
+      removeListener: vi.fn((channel) => {
+        listeners.delete(channel);
+      })
+    };
+    const listener = vi.fn();
+    const unsubscribe = createHcbApi(ipc).native.subscribeAction(listener);
+
+    listeners.get(IPC_CHANNELS.nativeAction)?.(
+      {},
+      {
+        type: "quickCapture"
+      }
+    );
+    listeners.get(IPC_CHANNELS.nativeAction)?.(
+      {},
+      {
+        type: "openRoute",
+        route: {
+          kind: "task",
+          id: ""
+        }
+      }
+    );
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      type: "quickCapture"
+    });
+
+    unsubscribe();
+    expect(ipc.removeListener).toHaveBeenCalledWith(
+      IPC_CHANNELS.nativeAction,
+      expect.any(Function)
+    );
+  });
+
   it("exposes only the stable HCB domain namespaces", () => {
     const api = createHcbApi({
       invoke: vi.fn()

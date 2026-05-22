@@ -265,16 +265,45 @@ const hcbApi: HcbApi = {
       ok({
         theme: "system" as const,
         startOnLogin: false,
+        selectedTaskListIds: [],
+        selectedCalendarIds: [],
+        syncMode: "balanced" as const,
         quickCaptureShortcut: null,
-        mcpEnabled: false
+        showTrayIcon: true,
+        trayClickAction: "toggle-window" as const,
+        notificationsEnabled: false,
+        notificationLeadMinutes: 10,
+        mcpEnabled: false,
+        mcpPermissionMode: "confirm-writes" as const,
+        mcpPort: 0,
+        diagnosticsIncludePerformance: true
       })
     ),
     update: vi.fn(async (request) =>
       ok({
         theme: request.theme ?? "system",
         startOnLogin: request.startOnLogin ?? false,
+        selectedTaskListIds: request.selectedTaskListIds ?? [],
+        selectedCalendarIds: request.selectedCalendarIds ?? [],
+        syncMode: request.syncMode ?? "balanced",
         quickCaptureShortcut: request.quickCaptureShortcut ?? null,
-        mcpEnabled: request.mcpEnabled ?? false
+        showTrayIcon: request.showTrayIcon ?? true,
+        trayClickAction: request.trayClickAction ?? "toggle-window",
+        notificationsEnabled: request.notificationsEnabled ?? false,
+        notificationLeadMinutes: request.notificationLeadMinutes ?? 10,
+        mcpEnabled: request.mcpEnabled ?? false,
+        mcpPermissionMode: request.mcpPermissionMode ?? "confirm-writes",
+        mcpPort: request.mcpPort ?? 0,
+        diagnosticsIncludePerformance: request.diagnosticsIncludePerformance ?? true
+      })
+    ),
+    recoveryAction: vi.fn(async (request) =>
+      ok({
+        action: request.action,
+        accepted: true,
+        destructive: request.action !== "refresh",
+        requiresReload: request.action === "clearGoogleCache",
+        message: "Recovery action accepted."
       })
     )
   },
@@ -284,7 +313,10 @@ const hcbApi: HcbApi = {
         enabled: false,
         running: false,
         readOnly: true,
-        confirmationRequired: true
+        confirmationRequired: true,
+        permissionMode: "read-only" as const,
+        port: 0,
+        tokenState: "not_configured" as const
       })
     ),
     setEnabled: vi.fn(async (request) =>
@@ -292,7 +324,10 @@ const hcbApi: HcbApi = {
         enabled: request.enabled,
         running: false,
         readOnly: true,
-        confirmationRequired: request.confirmationRequired ?? true
+        confirmationRequired: request.confirmationRequired ?? true,
+        permissionMode: request.permissionMode ?? "read-only",
+        port: request.port ?? 0,
+        tokenState: "not_configured" as const
       })
     )
   },
@@ -303,14 +338,48 @@ const hcbApi: HcbApi = {
         notifications: false,
         globalShortcuts: false,
         tray: false,
-        deepLinks: false
+        deepLinks: false,
+        trayStatus: {
+          state: "unsupported" as const,
+          message: "Tray/menu bar is unavailable."
+        },
+        quickCaptureShortcut: {
+          accelerator: null,
+          registered: false,
+          state: "unsupported" as const,
+          message: "Global shortcuts are unavailable."
+        },
+        notificationsStatus: {
+          permission: "unsupported" as const,
+          scheduledCount: 0,
+          state: "unsupported" as const,
+          message: "Notifications are unavailable."
+        },
+        deepLinkStatus: {
+          scheme: "hotcrossbuns" as const,
+          registered: false,
+          state: "unsupported" as const,
+          message: "Deep links are unavailable."
+        },
+        updaterStatus: {
+          state: "unsupported" as const,
+          message: "Preview update checks are not configured."
+        },
+        mcpStatus: {
+          state: "disabled" as const,
+          message: "MCP local agent access is disabled."
+        },
+        deferredStartup: {
+          state: "pending" as const
+        }
       })
     ),
     requestNotificationPermission: vi.fn(async () =>
       ok({
         state: "unsupported" as const
       })
-    )
+    ),
+    subscribeAction: vi.fn(() => () => undefined)
   },
   diagnostics: {
     health: vi.fn(async () =>
@@ -349,6 +418,96 @@ const hcbApi: HcbApi = {
     performance: vi.fn(async () =>
       ok({
         timings: []
+      })
+    ),
+    summary: vi.fn(async () =>
+      ok({
+        status: "ok" as const,
+        generatedAt: now,
+        account: {
+          state: "signed_out" as const,
+          grantedScopeCount: 0,
+          missingScopeCount: 2
+        },
+        sync: {
+          state: "idle" as const,
+          pendingMutationCount: 0,
+          offline: true,
+          stale: true,
+          mode: "balanced" as const
+        },
+        cache: {
+          taskListCount: 0,
+          taskCount: 0,
+          calendarCount: 0,
+          eventCount: 0,
+          noteCount: 0,
+          performanceSampleCount: 0,
+          migrationVersion: 2,
+          migrationDurationMs: 0
+        },
+        selectedResources: {
+          taskLists: [],
+          calendars: []
+        },
+        checkpoints: {
+          totalCount: 0,
+          tasksCount: 0,
+          calendarCount: 0
+        },
+        pendingMutations: {
+          totalCount: 0,
+          pendingCount: 0,
+          applyingCount: 0,
+          failedCount: 0,
+          byResourceType: []
+        },
+        mcp: {
+          enabled: false,
+          running: false,
+          permissionMode: "read-only" as const,
+          confirmationRequired: true,
+          port: 0,
+          tokenState: "not_configured" as const,
+          requestCounts: {
+            totalRequests: 0,
+            successCount: 0,
+            rejectedCount: 0,
+            errorCount: 0,
+            rateLimitedCount: 0
+          }
+        },
+        build: {
+          appName: "Hot Cross Buns 2",
+          version: "0.0.0-test",
+          environment: "test" as const,
+          nodeVersion: process.versions.node,
+          packaged: false
+        },
+        performance: {
+          startup: {
+            processStartedMs: 0
+          },
+          migrationDurationMs: 0,
+          slowQuerySamples: [],
+          pendingMutationCounts: {
+            totalCount: 0,
+            failedCount: 0
+          },
+          mcpRequestCounts: {
+            totalRequests: 0,
+            successCount: 0,
+            rejectedCount: 0,
+            errorCount: 0,
+            rateLimitedCount: 0
+          }
+        },
+        redaction: {
+          credentials: "redacted" as const,
+          googlePayloads: "omitted" as const,
+          mcpBearerTokens: "redacted" as const,
+          sensitiveBodies: "omitted" as const
+        }
       })
     )
   }

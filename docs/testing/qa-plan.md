@@ -151,6 +151,8 @@ Manual checks are required for platform-specific OS behavior:
 - unsigned preview install warning
 - signed/notarized install once enabled
 
+Use [Manual macOS Native Shell Checklist](manual-macos-native-shell.md) for tray/menu bar, global quick capture hotkey, local notification, and `hotcrossbuns://` deep-link verification.
+
 Record manual verification notes in release PRs.
 
 ## Acceptance Gate

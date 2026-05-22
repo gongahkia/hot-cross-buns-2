@@ -227,6 +227,70 @@ describe("SQLite-backed domain services", () => {
     );
   });
 
+  it("persists v1 settings sections in SQLite", async () => {
+    const { domain } = createTestServices();
+
+    const updated = await domain.settings.update({
+      theme: "dark",
+      selectedTaskListIds: ["list-a", "list-b", "list-a"],
+      selectedCalendarIds: ["cal-a"],
+      syncMode: "near-real-time",
+      quickCaptureShortcut: "Cmd+Shift+Space",
+      showTrayIcon: false,
+      trayClickAction: "quick-capture",
+      notificationsEnabled: true,
+      notificationLeadMinutes: 30,
+      mcpEnabled: true,
+      mcpPermissionMode: "allow-writes",
+      mcpPort: 4777,
+      diagnosticsIncludePerformance: false
+    });
+    const reread = await domain.settings.get();
+
+    expect(updated).toMatchObject({
+      theme: "dark",
+      selectedTaskListIds: ["list-a", "list-b"],
+      selectedCalendarIds: ["cal-a"],
+      syncMode: "near-real-time",
+      quickCaptureShortcut: "Cmd+Shift+Space",
+      showTrayIcon: false,
+      trayClickAction: "quick-capture",
+      notificationsEnabled: true,
+      notificationLeadMinutes: 30,
+      mcpEnabled: true,
+      mcpPermissionMode: "allow-writes",
+      mcpPort: 4777,
+      diagnosticsIncludePerformance: false
+    });
+    expect(reread).toEqual(updated);
+  });
+
+  it("rejects destructive recovery actions without confirmation", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+
+    await expect(
+      domain.settings.recoveryAction({
+        action: "clearGoogleCache"
+      })
+    ).rejects.toThrow("Type CLEAR CACHE");
+
+    const accepted = await domain.settings.recoveryAction({
+      action: "clearGoogleCache",
+      confirmation: {
+        accepted: true,
+        phrase: "CLEAR CACHE"
+      }
+    });
+
+    expect(accepted).toMatchObject({
+      accepted: true,
+      destructive: true,
+      requiresReload: true
+    });
+    expect((await domain.planner.listTasks({ status: "all", limit: 10 })).items).toEqual([]);
+  });
+
   it("uses the same local note service through MCP and planner search", async () => {
     const { domain } = createTestServices();
 

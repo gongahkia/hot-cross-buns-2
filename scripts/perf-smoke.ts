@@ -23,6 +23,7 @@ import type {
   StartupTimingSnapshot
 } from "../src/shared/ipc/contracts";
 import type { HcbResult } from "../src/shared/ipc/result";
+import { redactSensitiveText } from "../src/shared/redaction";
 import {
   generatePerfFixtureSet,
   summarizeAllPerfFixtureSets,
@@ -60,19 +61,6 @@ interface SeedResult {
 interface SqliteBaselineResult {
   measurements: PerfMeasurement[];
   queryPlans: PerfQueryPlanReport[];
-}
-
-function redactSensitiveText(text: string): string {
-  const home = process.env.HOME;
-  const withRedactedSecrets = text
-    .replace(/\b((?:access|refresh|id)_token)\b\s*([=:])\s*["']?[^"'\s]+/gi, "$1$2<redacted>")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer <redacted>");
-
-  if (!home) {
-    return withRedactedSecrets;
-  }
-
-  return withRedactedSecrets.split(home).join("~");
 }
 
 function sanitizeError(error: unknown): string {

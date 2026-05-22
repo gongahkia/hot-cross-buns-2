@@ -10,6 +10,7 @@ import type {
   NoteDeleteRequest,
   NoteUpdateRequest,
   SearchQueryRequest,
+  SettingsRecoveryActionRequest,
   SettingsSnapshot,
   SettingsUpdateRequest,
   SyncRunNowRequest,
@@ -27,6 +28,7 @@ import type {
   TaskPriority,
   TaskUpdateRequest
 } from "@shared/ipc/contracts";
+import { HcbPublicError } from "@shared/ipc/result";
 import type {
   GoogleAccountConnectionStatusDto,
   GoogleCalendarReadTransport,
@@ -72,11 +74,19 @@ export function createSqliteDomainServices(
     tasksTransport: options.syncTasksTransport ?? noopTasksTransport,
     calendarTransport: options.syncCalendarTransport ?? noopCalendarTransport
   });
+  const initialSettings = options.settingsRepository.get();
+  const initialMcpTokenState = options.settingsRepository.mcpTokenState();
   const mcpState: McpStatusResponse = {
-    enabled: options.settingsRepository.get().mcpEnabled,
+    enabled: initialSettings.mcpEnabled,
     running: false,
-    readOnly: false,
-    confirmationRequired: true,
+    readOnly: initialSettings.mcpPermissionMode === "read-only",
+    confirmationRequired: initialSettings.mcpPermissionMode !== "allow-writes",
+    permissionMode: initialSettings.mcpPermissionMode,
+    port: initialSettings.mcpPort,
+    tokenState: initialMcpTokenState.tokenState,
+    ...(initialMcpTokenState.lastTokenResetAt === undefined
+      ? {}
+      : { lastTokenResetAt: initialMcpTokenState.lastTokenResetAt }),
     url: "http://127.0.0.1"
   };
   const mcpTools = createMcpDomainServices(options.plannerRepository);
@@ -118,20 +128,81 @@ export function createSqliteDomainServices(
       update: (request: SettingsUpdateRequest) => {
         const snapshot = options.settingsRepository.update(request);
 
-        if (request.mcpEnabled !== undefined) {
-          mcpState.enabled = request.mcpEnabled;
+        if (
+          request.mcpEnabled !== undefined ||
+          request.mcpPermissionMode !== undefined ||
+          request.mcpPort !== undefined
+        ) {
+          applyMcpSettings(mcpState, snapshot);
         }
 
         return snapshot;
+      },
+      recoveryAction: async (request: SettingsRecoveryActionRequest) => {
+        if (request.action === "refresh") {
+          await sync.runNow({ resources: ["tasks", "calendar"], dryRun: false, full: false });
+          return {
+            action: request.action,
+            accepted: true,
+            destructive: false,
+            requiresReload: false,
+            message: "Refresh requested for selected Google resources."
+          };
+        }
+
+        if (request.action === "forceFullResync") {
+          requireRecoveryConfirmation(request, "FULL RESYNC");
+          options.syncRepository.clearAllCheckpoints();
+          await sync.runNow({ resources: ["tasks", "calendar"], dryRun: false, full: true });
+          return {
+            action: request.action,
+            accepted: true,
+            destructive: true,
+            requiresReload: false,
+            message: "Sync checkpoints were cleared and a full resync was requested."
+          };
+        }
+
+        if (request.action === "clearGoogleCache") {
+          requireRecoveryConfirmation(request, "CLEAR CACHE");
+          options.syncRepository.clearLocalGoogleCache();
+          return {
+            action: request.action,
+            accepted: true,
+            destructive: true,
+            requiresReload: true,
+            message: "Local Google cache was cleared. Reload to render the empty cache before the next sync."
+          };
+        }
+
+        requireRecoveryConfirmation(request, "RESET MCP TOKEN");
+        const reset = options.settingsRepository.resetMcpTokenRevision();
+        mcpState.tokenState = reset.tokenState;
+        mcpState.lastTokenResetAt = reset.resetAt;
+
+        return {
+          action: request.action,
+          accepted: true,
+          destructive: true,
+          requiresReload: false,
+          message: "MCP bearer token was reset without exposing the new token value."
+        };
       }
     },
     mcp: {
       status: () => ({ ...mcpState }),
       setEnabled: (request: McpSetEnabledRequest) => {
-        mcpState.enabled = request.enabled;
-        mcpState.confirmationRequired =
-          request.confirmationRequired ?? mcpState.confirmationRequired;
-        options.settingsRepository.update({ mcpEnabled: request.enabled });
+        const permissionMode =
+          request.permissionMode ??
+          (request.confirmationRequired === false
+            ? "allow-writes"
+            : mcpState.permissionMode);
+        const snapshot = options.settingsRepository.update({
+          mcpEnabled: request.enabled,
+          mcpPermissionMode: permissionMode,
+          ...(request.port === undefined ? {} : { mcpPort: request.port })
+        });
+        applyMcpSettings(mcpState, snapshot);
 
         return { ...mcpState };
       }
@@ -404,6 +475,29 @@ function normalizedResources(resources: SyncRunNowRequest["resources"]): ReadSyn
   return [...new Set(resources ?? ["tasks", "calendar"])] as ReadSyncResource[];
 }
 
+function applyMcpSettings(mcpState: McpStatusResponse, settings: SettingsSnapshot): void {
+  mcpState.enabled = settings.mcpEnabled;
+  mcpState.permissionMode = settings.mcpPermissionMode;
+  mcpState.readOnly = settings.mcpPermissionMode === "read-only";
+  mcpState.confirmationRequired = settings.mcpPermissionMode !== "allow-writes";
+  mcpState.port = settings.mcpPort;
+}
+
+function requireRecoveryConfirmation(
+  request: SettingsRecoveryActionRequest,
+  phrase: string
+): void {
+  if (request.confirmation?.accepted === true && request.confirmation.phrase === phrase) {
+    return;
+  }
+
+  throw new HcbPublicError({
+    code: "VALIDATION_ERROR",
+    message: `Type ${phrase} to confirm this destructive recovery action.`,
+    recoverable: true
+  });
+}
+
 function signedOutAccount(): GoogleAccountConnectionStatusDto {
   const now = new Date().toISOString();
 
@@ -428,12 +522,47 @@ function isStale(status: SyncStatusResponse): boolean {
 }
 
 function nativeCapabilities(): NativeCapabilitiesResponse {
+  const isMac = process.platform === "darwin";
+
   return {
     platform: nativePlatform(),
-    notifications: process.platform === "darwin",
-    globalShortcuts: process.platform === "darwin",
-    tray: process.platform === "darwin",
-    deepLinks: process.platform === "darwin"
+    notifications: isMac,
+    globalShortcuts: isMac,
+    tray: isMac,
+    deepLinks: isMac,
+    trayStatus: {
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Tray startup is owned by the native shell service." : "Tray/menu bar is unavailable."
+    },
+    quickCaptureShortcut: {
+      accelerator: null,
+      registered: false,
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Shortcut registration is owned by the native shell service." : "Global shortcuts are unavailable."
+    },
+    notificationsStatus: {
+      permission: isMac ? "prompt" : "unsupported",
+      scheduledCount: 0,
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Notification scheduling is owned by the native shell service." : "Notifications are unavailable."
+    },
+    deepLinkStatus: {
+      scheme: "hotcrossbuns",
+      registered: false,
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Protocol registration is owned by the native shell service." : "Deep links are unavailable."
+    },
+    updaterStatus: {
+      state: "unsupported",
+      message: "Preview update checks are not configured for this build."
+    },
+    mcpStatus: {
+      state: "disabled",
+      message: "MCP local agent access is disabled."
+    },
+    deferredStartup: {
+      state: "pending"
+    }
   };
 }
 

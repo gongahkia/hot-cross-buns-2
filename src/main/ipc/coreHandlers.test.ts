@@ -64,7 +64,9 @@ describe("core IPC handlers", () => {
         url: "http://127.0.0.1"
       }
     });
-    expect(JSON.stringify({ sync, mcp })).not.toMatch(/token|secret|Bearer/i);
+    expect(JSON.stringify({ sync, mcp })).not.toMatch(
+      /fake-access-token|fake-refresh-token|fake-mcp-token|Bearer\s+[A-Za-z0-9._~+/=-]+|secret=/i
+    );
   });
 });
 

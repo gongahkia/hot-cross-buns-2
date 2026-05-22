@@ -5,11 +5,13 @@ export type CalendarViewId = "agenda" | "day" | "week" | "month";
 export type SearchSource = "task" | "event" | "note";
 export type SettingsSectionId =
   | "google"
+  | "resources"
   | "sync"
   | "appearance"
   | "hotkeys"
   | "tray"
   | "notifications"
+  | "localData"
   | "mcp"
   | "diagnostics";
 

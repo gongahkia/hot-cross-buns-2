@@ -4,10 +4,15 @@ import type {
   CalendarEventSummary,
   CalendarListSummary,
   DiagnosticsHealthResponse,
+  DiagnosticsSummaryResponse,
+  NativeCapabilitiesResponse,
   NoteDetail,
   NoteSummary,
   SearchResultItem,
+  SettingsRecoveryActionRequest,
+  SettingsRecoveryActionResponse,
   SettingsSnapshot,
+  SettingsUpdateRequest,
   SyncStatusResponse,
   TaskDetail,
   TaskCreateRequest,
@@ -52,6 +57,14 @@ export interface CoreViewModelSource {
   isStale: boolean;
   largeTaskWindow: TaskViewModel[];
   refresh: () => void;
+  settings: SettingsSnapshot;
+  diagnosticsSummary?: DiagnosticsSummaryResponse;
+  settingsMutationError?: string;
+  settingsMutationPending: boolean;
+  updateSettings: (request: SettingsUpdateRequest) => Promise<boolean>;
+  runRecoveryAction: (
+    request: SettingsRecoveryActionRequest
+  ) => Promise<SettingsRecoveryActionResponse | null>;
   taskMutationError?: string;
   taskMutationPending: boolean;
   clearTaskMutationError: () => void;
@@ -87,6 +100,8 @@ interface CoreDataSnapshot {
   settings: SettingsSnapshot;
   syncStatus: SyncStatusResponse;
   health?: DiagnosticsHealthResponse;
+  native: NativeCapabilitiesResponse;
+  diagnosticsSummary?: DiagnosticsSummaryResponse;
 }
 
 interface CoreDataLoadState {
@@ -107,6 +122,8 @@ interface TaskMutationUiState {
   error?: string;
 }
 
+type SettingsMutationUiState = TaskMutationUiState;
+
 interface CalendarEventDayIndex {
   eventsByDay: Map<string, CalendarEventViewModel[]>;
 }
@@ -123,8 +140,59 @@ const emptySyncStatus: SyncStatusResponse = {
 const emptySettings: SettingsSnapshot = {
   theme: "system",
   startOnLogin: false,
+  selectedTaskListIds: [],
+  selectedCalendarIds: [],
+  syncMode: "balanced",
   quickCaptureShortcut: "Ctrl+Space",
-  mcpEnabled: false
+  showTrayIcon: true,
+  trayClickAction: "toggle-window",
+  notificationsEnabled: false,
+  notificationLeadMinutes: 10,
+  mcpEnabled: false,
+  mcpPermissionMode: "confirm-writes",
+  mcpPort: 0,
+  diagnosticsIncludePerformance: true
+};
+
+const emptyNativeCapabilities: NativeCapabilitiesResponse = {
+  platform: "unknown",
+  notifications: false,
+  globalShortcuts: false,
+  tray: false,
+  deepLinks: false,
+  trayStatus: {
+    state: "unsupported",
+    message: "Native shell is unavailable."
+  },
+  quickCaptureShortcut: {
+    accelerator: null,
+    registered: false,
+    state: "unsupported",
+    message: "Global shortcuts are unavailable."
+  },
+  notificationsStatus: {
+    permission: "unsupported",
+    scheduledCount: 0,
+    state: "unsupported",
+    message: "Notifications are unavailable."
+  },
+  deepLinkStatus: {
+    scheme: "hotcrossbuns",
+    registered: false,
+    state: "unsupported",
+    message: "Deep links are unavailable."
+  },
+  updaterStatus: {
+    state: "unsupported",
+    message: "Preview update checks are not configured."
+  },
+  mcpStatus: {
+    state: "disabled",
+    message: "MCP local agent access is disabled."
+  },
+  deferredStartup: {
+    state: "pending"
+  }
 };
 
 const emptySnapshot: CoreDataSnapshot = {
@@ -134,7 +202,8 @@ const emptySnapshot: CoreDataSnapshot = {
   events: [],
   notes: [],
   settings: emptySettings,
-  syncStatus: emptySyncStatus
+  syncStatus: emptySyncStatus,
+  native: emptyNativeCapabilities
 };
 
 export function CoreDataProvider({ children }: { children: ReactNode }): JSX.Element {
@@ -240,6 +309,9 @@ function usePreloadCoreSource(): CoreViewModelSource {
     state: "loading"
   });
   const [taskMutation, setTaskMutation] = useState<TaskMutationUiState>({ pending: false });
+  const [settingsMutation, setSettingsMutation] = useState<SettingsMutationUiState>({
+    pending: false
+  });
   const cachedDataReported = useRef(false);
   const retryTaskMutation = useRef<() => void>(() => undefined);
   const taskViewModelCache = useRef(new Map<string, { signature: string; viewModel: TaskViewModel }>());
@@ -307,6 +379,57 @@ function usePreloadCoreSource(): CoreViewModelSource {
     setTaskMutation({ pending: false });
     refreshSyncStatus();
   }, [refreshSyncStatus]);
+
+  const refreshDiagnosticsSummary = useCallback(() => {
+    void window.hcb?.diagnostics.summary().then((result) => {
+      if (!result?.ok) {
+        return;
+      }
+
+      setLoadState((current) => ({
+        ...current,
+        snapshot: {
+          ...current.snapshot,
+          diagnosticsSummary: result.data
+        }
+      }));
+    });
+  }, []);
+
+  const updateSettings = useCallback(
+    async (request: SettingsUpdateRequest): Promise<boolean> => {
+      if (!window.hcb) {
+        setSettingsMutation({
+          pending: false,
+          error: "Settings require the preload bridge."
+        });
+        return false;
+      }
+
+      setSettingsMutation({ pending: true });
+      const result = await window.hcb.settings.update(request);
+
+      if (result.ok) {
+        setLoadState((current) => ({
+          ...current,
+          snapshot: {
+            ...current.snapshot,
+            settings: result.data
+          }
+        }));
+        setSettingsMutation({ pending: false });
+        refreshDiagnosticsSummary();
+        return true;
+      }
+
+      setSettingsMutation({
+        pending: false,
+        error: result.error.message
+      });
+      return false;
+    },
+    [refreshDiagnosticsSummary]
+  );
 
   const createTask = useCallback(
     async (request: TaskCreateRequest): Promise<boolean> => {
@@ -643,6 +766,40 @@ function usePreloadCoreSource(): CoreViewModelSource {
     );
   }, []);
 
+  const runRecoveryAction = useCallback(
+    async (
+      request: SettingsRecoveryActionRequest
+    ): Promise<SettingsRecoveryActionResponse | null> => {
+      if (!window.hcb) {
+        setSettingsMutation({
+          pending: false,
+          error: "Recovery actions require the preload bridge."
+        });
+        return null;
+      }
+
+      setSettingsMutation({ pending: true });
+      const result = await window.hcb.settings.recoveryAction(request);
+
+      if (result.ok) {
+        setSettingsMutation({ pending: false });
+        refreshSyncStatus();
+        refreshDiagnosticsSummary();
+        if (request.action === "clearGoogleCache" || request.action === "forceFullResync") {
+          load();
+        }
+        return result.data;
+      }
+
+      setSettingsMutation({
+        pending: false,
+        error: result.error.message
+      });
+      return null;
+    },
+    [load, refreshDiagnosticsSummary, refreshSyncStatus]
+  );
+
   useEffect(() => {
     load();
   }, [load]);
@@ -678,6 +835,9 @@ function usePreloadCoreSource(): CoreViewModelSource {
       refresh: load,
       taskViewModelCache: taskViewModelCache.current,
       taskMutation,
+      settingsMutation,
+      updateSettings,
+      runRecoveryAction,
       clearTaskMutationError: () => setTaskMutation((current) => ({ ...current, error: undefined })),
       retryLastTaskMutation: () => retryTaskMutation.current(),
       createTask,
@@ -700,8 +860,11 @@ function usePreloadCoreSource(): CoreViewModelSource {
       loadState,
       moveTask,
       renameTaskList,
+      runRecoveryAction,
       reopenTask,
+      settingsMutation,
       taskMutation,
+      updateSettings,
       updateTask
     ]
   );
@@ -723,7 +886,9 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
     notes,
     settings,
     syncStatus,
-    health
+    health,
+    native,
+    diagnosticsSummary
   ] = await Promise.all([
     window.hcb.tasks.listTaskLists({ limit: 100 }).then((result) => unwrap(result, "Task lists failed")),
     window.hcb.tasks.list({ status: "all", limit: 100 }).then((result) => unwrap(result, "Tasks failed")),
@@ -742,7 +907,9 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
     window.hcb.notes.list({ limit: 50 }).then((result) => unwrap(result, "Notes failed")),
     window.hcb.settings.get().then((result) => unwrap(result, "Settings failed")),
     window.hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
-    window.hcb.diagnostics.health().then((result) => unwrap(result, "Diagnostics failed"))
+    window.hcb.diagnostics.health().then((result) => unwrap(result, "Diagnostics failed")),
+    window.hcb.native.capabilities().then((result) => unwrap(result, "Native status failed")),
+    window.hcb.diagnostics.summary().then((result) => unwrap(result, "Diagnostics summary failed"))
   ]);
 
   return {
@@ -753,7 +920,9 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
     notes: notes.items,
     settings,
     syncStatus,
-    health
+    health,
+    native,
+    diagnosticsSummary
   };
 }
 
@@ -765,6 +934,11 @@ function buildCoreViewModelSource(
     refresh: () => void;
     taskViewModelCache: Map<string, { signature: string; viewModel: TaskViewModel }>;
     taskMutation: TaskMutationUiState;
+    settingsMutation: SettingsMutationUiState;
+    updateSettings: (request: SettingsUpdateRequest) => Promise<boolean>;
+    runRecoveryAction: (
+      request: SettingsRecoveryActionRequest
+    ) => Promise<SettingsRecoveryActionResponse | null>;
     clearTaskMutationError: () => void;
     retryLastTaskMutation: () => void;
     createTask: (request: TaskCreateRequest) => Promise<boolean>;
@@ -835,6 +1009,12 @@ function buildCoreViewModelSource(
     isStale: options.state === "stale" || snapshot.syncStatus.stale === true,
     largeTaskWindow: tasks,
     refresh: options.refresh,
+    settings: snapshot.settings,
+    diagnosticsSummary: snapshot.diagnosticsSummary,
+    settingsMutationError: options.settingsMutation.error,
+    settingsMutationPending: options.settingsMutation.pending,
+    updateSettings: options.updateSettings,
+    runRecoveryAction: options.runRecoveryAction,
     taskMutationError: options.taskMutation.error,
     taskMutationPending: options.taskMutation.pending,
     clearTaskMutationError: options.clearTaskMutationError,
@@ -989,16 +1169,39 @@ function groupChildTasks(tasks: TaskSummary[]): Map<string, TaskSummary[]> {
 
 function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[] {
   const sync = snapshot.syncStatus;
+  const summary = snapshot.diagnosticsSummary;
+  const account = summary?.account;
+  const selectedTaskListCount =
+    summary?.selectedResources.taskLists.filter((resource) => resource.selected).length ??
+    snapshot.settings.selectedTaskListIds.length;
+  const selectedCalendarCount =
+    summary?.selectedResources.calendars.filter((resource) => resource.selected).length ??
+    snapshot.settings.selectedCalendarIds.length;
 
   return [
     {
       id: "google",
       title: "Google",
-      status: sync.offline ? "Disconnected" : "Connected",
-      detail: "Account connection state",
+      status: account?.state === "connected" ? "Connected" : "Disconnected",
+      detail: "Google account connection state",
       rows: [
-        { id: "state", label: "State", value: sync.offline ? "Signed out" : "Connected" },
-        { id: "scopes", label: "Scopes", value: "Tasks and Calendar" }
+        { id: "state", label: "State", value: account?.state ?? "signed_out" },
+        { id: "account", label: "Account", value: account?.email ?? "Not connected" },
+        {
+          id: "scopes",
+          label: "Missing scopes",
+          value: String(account?.missingScopeCount ?? 2)
+        }
+      ]
+    },
+    {
+      id: "resources",
+      title: "Resources",
+      status: `${selectedTaskListCount}/${selectedCalendarCount}`,
+      detail: "Selected task lists and calendars",
+      rows: [
+        { id: "task-lists", label: "Selected task lists", value: String(selectedTaskListCount) },
+        { id: "calendars", label: "Selected calendars", value: String(selectedCalendarCount) }
       ]
     },
     {
@@ -1007,6 +1210,7 @@ function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[
       status: syncLabel(sync),
       detail: "Read sync state",
       rows: [
+        { id: "mode", label: "Mode", value: snapshot.settings.syncMode },
         { id: "pending", label: "Pending mutations", value: String(sync.pendingMutationCount) },
         { id: "completed", label: "Last completed", value: sync.lastCompletedAt ?? "Never" },
         { id: "error", label: "Last error", value: sync.lastErrorCode ?? "None" }
@@ -1022,36 +1226,68 @@ function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[
     {
       id: "hotkeys",
       title: "Hotkeys",
-      status: snapshot.settings.quickCaptureShortcut ? "Set" : "Unset",
+      status: nativeStateLabel(snapshot.native.quickCaptureShortcut.state),
       detail: "Quick capture shortcut",
       rows: [
         {
           id: "quick-capture",
           label: "Quick capture",
-          value: snapshot.settings.quickCaptureShortcut ?? "Not configured"
+          value: snapshot.native.quickCaptureShortcut.accelerator ?? "Not configured"
+        },
+        {
+          id: "registration",
+          label: "Registration",
+          value: snapshot.native.quickCaptureShortcut.message ?? "No native status reported"
         }
       ]
     },
     {
       id: "tray",
       title: "Tray",
-      status: "Ready",
+      status: nativeStateLabel(snapshot.native.trayStatus.state),
       detail: "Menu bar state",
-      rows: [{ id: "platform", label: "Platform", value: "macOS first" }]
+      rows: [
+        { id: "icon", label: "Show icon", value: snapshot.settings.showTrayIcon ? "Yes" : "No" },
+        { id: "click", label: "Click action", value: snapshot.settings.trayClickAction },
+        { id: "native", label: "Native state", value: snapshot.native.trayStatus.message ?? "No native status reported" }
+      ]
     },
     {
       id: "notifications",
       title: "Notifications",
-      status: "Prompt",
+      status: nativeStateLabel(snapshot.native.notificationsStatus.state),
       detail: "Notification permission",
-      rows: [{ id: "permission", label: "Permission", value: "Prompt when needed" }]
+      rows: [
+        { id: "enabled", label: "Local notifications", value: snapshot.settings.notificationsEnabled ? "On" : "Off" },
+        { id: "lead", label: "Lead time", value: `${snapshot.settings.notificationLeadMinutes} min` },
+        { id: "permission", label: "Permission", value: snapshot.native.notificationsStatus.permission },
+        { id: "scheduled", label: "Scheduled", value: String(snapshot.native.notificationsStatus.scheduledCount) }
+      ]
+    },
+    {
+      id: "localData",
+      title: "Local data",
+      status: summary ? "Ready" : "Pending",
+      detail: "Cache, checkpoint, and pending mutation state",
+      rows: [
+        { id: "cache", label: "Cached items", value: String((summary?.cache.taskCount ?? 0) + (summary?.cache.eventCount ?? 0)) },
+        { id: "checkpoints", label: "Checkpoints", value: String(summary?.checkpoints.totalCount ?? 0) },
+        { id: "pending", label: "Pending mutations", value: String(summary?.pendingMutations.totalCount ?? sync.pendingMutationCount) }
+      ]
     },
     {
       id: "mcp",
       title: "MCP",
-      status: snapshot.settings.mcpEnabled ? "Enabled" : "Disabled",
+      status: snapshot.settings.mcpEnabled
+        ? nativeStateLabel(snapshot.native.mcpStatus.state)
+        : "Disabled",
       detail: "Local agent access",
-      rows: [{ id: "enabled", label: "Enabled", value: snapshot.settings.mcpEnabled ? "Yes" : "No" }]
+      rows: [
+        { id: "enabled", label: "Enabled", value: snapshot.settings.mcpEnabled ? "Yes" : "No" },
+        { id: "mode", label: "Permission mode", value: snapshot.settings.mcpPermissionMode },
+        { id: "token", label: "Token state", value: summary?.mcp.tokenState ?? "not_configured" },
+        { id: "startup", label: "Startup", value: snapshot.native.mcpStatus.message ?? "No native status reported" }
+      ]
     },
     {
       id: "diagnostics",
@@ -1071,6 +1307,30 @@ function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[
       ]
     }
   ];
+}
+
+function nativeStateLabel(state: NativeCapabilitiesResponse["trayStatus"]["state"]): string {
+  if (state === "ready") {
+    return "Ready";
+  }
+
+  if (state === "conflict") {
+    return "Conflict";
+  }
+
+  if (state === "error") {
+    return "Error";
+  }
+
+  if (state === "unsupported") {
+    return "Unsupported";
+  }
+
+  if (state === "disabled") {
+    return "Disabled";
+  }
+
+  return "Pending";
 }
 
 function stableTaskViewModel(

@@ -48,6 +48,7 @@ import type {
   TaskUpdateRequest
 } from "@shared/ipc/contracts";
 import { HcbPublicError } from "@shared/ipc/result";
+import { redactMetadata } from "@shared/redaction";
 import type { SqliteConnection, SqliteParams, SqliteWriteOperation } from "./sqliteConnection";
 
 interface PageWindow<T> {
@@ -175,7 +176,7 @@ export class LocalPerformanceRepository {
           timing.kind,
           timing.name,
           Math.max(0, Math.round(timing.durationMs * 100) / 100),
-          JSON.stringify(timing.metadata ?? {}),
+          JSON.stringify(redactMetadata(timing.metadata)),
           timing.createdAt ?? new Date().toISOString()
         ]
       );
@@ -196,6 +197,19 @@ export class LocalPerformanceRepository {
       `SELECT id, kind, name, duration_ms AS durationMs, created_at AS createdAt
        FROM local_performance_timings
        ORDER BY created_at DESC, id DESC
+       LIMIT ?;`,
+      [safeLimit]
+    );
+  }
+
+  listSlowSqliteQueries(limit = 10): Array<{ name: string; durationMs: number; createdAt: string }> {
+    const safeLimit = Math.max(1, Math.min(10, limit));
+
+    return this.connection.query<{ name: string; durationMs: number; createdAt: string }>(
+      `SELECT name, duration_ms AS durationMs, created_at AS createdAt
+       FROM local_performance_timings
+       WHERE kind = 'sqlite_query'
+       ORDER BY duration_ms DESC, created_at DESC, id DESC
        LIMIT ?;`,
       [safeLimit]
     );
@@ -1654,7 +1668,45 @@ export class LocalSettingsRepository {
         "quickCaptureShortcut",
         DEFAULT_SETTINGS.quickCaptureShortcut
       ),
-      mcpEnabled: this.readSetting("mcp", "enabled", DEFAULT_SETTINGS.mcpEnabled)
+      selectedTaskListIds: this.readSetting(
+        "google",
+        "selectedTaskListIds",
+        this.defaultSelectedTaskListIds()
+      ),
+      selectedCalendarIds: this.readSetting(
+        "google",
+        "selectedCalendarIds",
+        this.defaultSelectedCalendarIds()
+      ),
+      syncMode: this.readSetting("sync", "mode", DEFAULT_SETTINGS.syncMode),
+      showTrayIcon: this.readSetting("tray", "showIcon", DEFAULT_SETTINGS.showTrayIcon),
+      trayClickAction: this.readSetting(
+        "tray",
+        "clickAction",
+        DEFAULT_SETTINGS.trayClickAction
+      ),
+      notificationsEnabled: this.readSetting(
+        "notifications",
+        "enabled",
+        DEFAULT_SETTINGS.notificationsEnabled
+      ),
+      notificationLeadMinutes: this.readSetting(
+        "notifications",
+        "leadMinutes",
+        DEFAULT_SETTINGS.notificationLeadMinutes
+      ),
+      mcpEnabled: this.readSetting("mcp", "enabled", DEFAULT_SETTINGS.mcpEnabled),
+      mcpPermissionMode: this.readSetting(
+        "mcp",
+        "permissionMode",
+        DEFAULT_SETTINGS.mcpPermissionMode
+      ),
+      mcpPort: this.readSetting("mcp", "port", DEFAULT_SETTINGS.mcpPort),
+      diagnosticsIncludePerformance: this.readSetting(
+        "diagnostics",
+        "includePerformance",
+        DEFAULT_SETTINGS.diagnosticsIncludePerformance
+      )
     };
   }
 
@@ -1673,11 +1725,85 @@ export class LocalSettingsRepository {
       this.writeSetting("hotkeys", "quickCaptureShortcut", request.quickCaptureShortcut, now);
     }
 
+    if (request.selectedTaskListIds !== undefined) {
+      this.writeSetting("google", "selectedTaskListIds", uniqueIds(request.selectedTaskListIds), now);
+    }
+
+    if (request.selectedCalendarIds !== undefined) {
+      this.writeSetting("google", "selectedCalendarIds", uniqueIds(request.selectedCalendarIds), now);
+    }
+
+    if (request.syncMode !== undefined) {
+      this.writeSetting("sync", "mode", request.syncMode, now);
+    }
+
+    if (request.showTrayIcon !== undefined) {
+      this.writeSetting("tray", "showIcon", request.showTrayIcon, now);
+    }
+
+    if (request.trayClickAction !== undefined) {
+      this.writeSetting("tray", "clickAction", request.trayClickAction, now);
+    }
+
+    if (request.notificationsEnabled !== undefined) {
+      this.writeSetting("notifications", "enabled", request.notificationsEnabled, now);
+    }
+
+    if (request.notificationLeadMinutes !== undefined) {
+      this.writeSetting("notifications", "leadMinutes", request.notificationLeadMinutes, now);
+    }
+
     if (request.mcpEnabled !== undefined) {
       this.writeSetting("mcp", "enabled", request.mcpEnabled, now);
     }
 
+    if (request.mcpPermissionMode !== undefined) {
+      this.writeSetting("mcp", "permissionMode", request.mcpPermissionMode, now);
+    }
+
+    if (request.mcpPort !== undefined) {
+      this.writeSetting("mcp", "port", request.mcpPort, now);
+    }
+
+    if (request.diagnosticsIncludePerformance !== undefined) {
+      this.writeSetting(
+        "diagnostics",
+        "includePerformance",
+        request.diagnosticsIncludePerformance,
+        now
+      );
+    }
+
     return this.get();
+  }
+
+  resetMcpTokenRevision(now = new Date().toISOString()): { tokenState: "rotated"; resetAt: string } {
+    this.writeSetting("mcp", "tokenRevision", `rev:${randomUUID()}`, now);
+    this.writeSetting("mcp", "tokenResetAt", now, now);
+
+    return {
+      tokenState: "rotated",
+      resetAt: now
+    };
+  }
+
+  mcpTokenState(): {
+    tokenState: "not_configured" | "configured" | "rotated";
+    lastTokenResetAt?: string;
+  } {
+    const tokenRevision = this.readSetting<string | null>("mcp", "tokenRevision", null);
+    const lastTokenResetAt = this.readSetting<string | null>("mcp", "tokenResetAt", null);
+
+    if (lastTokenResetAt) {
+      return {
+        tokenState: "rotated",
+        lastTokenResetAt
+      };
+    }
+
+    return {
+      tokenState: tokenRevision ? "configured" : "not_configured"
+    };
   }
 
   private readSetting<T>(scope: string, key: string, fallback: T): T {
@@ -1709,6 +1835,32 @@ export class LocalSettingsRepository {
          updated_at = excluded.updated_at;`,
       [scope, key, JSON.stringify(value), now]
     );
+  }
+
+  private defaultSelectedTaskListIds(): string[] {
+    const rows = this.connection.query<{ id: string }>(
+      `SELECT id
+       FROM google_task_lists
+       WHERE deleted_at IS NULL
+       ORDER BY sort_order ASC, title COLLATE NOCASE ASC, id ASC
+       LIMIT 100;`
+    );
+
+    return rows.map((row) => row.id);
+  }
+
+  private defaultSelectedCalendarIds(): string[] {
+    const rows = this.connection.query<{ id: string }>(
+      `SELECT id
+       FROM google_calendar_lists
+       WHERE deleted_at IS NULL
+         AND is_hidden = 0
+         AND is_selected = 1
+       ORDER BY is_primary DESC, summary COLLATE NOCASE ASC, id ASC
+       LIMIT 100;`
+    );
+
+    return rows.map((row) => row.id);
   }
 }
 
@@ -1913,6 +2065,10 @@ function nullIfEmpty(value: string): string | null {
   const trimmed = value.trim();
 
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function uniqueIds(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
 }
 
 function googleEventIdFromLocalEventId(id: string): string {

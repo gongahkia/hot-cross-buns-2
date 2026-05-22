@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import type {
   CalendarEventCreateRequest,
   CalendarEventUpdateRequest,
+  SettingsRecoveryActionRequest,
+  SettingsSnapshot,
+  SettingsUpdateRequest,
   TaskCreateRequest,
   TaskUpdateRequest
 } from "@shared/ipc/contracts";
@@ -2217,9 +2220,381 @@ function SearchView({
 function SettingsView(): JSX.Element {
   const source = useCoreViewModelSource();
   const [selectedSectionId, setSelectedSectionId] = useState<SettingsSectionId>("google");
+  const [confirmation, setConfirmation] = useState<{
+    action: SettingsRecoveryActionRequest["action"];
+    phrase: string;
+  } | null>(null);
+  const [confirmationInput, setConfirmationInput] = useState("");
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
   const selectedSection =
     source.settingsSections.find((section) => section.id === selectedSectionId) ??
     source.settingsSections[0];
+  const diagnostics = source.diagnosticsSummary;
+  const settings = source.settings;
+
+  function updateSettings(request: SettingsUpdateRequest): void {
+    setRecoveryMessage(null);
+    void source.updateSettings(request);
+  }
+
+  function updateSelectedTaskList(taskListId: string, selected: boolean): void {
+    const current = new Set(settings.selectedTaskListIds.length > 0
+      ? settings.selectedTaskListIds
+      : source.taskLists.map((taskList) => taskList.id));
+
+    if (selected) {
+      current.add(taskListId);
+    } else {
+      current.delete(taskListId);
+    }
+
+    updateSettings({ selectedTaskListIds: [...current] });
+  }
+
+  function updateSelectedCalendar(calendarId: string, selected: boolean): void {
+    const current = new Set(settings.selectedCalendarIds.length > 0
+      ? settings.selectedCalendarIds
+      : source.calendarSources.filter((calendar) => calendar.selected).map((calendar) => calendar.id));
+
+    if (selected) {
+      current.add(calendarId);
+    } else {
+      current.delete(calendarId);
+    }
+
+    updateSettings({ selectedCalendarIds: [...current] });
+  }
+
+  function beginRecoveryAction(action: SettingsRecoveryActionRequest["action"]): void {
+    if (action === "refresh") {
+      void runRecovery({ action });
+      return;
+    }
+
+    setConfirmation({ action, phrase: recoveryPhrase(action) });
+    setConfirmationInput("");
+  }
+
+  async function runRecovery(request: SettingsRecoveryActionRequest): Promise<void> {
+    const result = await source.runRecoveryAction(request);
+
+    if (result) {
+      setRecoveryMessage(result.message);
+      setConfirmation(null);
+      setConfirmationInput("");
+    }
+  }
+
+  function confirmRecoveryAction(): void {
+    if (!confirmation || confirmationInput !== confirmation.phrase) {
+      return;
+    }
+
+    void runRecovery({
+      action: confirmation.action,
+      confirmation: {
+        accepted: true,
+        phrase: confirmationInput
+      }
+    });
+  }
+
+  function copyDiagnostics(): void {
+    const payload = JSON.stringify(diagnostics ?? selectedSection.rows, null, 2);
+    void navigator.clipboard?.writeText(payload);
+    setRecoveryMessage("Diagnostics summary copied without credentials, raw Google payloads, MCP bearer tokens, or sensitive bodies.");
+  }
+
+  function renderSectionControls(): JSX.Element {
+    if (selectedSection.id === "google") {
+      return (
+        <div className="grid gap-3 p-3">
+          <SettingsRows rows={selectedSection.rows} status={selectedSection.status} />
+          <StatusBanner
+            description="Only sanitized connection state is available in the renderer."
+            title="Credential storage"
+            tone="success"
+          />
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "resources") {
+      const selectedTaskLists = new Set(settings.selectedTaskListIds);
+      const selectedCalendars = new Set(settings.selectedCalendarIds);
+
+      return (
+        <div className="grid grid-cols-2 gap-3 p-3">
+          <div className="min-w-0 rounded-hcbMd border border-border bg-bg-tertiary">
+            <div className="border-b border-border px-3 py-2">
+              <h3 className="truncate text-[var(--text-md)] font-semibold text-text-primary">Task lists</h3>
+              <p className="truncate text-[var(--text-xs)] text-text-muted">Google Tasks</p>
+            </div>
+            <div className="grid gap-2 p-3">
+              {source.taskLists.length === 0 ? (
+                <EmptyState description="No task lists are cached yet." title="No task lists" />
+              ) : source.taskLists.map((taskList) => (
+                <label
+                  className="flex min-h-8 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary"
+                  key={taskList.id}
+                >
+                  <input
+                    checked={selectedTaskLists.size === 0 || selectedTaskLists.has(taskList.id)}
+                    className="accent-[var(--color-accent)]"
+                    onChange={(event) => updateSelectedTaskList(taskList.id, event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{taskList.title}</span>
+                  <Badge>{taskList.activeTaskCount ?? taskList.taskCount ?? 0}</Badge>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="min-w-0 rounded-hcbMd border border-border bg-bg-tertiary">
+            <div className="border-b border-border px-3 py-2">
+              <h3 className="truncate text-[var(--text-md)] font-semibold text-text-primary">Calendars</h3>
+              <p className="truncate text-[var(--text-xs)] text-text-muted">Google Calendar</p>
+            </div>
+            <div className="grid gap-2 p-3">
+              {source.calendarSources.length === 0 ? (
+                <EmptyState description="No calendars are cached yet." title="No calendars" />
+              ) : source.calendarSources.map((calendar) => (
+                <label
+                  className="flex min-h-8 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary"
+                  key={calendar.id}
+                >
+                  <input
+                    checked={selectedCalendars.size === 0 ? calendar.selected : selectedCalendars.has(calendar.id)}
+                    className="accent-[var(--color-accent)]"
+                    onChange={(event) => updateSelectedCalendar(calendar.id, event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
+                  <Badge>{calendar.eventCount ?? 0}</Badge>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "sync") {
+      return (
+        <div className="grid gap-3 p-3">
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Sync mode</span>
+            <select
+              aria-label="Sync mode"
+              className={settingsSelectClass}
+              onChange={(event) =>
+                updateSettings({ syncMode: event.target.value as SettingsSnapshot["syncMode"] })
+              }
+              value={settings.syncMode}
+            >
+              <option value="manual">Manual</option>
+              <option value="balanced">Balanced</option>
+              <option value="near-real-time">Near real-time</option>
+            </select>
+          </label>
+          <div className="flex items-center gap-2">
+            <Button disabled={source.settingsMutationPending} onClick={() => beginRecoveryAction("refresh")}>
+              <RotateCcw aria-hidden="true" size={14} />
+              Refresh
+            </Button>
+            <Button
+              disabled={source.settingsMutationPending}
+              onClick={() => beginRecoveryAction("forceFullResync")}
+              variant="danger"
+            >
+              Force full resync
+            </Button>
+          </div>
+          <SettingsRows rows={selectedSection.rows} status={selectedSection.status} />
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "appearance") {
+      return (
+        <div className="grid gap-3 p-3">
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Theme</span>
+            <select
+              aria-label="Theme"
+              className={settingsSelectClass}
+              onChange={(event) =>
+                updateSettings({ theme: event.target.value as SettingsSnapshot["theme"] })
+              }
+              value={settings.theme}
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "hotkeys") {
+      return (
+        <div className="grid gap-3 p-3">
+          <StatusBanner
+            description="Shortcut conflicts are recoverable and do not stop the app."
+            title="Shortcut attention"
+            tone="warning"
+          />
+          <Input
+            aria-label="Quick capture shortcut"
+            onBlur={(event) =>
+              updateSettings({
+                quickCaptureShortcut: event.currentTarget.value.trim() || null
+              })
+            }
+            defaultValue={settings.quickCaptureShortcut ?? ""}
+            placeholder="Ctrl+Space"
+          />
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "tray") {
+      return (
+        <div className="grid gap-3 p-3">
+          <SettingsToggle
+            checked={settings.showTrayIcon}
+            label="Show menu bar icon"
+            onChange={(checked) => updateSettings({ showTrayIcon: checked })}
+          />
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Primary click</span>
+            <select
+              aria-label="Tray click action"
+              className={settingsSelectClass}
+              onChange={(event) =>
+                updateSettings({
+                  trayClickAction: event.target.value as SettingsSnapshot["trayClickAction"]
+                })
+              }
+              value={settings.trayClickAction}
+            >
+              <option value="toggle-window">Show or hide window</option>
+              <option value="quick-capture">Quick capture</option>
+              <option value="open-today">Open Today</option>
+            </select>
+          </label>
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "notifications") {
+      return (
+        <div className="grid gap-3 p-3">
+          <SettingsToggle
+            checked={settings.notificationsEnabled}
+            label="Enable local notifications"
+            onChange={(checked) => updateSettings({ notificationsEnabled: checked })}
+          />
+          <Input
+            aria-label="Notification lead minutes"
+            min={0}
+            max={40320}
+            onBlur={(event) =>
+              updateSettings({
+                notificationLeadMinutes: Number(event.currentTarget.value) || 0
+              })
+            }
+            defaultValue={String(settings.notificationLeadMinutes)}
+            type="number"
+          />
+          <Button onClick={() => void window.hcb?.native.requestNotificationPermission()} variant="ghost">
+            Request permission
+          </Button>
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "localData") {
+      return (
+        <div className="grid gap-3 p-3">
+          <div className="grid grid-cols-3 gap-2">
+            <MetricTile label="Cache rows" value={String((diagnostics?.cache.taskCount ?? 0) + (diagnostics?.cache.eventCount ?? 0))} />
+            <MetricTile label="Checkpoints" value={String(diagnostics?.checkpoints.totalCount ?? 0)} />
+            <MetricTile label="Pending" value={String(diagnostics?.pendingMutations.totalCount ?? 0)} />
+          </div>
+          <Button
+            disabled={source.settingsMutationPending}
+            onClick={() => beginRecoveryAction("clearGoogleCache")}
+            variant="danger"
+          >
+            <Trash2 aria-hidden="true" size={14} />
+            Clear local Google cache
+          </Button>
+        </div>
+      );
+    }
+
+    if (selectedSection.id === "mcp") {
+      return (
+        <div className="grid gap-3 p-3">
+          <SettingsToggle
+            checked={settings.mcpEnabled}
+            label="Enable MCP server"
+            onChange={(checked) => updateSettings({ mcpEnabled: checked })}
+          />
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Permission mode</span>
+            <select
+              aria-label="MCP permission mode"
+              className={settingsSelectClass}
+              onChange={(event) =>
+                updateSettings({
+                  mcpPermissionMode: event.target.value as SettingsSnapshot["mcpPermissionMode"]
+                })
+              }
+              value={settings.mcpPermissionMode}
+            >
+              <option value="read-only">Read-only</option>
+              <option value="confirm-writes">Confirm writes</option>
+              <option value="allow-writes">Allow writes</option>
+            </select>
+          </label>
+          <Input
+            aria-label="MCP port"
+            min={0}
+            max={65535}
+            onBlur={(event) => updateSettings({ mcpPort: Number(event.currentTarget.value) || 0 })}
+            defaultValue={String(settings.mcpPort)}
+            type="number"
+          />
+          <Button
+            disabled={source.settingsMutationPending}
+            onClick={() => beginRecoveryAction("resetMcpToken")}
+            variant="danger"
+          >
+            Reset MCP token
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-3 p-3">
+        <SettingsToggle
+          checked={settings.diagnosticsIncludePerformance}
+          label="Include performance diagnostics"
+          onChange={(checked) => updateSettings({ diagnosticsIncludePerformance: checked })}
+        />
+        <div className="grid grid-cols-3 gap-2">
+          <MetricTile label="Startup" value={`${Math.round(diagnostics?.performance.startup.shellVisibleMs ?? 0)}ms`} />
+          <MetricTile label="Migration" value={`${Math.round(diagnostics?.performance.migrationDurationMs ?? 0)}ms`} />
+          <MetricTile label="MCP requests" value={String(diagnostics?.performance.mcpRequestCounts.totalRequests ?? 0)} />
+        </div>
+        <SettingsRows rows={selectedSection.rows} status={selectedSection.status} />
+      </div>
+    );
+  }
 
   return (
     <SectionChrome
@@ -2252,7 +2627,7 @@ function SettingsView(): JSX.Element {
       <div className="grid gap-3">
         <Panel
           action={
-            <Button size="sm" variant="ghost">
+            <Button onClick={copyDiagnostics} size="sm" variant="ghost">
               <Copy aria-hidden="true" size={14} />
               Copy diagnostics
             </Button>
@@ -2260,69 +2635,116 @@ function SettingsView(): JSX.Element {
           title={selectedSection.title}
           description={selectedSection.detail}
         >
-          <div className="grid gap-3 p-3">
-            <div role="list">
-              {selectedSection.rows.map((row) => (
-                <ListRow
-                  description={row.value}
-                  key={row.id}
-                  title={row.label}
-                  trailing={<Badge tone={settingTone(selectedSection.status)}>{selectedSection.status}</Badge>}
-                />
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex min-h-9 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary">
-                <input
-                  aria-label={`${selectedSection.title} enabled`}
-                  className="accent-[var(--color-accent)]"
-                  defaultChecked={selectedSection.id !== "mcp"}
-                  type="checkbox"
-                />
-                Enabled
-              </label>
-              <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                <span>Mode</span>
-                <select
-                  aria-label={`${selectedSection.title} mode`}
-                  className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  defaultValue="local"
-                >
-                  <option value="local">Local</option>
-                  <option value="sync">Sync</option>
-                </select>
-              </label>
-            </div>
-          </div>
+          {renderSectionControls()}
         </Panel>
 
-        <Panel title="Diagnostics state" description="Sanitized status and recoverable errors">
-          {selectedSection.id === "hotkeys" ? (
-            <ErrorState
-              actionLabel="Review"
-              description="Shortcut conflicts are shown as recoverable settings state."
-              title="Shortcut attention"
-            />
-          ) : (
-            <div className="grid grid-cols-3 gap-2 p-3">
-              <div className="rounded-hcbMd border border-border bg-bg-tertiary p-3">
-                <div className="text-[var(--text-xs)] text-text-muted">Secret exposure</div>
-                <div className="mt-1 text-[var(--text-md)] font-semibold text-success">Redacted</div>
-              </div>
-              <div className="rounded-hcbMd border border-border bg-bg-tertiary p-3">
-                <div className="text-[var(--text-xs)] text-text-muted">IPC contract</div>
-                <div className="mt-1 text-[var(--text-md)] font-semibold text-success">Typed</div>
-              </div>
-              <div className="rounded-hcbMd border border-border bg-bg-tertiary p-3">
-                <div className="text-[var(--text-xs)] text-text-muted">Renderer mode</div>
-                <div className="mt-1 text-[var(--text-md)] font-semibold text-info">Preload</div>
+        {source.settingsMutationError ? (
+          <StatusBanner
+            description={source.settingsMutationError}
+            title="Settings action not applied"
+            tone="warning"
+          />
+        ) : null}
+        {recoveryMessage ? (
+          <StatusBanner description={recoveryMessage} title="Recovery action applied" tone="success" />
+        ) : null}
+        {confirmation ? (
+          <Panel title="Confirm destructive action" description={confirmation.action}>
+            <div className="grid gap-3 p-3">
+              <Input
+                aria-label="Confirmation phrase"
+                onChange={(event) => setConfirmationInput(event.target.value)}
+                placeholder={confirmation.phrase}
+                value={confirmationInput}
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  disabled={confirmationInput !== confirmation.phrase || source.settingsMutationPending}
+                  onClick={confirmRecoveryAction}
+                  variant="danger"
+                >
+                  Confirm
+                </Button>
+                <Button onClick={() => setConfirmation(null)} variant="ghost">
+                  Cancel
+                </Button>
               </div>
             </div>
-          )}
+          </Panel>
+        ) : null}
+
+        <Panel title="Diagnostics state" description="Sanitized status and recoverable errors">
+          <div className="grid grid-cols-4 gap-2 p-3">
+            <MetricTile label="Credentials" value={diagnostics?.redaction.credentials ?? "redacted"} />
+            <MetricTile label="Google payloads" value={diagnostics?.redaction.googlePayloads ?? "omitted"} />
+            <MetricTile label="MCP bearer" value={diagnostics?.redaction.mcpBearerTokens ?? "redacted"} />
+            <MetricTile label="Sensitive bodies" value={diagnostics?.redaction.sensitiveBodies ?? "omitted"} />
+          </div>
         </Panel>
       </div>
     </SectionChrome>
+  );
+}
+
+const settingsSelectClass =
+  "h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+function recoveryPhrase(action: SettingsRecoveryActionRequest["action"]): string {
+  if (action === "forceFullResync") {
+    return "FULL RESYNC";
+  }
+
+  if (action === "clearGoogleCache") {
+    return "CLEAR CACHE";
+  }
+
+  if (action === "resetMcpToken") {
+    return "RESET MCP TOKEN";
+  }
+
+  return "";
+}
+
+function SettingsRows({
+  rows,
+  status
+}: {
+  rows: Array<{ id: string; label: string; value: string }>;
+  status: string;
+}): JSX.Element {
+  return (
+    <div role="list">
+      {rows.map((row) => (
+        <ListRow
+          description={row.value}
+          key={row.id}
+          title={row.label}
+          trailing={<Badge tone={settingTone(status)}>{status}</Badge>}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SettingsToggle({
+  checked,
+  label,
+  onChange
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}): JSX.Element {
+  return (
+    <label className="flex min-h-9 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary">
+      <input
+        checked={checked}
+        className="accent-[var(--color-accent)]"
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 

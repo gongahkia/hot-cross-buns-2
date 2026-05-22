@@ -23,12 +23,14 @@ export function createStubIpcHandlers(): IpcHandlerDefinition[] {
     stub(ipcContracts.sync.runNow, "Manual sync is not implemented yet"),
     stub(ipcContracts.settings.get, "Settings loading is not implemented yet"),
     stub(ipcContracts.settings.update, "Settings updates are not implemented yet"),
+    stub(ipcContracts.settings.recoveryAction, "Settings recovery is not implemented yet"),
     stub(ipcContracts.mcp.status, "MCP status is not implemented yet"),
     stub(ipcContracts.mcp.setEnabled, "MCP settings updates are not implemented yet"),
     stub(ipcContracts.native.capabilities, "Native capability reporting is not implemented yet"),
     stub(
       ipcContracts.native.requestNotificationPermission,
       "Notification permission requests are not implemented yet"
-    )
+    ),
+    stub(ipcContracts.diagnostics.summary, "Diagnostics summary is not implemented yet")
   ];
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import type { NativeAction } from "@shared/ipc/contracts";
 import { CheckCircle2, Command, RefreshCw, WifiOff } from "lucide-react";
 import { CommandPalette } from "./components/CommandPalette";
 import { Badge, Button, IconButton, StatusBanner, cx } from "./components/primitives";
@@ -199,20 +200,75 @@ function AppShell(): JSX.Element {
     setCommandPaletteOpen(true);
   }, []);
 
+  const triggerTaskCommand = useCallback(
+    (id: TaskSurfaceCommand["id"]): void => {
+      navigateToSection("tasks");
+      setTaskCommand((current) => ({
+        id,
+        nonce: (current?.nonce ?? 0) + 1
+      }));
+    },
+    [navigateToSection]
+  );
+
+  const handleNativeAction = useCallback(
+    (action: NativeAction): void => {
+      if (action.type === "quickCapture") {
+        triggerTaskCommand("quick-capture");
+        return;
+      }
+
+      if (action.type === "openSettings") {
+        navigateToSection("settings");
+        return;
+      }
+
+      if (action.type === "refresh") {
+        source.refresh();
+        return;
+      }
+
+      if (action.route.kind === "search") {
+        setSearchQuery(action.route.query ?? "");
+        navigateToSection("search");
+        return;
+      }
+
+      if (action.route.kind === "settings") {
+        navigateToSection("settings");
+        return;
+      }
+
+      if (action.route.kind === "calendar" || action.route.kind === "event") {
+        navigateToSection("calendar");
+        return;
+      }
+
+      if (action.route.kind === "notes" || action.route.kind === "note") {
+        navigateToSection("notes");
+        return;
+      }
+
+      if (action.route.kind === "tasks" || action.route.kind === "task") {
+        navigateToSection("tasks");
+        return;
+      }
+
+      navigateToSection("today");
+    },
+    [navigateToSection, source.refresh, triggerTaskCommand]
+  );
+
   const handlePaletteCommand = useCallback(
     (command: MockCommand): boolean => {
       if (command.id !== "new-task" && command.id !== "quick-capture") {
         return false;
       }
 
-      navigateToSection("tasks");
-      setTaskCommand((current) => ({
-        id: command.id as TaskSurfaceCommand["id"],
-        nonce: (current?.nonce ?? 0) + 1
-      }));
+      triggerTaskCommand(command.id as TaskSurfaceCommand["id"]);
       return true;
     },
-    [navigateToSection]
+    [triggerTaskCommand]
   );
 
   const focusSection = useCallback(
@@ -275,6 +331,8 @@ function AppShell(): JSX.Element {
       void window.hcb?.diagnostics.markShellVisible();
     });
   }, []);
+
+  useEffect(() => window.hcb?.native.subscribeAction(handleNativeAction), [handleNativeAction]);
 
   useEffect(() => {
     function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {

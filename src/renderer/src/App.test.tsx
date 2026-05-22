@@ -783,7 +783,18 @@ describe("App shell", () => {
     await goToSection("Settings");
 
     const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
-    for (const label of ["Google", "Sync", "Appearance", "Hotkeys", "Tray", "Notifications", "MCP", "Diagnostics"]) {
+    for (const label of [
+      "Google",
+      "Resources",
+      "Sync",
+      "Appearance",
+      "Hotkeys",
+      "Tray",
+      "Notifications",
+      "Local data",
+      "MCP",
+      "Diagnostics"
+    ]) {
       expect(within(settingsSupport).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
 
@@ -792,7 +803,39 @@ describe("App shell", () => {
 
     await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
     expect(screen.getByRole("button", { name: /Copy diagnostics/ })).toBeInTheDocument();
-    expect(screen.getByText("Secret exposure")).toBeInTheDocument();
+    expect(screen.getByText("Credentials")).toBeInTheDocument();
+  });
+
+  it("requires confirmation before destructive local data recovery actions", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
+
+    await user.click(within(settingsSupport).getByRole("button", { name: /Local data/ }));
+    await user.click(screen.getByRole("button", { name: /Clear local Google cache/ }));
+
+    expect(api.settings.recoveryAction).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Confirm destructive action" })).toBeInTheDocument();
+
+    const confirmButton = screen.getByRole("button", { name: "Confirm" });
+    expect(confirmButton).toBeDisabled();
+
+    await user.type(screen.getByRole("textbox", { name: "Confirmation phrase" }), "CLEAR CACHE");
+    await user.click(confirmButton);
+
+    await waitFor(() => {
+      expect(api.settings.recoveryAction).toHaveBeenCalledWith({
+        action: "clearGoogleCache",
+        confirmation: {
+          accepted: true,
+          phrase: "CLEAR CACHE"
+        }
+      });
+    });
   });
 
   it("handles an unavailable preload bridge as an offline state", async () => {

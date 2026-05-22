@@ -1,0 +1,668 @@
+import type {
+  NativeAction,
+  NativeCapabilitiesResponse,
+  NativeFeatureState,
+  NativeNotificationPermissionResponse,
+  SettingsSnapshot
+} from "@shared/ipc/contracts";
+import type { NativeDomainService } from "../services/domainInterfaces";
+import {
+  HCB_DEEP_LINK_SCHEME,
+  type NativeOperationResult,
+  type NativePlannerSnapshotSource,
+  type NativePlatformAdapter,
+  type NativePlatformCapabilities,
+  type NativeSettingsSource,
+  type NativeShellSyncActions,
+  type NativeShellWindowActions
+} from "./types";
+
+const notificationHorizonMs = 24 * 60 * 60 * 1000;
+const defaultEventReminderMs = 10 * 60 * 1000;
+const immediateNotificationDelayMs = 1_000;
+const maxScheduledNotifications = 40;
+
+export interface NativeShellServiceOptions {
+  adapter: NativePlatformAdapter;
+  planner: NativePlannerSnapshotSource;
+  settings: NativeSettingsSource;
+  windows: NativeShellWindowActions;
+  sync: NativeShellSyncActions;
+  now?: () => Date;
+}
+
+export class NativeShellService implements NativeDomainService {
+  private readonly now: () => Date;
+  private status: NativeCapabilitiesResponse;
+  private currentShortcut: string | null = null;
+  private deferredStarted = false;
+
+  constructor(private readonly options: NativeShellServiceOptions) {
+    this.now = options.now ?? (() => new Date());
+    this.status = initialStatus(options.adapter.capabilities(), options.settings.get());
+  }
+
+  installAppMenu(): void {
+    this.options.adapter.installAppMenu(this.actions());
+  }
+
+  startDeferredStartup(): void {
+    if (this.deferredStarted) {
+      return;
+    }
+
+    this.deferredStarted = true;
+    this.status = {
+      ...this.status,
+      deferredStartup: {
+        state: "running",
+        startedAt: this.now().toISOString()
+      }
+    };
+
+    void this.runDeferredStartup();
+  }
+
+  applySettings(snapshot: SettingsSnapshot): void {
+    this.status = {
+      ...this.status,
+      mcpStatus: snapshot.mcpEnabled
+        ? featureStatus("pending", "MCP listener startup is deferred until secure token storage is wired.")
+        : featureStatus("disabled", "MCP local agent access is disabled.")
+    };
+
+    if (!snapshot.showTrayIcon) {
+      this.options.adapter.destroyTray();
+      this.status = {
+        ...this.status,
+        trayStatus: featureStatus("disabled", "Menu bar icon is disabled in Settings.")
+      };
+    } else if (this.deferredStarted && this.status.trayStatus.state === "disabled") {
+      this.setupTray();
+    }
+
+    if (!snapshot.notificationsEnabled) {
+      this.options.adapter.clearScheduledNotifications();
+      this.status = {
+        ...this.status,
+        notificationsStatus: {
+          ...this.status.notificationsStatus,
+          scheduledCount: 0,
+          state: "disabled",
+          message: "Local notifications are disabled in Settings."
+        }
+      };
+    } else if (this.deferredStarted) {
+      this.scheduleNotificationsFromCache();
+    }
+
+    if (!this.deferredStarted) {
+      this.status = {
+        ...this.status,
+        quickCaptureShortcut: {
+          ...this.status.quickCaptureShortcut,
+          accelerator: snapshot.quickCaptureShortcut,
+          state: snapshot.quickCaptureShortcut ? "pending" : "disabled",
+          registered: false,
+          ...(snapshot.quickCaptureShortcut ? {} : { message: "Quick capture shortcut is not configured." })
+        }
+      };
+      return;
+    }
+
+    this.registerQuickCaptureShortcut(snapshot.quickCaptureShortcut);
+  }
+
+  capabilities(): NativeCapabilitiesResponse {
+    return structuredClone(this.status);
+  }
+
+  requestNotificationPermission(): NativeNotificationPermissionResponse {
+    const permission = this.options.adapter.requestNotificationPermission();
+
+    this.status = {
+      ...this.status,
+      notificationsStatus: {
+        ...this.status.notificationsStatus,
+        permission: permission.state,
+        state: permission.state === "unsupported" ? "unsupported" : "ready",
+        message:
+          permission.state === "unsupported"
+            ? "Local notifications are not supported by this platform adapter."
+            : "Notification permission request was handed to the operating system."
+      }
+    };
+
+    return permission;
+  }
+
+  handleDeepLink(rawUrl: string): boolean {
+    const action = parseHotCrossBunsDeepLink(rawUrl);
+
+    if (!action) {
+      this.status = {
+        ...this.status,
+        deepLinkStatus: {
+          ...this.status.deepLinkStatus,
+          state: "error",
+          message: "Ignored malformed hotcrossbuns deep link."
+        }
+      };
+      return false;
+    }
+
+    this.options.windows.showMainWindow();
+    this.options.windows.dispatchAction(action);
+    this.status = {
+      ...this.status,
+      deepLinkStatus: {
+        ...this.status.deepLinkStatus,
+        state: this.status.deepLinkStatus.registered ? "ready" : this.status.deepLinkStatus.state,
+        message: "Last deep link was routed to the renderer through preload."
+      }
+    };
+
+    return true;
+  }
+
+  dispose(): void {
+    this.options.adapter.dispose();
+  }
+
+  private async runDeferredStartup(): Promise<void> {
+    try {
+      this.setupTray();
+      this.registerQuickCaptureShortcut(this.options.settings.get().quickCaptureShortcut);
+      this.registerProtocolClient();
+      this.scheduleNotificationsFromCache();
+      await this.checkForUpdates();
+      this.updateMcpDeferredStatus(this.options.settings.get());
+      this.status = {
+        ...this.status,
+        deferredStartup: {
+          ...this.status.deferredStartup,
+          state: "complete",
+          completedAt: this.now().toISOString()
+        }
+      };
+    } catch (error) {
+      this.status = {
+        ...this.status,
+        deferredStartup: {
+          ...this.status.deferredStartup,
+          state: "error",
+          message: messageFromError(error, "Deferred native startup failed.")
+        }
+      };
+    }
+  }
+
+  private actions() {
+    return {
+      showOrHideMainWindow: () => this.handleTrayPrimaryAction(),
+      quickCapture: () => {
+        this.options.windows.showMainWindow();
+        this.options.windows.dispatchAction({ type: "quickCapture" });
+      },
+      refresh: () => {
+        this.options.windows.showMainWindow();
+        this.options.windows.dispatchAction({ type: "refresh" });
+        void this.options.sync.runNow({
+          resources: ["tasks", "calendar"],
+          full: false,
+          dryRun: false
+        });
+      },
+      openSettings: () => {
+        this.options.windows.showMainWindow();
+        this.options.windows.dispatchAction({ type: "openSettings" });
+      },
+      quit: this.options.windows.quit
+    };
+  }
+
+  private setupTray(): void {
+    if (!this.status.tray) {
+      this.status = {
+        ...this.status,
+        trayStatus: featureStatus("unsupported", "Tray/menu bar adapter is unavailable.")
+      };
+      return;
+    }
+
+    if (!this.options.settings.get().showTrayIcon) {
+      this.status = {
+        ...this.status,
+        trayStatus: featureStatus("disabled", "Menu bar icon is disabled in Settings.")
+      };
+      return;
+    }
+
+    const result = this.options.adapter.createTray(this.actions());
+    this.status = {
+      ...this.status,
+      trayStatus: statusFromResult(result, "ready", "Menu bar item is ready.")
+    };
+  }
+
+  private registerQuickCaptureShortcut(accelerator: string | null): void {
+    if (this.currentShortcut) {
+      this.options.adapter.unregisterGlobalShortcut(this.currentShortcut);
+      this.currentShortcut = null;
+    }
+
+    if (!accelerator) {
+      this.status = {
+        ...this.status,
+        quickCaptureShortcut: {
+          accelerator,
+          registered: false,
+          state: "disabled",
+          message: "Quick capture shortcut is not configured."
+        }
+      };
+      return;
+    }
+
+    if (!this.status.globalShortcuts) {
+      this.status = {
+        ...this.status,
+        quickCaptureShortcut: {
+          accelerator,
+          registered: false,
+          state: "unsupported",
+          message: "Global shortcuts are not supported by this platform adapter."
+        }
+      };
+      return;
+    }
+
+    const result = this.options.adapter.registerGlobalShortcut(accelerator, () => {
+      this.options.windows.showMainWindow();
+      this.options.windows.dispatchAction({ type: "quickCapture" });
+    });
+
+    if (result.ok) {
+      this.currentShortcut = accelerator;
+    }
+
+    this.status = {
+      ...this.status,
+      quickCaptureShortcut: {
+        accelerator,
+        registered: result.ok,
+        state: result.ok ? "ready" : result.state ?? "conflict",
+        message: result.message ?? (result.ok ? "Quick capture shortcut is registered." : "Shortcut registration failed.")
+      }
+    };
+  }
+
+  private registerProtocolClient(): void {
+    if (!this.status.deepLinks) {
+      this.status = {
+        ...this.status,
+        deepLinkStatus: {
+          scheme: HCB_DEEP_LINK_SCHEME,
+          registered: false,
+          state: "unsupported",
+          message: "Deep links are not supported by this platform adapter."
+        }
+      };
+      return;
+    }
+
+    const result = this.options.adapter.registerProtocolClient(HCB_DEEP_LINK_SCHEME);
+    this.status = {
+      ...this.status,
+      deepLinkStatus: {
+        scheme: HCB_DEEP_LINK_SCHEME,
+        registered: result.ok,
+        state: result.ok ? "ready" : result.state ?? "error",
+        message: result.message ?? (result.ok ? "Protocol handler is registered." : "Protocol handler registration failed.")
+      }
+    };
+  }
+
+  private scheduleNotificationsFromCache(): void {
+    if (!this.status.notifications) {
+      this.status = {
+        ...this.status,
+        notificationsStatus: {
+          permission: "unsupported",
+          scheduledCount: 0,
+          state: "unsupported",
+          message: "Local notifications are not supported by this platform adapter."
+        }
+      };
+      return;
+    }
+
+    const settings = this.options.settings.get();
+
+    if (!settings.notificationsEnabled) {
+      this.options.adapter.clearScheduledNotifications();
+      this.status = {
+        ...this.status,
+        notificationsStatus: {
+          ...this.status.notificationsStatus,
+          scheduledCount: 0,
+          state: "disabled",
+          message: "Local notifications are disabled in Settings."
+        }
+      };
+      return;
+    }
+
+    this.options.adapter.clearScheduledNotifications();
+
+    const now = this.now();
+    const horizon = new Date(now.getTime() + notificationHorizonMs);
+    const requests = [
+      ...this.taskNotificationRequests(now, horizon),
+      ...this.eventNotificationRequests(now, horizon, settings.notificationLeadMinutes)
+    ].slice(0, maxScheduledNotifications);
+    let scheduledCount = 0;
+
+    for (const request of requests) {
+      const scheduled = this.options.adapter.scheduleNotification(request, () => {
+        if (request.action) {
+          this.options.windows.showMainWindow();
+          this.options.windows.dispatchAction(request.action);
+        }
+      });
+
+      if (scheduled) {
+        scheduledCount += 1;
+      }
+    }
+
+    this.status = {
+      ...this.status,
+      notificationsStatus: {
+        ...this.status.notificationsStatus,
+        scheduledCount,
+        state: "ready",
+        message:
+          scheduledCount === 0
+            ? "No due tasks or upcoming events are in the next 24 hours."
+            : `${scheduledCount} local notification${scheduledCount === 1 ? "" : "s"} scheduled.`
+      }
+    };
+  }
+
+  private taskNotificationRequests(now: Date, horizon: Date) {
+    try {
+      return this.options.planner
+        .listTasks({ status: "active", limit: 100 })
+        .items.flatMap((task) => {
+          if (!task.dueAt) {
+            return [];
+          }
+
+          const dueAt = dateFromIso(task.dueAt);
+
+          if (!dueAt || dueAt.getTime() > horizon.getTime()) {
+            return [];
+          }
+
+          const deliveryDate =
+            dueAt.getTime() <= now.getTime()
+              ? new Date(now.getTime() + immediateNotificationDelayMs)
+              : dueAt;
+
+          return [
+            {
+              id: `task:${task.id}`,
+              title: "Task due",
+              body: task.title,
+              deliveryDate,
+              action: {
+                type: "openRoute",
+                route: {
+                  kind: "task",
+                  id: task.id
+                }
+              } satisfies NativeAction
+            }
+          ];
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  private eventNotificationRequests(now: Date, horizon: Date, leadMinutes: number) {
+    try {
+      return this.options.planner
+        .listCalendarEvents({
+          start: now.toISOString(),
+          end: horizon.toISOString(),
+          limit: 100
+        })
+        .items.flatMap((event) => {
+          const startsAt = dateFromIso(event.startsAt);
+
+          if (!startsAt || startsAt.getTime() < now.getTime()) {
+            return [];
+          }
+
+          const reminderMs =
+            leadMinutes > 0 ? leadMinutes * 60_000 : defaultEventReminderMs;
+          const reminderAt = new Date(startsAt.getTime() - reminderMs);
+          const deliveryDate =
+            reminderAt.getTime() <= now.getTime()
+              ? new Date(now.getTime() + immediateNotificationDelayMs)
+              : reminderAt;
+
+          if (deliveryDate.getTime() > horizon.getTime()) {
+            return [];
+          }
+
+          return [
+            {
+              id: `event:${event.id}`,
+              title: "Upcoming event",
+              body: event.title,
+              deliveryDate,
+              action: {
+                type: "openRoute",
+                route: {
+                  kind: "event",
+                  id: event.id
+                }
+              } satisfies NativeAction
+            }
+          ];
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  private checkForUpdates(): void | Promise<void> {
+    const result = this.options.adapter.checkForUpdates();
+
+    if (isPromise(result)) {
+      return result.then((resolved) => {
+        this.applyUpdateStatus(resolved);
+      });
+    }
+
+    this.applyUpdateStatus(result);
+  }
+
+  private applyUpdateStatus(result: NativeOperationResult): void {
+    this.status = {
+      ...this.status,
+      updaterStatus: statusFromResult(
+        result,
+        "ready",
+        "Preview update check completed without blocking startup."
+      )
+    };
+  }
+
+  private handleTrayPrimaryAction(): void {
+    const action = this.options.settings.get().trayClickAction;
+
+    if (action === "quick-capture") {
+      this.options.windows.showMainWindow();
+      this.options.windows.dispatchAction({ type: "quickCapture" });
+      return;
+    }
+
+    if (action === "open-today") {
+      this.options.windows.showMainWindow();
+      this.options.windows.dispatchAction({ type: "openRoute", route: { kind: "today" } });
+      return;
+    }
+
+    this.options.windows.showOrHideMainWindow();
+  }
+
+  private updateMcpDeferredStatus(settings: SettingsSnapshot): void {
+    this.status = {
+      ...this.status,
+      mcpStatus: settings.mcpEnabled
+        ? featureStatus("pending", "MCP listener startup remains deferred until secure token storage is wired.")
+        : featureStatus("disabled", "MCP local agent access is disabled.")
+    };
+  }
+}
+
+export function parseHotCrossBunsDeepLink(rawUrl: string): NativeAction | null {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== `${HCB_DEEP_LINK_SCHEME}:`) {
+    return null;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const id = decodeURIComponent(parsed.pathname.replace(/^\/+/, "")).trim();
+  const query = parsed.searchParams.get("q")?.trim();
+
+  if (host === "today" || host === "") {
+    return { type: "openRoute", route: { kind: "today" } };
+  }
+
+  if (host === "settings") {
+    return { type: "openSettings" };
+  }
+
+  if (host === "search") {
+    return query ? { type: "openRoute", route: { kind: "search", query } } : null;
+  }
+
+  if (host === "task" || host === "tasks") {
+    return id ? { type: "openRoute", route: { kind: "task", id } } : { type: "openRoute", route: { kind: "tasks" } };
+  }
+
+  if (host === "event" || host === "calendar") {
+    return id ? { type: "openRoute", route: { kind: "event", id } } : { type: "openRoute", route: { kind: "calendar" } };
+  }
+
+  if (host === "note" || host === "notes") {
+    return id ? { type: "openRoute", route: { kind: "note", id } } : { type: "openRoute", route: { kind: "notes" } };
+  }
+
+  return null;
+}
+
+function initialStatus(
+  capabilities: NativePlatformCapabilities,
+  settings: SettingsSnapshot
+): NativeCapabilitiesResponse {
+  return {
+    platform: capabilities.platform,
+    notifications: capabilities.notifications,
+    globalShortcuts: capabilities.globalShortcuts,
+    tray: capabilities.tray,
+    deepLinks: capabilities.deepLinks,
+    trayStatus: capabilities.tray
+      ? settings.showTrayIcon
+        ? featureStatus("pending", "Tray startup is deferred until the shell is visible.")
+        : featureStatus("disabled", "Menu bar icon is disabled in Settings.")
+      : featureStatus("unsupported", "Tray/menu bar adapter is unavailable."),
+    quickCaptureShortcut: {
+      accelerator: settings.quickCaptureShortcut,
+      registered: false,
+      state: capabilities.globalShortcuts
+        ? settings.quickCaptureShortcut
+          ? "pending"
+          : "disabled"
+        : "unsupported",
+      message: capabilities.globalShortcuts
+        ? "Quick capture shortcut registration is deferred until the shell is visible."
+        : "Global shortcuts are not supported by this platform adapter."
+    },
+    notificationsStatus: {
+      permission: capabilities.notifications ? "prompt" : "unsupported",
+      scheduledCount: 0,
+      state: capabilities.notifications
+        ? settings.notificationsEnabled
+          ? "pending"
+          : "disabled"
+        : "unsupported",
+      message: capabilities.notifications
+        ? settings.notificationsEnabled
+          ? "Notification scheduling is deferred until the shell is visible."
+          : "Local notifications are disabled in Settings."
+        : "Local notifications are not supported by this platform adapter."
+    },
+    deepLinkStatus: {
+      scheme: HCB_DEEP_LINK_SCHEME,
+      registered: false,
+      state: capabilities.deepLinks ? "pending" : "unsupported",
+      message: capabilities.deepLinks
+        ? "Protocol registration is deferred until the shell is visible."
+        : "Deep links are not supported by this platform adapter."
+    },
+    updaterStatus: capabilities.updaterChecks
+      ? featureStatus("pending", "Update checks are deferred until the shell is visible.")
+      : featureStatus("unsupported", "Preview update checks are not configured for this build."),
+    mcpStatus: settings.mcpEnabled
+      ? featureStatus("pending", "MCP listener startup is deferred until the shell is visible.")
+      : featureStatus("disabled", "MCP local agent access is disabled."),
+    deferredStartup: {
+      state: "pending"
+    }
+  };
+}
+
+function featureStatus(state: NativeFeatureState, message: string) {
+  return {
+    state,
+    message
+  };
+}
+
+function statusFromResult(
+  result: NativeOperationResult,
+  successState: NativeFeatureState,
+  successMessage: string
+) {
+  return {
+    state: result.ok ? successState : result.state ?? "error",
+    message: result.message ?? (result.ok ? successMessage : "Native adapter operation failed.")
+  };
+}
+
+function dateFromIso(value: string): Date | null {
+  const date = new Date(value);
+
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function messageFromError(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim() ? error.message.slice(0, 500) : fallback;
+}
+
+function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof (value as Promise<T>).then === "function";
+}

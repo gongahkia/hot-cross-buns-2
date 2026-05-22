@@ -4,7 +4,7 @@ export interface McpRateLimitConfiguration {
 }
 
 export const defaultMcpRateLimit: McpRateLimitConfiguration = {
-  maxRequests: 120,
+  maxRequests: 60,
   windowMs: 60_000
 };
 

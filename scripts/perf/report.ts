@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { StartupTimingSnapshot } from "../../src/shared/ipc/contracts";
+import { redactLogValue } from "../../src/shared/redaction";
 import type { PerfFixtureSummary } from "./fixtures";
 
 export type PerfReportMode = "report-only";
@@ -75,6 +76,10 @@ export interface PerfReport {
 export interface WrittenPerfReportPaths {
   jsonPath: string;
   markdownPath: string;
+}
+
+export function sanitizePerformanceReport(report: PerfReport): PerfReport {
+  return redactLogValue(report) as PerfReport;
 }
 
 function formatBytes(bytes: number): string {
@@ -177,17 +182,19 @@ function ipcRouteRows(ipcRoutes: PerfIpcRouteReport[] | undefined): string[] {
 }
 
 export function renderPerformanceMarkdown(report: PerfReport): string {
+  const sanitizedReport = sanitizePerformanceReport(report);
+
   return [
     "# Performance Smoke",
     "",
-    `Generated: ${report.generatedAt}`,
-    `Mode: ${report.mode}`,
+    `Generated: ${sanitizedReport.generatedAt}`,
+    `Mode: ${sanitizedReport.mode}`,
     "",
     "## Fixtures",
     "",
     "| Size | Tasks | Event instances | Notes | Total records | JSON size | SHA-256 |",
     "|---|---:|---:|---:|---:|---:|---|",
-    ...report.fixtures.map(
+    ...sanitizedReport.fixtures.map(
       (fixture) =>
         `| ${fixture.size} | ${fixture.counts.tasks} | ${fixture.counts.eventInstances} | ${fixture.counts.notes} | ${fixture.totalRecords} | ${formatBytes(
           fixture.jsonBytes
@@ -198,39 +205,39 @@ export function renderPerformanceMarkdown(report: PerfReport): string {
     "",
     "| Phase | Value | Field |",
     "|---|---:|---|",
-    ...startupRows(report.startup),
+    ...startupRows(sanitizedReport.startup),
     "",
     "## Launches",
     "",
     "| Launch | Shell visible | Cached render | Command palette | Wall clock | Notes |",
     "|---|---:|---:|---:|---:|---|",
-    ...launchRows(report.launches),
+    ...launchRows(sanitizedReport.launches),
     "",
     "## Measurements",
     "",
     "| Measurement | Value | Notes |",
     "|---|---:|---|",
-    ...measurementRows(report.measurements),
+    ...measurementRows(sanitizedReport.measurements),
     "",
     "## SQLite Query Plans",
     "",
     "| Query | Category | Plan status | Details | Notes |",
     "|---|---|---|---|---|",
-    ...queryPlanRows(report.queryPlans),
+    ...queryPlanRows(sanitizedReport.queryPlans),
     "",
     "## IPC Routes",
     "",
     "| Route | Calls | Average | Last |",
     "|---|---:|---:|---:|",
-    ...ipcRouteRows(report.ipcRoutes),
+    ...ipcRouteRows(sanitizedReport.ipcRoutes),
     "",
     "## Future Hooks",
     "",
-    ...report.futureHooks.map((hook) => `- ${hook}`),
+    ...sanitizedReport.futureHooks.map((hook) => `- ${hook}`),
     "",
     "## Notes",
     "",
-    ...report.notes.map((note) => `- ${note}`),
+    ...sanitizedReport.notes.map((note) => `- ${note}`),
     ""
   ].join("\n");
 }
@@ -240,12 +247,13 @@ export function writePerformanceReport(
   artifactDir: string
 ): WrittenPerfReportPaths {
   mkdirSync(artifactDir, { recursive: true });
+  const sanitizedReport = sanitizePerformanceReport(report);
 
   const jsonPath = join(artifactDir, "latest.json");
   const markdownPath = join(artifactDir, "latest.md");
 
-  writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
-  writeFileSync(markdownPath, renderPerformanceMarkdown(report));
+  writeFileSync(jsonPath, `${JSON.stringify(sanitizedReport, null, 2)}\n`);
+  writeFileSync(markdownPath, renderPerformanceMarkdown(sanitizedReport));
 
   return { jsonPath, markdownPath };
 }

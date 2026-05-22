@@ -18,6 +18,7 @@ import type {
   McpSetEnabledRequest,
   McpStatusResponse,
   MutationAck,
+  NativeAction,
   NativeCapabilitiesResponse,
   NativeNotificationPermissionResponse,
   NoteCreateRequest,
@@ -107,6 +108,7 @@ export interface HcbApi {
     requestNotificationPermission: () => Promise<
       HcbResult<NativeNotificationPermissionResponse>
     >;
+    subscribeAction: (listener: (action: NativeAction) => void) => () => void;
   };
   diagnostics: {
     health: () => Promise<HcbResult<DiagnosticsHealthResponse>>;

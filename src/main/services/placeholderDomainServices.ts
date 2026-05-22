@@ -7,6 +7,7 @@ import {
   MAX_SEARCH_LIMIT,
   type CalendarEventSummary,
   type McpStatusResponse,
+  type NativeCapabilitiesResponse,
   type NoteDetail,
   type NoteSummary,
   type SearchResultItem,
@@ -192,7 +193,17 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       theme: "system",
       startOnLogin: false,
       quickCaptureShortcut: "Ctrl+Space",
-      mcpEnabled: false
+      selectedTaskListIds: ["list-inbox", "list-planning"],
+      selectedCalendarIds: ["cal-product", "cal-engineering", "cal-qa"],
+      syncMode: "balanced",
+      showTrayIcon: true,
+      trayClickAction: "toggle-window",
+      notificationsEnabled: false,
+      notificationLeadMinutes: 10,
+      mcpEnabled: false,
+      mcpPermissionMode: "confirm-writes",
+      mcpPort: 0,
+      diagnosticsIncludePerformance: true
     },
     sync: {
       state: "idle",
@@ -203,6 +214,9 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       running: false,
       readOnly: false,
       confirmationRequired: true,
+      permissionMode: "confirm-writes",
+      port: 0,
+      tokenState: "not_configured",
       url: "http://127.0.0.1"
     }
   };
@@ -613,38 +627,130 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           };
         }
 
+        if (request.mcpPermissionMode !== undefined) {
+          state.mcp = {
+            ...state.mcp,
+            permissionMode: request.mcpPermissionMode,
+            readOnly: request.mcpPermissionMode === "read-only",
+            confirmationRequired: request.mcpPermissionMode !== "allow-writes"
+          };
+        }
+
+        if (request.mcpPort !== undefined) {
+          state.mcp = {
+            ...state.mcp,
+            port: request.mcpPort
+          };
+        }
+
         return { ...state.settings };
+      },
+      recoveryAction: (request) => {
+        if (request.action !== "refresh") {
+          const phrase = recoveryPhrase(request.action);
+
+          if (
+            request.confirmation?.accepted !== true ||
+            request.confirmation.phrase !== phrase
+          ) {
+            throw new Error(`Type ${phrase} to confirm this destructive recovery action.`);
+          }
+        }
+
+        if (request.action === "resetMcpToken") {
+          state.mcp = {
+            ...state.mcp,
+            tokenState: "rotated",
+            lastTokenResetAt: new Date().toISOString()
+          };
+        }
+
+        return {
+          action: request.action,
+          accepted: true,
+          destructive: request.action !== "refresh",
+          requiresReload: request.action === "clearGoogleCache",
+          message: recoveryMessage(request.action)
+        };
       }
     },
     mcp: {
       status: () => ({ ...state.mcp }),
       setEnabled: (request) => {
+        const permissionMode =
+          request.permissionMode ??
+          (request.confirmationRequired === false ? "allow-writes" : state.mcp.permissionMode);
         state.mcp = {
           ...state.mcp,
           enabled: request.enabled,
-          confirmationRequired: request.confirmationRequired ?? state.mcp.confirmationRequired
+          permissionMode,
+          readOnly: permissionMode === "read-only",
+          confirmationRequired:
+            request.confirmationRequired ?? permissionMode !== "allow-writes",
+          port: request.port ?? state.mcp.port
         };
         state.settings = {
           ...state.settings,
-          mcpEnabled: request.enabled
+          mcpEnabled: request.enabled,
+          mcpPermissionMode: permissionMode,
+          mcpPort: request.port ?? state.settings.mcpPort
         };
 
         return { ...state.mcp };
       }
     },
     native: {
-      capabilities: () => ({
-        platform: nativePlatform(),
-        notifications: process.platform === "darwin",
-        globalShortcuts: process.platform === "darwin",
-        tray: process.platform === "darwin",
-        deepLinks: process.platform === "darwin"
-      }),
+      capabilities: () => nativeCapabilities(),
       requestNotificationPermission: () => ({
         state: process.platform === "darwin" ? "prompt" : "unsupported"
       })
     },
     mcpTools
+  };
+}
+
+function nativeCapabilities(): NativeCapabilitiesResponse {
+  const isMac = process.platform === "darwin";
+
+  return {
+    platform: nativePlatform(),
+    notifications: isMac,
+    globalShortcuts: isMac,
+    tray: isMac,
+    deepLinks: isMac,
+    trayStatus: {
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Tray startup is owned by the native shell service." : "Tray/menu bar is unavailable."
+    },
+    quickCaptureShortcut: {
+      accelerator: null,
+      registered: false,
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Shortcut registration is owned by the native shell service." : "Global shortcuts are unavailable."
+    },
+    notificationsStatus: {
+      permission: isMac ? "prompt" : "unsupported",
+      scheduledCount: 0,
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Notification scheduling is owned by the native shell service." : "Notifications are unavailable."
+    },
+    deepLinkStatus: {
+      scheme: "hotcrossbuns" as const,
+      registered: false,
+      state: isMac ? "pending" : "unsupported",
+      message: isMac ? "Protocol registration is owned by the native shell service." : "Deep links are unavailable."
+    },
+    updaterStatus: {
+      state: "unsupported",
+      message: "Preview update checks are not configured for this build."
+    },
+    mcpStatus: {
+      state: "disabled",
+      message: "MCP local agent access is disabled."
+    },
+    deferredStartup: {
+      state: "pending"
+    }
   };
 }
 
@@ -1122,11 +1228,83 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
     patch.quickCaptureShortcut = request.quickCaptureShortcut;
   }
 
+  if (request.selectedTaskListIds !== undefined) {
+    patch.selectedTaskListIds = [...new Set(request.selectedTaskListIds)];
+  }
+
+  if (request.selectedCalendarIds !== undefined) {
+    patch.selectedCalendarIds = [...new Set(request.selectedCalendarIds)];
+  }
+
+  if (request.syncMode !== undefined) {
+    patch.syncMode = request.syncMode;
+  }
+
+  if (request.showTrayIcon !== undefined) {
+    patch.showTrayIcon = request.showTrayIcon;
+  }
+
+  if (request.trayClickAction !== undefined) {
+    patch.trayClickAction = request.trayClickAction;
+  }
+
+  if (request.notificationsEnabled !== undefined) {
+    patch.notificationsEnabled = request.notificationsEnabled;
+  }
+
+  if (request.notificationLeadMinutes !== undefined) {
+    patch.notificationLeadMinutes = request.notificationLeadMinutes;
+  }
+
   if (request.mcpEnabled !== undefined) {
     patch.mcpEnabled = request.mcpEnabled;
   }
 
+  if (request.mcpPermissionMode !== undefined) {
+    patch.mcpPermissionMode = request.mcpPermissionMode;
+  }
+
+  if (request.mcpPort !== undefined) {
+    patch.mcpPort = request.mcpPort;
+  }
+
+  if (request.diagnosticsIncludePerformance !== undefined) {
+    patch.diagnosticsIncludePerformance = request.diagnosticsIncludePerformance;
+  }
+
   return patch;
+}
+
+function recoveryPhrase(action: "refresh" | "forceFullResync" | "clearGoogleCache" | "resetMcpToken"): string {
+  if (action === "forceFullResync") {
+    return "FULL RESYNC";
+  }
+
+  if (action === "clearGoogleCache") {
+    return "CLEAR CACHE";
+  }
+
+  if (action === "resetMcpToken") {
+    return "RESET MCP TOKEN";
+  }
+
+  return "";
+}
+
+function recoveryMessage(action: "refresh" | "forceFullResync" | "clearGoogleCache" | "resetMcpToken"): string {
+  if (action === "forceFullResync") {
+    return "Sync checkpoints were cleared and a full resync was requested.";
+  }
+
+  if (action === "clearGoogleCache") {
+    return "Local Google cache was cleared.";
+  }
+
+  if (action === "resetMcpToken") {
+    return "MCP bearer token was reset without exposing the new token value.";
+  }
+
+  return "Refresh requested for selected Google resources.";
 }
 
 function nativePlatform(): "darwin" | "linux" | "win32" | "unknown" {

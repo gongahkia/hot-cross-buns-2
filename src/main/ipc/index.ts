@@ -11,7 +11,7 @@ export function registerHcbIpc(services: ServiceContainer): void {
   registerIpcDispatcher(
     ipcMain,
     [
-      ...createDiagnosticsIpcHandlers(metrics, services.performance),
+      ...createDiagnosticsIpcHandlers(metrics, services.performance, services),
       ...createCoreIpcHandlers(services.domain)
     ],
     {

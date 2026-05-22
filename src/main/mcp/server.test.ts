@@ -87,6 +87,17 @@ describe("local MCP server contract", () => {
     expect(response.status).toBe(403);
   });
 
+  it("rejects browser origins even when they are local", async () => {
+    const { server } = fixture("read-only");
+
+    const response = await post(server, rpc("tools/list"), {
+      ...authHeaders(),
+      Origin: "http://127.0.0.1:3000"
+    });
+
+    expect(response.status).toBe(403);
+  });
+
   it("executes a read tool in read-only mode", async () => {
     const { server } = fixture("read-only");
 
@@ -228,6 +239,7 @@ describe("local MCP server contract", () => {
         arguments: {
           title: "Private launch note",
           body: "Do not write this literal to audit metadata.",
+          refreshToken: "fake-refresh-token",
           dryRun: true
         }
       }),
@@ -244,7 +256,7 @@ describe("local MCP server contract", () => {
       outcome: "dry_run",
       isWrite: true,
       metadata: {
-        argumentKeys: "body,dryRun,title",
+        argumentKeys: "[redacted],body,dryRun,title",
         dryRunRequested: "true",
         confirmationIssued: "true"
       }
@@ -252,6 +264,7 @@ describe("local MCP server contract", () => {
     expect(JSON.stringify(audit.events)).not.toContain("Private launch note");
     expect(JSON.stringify(audit.events)).not.toContain("Do not write this literal");
     expect(JSON.stringify(audit.events)).not.toContain(testToken);
+    expect(JSON.stringify(audit.events)).not.toContain("fake-refresh-token");
   });
 
   it("rate limits per local client key", async () => {

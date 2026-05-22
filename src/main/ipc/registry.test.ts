@@ -120,6 +120,41 @@ describe("IPC dispatcher", () => {
     });
   });
 
+  it("redacts token fixtures from public IPC error messages, details, and logs", async () => {
+    const logger = {
+      debug: vi.fn()
+    };
+    const dispatcher = createIpcDispatcher(
+      [
+        {
+          contract: ipcContracts.settings.get,
+          handle: () => {
+            throw new HcbPublicError({
+              code: "SERVICE_UNAVAILABLE",
+              message: "Settings failed with access_token=fake-access-token",
+              recoverable: true,
+              details: {
+                refreshToken: "fake-refresh-token",
+                reason: "Bearer fake-mcp-token"
+              }
+            });
+          }
+        }
+      ],
+      { logger }
+    );
+
+    const result = await dispatcher(null, envelope("settings", "get", {}));
+
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toMatch(
+      /fake-access-token|fake-refresh-token|fake-mcp-token|refreshToken/
+    );
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toMatch(
+      /fake-access-token|fake-refresh-token|fake-mcp-token/
+    );
+  });
+
   it("registers future-domain stubs as sanitized HcbResult failures", async () => {
     const dispatcher = createIpcDispatcher(createStubIpcHandlers());
 

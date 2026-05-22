@@ -2,8 +2,8 @@ import { Buffer } from "node:buffer";
 import type { JsonObject } from "./types";
 
 export const MCP_HTTP_PATH = "/mcp";
-export const MCP_MAX_HTTP_HEADER_BYTES = 16 * 1024;
-export const MCP_MAX_HTTP_BODY_BYTES = 1024 * 1024;
+export const MCP_MAX_HTTP_HEADER_BYTES = 8 * 1024;
+export const MCP_MAX_HTTP_BODY_BYTES = 256 * 1024;
 export const MCP_MAX_HTTP_REQUEST_BYTES =
   MCP_MAX_HTTP_HEADER_BYTES + MCP_MAX_HTTP_BODY_BYTES + 4;
 

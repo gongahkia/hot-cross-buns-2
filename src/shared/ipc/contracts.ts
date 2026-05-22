@@ -4,10 +4,12 @@ import { hcbErrorCodeSchema, hcbResultSchema } from "./result";
 export const HCB_IPC_VERSION = 1;
 export const HCB_IPC_CHANNEL = "hcb:ipc:v1";
 export const HCB_SYNC_STATUS_EVENT_CHANNEL = "hcb:sync-status:v1";
+export const HCB_NATIVE_ACTION_EVENT_CHANNEL = "hcb:native-action:v1";
 
 export const IPC_CHANNELS = {
   dispatch: HCB_IPC_CHANNEL,
-  syncStatus: HCB_SYNC_STATUS_EVENT_CHANNEL
+  syncStatus: HCB_SYNC_STATUS_EVENT_CHANNEL,
+  nativeAction: HCB_NATIVE_ACTION_EVENT_CHANNEL
 } as const;
 
 export const DEFAULT_LIST_LIMIT = 50;
@@ -712,13 +714,80 @@ export type McpSetEnabledRequest = z.input<typeof mcpSetEnabledRequestSchema>;
 
 export const nativeCapabilitiesRequestSchema = emptyRequestSchema;
 
+export const nativeFeatureStateSchema = z.enum([
+  "pending",
+  "ready",
+  "disabled",
+  "unsupported",
+  "conflict",
+  "error"
+]);
+
+export type NativeFeatureState = z.infer<typeof nativeFeatureStateSchema>;
+
+const nativeStatusMessageSchema = z.string().min(1).max(500);
+
+export const nativeFeatureStatusSchema = z
+  .object({
+    state: nativeFeatureStateSchema,
+    message: nativeStatusMessageSchema.optional()
+  })
+  .strict();
+
+export type NativeFeatureStatus = z.infer<typeof nativeFeatureStatusSchema>;
+
+export const nativeHotkeyStatusSchema = nativeFeatureStatusSchema
+  .extend({
+    accelerator: z.string().min(1).max(120).nullable(),
+    registered: z.boolean()
+  })
+  .strict();
+
+export type NativeHotkeyStatus = z.infer<typeof nativeHotkeyStatusSchema>;
+
+export const nativeNotificationStatusSchema = nativeFeatureStatusSchema
+  .extend({
+    permission: z.enum(["granted", "denied", "prompt", "unsupported"]),
+    scheduledCount: z.number().int().nonnegative()
+  })
+  .strict();
+
+export type NativeNotificationStatus = z.infer<typeof nativeNotificationStatusSchema>;
+
+export const nativeDeepLinkStatusSchema = nativeFeatureStatusSchema
+  .extend({
+    scheme: z.literal("hotcrossbuns"),
+    registered: z.boolean()
+  })
+  .strict();
+
+export type NativeDeepLinkStatus = z.infer<typeof nativeDeepLinkStatusSchema>;
+
+export const nativeDeferredStartupStatusSchema = z
+  .object({
+    state: z.enum(["pending", "running", "complete", "error"]),
+    startedAt: isoDateTimeSchema.optional(),
+    completedAt: isoDateTimeSchema.optional(),
+    message: nativeStatusMessageSchema.optional()
+  })
+  .strict();
+
+export type NativeDeferredStartupStatus = z.infer<typeof nativeDeferredStartupStatusSchema>;
+
 export const nativeCapabilitiesResponseSchema = z
   .object({
     platform: z.enum(["darwin", "linux", "win32", "unknown"]),
     notifications: z.boolean(),
     globalShortcuts: z.boolean(),
     tray: z.boolean(),
-    deepLinks: z.boolean()
+    deepLinks: z.boolean(),
+    trayStatus: nativeFeatureStatusSchema,
+    quickCaptureShortcut: nativeHotkeyStatusSchema,
+    notificationsStatus: nativeNotificationStatusSchema,
+    deepLinkStatus: nativeDeepLinkStatusSchema,
+    updaterStatus: nativeFeatureStatusSchema,
+    mcpStatus: nativeFeatureStatusSchema,
+    deferredStartup: nativeDeferredStartupStatusSchema
   })
   .strict();
 
@@ -735,6 +804,42 @@ export const nativeNotificationPermissionResponseSchema = z
 export type NativeNotificationPermissionResponse = z.infer<
   typeof nativeNotificationPermissionResponseSchema
 >;
+
+export const nativeRouteSchema = z
+  .object({
+    kind: z.enum(["today", "tasks", "task", "calendar", "event", "notes", "note", "settings", "search"]),
+    id: idSchema.optional(),
+    query: z.string().min(1).max(200).optional()
+  })
+  .strict();
+
+export type NativeRoute = z.infer<typeof nativeRouteSchema>;
+
+export const nativeActionSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("quickCapture")
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("openSettings")
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("refresh")
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("openRoute"),
+      route: nativeRouteSchema
+    })
+    .strict()
+]);
+
+export type NativeAction = z.infer<typeof nativeActionSchema>;
 
 export const startupTimingSnapshotSchema = z
   .object({
