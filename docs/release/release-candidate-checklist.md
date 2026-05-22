@@ -36,10 +36,10 @@ Packaging artifacts:
 
 | Artifact | Size | Checksum |
 |---|---:|---|
-| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.dmg` | 94 MiB | `94a822ac57da220767809e1e2335d8bbcda83d269eed7c28dd27fe2514667fe5` |
-| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.zip` | 91 MiB | `04af322d90d979c8c4d2e7ef36f2e9f6645e0b7f885ffbabeb511cfd53e09e5b` |
+| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.dmg` | 94 MiB | `7c2b4a056241b925a35b37babfccea2a693e85268339e58d3d8f09d847510ed6` |
+| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.zip` | 91 MiB | `c1f0c34ae5ce3df692814270725dc51512ccd554a20a5b1a437888dab72a910b` |
 
-Packaging caveats: `electron-builder` reported missing `package.json` author, skipped signing because `mac.identity: null`, and generated blockmap/latest metadata that must not be uploaded for the unsigned preview flow. The macOS package now uses `build/icon.icns` generated from the legacy app icon set.
+Packaging caveats: `electron-builder` reported missing `package.json` author, skipped signing because `mac.identity: null`, and generated blockmap/latest metadata that must not be uploaded for the unsigned preview flow. The macOS package now uses `build/icon.icns` generated from the round bun app icon on a white rounded background.
 
 ## Performance Smoke
 
@@ -97,7 +97,7 @@ Git diff audit covered the current tracked changes and the packaging/bundle-revi
 Docs updated during this QA pass:
 
 - `.gitignore`: anchored generated release artifacts as `/release/` so `docs/release/` reports are not ignored.
-- `assets/brand/` and `build/icon.icns`: copied legacy logo/icon assets and generated the macOS package icon.
+- `assets/brand/` and `build/icon.icns`: copied legacy logo/icon assets and generated the macOS package icon from the round bun mark on a white rounded background.
 - `electron-builder.yml`: wired the macOS package icon and copied brand assets into packaged resources.
 - `src/main/index.ts`: applies the copied app icon to the Electron browser window.
 - `src/main/native/electronMacAdapter.ts`: uses the copied menu bar icon/app icon assets and exposes left-click panel plus right-click utility menu behavior.
