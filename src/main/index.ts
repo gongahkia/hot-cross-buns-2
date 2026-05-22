@@ -2,10 +2,11 @@ import { app, BrowserWindow, session } from "electron";
 import { join } from "node:path";
 import { registerHcbIpc } from "./ipc";
 import { configureNavigationLockdown, configureSessionHardening } from "./security";
-import { createServiceContainer } from "./services/serviceContainer";
+import { createServiceContainer, type ServiceContainer } from "./services/serviceContainer";
 import { markStartupTiming } from "./startupTiming";
 
 let mainWindow: BrowserWindow | null = null;
+let services: ServiceContainer | null = null;
 
 if (process.env.HCB_USER_DATA_DIR && !app.isPackaged) {
   app.setPath("userData", process.env.HCB_USER_DATA_DIR);
@@ -58,7 +59,7 @@ function createMainWindow(): BrowserWindow {
 app.whenReady().then(() => {
   markStartupTiming("appReadyMs");
   configureSessionHardening(session.defaultSession);
-  const services = createServiceContainer({
+  services = createServiceContainer({
     appSupportDirectory: app.getPath("userData")
   });
   registerHcbIpc(services);
@@ -77,4 +78,9 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  services?.close();
+  services = null;
 });
