@@ -608,6 +608,7 @@ export const settingsSnapshotSchema = z
     quickCaptureShortcut: z.string().min(1).max(120).nullable(),
     selectedTaskListIds: z.array(idSchema).max(100),
     selectedCalendarIds: z.array(idSchema).max(100),
+    setupCompletedAt: isoDateTimeSchema.nullable(),
     syncMode: syncModeSchema,
     showTrayIcon: z.boolean(),
     trayClickAction: trayClickActionSchema,
@@ -631,6 +632,7 @@ export const settingsUpdateRequestSchema = z
     quickCaptureShortcut: z.string().min(1).max(120).nullable().optional(),
     selectedTaskListIds: z.array(idSchema).max(100).optional(),
     selectedCalendarIds: z.array(idSchema).max(100).optional(),
+    setupCompletedAt: isoDateTimeSchema.nullable().optional(),
     syncMode: syncModeSchema.optional(),
     showTrayIcon: z.boolean().optional(),
     trayClickAction: trayClickActionSchema.optional(),
@@ -654,6 +656,7 @@ export const settingsRecoveryActionSchema = z.enum([
   "refresh",
   "forceFullResync",
   "clearGoogleCache",
+  "resetOnboarding",
   "resetMcpToken"
 ]);
 

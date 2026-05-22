@@ -201,6 +201,7 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       quickCaptureShortcut: "Ctrl+Space",
       selectedTaskListIds: ["list-inbox", "list-planning"],
       selectedCalendarIds: ["cal-product", "cal-engineering", "cal-qa"],
+      setupCompletedAt: nowIso,
       syncMode: "balanced",
       showTrayIcon: true,
       trayClickAction: "open-menu",
@@ -654,7 +655,7 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         return { ...state.settings };
       },
       recoveryAction: (request) => {
-        if (request.action !== "refresh") {
+        if (request.action !== "refresh" && request.action !== "resetOnboarding") {
           const phrase = recoveryPhrase(request.action);
 
           if (
@@ -673,10 +674,17 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           };
         }
 
+        if (request.action === "resetOnboarding") {
+          state.settings = {
+            ...state.settings,
+            setupCompletedAt: null
+          };
+        }
+
         return {
           action: request.action,
           accepted: true,
-          destructive: request.action !== "refresh",
+          destructive: request.action !== "refresh" && request.action !== "resetOnboarding",
           requiresReload: request.action === "clearGoogleCache",
           message: recoveryMessage(request.action)
         };
@@ -1292,6 +1300,10 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
     patch.selectedCalendarIds = [...new Set(request.selectedCalendarIds)];
   }
 
+  if (request.setupCompletedAt !== undefined) {
+    patch.setupCompletedAt = request.setupCompletedAt;
+  }
+
   if (request.syncMode !== undefined) {
     patch.syncMode = request.syncMode;
   }
@@ -1339,7 +1351,9 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
   return patch;
 }
 
-function recoveryPhrase(action: "refresh" | "forceFullResync" | "clearGoogleCache" | "resetMcpToken"): string {
+function recoveryPhrase(
+  action: "refresh" | "forceFullResync" | "clearGoogleCache" | "resetOnboarding" | "resetMcpToken"
+): string {
   if (action === "forceFullResync") {
     return "FULL RESYNC";
   }
@@ -1355,7 +1369,9 @@ function recoveryPhrase(action: "refresh" | "forceFullResync" | "clearGoogleCach
   return "";
 }
 
-function recoveryMessage(action: "refresh" | "forceFullResync" | "clearGoogleCache" | "resetMcpToken"): string {
+function recoveryMessage(
+  action: "refresh" | "forceFullResync" | "clearGoogleCache" | "resetOnboarding" | "resetMcpToken"
+): string {
   if (action === "forceFullResync") {
     return "Sync checkpoints were cleared and a full resync was requested.";
   }
@@ -1366,6 +1382,10 @@ function recoveryMessage(action: "refresh" | "forceFullResync" | "clearGoogleCac
 
   if (action === "resetMcpToken") {
     return "MCP bearer token was reset without exposing the new token value.";
+  }
+
+  if (action === "resetOnboarding") {
+    return "Onboarding will be shown again without changing planner data.";
   }
 
   return "Refresh requested for selected Google resources.";

@@ -142,6 +142,7 @@ const emptySettings: SettingsSnapshot = {
   startOnLogin: false,
   selectedTaskListIds: [],
   selectedCalendarIds: [],
+  setupCompletedAt: null,
   syncMode: "balanced",
   quickCaptureShortcut: "Ctrl+Space",
   showTrayIcon: true,
@@ -818,7 +819,11 @@ function usePreloadCoreSource(): CoreViewModelSource {
         setSettingsMutation({ pending: false });
         refreshSyncStatus();
         refreshDiagnosticsSummary();
-        if (request.action === "clearGoogleCache" || request.action === "forceFullResync") {
+        if (
+          request.action === "clearGoogleCache" ||
+          request.action === "forceFullResync" ||
+          request.action === "resetOnboarding"
+        ) {
           load();
         }
         return result.data;

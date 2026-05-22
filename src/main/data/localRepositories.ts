@@ -146,6 +146,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   quickCaptureShortcut: "Ctrl+Space",
   selectedTaskListIds: [],
   selectedCalendarIds: [],
+  setupCompletedAt: null,
   syncMode: "balanced",
   showTrayIcon: true,
   trayClickAction: "open-menu",
@@ -1680,6 +1681,11 @@ export class LocalSettingsRepository {
         "selectedCalendarIds",
         this.defaultSelectedCalendarIds()
       ),
+      setupCompletedAt: this.readSetting(
+        "app",
+        "setupCompletedAt",
+        DEFAULT_SETTINGS.setupCompletedAt
+      ),
       syncMode: this.readSetting("sync", "mode", DEFAULT_SETTINGS.syncMode),
       showTrayIcon: this.readSetting("tray", "showIcon", DEFAULT_SETTINGS.showTrayIcon),
       trayClickAction: this.readSetting(
@@ -1739,6 +1745,10 @@ export class LocalSettingsRepository {
 
     if (request.selectedCalendarIds !== undefined) {
       this.writeSetting("google", "selectedCalendarIds", uniqueIds(request.selectedCalendarIds), now);
+    }
+
+    if (request.setupCompletedAt !== undefined) {
+      this.writeSetting("app", "setupCompletedAt", request.setupCompletedAt, now);
     }
 
     if (request.syncMode !== undefined) {

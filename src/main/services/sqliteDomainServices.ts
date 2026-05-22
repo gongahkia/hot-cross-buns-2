@@ -195,6 +195,17 @@ export function createSqliteDomainServices(
           };
         }
 
+        if (request.action === "resetOnboarding") {
+          options.settingsRepository.update({ setupCompletedAt: null });
+          return {
+            action: request.action,
+            accepted: true,
+            destructive: false,
+            requiresReload: false,
+            message: "Onboarding will be shown again without changing planner data."
+          };
+        }
+
         requireRecoveryConfirmation(request, "RESET MCP TOKEN");
         const reset = options.settingsRepository.resetMcpTokenRevision();
         mcpState.tokenState = reset.tokenState;

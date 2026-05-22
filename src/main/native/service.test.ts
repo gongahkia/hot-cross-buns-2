@@ -34,6 +34,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     startOnLogin: false,
     selectedTaskListIds: [],
     selectedCalendarIds: [],
+    setupCompletedAt: "2026-05-22T00:00:00.000Z",
     syncMode: "balanced",
     quickCaptureShortcut: "Ctrl+Space",
     showTrayIcon: true,

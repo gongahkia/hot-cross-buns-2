@@ -54,6 +54,7 @@ function testSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapsh
     startOnLogin: false,
     selectedTaskListIds: [],
     selectedCalendarIds: [],
+    setupCompletedAt: now,
     syncMode: "balanced",
     quickCaptureShortcut: null,
     showTrayIcon: true,
