@@ -62,7 +62,9 @@ export class NativeShellService implements NativeDomainService {
       }
     };
 
-    void this.runDeferredStartup();
+    setTimeout(() => {
+      void this.runDeferredStartup();
+    }, 0);
   }
 
   applySettings(snapshot: SettingsSnapshot): void {
@@ -294,7 +296,10 @@ export class NativeShellService implements NativeDomainService {
         accelerator,
         registered: result.ok,
         state: result.ok ? "ready" : result.state ?? "conflict",
-        message: result.message ?? (result.ok ? "Quick capture shortcut is registered." : "Shortcut registration failed.")
+        message: sanitizedNativeMessage(
+          result.message ??
+            (result.ok ? "Quick capture shortcut is registered." : "Shortcut registration failed.")
+        )
       }
     };
   }
@@ -320,7 +325,10 @@ export class NativeShellService implements NativeDomainService {
         scheme: HCB_DEEP_LINK_SCHEME,
         registered: result.ok,
         state: result.ok ? "ready" : result.state ?? "error",
-        message: result.message ?? (result.ok ? "Protocol handler is registered." : "Protocol handler registration failed.")
+        message: sanitizedNativeMessage(
+          result.message ??
+            (result.ok ? "Protocol handler is registered." : "Protocol handler registration failed.")
+        )
       }
     };
   }

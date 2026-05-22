@@ -18,6 +18,7 @@ import type {
 const now = new Date("2026-05-22T12:00:00.000Z");
 
 async function flushNativeStartup(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
   await Promise.resolve();
   await Promise.resolve();
 }
