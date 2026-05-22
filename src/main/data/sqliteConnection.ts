@@ -1,6 +1,6 @@
+import DatabaseConstructor from "better-sqlite3";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Database, Statement } from "better-sqlite3";
@@ -68,7 +68,6 @@ export class SqliteExecutionError extends Error {
 
 const DEFAULT_DATABASE_FILENAME = "hot-cross-buns-2.sqlite3";
 const PYTHON_BINARY = process.env.HCB_SQLITE_PYTHON ?? "python3";
-const require = createRequire(import.meta.url);
 
 const PRODUCTION_PRAGMAS = [
   "foreign_keys = ON",
@@ -89,7 +88,7 @@ class BetterSqliteConnection implements SqliteConnection {
 
   constructor(databasePath: string) {
     this.databasePath = databasePath;
-    this.database = new (loadBetterSqliteConstructor())(databasePath);
+    this.database = new DatabaseConstructor(databasePath);
     this.applyProductionPragmas();
   }
 
@@ -535,14 +534,6 @@ export function createTemporarySqliteConnection(
       rmSync(directory, { recursive: true, force: true });
     }
   };
-}
-
-function loadBetterSqliteConstructor(): typeof import("better-sqlite3") {
-  try {
-    return require("better-sqlite3") as typeof import("better-sqlite3");
-  } catch (error) {
-    throw sqliteError(error);
-  }
 }
 
 function runPreparedStatement(statement: Statement, params?: SqliteParams): SqliteRunResult {

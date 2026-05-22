@@ -142,6 +142,22 @@ Required settings areas:
 
 Settings must not expose raw tokens, secrets, cache encryption keys, or full Google diagnostic payloads.
 
+## First-Run Setup
+
+Current Mac v1 setup behavior:
+
+- The app shows a first-run setup modal when local settings have no `setupCompletedAt` timestamp.
+- Setup writes normal local settings through the existing typed preload IPC: selected task lists, selected calendars, sync mode, notification preference, optional MCP enablement/permission mode, and the setup completion timestamp.
+- Google setup is represented as runtime/OAuth readiness and current sanitized account state only. The flow does not collect OAuth client secrets and does not create new Google transports.
+- Users can choose local-only setup. That marks setup complete, leaves Google selections empty, uses manual sync, disables notifications/MCP, and keeps local notes/settings usable.
+- Settings includes a reset onboarding action that clears only the setup completion timestamp. It does not delete planner rows, local notes, Google cache rows, checkpoints, or pending mutations.
+
+Remaining Mac v1 blockers:
+
+- User-facing desktop OAuth client setup and Keychain-backed token storage are still not wired into production.
+- Authenticated Google transport construction, account selection, real sync scheduling, and selected-resource population from live Google data remain separate Google sync work.
+- Live MCP listener startup and OS credential storage for the MCP bearer token remain separate native/runtime work.
+
 ## Acceptance Checks
 
 - Renderer cannot access Node APIs directly.

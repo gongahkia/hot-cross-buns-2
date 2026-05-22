@@ -27,6 +27,20 @@ Legacy has a first-launch onboarding flow for Google sign-in, sync mode, task-li
 
 Add a Hot Cross Buns 2 onboarding route/modal that appears when local settings show no completed setup marker. It should guide the user through runtime Google OAuth client setup, selected task lists, selected calendars, sync mode, notification preference, and optional MCP access. Persist a setup completion timestamp in local settings and keep a Reset onboarding action in Settings.
 
+Status on 2026-05-22:
+
+- Implemented a first-run setup modal keyed by the local `setupCompletedAt` setting.
+- The modal covers Google runtime/OAuth readiness, cached task-list selection, cached calendar selection, sync mode, notification preference, and optional MCP access.
+- Completing setup persists selected resources, sync mode, notifications, MCP preference, and setup completion timestamp through existing settings IPC.
+- Choosing local-only setup completes onboarding without Google selections and keeps local notes/settings available.
+- Settings now has a non-destructive Reset onboarding action that clears only the completion timestamp.
+
+Remaining blockers:
+
+- The flow reports OAuth/runtime readiness only; it does not add production OAuth client collection, Keychain token storage, or authenticated Google transport construction.
+- Task-list and calendar choices come from cached local rows. Live Google account connection and first sync still need the Google sync/runtime work.
+- MCP setup persists local settings only; the live listener and bearer token credential lifecycle remain separate Mac v1 blockers.
+
 Acceptance checks:
 
 - Fresh local database opens onboarding before the main planner.

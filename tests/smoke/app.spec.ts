@@ -104,6 +104,11 @@ test("launches, navigates, opens command palette, and creates core items", async
 
     await expect(page.getByTestId("app-shell")).toBeVisible();
     await expect(page.locator("#planner-title")).toHaveText("Today");
+    const firstRunSetup = page.getByRole("dialog", { name: "First-run setup" });
+
+    await expect(firstRunSetup).toBeVisible();
+    await firstRunSetup.getByRole("button", { name: "Finish setup" }).click();
+    await expect(firstRunSetup).toBeHidden();
 
     for (const label of ["Today", "Tasks", "Calendar", "Notes", "Search", "Settings"]) {
       await expect(page.getByRole("button", { name: new RegExp(`^${label}\\b`) })).toBeVisible();
