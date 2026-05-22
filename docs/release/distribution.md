@@ -70,6 +70,8 @@ artifacts/release/bundle-review.json
 artifacts/release/bundle-review.md
 ```
 
+`electron-builder` may also leave `.blockmap`, `builder-debug.yml`, and `latest-mac.yml` files in `release/`. Do not upload those files for unsigned preview releases. They are not supported updater artifacts for the current release flow.
+
 Verify checksums locally:
 
 ```sh

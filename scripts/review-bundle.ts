@@ -72,6 +72,7 @@ interface ReviewReport {
   generatedAt: string;
   runtimeDependencies: string[];
   devDependencies: string[];
+  externalMainOrPreloadRequires: string[];
   rendererAssetBytes: number;
   mainAssetBytes: number;
   preloadAssetBytes: number;
@@ -207,6 +208,21 @@ function dependencyIssues(runtimeDependencies: readonly string[]): string[] {
     .map((dependency) => `${dependency} is listed as a runtime dependency but should stay dev-only.`);
 }
 
+async function externalDependencyRequires(
+  files: readonly string[],
+  dependencyNames: readonly string[]
+): Promise<string[]> {
+  const source = (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("\n");
+  const externalRequires = dependencyNames.filter((dependency) => {
+    const escapedDependency = dependency.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`require\\(\\s*["']${escapedDependency}(?:/[^"']*)?["']\\s*\\)`);
+
+    return pattern.test(source);
+  });
+
+  return externalRequires.sort();
+}
+
 function markdownReport(report: ReviewReport): string {
   const lines = [
     "# Bundle And Dependency Review",
@@ -227,6 +243,12 @@ function markdownReport(report: ReviewReport): string {
     "",
     ...report.runtimeDependencies.map((dependency) => `- ${dependency}`),
     "",
+    "## External Main/Preload Requires",
+    "",
+    ...(report.externalMainOrPreloadRequires.length === 0
+      ? ["- None"]
+      : report.externalMainOrPreloadRequires.map((dependency) => `- ${dependency}`)),
+    "",
     "## Issues",
     "",
     ...(report.issues.length === 0 ? ["- None"] : report.issues.map((issue) => `- ${issue}`)),
@@ -241,6 +263,10 @@ async function main(): Promise<void> {
 
   const runtimeDependencies = Object.keys(packageJson.dependencies ?? {}).sort();
   const devDependencies = Object.keys(packageJson.devDependencies ?? {}).sort();
+  const externalMainOrPreloadRequires = await externalDependencyRequires(
+    [join(MAIN_DIR, "index.js"), join(PRELOAD_DIR, "index.js")],
+    runtimeDependencies
+  );
   const rendererImportViolations = await importViolations(
     RENDERER_SOURCE_DIR,
     forbiddenRendererImportPrefixes
@@ -251,6 +277,10 @@ async function main(): Promise<void> {
   );
   const issues = [
     ...dependencyIssues(runtimeDependencies),
+    ...externalMainOrPreloadRequires.map(
+      (dependency) =>
+        `${dependency} is required externally by main/preload; bundle it or document why it must ship in node_modules.`
+    ),
     ...rendererImportViolations.map(
       (violation) => `${violation.file} imports privileged module ${violation.importPath}.`
     ),
@@ -262,6 +292,7 @@ async function main(): Promise<void> {
     generatedAt: new Date().toISOString(),
     runtimeDependencies,
     devDependencies,
+    externalMainOrPreloadRequires,
     rendererAssetBytes: await totalBytes(RENDERER_DIR),
     mainAssetBytes: await totalBytes(MAIN_DIR),
     preloadAssetBytes: await totalBytes(PRELOAD_DIR),
@@ -276,6 +307,9 @@ async function main(): Promise<void> {
   await writeFile(REPORT_MD, markdownReport(report), "utf8");
 
   console.log(`Runtime dependencies: ${runtimeDependencies.join(", ") || "none"}`);
+  console.log(
+    `External main/preload requires: ${externalMainOrPreloadRequires.join(", ") || "none"}`
+  );
   console.log(
     `Built output: main ${formatBytes(report.mainAssetBytes)}, preload ${formatBytes(
       report.preloadAssetBytes

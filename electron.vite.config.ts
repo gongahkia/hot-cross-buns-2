@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import { defineConfig } from "electron-vite";
 
 const fromRoot = (path: string) => resolve(__dirname, path);
 const buildMetadataDefines = {
@@ -12,7 +12,6 @@ const buildMetadataDefines = {
 export default defineConfig({
   main: {
     define: buildMetadataDefines,
-    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
         "@main": fromRoot("src/main"),
