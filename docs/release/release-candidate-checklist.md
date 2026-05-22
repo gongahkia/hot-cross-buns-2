@@ -13,11 +13,12 @@ Automated unit, typecheck, production build, Electron smoke, performance smoke, 
 |---|---|---|
 | `pnpm test` | PASS | 24 Vitest files, 115 tests passed in 16.93s. |
 | `pnpm typecheck` | PASS | `tsc --noEmit` completed. |
-| `pnpm build` | PASS | Main 381.93 kB, preload 154.64 kB, renderer JS 424.13 kB. |
+| `pnpm build` | PASS | Main 382.68 kB, preload 154.64 kB, renderer JS 424.26 kB, sidebar icon asset 4.55 kB. |
 | `pnpm test:smoke` | PASS | 1 Playwright Electron smoke passed in 9.0s. |
 | `pnpm test:perf` | PASS | Report-only perf smoke wrote `artifacts/perf/latest.json` and `.md`. |
-| `pnpm release:review-bundle` | PASS | No issues; no external main/preload requires; renderer 436.6 KiB. |
+| `pnpm release:review-bundle` | PASS | No issues; no external main/preload requires; renderer 441.3 KiB. |
 | `pnpm release:mac:preview` | PASS | Tests, release build, bundle review, unsigned DMG/zip, and checksums completed. |
+| `pnpm pack:mac:preview` | PASS | Rebuilt unsigned preview package after wiring legacy icon/logo assets. |
 | `shasum -a 256 -c SHASUMS256.txt` | PASS | DMG and zip checksums verified. |
 | `git diff --check` | PASS | No whitespace errors. |
 | `rg` secret-pattern scans over source and diff | PASS | Only fake test fixtures and documentation references found. |
@@ -34,10 +35,10 @@ Packaging artifacts:
 
 | Artifact | Size | Checksum |
 |---|---:|---|
-| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.dmg` | 94 MiB | `66b9b2eede067d3d6d4efd56847a182c2340db50f08e713e1bdc6994cc468a96` |
-| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.zip` | 91 MiB | `e0582c817916494344302a568438680044f4ef0c6ba612b537565e23f179b91c` |
+| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.dmg` | 94 MiB | `ffd56a88fe9d3ca6bb637a8bdfc40f4b634d3aec24ce92655ca926ecbcb75dca` |
+| `release/Hot-Cross-Buns-2-0.0.0-mac-arm64.zip` | 91 MiB | `0e780f8039a1a21b86388383c19b113e3a771d318843973be2ac905800041f39` |
 
-Packaging caveats: `electron-builder` reported missing `package.json` author, default Electron icon, skipped signing because `mac.identity: null`, and generated blockmap/latest metadata that must not be uploaded for the unsigned preview flow.
+Packaging caveats: `electron-builder` reported missing `package.json` author, skipped signing because `mac.identity: null`, and generated blockmap/latest metadata that must not be uploaded for the unsigned preview flow. The macOS package now uses `build/icon.icns` generated from the legacy app icon set.
 
 ## Performance Smoke
 
@@ -81,7 +82,7 @@ SQLite query plans were indexed for task, event, note, search, checkpoint, and p
 | MCP / Native Shell | MCP status/settings are stateful, but no live local listener starts from app settings, and MCP bearer token storage is not Keychain-backed. | Start/stop `LocalMcpServer` safely after app interactive, persist bearer token in OS credentials, and expose usable connection details. |
 | Performance / Main / Renderer | Startup shell-visible, cached render, search UI, and task-complete feedback miss `docs/performance/performance-strategy.md` budgets. | Profile startup staging and renderer/data IPC paths; record accepted baseline or fix before RC sign-off. |
 | Native Shell / Release QA | Tray/menu bar, global hotkey, notifications, and `hotcrossbuns://` protocol behavior were not manually verified on the packaged app. | Run `docs/testing/manual-macos-native-shell.md` against the packaged app and record results. |
-| Release Packaging | Unsigned preview artifacts build, but package metadata still uses default Electron icon, missing author metadata, and is not notarization-ready. | Add product icon/author metadata for preview polish; signing/notarization remains required before broad distribution. |
+| Release Packaging | Unsigned preview artifacts build, but package metadata still lacks author metadata and is not notarization-ready. | Add author metadata for preview polish; signing/notarization remains required before broad distribution. |
 
 ## Diff Audit
 
@@ -95,6 +96,11 @@ Git diff audit covered the current tracked changes and the packaging/bundle-revi
 Docs updated during this QA pass:
 
 - `.gitignore`: anchored generated release artifacts as `/release/` so `docs/release/` reports are not ignored.
+- `assets/brand/` and `build/icon.icns`: copied legacy logo/icon assets and generated the macOS package icon.
+- `electron-builder.yml`: wired the macOS package icon and copied brand assets into packaged resources.
+- `src/main/native/electronMacAdapter.ts`: uses the copied menu bar icon and app icon assets.
+- `src/renderer/src/App.tsx`: uses the copied app icon in the sidebar header.
+- `docs/design/design-system.md`: records the copied asset locations and usage.
 - `docs/release/distribution.md`: clarified generated `app-update.yml` does not mean updater support.
 - `docs/specs/native-parity.md`: documented current Keychain/MCP listener blockers.
 - `docs/release/release-candidate-checklist.md`: added this RC report.
