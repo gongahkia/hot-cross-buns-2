@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Electron-first rebuild of Hot Cross Buns.",
+  "author": "gongahkia",
   "main": "out/main/index.js",
   "packageManager": "pnpm@9.15.4",
   "engines": {

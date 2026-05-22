@@ -89,6 +89,18 @@ Search sources:
 
 Search results should include deep links into the app and should identify source type.
 
+Implemented local query syntax:
+
+- Plain text terms search cached task title/notes/list names, event title/location/description/calendar names, and note title/body.
+- `source:` or `domain:` narrows to `tasks`, `calendar`, and/or `notes`; aliases include `task`, `event`, and `note`.
+- `status:` filters tasks by `active`/`open`, `completed`/`done`, `hidden`, or `deleted`.
+- `due:` filters task due dates; `start:` filters event start dates. Supported windows are `YYYY-MM-DD`, `today`, `tomorrow`, `yesterday`, `before:YYYY-MM-DD`, `after:YYYY-MM-DD`, `YYYY-MM-DD..YYYY-MM-DD`, `any`, and `none`.
+- `priority:` filters tasks by `none`, `low`, `medium`, or `high`.
+- `list:` filters task list title, and `calendar:`/`cal:` filters calendar title. Quote multi-word values, for example `list:"Product Planning"`.
+- `notes:` or `body:` filters body/details presence with `yes` or `no`.
+
+The renderer shows parsed filters as chips and reports invalid structured syntax inline without executing a search request. Saved custom filters are not implemented yet; they should wait until saved-view storage is added through settings or the local database.
+
 ## Command Palette
 
 The command palette is a first-class workflow surface.
@@ -108,8 +120,16 @@ Required commands:
 - force full resync
 - toggle MCP server if enabled by settings
 - copy diagnostics summary
+- search filter syntax
 
 Palette commands should call the same service APIs as visible UI controls.
+
+Current implementation notes:
+
+- Renderer command metadata now comes from a shared action registry with stable IDs such as `task.create`, `calendar.create`, `calendar.view.week`, `note.create`, `sync.refresh`, and `diagnostics.copy`.
+- Command palette entries show disabled reasons when required cached resources or selected-item context are unavailable.
+- Visible task, calendar, note, settings, diagnostics, and refresh controls expose matching action IDs for tests and future context-menu/telemetry reuse.
+- Selected-item palette execution is not fully global yet; selected task actions are wired in the Tasks toolbar and remain disabled in the palette until the shell owns shared selection context.
 
 ## Tray And Hotkeys
 
@@ -171,5 +191,6 @@ Remaining Mac v1 blockers:
 - Core IPC read routes return bounded, paginated SQLite-backed DTOs. Renderer screens load those DTOs through `coreViewModelSource` and keep route-level state small.
 - UI task, task-list, calendar-event, and note commands call typed preload APIs. Task and event writes optimistically update local mirrors and enqueue Google mutations; note writes update local SQLite only.
 - MCP task, event, and note tools call the same main-side domain services as UI IPC handlers, including the same validation and mutation queue paths for synced task/event resources.
-- Local search is SQLite-backed and capped. It indexes current task title/details/list names, event title/location/description/calendar names, and note title/body; it never calls Google per keystroke.
+- Local search is SQLite-backed and capped. It indexes current task title/details/list names, event title/location/description/calendar names, and note title/body; it applies the structured local DSL in main-process SQLite and never calls Google per keystroke.
+- Today's local timeline is grouped into all-day, morning, afternoon, evening, and unscheduled sections using cached event starts and existing task rows. It does not yet include task planned-time, duration, conflicts, or scheduling suggestions.
 - Calendar agenda, task, note, and search surfaces remain virtualized or range/pagination-shaped to preserve renderer and IPC budgets.

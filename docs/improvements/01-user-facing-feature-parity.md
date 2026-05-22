@@ -54,11 +54,23 @@ Legacy has `AdvancedSearchQuery`, `AdvancedSearchMatcher`, `QueryDSL`, `CustomFi
 
 Extend current local search beyond plain FTS. Add a parser for structured filters such as source, status, due/start date windows, list/calendar names, tags, priority, attendee, location, and notes/body presence. Expose this as chips in Search and as saved custom filters in Settings. Keep all search local-first.
 
+Status on 2026-05-23:
+
+- Implemented the first local structured search DSL slice for plain text plus `source:`/`domain:`, task `status:`, `due:` windows, event `start:` windows, task `priority:`, `list:`, `calendar:`/`cal:`, and `notes:`/`body:` presence.
+- The renderer surfaces parsed filters as chips and shows inline invalid-query feedback without dispatching invalid search IPC.
+- Main-process SQLite applies the same parsed filters, including filter-only searches, so matching remains local and bounded.
+- Command palette now exposes Search and filter-syntax discovery.
+
+Deferred:
+
+- Saved custom filters/views are not added yet because stable saved-view storage should be introduced through settings or the local database in a dedicated pass.
+- Fuzzy ranking, tag extraction, attendee/location-specific filters, settings search indexing, and full legacy `CustomFilter` parity remain out of scope for this slice.
+
 Acceptance checks:
 
 - Search supports plain text and structured filters in the same query.
 - Invalid query syntax produces an inline, non-crashing error.
-- Saved filters appear in the sidebar or Search section.
+- Saved filters appear in the sidebar or Search section. Deferred for this slice; no second filter source of truth was added.
 - Search does not call Google per keystroke.
 
 ### 3. Rich Calendar Planning

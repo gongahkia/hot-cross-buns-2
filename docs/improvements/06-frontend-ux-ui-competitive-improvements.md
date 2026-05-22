@@ -51,6 +51,13 @@ Acceptance checks:
 - Disabled actions show a clear reason without throwing or silently disappearing.
 - Renderer tests cover action availability for loading, empty, offline, stale, and ready states.
 
+Status on 2026-05-23:
+
+- Implemented a renderer action registry in `src/renderer/src/actions/plannerActions.ts` for task create/quick capture/selected task actions, calendar create/view actions, note create, navigation, search syntax discovery, sync refresh, MCP, and diagnostics.
+- Command palette entries now use the same action IDs as the visible controls, include disabled-state reason text, and gate task/calendar writes when cached resources or selected-item context are unavailable.
+- Visible task, calendar, note, settings, diagnostics, and refresh controls now carry matching `data-action-id` attributes for testing and future telemetry/context-menu reuse.
+- Selected task context is currently local to the Tasks screen toolbar. Palette-scoped selected-item execution remains deferred until the shell owns a shared selected-item context.
+
 ### 2. Configurable Views Over One Local Model
 
 Notion and Linear both make views configurable: filters, sorts, grouping, layout, visible properties, and per-view display settings. OmniFocus uses perspectives for purposeful slices like Inbox, Forecast, and Review.
@@ -196,6 +203,11 @@ Acceptance checks:
 - Large local task/event fixtures do not cause unbounded DOM growth.
 - Timeline state is derived from cached local data.
 
+Status on 2026-05-23:
+
+- Today now groups the existing cached event/task timeline into all-day, morning, afternoon, evening, and unscheduled sections without introducing new scheduling fields.
+- The slice remains renderer-only and uses the existing virtualized list path. Task planned time, duration, locked scheduling, conflicts, current-time marker, and auto-scheduling are still backend/data-model backlog items.
+
 ### 3. Task Power Surface
 
 Combine Linear's multi-path actions, OmniFocus perspectives, and TickTick's task modes.
@@ -254,6 +266,17 @@ Acceptance checks:
 - Filters operate entirely on local cached data.
 - Saved views have stable IDs and names.
 - Search handles empty, invalid, loading, stale, and offline states consistently.
+
+Status on 2026-05-23:
+
+- Implemented visible chips and inline invalid-query feedback for the initial local Search DSL: source/domain, task status, due/start windows, priority, list/calendar title, and notes/body presence.
+- Added command palette discovery for local search filter syntax.
+- Saved search views remain deferred because stable saved-view storage has not been introduced.
+
+Additional frontend polish status on 2026-05-23:
+
+- Calendar week/month cells and event chips now respond to keyboard activation, opening create/edit flows without requiring pointer input.
+- Focused renderer coverage now includes shared action IDs, command palette action availability, and keyboard creation from calendar grid cells.
 
 ### 6. Notes And Linked Planning
 
@@ -368,3 +391,9 @@ Add markdown preview, planner links, backlinks, and note properties. Defer graph
 ## Recommended Starting Point
 
 Start with Slice 1 before deep calendar or scheduling work. The action registry, inspector, display controls, and state polish give every later feature a consistent place to live and reduce the risk of building separate interaction patterns for each screen.
+
+Current slice status on 2026-05-23:
+
+- Slice 1 is partially implemented for the shared action registry, palette availability, visible control IDs, and selected task toolbar state.
+- Slice 2 is partially implemented through grouped Today timeline sections over existing cached data.
+- The shared inspector shell, persisted display options, saved views, task duration/planned-time fields, note backlinks, bulk selection, and full selected-item palette context remain deferred.

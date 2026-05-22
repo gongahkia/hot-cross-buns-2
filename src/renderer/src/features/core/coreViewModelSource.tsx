@@ -24,6 +24,10 @@ import type {
   TaskUpdateRequest
 } from "@shared/ipc/contracts";
 import type { HcbResult } from "@shared/ipc/result";
+import {
+  parseLocalSearchQuery,
+  type ParsedLocalSearchQuery
+} from "@shared/search/localSearch";
 import { reportRendererTiming } from "../../hooks/useRenderTiming";
 import type {
   CalendarDayViewModel,
@@ -112,7 +116,8 @@ interface CoreDataLoadState {
 
 interface SearchHookState {
   viewModel: SearchViewModel;
-  state: "idle" | "loading" | "results" | "empty" | "error" | "offline" | "stale";
+  state: "idle" | "loading" | "results" | "empty" | "error" | "offline" | "stale" | "invalid";
+  parsed: ParsedLocalSearchQuery;
   errorMessage?: string;
   latencyMs?: number;
 }
@@ -255,9 +260,11 @@ export function useCoreViewModelSource(): CoreViewModelSource {
 }
 
 export function useLocalSearch(query: string): SearchHookState {
+  const parsed = useMemo(() => parseLocalSearchQuery(query), [query]);
   const [state, setState] = useState<SearchHookState>({
     viewModel: idleSearchViewModel(),
-    state: "idle"
+    state: "idle",
+    parsed
   });
 
   useEffect(() => {
@@ -266,8 +273,22 @@ export function useLocalSearch(query: string): SearchHookState {
     if (!trimmed) {
       setState({
         viewModel: idleSearchViewModel(),
-        state: "idle"
+        state: "idle",
+        parsed
       });
+      return;
+    }
+
+    if (parsed.errors.length > 0) {
+      setState((current) => ({
+        viewModel:
+          current.viewModel.state === "results"
+            ? current.viewModel
+            : emptySearchViewModel("Fix the query syntax to search local data."),
+        state: "invalid",
+        parsed,
+        errorMessage: parsed.errors[0]?.message ?? "Invalid search query."
+      }));
       return;
     }
 
@@ -275,20 +296,21 @@ export function useLocalSearch(query: string): SearchHookState {
       setState({
         viewModel: emptySearchViewModel("Search is unavailable while the preload bridge is offline."),
         state: "offline",
+        parsed,
         errorMessage: "Preload bridge is unavailable."
       });
       return;
     }
 
     let cancelled = false;
-    const previous = state.viewModel;
     const debounce = window.setTimeout(() => {
       const startedAt = performance.now();
 
-      setState({
-        viewModel: previous,
-        state: previous.state === "results" ? "stale" : "loading"
-      });
+      setState((current) => ({
+        viewModel: current.viewModel,
+        state: current.viewModel.state === "results" ? "stale" : "loading",
+        parsed
+      }));
 
       window.hcb?.search
         .query({
@@ -306,6 +328,7 @@ export function useLocalSearch(query: string): SearchHookState {
           setState({
             viewModel,
             state: viewModel.state,
+            parsed,
             latencyMs: Math.max(0, Math.round(performance.now() - startedAt))
           });
           reportRendererTiming("search.query", performance.now() - startedAt, {
@@ -321,6 +344,7 @@ export function useLocalSearch(query: string): SearchHookState {
           setState({
             viewModel: emptySearchViewModel("Local search could not read the cache."),
             state: "error",
+            parsed,
             errorMessage: error instanceof Error ? error.message : "Local search failed."
           });
         });
@@ -330,7 +354,7 @@ export function useLocalSearch(query: string): SearchHookState {
       cancelled = true;
       window.clearTimeout(debounce);
     };
-  }, [query]);
+  }, [query, parsed]);
 
   return state;
 }

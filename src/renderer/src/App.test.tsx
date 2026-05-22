@@ -559,6 +559,7 @@ describe("App shell", () => {
 
   it("routes palette action command shells without waiting on sync or search", async () => {
     const user = userEvent.setup();
+    installHcb(seededHcb());
     render(<App />);
 
     await runPaletteCommand(user, "new task", /New task/);
@@ -584,6 +585,40 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
   });
 
+  it("shares action IDs across task controls and command palette availability", async () => {
+    const user = userEvent.setup();
+    installHcb(seededHcb());
+    render(<App />);
+
+    await goToSection("Tasks");
+    expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+
+    const taskToolbar = screen.getByRole("toolbar", { name: "Task actions" });
+    const newTaskButton = within(taskToolbar).getByRole("button", { name: "New task" });
+    const quickCaptureButton = within(taskToolbar).getByRole("button", { name: "Quick capture" });
+    const completeButton = within(taskToolbar).getByRole("button", { name: "Complete" });
+
+    expect(newTaskButton).toHaveAttribute("data-action-id", "task.create");
+    expect(quickCaptureButton).toHaveAttribute("data-action-id", "task.quickCapture");
+    expect(completeButton).toHaveAttribute("data-action-id", "task.completeSelected");
+    expect(completeButton).toBeDisabled();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const dialog = await screen.findByRole("dialog", { name: "Command palette" });
+    const input = within(dialog).getByRole("searchbox", { name: "Filter commands" });
+
+    await user.type(input, "complete selected");
+    const completeCommand = within(dialog).getByRole("option", { name: /Complete selected task/ });
+
+    expect(completeCommand).toHaveAttribute("data-action-id", "task.completeSelected");
+    expect(completeCommand).toBeDisabled();
+    expect(completeCommand).toHaveTextContent("No selected task");
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /Draft inbox triage rules Today/ }));
+    expect(completeButton).not.toBeDisabled();
+  });
+
   it("renders seeded SQLite-shaped data and uses local search", async () => {
     const api = seededHcb();
     installHcb(api);
@@ -606,6 +641,17 @@ describe("App shell", () => {
     await userEvent.setup().type(screen.getByRole("textbox", { name: "Search local cache" }), "triage");
     expect(await screen.findByText(/Task in Inbox/)).toBeInTheDocument();
     expect(api.search.query).toHaveBeenCalledWith({ query: "triage", limit: 30 });
+  });
+
+  it("groups the Today timeline into local planner sections", async () => {
+    installHcb(seededHcb());
+    render(<App />);
+
+    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
+    const timeline = screen.getByRole("list", { name: "Today timeline" });
+
+    expect(within(timeline).getByText("Unscheduled")).toBeInTheDocument();
+    expect(within(timeline).getByText("Tasks without a planned time")).toBeInTheDocument();
   });
 
   it("renders task groups, subtasks, completion, empty state, and error state", async () => {
@@ -791,6 +837,29 @@ describe("App shell", () => {
     expect(screen.getByRole("grid", { name: "Calendar month view" })).toBeInTheDocument();
   });
 
+  it("opens calendar creation from keyboard-focused grid cells", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Week" }));
+    const grid = screen.getByRole("grid", { name: "Calendar week view" });
+    const firstCell = within(grid).getAllByRole("gridcell")[0];
+
+    firstCell.focus();
+    fireEvent.keyDown(firstCell, { key: "Enter" });
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New event" })).toHaveAttribute(
+      "data-action-id",
+      "calendar.create"
+    );
+  });
+
   it("creates, edits, and deletes calendar events through preload", async () => {
     const api = seededHcb();
     installHcb(api);
@@ -916,6 +985,69 @@ describe("App shell", () => {
     await user.type(input, "missing");
     expect(await screen.findByText("No matching results")).toBeInTheDocument();
     expect(api.search.query).toHaveBeenLastCalledWith({ query: "missing", limit: 30 });
+  });
+
+  it("shows structured local search filters and keeps search on the local IPC path", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
+    await goToSection("Search");
+
+    vi.mocked(api.search.query).mockClear();
+    vi.mocked(api.tasks.list).mockClear();
+    vi.mocked(api.calendar.listEvents).mockClear();
+    vi.mocked(api.notes.list).mockClear();
+
+    const input = screen.getByRole("textbox", { name: "Search local cache" });
+    const query = "source:tasks status:open due:today priority:high list:Inbox notes:yes triage";
+
+    await user.type(input, query);
+
+    expect(screen.getByText("Source: tasks")).toBeInTheDocument();
+    expect(screen.getByText("Status: active")).toBeInTheDocument();
+    expect(screen.getByText("Due: today")).toBeInTheDocument();
+    expect(screen.getByText("Priority: high")).toBeInTheDocument();
+    expect(screen.getByText("List: Inbox")).toBeInTheDocument();
+    expect(await screen.findByText("Body: yes")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(api.search.query).toHaveBeenCalledWith({ query, limit: 30 });
+    });
+    expect(api.tasks.list).not.toHaveBeenCalled();
+    expect(api.calendar.listEvents).not.toHaveBeenCalled();
+    expect(api.notes.list).not.toHaveBeenCalled();
+  });
+
+  it("shows invalid search syntax inline without executing a search", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Search");
+    vi.mocked(api.search.query).mockClear();
+
+    await user.type(screen.getByRole("textbox", { name: "Search local cache" }), "status:blocked triage");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unsupported task status");
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    expect(api.search.query).not.toHaveBeenCalled();
+  });
+
+  it("discovers structured search syntax through the command palette", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await runPaletteCommand(user, "source:tasks", /Search filter syntax/);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Search" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search local cache" })).toHaveValue(
+      "source:tasks status:active due:today"
+    );
   });
 
   it("renders required settings sections and section controls", async () => {

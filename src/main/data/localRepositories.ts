@@ -49,6 +49,13 @@ import type {
 } from "@shared/ipc/contracts";
 import { HcbPublicError } from "@shared/ipc/result";
 import { redactMetadata } from "@shared/redaction";
+import {
+  hasRunnableLocalSearch,
+  parseLocalSearchQuery,
+  resolveLocalSearchDomains,
+  type LocalSearchDateFilter,
+  type ParsedLocalSearchQuery
+} from "@shared/search/localSearch";
 import type { SqliteConnection, SqliteParams, SqliteWriteOperation } from "./sqliteConnection";
 
 interface PageWindow<T> {
@@ -1133,12 +1140,23 @@ export class LocalPlannerRepository {
 
     try {
       const result = this.measureSqlite("search.query.sqlite", () => {
-        const domains = new Set<SearchDomain>(request.domains ?? ["tasks", "calendar", "notes"]);
+        const parsed = parseLocalSearchQuery(request.query);
+        const parseError = parsed.errors[0];
+
+        if (parseError !== undefined) {
+          throw new HcbPublicError({
+            code: "VALIDATION_ERROR",
+            message: parseError.message,
+            recoverable: true
+          });
+        }
+
+        const domains = new Set<SearchDomain>(resolveLocalSearchDomains(parsed, request.domains));
         const limit = Math.max(1, Math.min(50, request.limit ?? 20));
-        const ftsQuery = ftsMatchQuery(request.query);
+        const ftsQuery = ftsMatchQuery(parsed.text);
         const results: SearchResultItem[] = [];
 
-        if (!ftsQuery) {
+        if (!hasRunnableLocalSearch(parsed) || (!ftsQuery && parsed.chips.length === 0)) {
           return {
             items: [],
             page: {
@@ -1148,7 +1166,14 @@ export class LocalPlannerRepository {
           };
         }
 
-        if (domains.size === 3 && domains.has("tasks") && domains.has("calendar") && domains.has("notes")) {
+        if (
+          parsed.chips.length === 0 &&
+          ftsQuery &&
+          domains.size === 3 &&
+          domains.has("tasks") &&
+          domains.has("calendar") &&
+          domains.has("notes")
+        ) {
           const items = this.searchAllDomains(ftsQuery, limit);
 
           return {
@@ -1161,15 +1186,15 @@ export class LocalPlannerRepository {
         }
 
         if (domains.has("tasks")) {
-          results.push(...this.searchTasks(ftsQuery, limit));
+          results.push(...this.searchTasks(parsed, ftsQuery, limit));
         }
 
         if (domains.has("calendar")) {
-          results.push(...this.searchEvents(ftsQuery, limit));
+          results.push(...this.searchEvents(parsed, ftsQuery, limit));
         }
 
         if (domains.has("notes")) {
-          results.push(...this.searchNotes(ftsQuery, limit));
+          results.push(...this.searchNotes(parsed, ftsQuery, limit));
         }
 
         const sorted = results
@@ -1516,7 +1541,47 @@ export class LocalPlannerRepository {
       }));
   }
 
-  private searchTasks(ftsQuery: string, limit: number): SearchResultItem[] {
+  private searchTasks(
+    parsed: ParsedLocalSearchQuery,
+    ftsQuery: string,
+    limit: number
+  ): SearchResultItem[] {
+    const { predicates, params } = taskSearchPredicates(parsed);
+    const where = predicates.join(" AND ");
+
+    if (!ftsQuery) {
+      return this.connection
+        .query<{
+          id: string;
+          title: string;
+          snippet: string | null;
+          updatedAt: string;
+        }>(
+          `SELECT
+             tasks.id AS id,
+             tasks.title AS title,
+             COALESCE(tasks.notes, lists.title) AS snippet,
+             tasks.updated_at AS updatedAt
+           FROM google_tasks tasks
+           INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+           WHERE ${where}
+           ORDER BY
+             CASE WHEN tasks.due_at IS NULL THEN 1 ELSE 0 END,
+             tasks.due_at ASC,
+             tasks.updated_at DESC,
+             tasks.id ASC
+           LIMIT ?;`,
+          [...params, limit]
+        )
+        .map((row) => ({
+          id: row.id,
+          domain: "tasks" as const,
+          title: row.title,
+          snippet: row.snippet ?? undefined,
+          updatedAt: row.updatedAt
+        }));
+    }
+
     return this.connection
       .query<{
         id: string;
@@ -1551,12 +1616,10 @@ export class LocalPlannerRepository {
          FROM ranked
          INNER JOIN google_tasks tasks ON tasks.rowid = ranked.taskRowid
          INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
-         WHERE tasks.deleted_at IS NULL
-           AND tasks.is_hidden = 0
-           AND lists.deleted_at IS NULL
+         WHERE ${where}
          ORDER BY ranked.rank ASC, tasks.updated_at DESC, tasks.id ASC
          LIMIT ?;`,
-        [ftsQuery, ftsQuery, limit]
+        [ftsQuery, ftsQuery, ...params, limit]
       )
       .map((row) => ({
         id: row.id,
@@ -1567,7 +1630,43 @@ export class LocalPlannerRepository {
       }));
   }
 
-  private searchEvents(ftsQuery: string, limit: number): SearchResultItem[] {
+  private searchEvents(
+    parsed: ParsedLocalSearchQuery,
+    ftsQuery: string,
+    limit: number
+  ): SearchResultItem[] {
+    const { predicates, params } = eventSearchPredicates(parsed);
+    const where = predicates.join(" AND ");
+
+    if (!ftsQuery) {
+      return this.connection
+        .query<{
+          id: string;
+          title: string;
+          snippet: string | null;
+          updatedAt: string;
+        }>(
+          `SELECT
+             events.id AS id,
+             events.summary AS title,
+             COALESCE(events.description, events.location, calendars.summary) AS snippet,
+             events.updated_at AS updatedAt
+           FROM google_calendar_events events
+           INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+           WHERE ${where}
+           ORDER BY events.start_at ASC, events.updated_at DESC, events.id ASC
+           LIMIT ?;`,
+          [...params, limit]
+        )
+        .map((row) => ({
+          id: row.id,
+          domain: "calendar" as const,
+          title: row.title,
+          snippet: row.snippet ?? undefined,
+          updatedAt: row.updatedAt
+        }));
+    }
+
     return this.connection
       .query<{
         id: string;
@@ -1602,12 +1701,10 @@ export class LocalPlannerRepository {
          FROM ranked
          INNER JOIN google_calendar_events events ON events.rowid = ranked.eventRowid
          INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
-         WHERE events.deleted_at IS NULL
-           AND events.status != 'cancelled'
-           AND calendars.deleted_at IS NULL
+         WHERE ${where}
          ORDER BY ranked.rank ASC, events.updated_at DESC, events.id ASC
          LIMIT ?;`,
-        [ftsQuery, ftsQuery, limit]
+        [ftsQuery, ftsQuery, ...params, limit]
       )
       .map((row) => ({
         id: row.id,
@@ -1618,7 +1715,38 @@ export class LocalPlannerRepository {
       }));
   }
 
-  private searchNotes(ftsQuery: string, limit: number): SearchResultItem[] {
+  private searchNotes(
+    parsed: ParsedLocalSearchQuery,
+    ftsQuery: string,
+    limit: number
+  ): SearchResultItem[] {
+    const { predicates, params } = noteSearchPredicates(parsed);
+    const where = predicates.join(" AND ");
+
+    if (!ftsQuery) {
+      return this.connection
+        .query<{
+          id: string;
+          title: string;
+          body: string;
+          updatedAt: string;
+        }>(
+          `SELECT notes.id AS id, notes.title AS title, notes.body AS body, notes.updated_at AS updatedAt
+           FROM local_notes notes
+           WHERE ${where}
+           ORDER BY notes.updated_at DESC, notes.id ASC
+           LIMIT ?;`,
+          [...params, limit]
+        )
+        .map((row) => ({
+          id: row.id,
+          domain: "notes" as const,
+          title: row.title,
+          snippet: preview(row.body),
+          updatedAt: row.updatedAt
+        }));
+    }
+
     return this.connection
       .query<{
         id: string;
@@ -1630,10 +1758,10 @@ export class LocalPlannerRepository {
          FROM local_notes_fts
          INNER JOIN local_notes notes ON notes.rowid = local_notes_fts.rowid
          WHERE local_notes_fts MATCH ?
-           AND notes.deleted_at IS NULL
+           AND ${where}
          ORDER BY bm25(local_notes_fts) ASC, notes.updated_at DESC, notes.id ASC
          LIMIT ?;`,
-        [ftsQuery, limit]
+        [ftsQuery, ...params, limit]
       )
       .map((row) => ({
         id: row.id,
@@ -2248,6 +2376,137 @@ function ftsMatchQuery(value: string): string {
     ?.slice(0, 8) ?? [];
 
   return tokens.map((token) => `${token}*`).join(" ");
+}
+
+function taskSearchPredicates(parsed: ParsedLocalSearchQuery): {
+  predicates: string[];
+  params: Array<string | number | boolean | null>;
+} {
+  const predicates = ["lists.deleted_at IS NULL"];
+  const params: Array<string | number | boolean | null> = [];
+  const status = parsed.filters.taskStatus;
+
+  if (status === "deleted") {
+    predicates.push("tasks.deleted_at IS NOT NULL");
+  } else {
+    predicates.push("tasks.deleted_at IS NULL");
+
+    if (status === "hidden") {
+      predicates.push("tasks.is_hidden = 1");
+    } else {
+      predicates.push("tasks.is_hidden = 0");
+    }
+
+    if (status === "active") {
+      predicates.push("tasks.status != 'completed'");
+    } else if (status === "completed") {
+      predicates.push("tasks.status = 'completed'");
+    }
+  }
+
+  if (parsed.filters.priority !== undefined) {
+    predicates.push("COALESCE(tasks.local_priority, 'none') = ?");
+    params.push(parsed.filters.priority);
+  }
+
+  if (parsed.filters.listTitle !== undefined) {
+    predicates.push("LOWER(lists.title) LIKE ? ESCAPE '\\'");
+    params.push(likeContainsParam(parsed.filters.listTitle));
+  }
+
+  if (parsed.filters.hasBody !== undefined) {
+    predicates.push(
+      parsed.filters.hasBody
+        ? "TRIM(COALESCE(tasks.notes, '')) != ''"
+        : "TRIM(COALESCE(tasks.notes, '')) = ''"
+    );
+  }
+
+  addDatePredicate(predicates, params, "tasks.due_at", parsed.filters.due);
+
+  return { predicates, params };
+}
+
+function eventSearchPredicates(parsed: ParsedLocalSearchQuery): {
+  predicates: string[];
+  params: Array<string | number | boolean | null>;
+} {
+  const predicates = [
+    "events.deleted_at IS NULL",
+    "events.status != 'cancelled'",
+    "calendars.deleted_at IS NULL"
+  ];
+  const params: Array<string | number | boolean | null> = [];
+
+  if (parsed.filters.calendarTitle !== undefined) {
+    predicates.push("LOWER(calendars.summary) LIKE ? ESCAPE '\\'");
+    params.push(likeContainsParam(parsed.filters.calendarTitle));
+  }
+
+  if (parsed.filters.hasBody !== undefined) {
+    predicates.push(
+      parsed.filters.hasBody
+        ? "TRIM(COALESCE(events.description, '')) != ''"
+        : "TRIM(COALESCE(events.description, '')) = ''"
+    );
+  }
+
+  addDatePredicate(predicates, params, "events.start_at", parsed.filters.start);
+
+  return { predicates, params };
+}
+
+function noteSearchPredicates(parsed: ParsedLocalSearchQuery): {
+  predicates: string[];
+  params: Array<string | number | boolean | null>;
+} {
+  const predicates = ["notes.deleted_at IS NULL"];
+  const params: Array<string | number | boolean | null> = [];
+
+  if (parsed.filters.hasBody !== undefined) {
+    predicates.push(
+      parsed.filters.hasBody
+        ? "TRIM(notes.body) != ''"
+        : "TRIM(notes.body) = ''"
+    );
+  }
+
+  return { predicates, params };
+}
+
+function addDatePredicate(
+  predicates: string[],
+  params: Array<string | number | boolean | null>,
+  column: string,
+  filter: LocalSearchDateFilter | undefined
+): void {
+  if (filter === undefined) {
+    return;
+  }
+
+  if (filter.mode === "present") {
+    predicates.push(`${column} IS NOT NULL`);
+    return;
+  }
+
+  if (filter.mode === "missing") {
+    predicates.push(`${column} IS NULL`);
+    return;
+  }
+
+  if (filter.from !== undefined) {
+    predicates.push(`${column} >= ?`);
+    params.push(filter.from);
+  }
+
+  if (filter.to !== undefined) {
+    predicates.push(`${column} < ?`);
+    params.push(filter.to);
+  }
+}
+
+function likeContainsParam(value: string): string {
+  return `%${value.toLowerCase().replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
 }
 
 function taskStatusFromRow(row: TaskRow): TaskSummary["status"] {

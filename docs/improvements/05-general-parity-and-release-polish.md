@@ -42,6 +42,11 @@ Acceptance checks:
 - CI uses the pinned package manager from `package.json`.
 - Electron smoke failures upload Playwright traces/screenshots.
 
+Status on 2026-05-23:
+
+- Added `.github/workflows/ci.yml` with pinned `pnpm@9.15.4`, install, `pnpm typecheck`, `pnpm test`, macOS Electron smoke, and scheduled/manual performance smoke.
+- Failed or cancelled smoke/performance runs upload Playwright and performance artifacts for diagnosis.
+
 ### 2. Public Docsite And Install Flow
 
 Legacy has a GitHub Pages style docsite, privacy page, media assets, install script, and first-launch unsigned-DMG guidance.
@@ -60,6 +65,12 @@ Acceptance checks:
 - Docs build from tracked files.
 - Install script verifies checksum before mounting/copying a DMG.
 - Privacy page states no third-party analytics SDK and describes local cache/token handling.
+
+Status on 2026-05-23:
+
+- Added `scripts/install-mac-preview.sh`, which verifies SHA-256 before copying an unsigned `.dmg` or `.zip` preview app bundle.
+- Added `docs/support/mac-preview-support.md` with unsigned preview install, Gatekeeper, privacy, diagnostics, and rollback guidance.
+- Public docsite generation remains deferred; current support material is tracked Markdown.
 
 ### 3. Release Metadata And Distribution Hardening
 
@@ -98,6 +109,11 @@ Acceptance checks:
 - Agent workflow points to the improvement docs when doing legacy parity work.
 - Performance docs explain where generated evidence is stored.
 
+Status on 2026-05-23:
+
+- Added `docs/CONTRIBUTING.md` with setup, daily commands, release commands, CI expectations, and PR note expectations.
+- Updated `README.md`, `docs/README.md`, `docs/performance/build-and-test-performance.md`, and `docs/testing/qa-plan.md` with current command and artifact guidance.
+
 ### 5. Asset And Localization Parity
 
 Legacy includes app icons, menu-bar template assets, onboarding imagery, localized strings, and public website media.
@@ -135,6 +151,11 @@ Acceptance checks:
 - Release candidate checklist links to every manual QA doc.
 - Support docs avoid exposing maintainer OAuth credentials.
 - User-facing docs match current app behavior rather than future roadmap promises.
+
+Status on 2026-05-23:
+
+- Added Mac preview support guidance that explicitly avoids Gatekeeper-disable advice and avoids sharing OAuth credentials, MCP tokens, local databases, raw Google payloads, or signing material.
+- Updated release distribution docs with current macOS package metadata, icon/resource paths, unsigned preview checksum helper, and support-doc links.
 
 ## Recommended Starting Point
 

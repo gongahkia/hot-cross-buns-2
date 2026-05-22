@@ -6,7 +6,8 @@ import { performance } from "node:perf_hooks";
 import { REQUIRED_GOOGLE_SCOPES } from "../src/main/google/types";
 import {
   LocalPerformanceRepository,
-  LocalPlannerRepository
+  LocalPlannerRepository,
+  LocalSettingsRepository
 } from "../src/main/data/localRepositories";
 import { runLocalDataMigrations } from "../src/main/data/migrations";
 import { createAppSqliteConnection, type SqliteConnection } from "../src/main/data/sqliteConnection";
@@ -93,7 +94,14 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
   try {
     runLocalDataMigrations(connection);
     const syncRepository = new GoogleSyncRepository(connection);
+    const settingsRepository = new LocalSettingsRepository(connection);
     const now = mediumFixture.baseTime;
+
+    settingsRepository.update({
+      selectedTaskListIds: mediumFixture.taskLists.map((list) => taskListLocalId(accountId, list.id)),
+      selectedCalendarIds: mediumFixture.calendars.map((calendar) => calendarLocalId(accountId, calendar.id)),
+      setupCompletedAt: now
+    });
 
     syncRepository.upsertAccountStatus({
       accountId,
@@ -597,9 +605,9 @@ async function collectLaunchTiming(
       }
     });
 
-    const page = await electronApp.firstWindow({ timeout: 15_000 });
+    const page = electronApp.windows()[0] ?? await electronApp.firstWindow({ timeout: 45_000 });
 
-    await page.getByTestId("app-shell").waitFor({ state: "visible", timeout: 15_000 });
+    await page.getByTestId("app-shell").waitFor({ state: "visible", timeout: 45_000 });
     await page
       .waitForFunction(
         `(async () => {

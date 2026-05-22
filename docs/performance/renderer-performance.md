@@ -37,6 +37,12 @@ Search:
 - Return capped result sets with a continuation strategy if needed.
 - Highlight matches using precomputed ranges where possible.
 
+Current measurement note, 2026-05-23:
+
+- `pnpm test:perf` direct medium-fixture `search.medium-local` collected at 13.94ms after the structured local DSL slice.
+- Warm Electron `search.ui` collected at 467.51ms, above the <100ms RC target. The direct SQLite path is fast enough, but the unpackaged Electron run still shows slow IPC/startup behavior and cold app-shell capture timed out in this run.
+- Remaining performance blocker: prove the packaged native SQLite adapter path and reduce renderer search round-trip latency before treating Search UI as within budget.
+
 Command palette and quick capture:
 
 - Keep initial command registry in memory.

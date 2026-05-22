@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Command, Search, X } from "lucide-react";
-import { mockCommands, type MockCommand, type SectionId } from "../data/mockPlanner";
+import {
+  plannerActionAvailability,
+  plannerActions,
+  type PlannerAction,
+  type PlannerActionContext
+} from "../actions/plannerActions";
+import type { SectionId } from "../data/mockPlanner";
 import { Badge, Button, IconButton, Input, cx } from "./primitives";
 
 interface CommandPaletteProps {
-  onCommand?: (command: MockCommand) => boolean | void;
+  actionContext: PlannerActionContext;
+  onCommand?: (command: PlannerAction) => boolean | void;
   onNavigate: (sectionId: SectionId) => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }
 
-function commandMatches(command: MockCommand, query: string): boolean {
+function commandMatches(command: PlannerAction, query: string): boolean {
   const normalizedQuery = query.trim().toLowerCase();
 
   if (!normalizedQuery) {
@@ -24,7 +31,7 @@ function commandMatches(command: MockCommand, query: string): boolean {
     .includes(normalizedQuery);
 }
 
-function dispatchCalendarCommand(command: MockCommand): void {
+function dispatchCalendarCommand(command: PlannerAction): void {
   if (!command.calendarAction) {
     return;
   }
@@ -41,7 +48,22 @@ function dispatchCalendarCommand(command: MockCommand): void {
   }, 0);
 }
 
+function dispatchNoteCommand(command: PlannerAction): void {
+  if (!command.noteAction) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("hcb:note-command", {
+        detail: { action: command.noteAction }
+      })
+    );
+  }, 0);
+}
+
 export function CommandPalette({
+  actionContext,
   onCommand,
   onNavigate,
   onOpenChange,
@@ -52,7 +74,7 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filteredCommands = useMemo(
-    () => mockCommands.filter((command) => commandMatches(command, query)),
+    () => plannerActions.filter((command) => commandMatches(command, query)),
     [query]
   );
 
@@ -82,8 +104,14 @@ export function CommandPalette({
     onOpenChange(false);
   }
 
-  function runCommand(command: MockCommand | undefined): void {
+  function runCommand(command: PlannerAction | undefined): void {
     if (!command) {
+      return;
+    }
+
+    const availability = plannerActionAvailability(command, actionContext);
+
+    if (!availability.enabled) {
       return;
     }
 
@@ -97,6 +125,7 @@ export function CommandPalette({
     }
 
     dispatchCalendarCommand(command);
+    dispatchNoteCommand(command);
 
     closePalette();
   }
@@ -173,31 +202,40 @@ export function CommandPalette({
 
         <div className="max-h-[360px] overflow-y-auto p-2" id="command-palette-options" role="listbox">
           {filteredCommands.length > 0 ? (
-            filteredCommands.map((command, index) => (
-              <button
-                aria-selected={index === highlightedIndex}
-                className={cx(
-                  "flex min-h-12 w-full items-center gap-3 rounded-hcbMd px-3 py-2 text-left transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                  index === highlightedIndex
-                    ? "bg-surface-0 text-text-primary"
-                    : "text-text-secondary hover:bg-surface-0 hover:text-text-primary"
-                )}
-                id={`command-option-${command.id}`}
-                key={command.id}
-                onClick={() => runCommand(command)}
-                onMouseEnter={() => setHighlightedIndex(index)}
-                role="option"
-                type="button"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[var(--text-md)] font-medium">{command.label}</div>
-                  <div className="truncate text-[var(--text-xs)] text-text-muted">
-                    {command.description}
+            filteredCommands.map((command, index) => {
+              const availability = plannerActionAvailability(command, actionContext);
+
+              return (
+                <button
+                  aria-disabled={!availability.enabled}
+                  aria-selected={index === highlightedIndex}
+                  className={cx(
+                    "flex min-h-12 w-full items-center gap-3 rounded-hcbMd px-3 py-2 text-left transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-55",
+                    index === highlightedIndex
+                      ? "bg-surface-0 text-text-primary"
+                      : "text-text-secondary hover:bg-surface-0 hover:text-text-primary"
+                  )}
+                  data-action-id={command.id}
+                  disabled={!availability.enabled}
+                  id={`command-option-${command.id}`}
+                  key={command.id}
+                  onClick={() => runCommand(command)}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  role="option"
+                  type="button"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[var(--text-md)] font-medium">{command.label}</div>
+                    <div className="truncate text-[var(--text-xs)] text-text-muted">
+                      {availability.reason ?? command.description}
+                    </div>
                   </div>
-                </div>
-                <Badge tone={command.sectionId ? "accent" : "neutral"}>{command.category}</Badge>
-              </button>
-            ))
+                  <Badge tone={availability.enabled && command.sectionId ? "accent" : "neutral"}>
+                    {command.category}
+                  </Badge>
+                </button>
+              );
+            })
           ) : (
             <div className="grid min-h-28 place-items-center text-center">
               <div>

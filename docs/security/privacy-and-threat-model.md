@@ -145,6 +145,17 @@ Controls:
 
 Diagnostics and performance reports expose counts, timings, status states, query-plan summaries, and redaction guarantees. They do not include raw Google payloads, OAuth credentials, MCP bearer tokens, local note bodies, task notes, calendar descriptions, guest lists, or full mutation payloads. Copyable diagnostics also omit account identifiers, account email/display names, and task-list/calendar identifiers or titles; selected-resource rows use stable placeholders only. If the user disables performance diagnostics, copied summaries and the diagnostics performance endpoint omit timing samples.
 
+## Preview Support Summary
+
+Use this short summary in release notes and support replies for unsigned macOS preview builds:
+
+- Hot Cross Buns 2 stores planner cache data, settings, checkpoints, local notes, diagnostics metadata, and pending mutation state on the local Mac.
+- Google Tasks and Calendar are the intended synced sources, but the Mac v1 preview is not release-ready until OAuth, Keychain credential storage, authenticated sync transport, and sync scheduling are wired end to end.
+- Local notes are local-only and are not uploaded to Google.
+- The app includes no third-party analytics SDK and no hosted sync backend.
+- Copyable diagnostics are sanitized and are the preferred support artifact.
+- Users and maintainers must not share OAuth credentials, MCP bearer tokens, local databases, raw Google payloads, Apple signing material, or notarization secrets.
+
 ## Required Security Tests
 
 - IPC validation rejects malformed inputs.

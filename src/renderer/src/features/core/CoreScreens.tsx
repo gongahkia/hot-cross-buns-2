@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import type {
   CalendarEventCreateRequest,
   CalendarEventUpdateRequest,
@@ -25,6 +25,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
+import { getPlannerAction, type PlannerActionId } from "../../actions/plannerActions";
 import { Badge, Button, IconButton, Input, ListRow, Panel, StatusBanner, cx } from "../../components/primitives";
 import { EmptyState, ErrorState, LoadingState, OfflineState } from "../../components/states";
 import { VirtualizedList } from "../../components/VirtualizedList";
@@ -107,6 +108,23 @@ function scheduleRendererFrame(callback: () => void): void {
   }
 
   window.setTimeout(callback, 0);
+}
+
+function actionLabel(actionId: PlannerActionId): string {
+  return getPlannerAction(actionId).label;
+}
+
+function actionDescription(actionId: PlannerActionId): string {
+  return getPlannerAction(actionId).description;
+}
+
+function handleActivationKeyDown(event: KeyboardEvent<HTMLElement>, callback: () => void): void {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  event.preventDefault();
+  callback();
 }
 
 function normalizeGuestEmails(values: readonly string[] | undefined): string[] {
@@ -476,6 +494,118 @@ function TodayTimelineRow({
   );
 }
 
+type TodayTimelineDataRow =
+  | { kind: "task"; task: TaskViewModel }
+  | { kind: "event"; event: CalendarEventViewModel };
+
+type TodayTimelineEntry =
+  | { kind: "header"; id: string; title: string; detail: string; count: number }
+  | { kind: "row"; id: string; row: TodayTimelineDataRow };
+
+const todayTimelineSections = [
+  {
+    id: "all-day",
+    title: "All day",
+    detail: "Fixed calendar blocks"
+  },
+  {
+    id: "morning",
+    title: "Morning",
+    detail: "Before noon"
+  },
+  {
+    id: "afternoon",
+    title: "Afternoon",
+    detail: "Midday work"
+  },
+  {
+    id: "evening",
+    title: "Evening",
+    detail: "Later agenda"
+  },
+  {
+    id: "unscheduled",
+    title: "Unscheduled",
+    detail: "Tasks without a planned time"
+  }
+] as const;
+
+type TodayTimelineSectionId = (typeof todayTimelineSections)[number]["id"];
+
+function todayTimelineSection(row: TodayTimelineDataRow): TodayTimelineSectionId {
+  if (row.kind === "task") {
+    return "unscheduled";
+  }
+
+  if (row.event.allDay) {
+    return "all-day";
+  }
+
+  const hour = new Date(row.event.startsAt).getHours();
+
+  if (hour < 12) {
+    return "morning";
+  }
+
+  if (hour < 17) {
+    return "afternoon";
+  }
+
+  return "evening";
+}
+
+function buildTodayTimelineEntries(rows: TodayTimelineDataRow[]): TodayTimelineEntry[] {
+  const grouped = new Map<TodayTimelineSectionId, TodayTimelineDataRow[]>();
+
+  for (const row of rows) {
+    const sectionId = todayTimelineSection(row);
+    grouped.set(sectionId, [...(grouped.get(sectionId) ?? []), row]);
+  }
+
+  return todayTimelineSections.flatMap((section) => {
+    const sectionRows = grouped.get(section.id) ?? [];
+
+    if (sectionRows.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        kind: "header" as const,
+        id: section.id,
+        title: section.title,
+        detail: section.detail,
+        count: sectionRows.length
+      },
+      ...sectionRows.map((row, index) => ({
+        kind: "row" as const,
+        id: `${section.id}-${row.kind}-${index}`,
+        row
+      }))
+    ];
+  });
+}
+
+function TodayTimelineHeader({
+  count,
+  detail,
+  title
+}: {
+  count: number;
+  detail: string;
+  title: string;
+}): JSX.Element {
+  return (
+    <div className="flex min-h-9 items-center gap-3 border-b border-border bg-bg-tertiary px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[var(--text-sm)] font-semibold text-text-primary">{title}</div>
+        <div className="truncate text-[var(--text-xs)] text-text-muted">{detail}</div>
+      </div>
+      <Badge tone="neutral">{count}</Badge>
+    </div>
+  );
+}
+
 function TodayView(): JSX.Element {
   const source = useCoreViewModelSource();
   const timelineRows = useMemo(
@@ -487,6 +617,7 @@ function TodayView(): JSX.Element {
       ),
     [source]
   );
+  const timelineEntries = useMemo(() => buildTodayTimelineEntries(timelineRows), [timelineRows]);
 
   if (
     (source.dataState === "loading" ||
@@ -534,11 +665,27 @@ function TodayView(): JSX.Element {
           <VirtualizedList
             ariaLabel="Today timeline"
             estimateRowHeight={58}
-            getKey={(row, index) => `${row.kind}-${index}`}
-            items={timelineRows}
+            emptyState={
+              <EmptyState
+                description="No cached agenda rows are available for Today."
+                title="No timeline rows"
+              />
+            }
+            getKey={(entry) => entry.id}
+            items={timelineEntries}
             performanceLabel="today.timeline"
-            renderRow={(row) => <TodayTimelineRow row={row} />}
-            viewportHeight={306}
+            renderRow={(entry) =>
+              entry.kind === "header" ? (
+                <TodayTimelineHeader
+                  count={entry.count}
+                  detail={entry.detail}
+                  title={entry.title}
+                />
+              ) : (
+                <TodayTimelineRow row={entry.row} />
+              )
+            }
+            viewportHeight={342}
           />
         </Panel>
       </SectionChrome>
@@ -547,7 +694,7 @@ function TodayView(): JSX.Element {
 }
 
 export interface TaskSurfaceCommand {
-  id: "new-task" | "quick-capture";
+  id: "task.create" | "task.quickCapture";
   nonce: number;
 }
 
@@ -755,7 +902,7 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     handledCommandNonce.current = command.nonce;
     setActiveFilterId("open");
 
-    if (command.id === "quick-capture") {
+    if (command.id === "task.quickCapture") {
       quickCaptureOpenStartedAt.current = rendererNow();
       setQuickCaptureOpen(true);
       return;
@@ -927,17 +1074,29 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2" role="toolbar" aria-label="Task actions">
-          <Button onClick={openNewTask} variant="primary">
+          <Button
+            data-action-id="task.create"
+            onClick={openNewTask}
+            title={actionDescription("task.create")}
+            variant="primary"
+          >
             <Plus aria-hidden="true" size={15} />
-            New task
-          </Button>
-          <Button onClick={toggleQuickCapture} variant="secondary">
-            <ListPlus aria-hidden="true" size={15} />
-            Quick capture
+            {actionLabel("task.create")}
           </Button>
           <Button
+            data-action-id="task.quickCapture"
+            onClick={toggleQuickCapture}
+            title={actionDescription("task.quickCapture")}
+            variant="secondary"
+          >
+            <ListPlus aria-hidden="true" size={15} />
+            {actionLabel("task.quickCapture")}
+          </Button>
+          <Button
+            data-action-id="task.completeSelected"
             disabled={!selectedTask}
             onClick={() => selectedTask ? void toggleTask(selectedTask.id) : undefined}
+            title={selectedTask ? actionDescription("task.completeSelected") : "No selected task"}
             variant="ghost"
           >
             {selectedTask?.status === "completed" ? (
@@ -948,8 +1107,10 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
             {selectedTask?.status === "completed" ? "Reopen" : "Complete"}
           </Button>
           <Button
+            data-action-id="task.deleteSelected"
             disabled={!selectedTask}
             onClick={() => selectedTask ? void deleteTask(selectedTask.id) : undefined}
+            title={selectedTask ? actionDescription("task.deleteSelected") : "No selected task"}
             variant="danger"
           >
             <Trash2 aria-hidden="true" size={15} />
@@ -1011,6 +1172,7 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
                 <div className="flex items-center gap-2">
                   {draft.mode === "edit" ? (
                     <IconButton
+                      data-action-id="task.deleteSelected"
                       icon={Trash2}
                       label="Delete selected task"
                       onClick={() => draft.id ? void deleteTask(draft.id) : undefined}
@@ -1500,10 +1662,12 @@ function CalendarEventForm({
 }
 
 function CalendarTabButton({
+  actionId,
   active,
   children,
   onClick
 }: {
+  actionId: PlannerActionId;
   active: boolean;
   children: ReactNode;
   onClick: () => void;
@@ -1511,6 +1675,7 @@ function CalendarTabButton({
   return (
     <Button
       aria-selected={active}
+      data-action-id={actionId}
       onClick={onClick}
       role="tab"
       size="sm"
@@ -1519,6 +1684,10 @@ function CalendarTabButton({
       {children}
     </Button>
   );
+}
+
+function calendarViewActionId(viewId: CalendarViewId): PlannerActionId {
+  return `calendar.view.${viewId}` as PlannerActionId;
 }
 
 function DayView({
@@ -1533,9 +1702,15 @@ function DayView({
   return (
     <Panel
       action={
-        <Button onClick={() => onCreate()} size="sm" variant="primary">
+        <Button
+          data-action-id="calendar.create"
+          onClick={() => onCreate()}
+          size="sm"
+          title={actionDescription("calendar.create")}
+          variant="primary"
+        >
           <Plus aria-hidden="true" size={14} />
-          New event
+          {actionLabel("calendar.create")}
         </Button>
       }
       title="Day view"
@@ -1562,6 +1737,7 @@ function DayView({
         {source.calendarDayView.events.length === 0 ? (
           <button
             className="min-h-24 rounded-hcbMd border border-dashed border-border bg-bg-tertiary text-[var(--text-sm)] text-text-muted hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            data-action-id="calendar.create"
             onClick={() => onCreate({ allDay: true })}
             type="button"
           >
@@ -1593,6 +1769,11 @@ function WeekView({
             )}
             key={day.id}
             onClick={() => onCreate({ startsAt: `${day.id.slice("week-".length)}T00:00:00.000Z`, allDay: true })}
+            onKeyDown={(event) =>
+              handleActivationKeyDown(event, () =>
+                onCreate({ startsAt: `${day.id.slice("week-".length)}T00:00:00.000Z`, allDay: true })
+              )
+            }
             role="gridcell"
             tabIndex={0}
           >
@@ -1601,18 +1782,22 @@ function WeekView({
               <span className="text-[var(--text-md)] font-semibold text-text-primary">{day.dateLabel}</span>
             </div>
             <div className="mt-2 grid gap-1">
-              {day.events.slice(0, 3).map((event) => (
+              {day.events.slice(0, 3).map((calendarEvent) => (
                 <span
                   className="truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary"
-                  key={event.id}
+                  key={calendarEvent.id}
                   onClick={(clickEvent) => {
                     clickEvent.stopPropagation();
-                    onOpen(event);
+                    onOpen(calendarEvent);
+                  }}
+                  onKeyDown={(keyEvent) => {
+                    keyEvent.stopPropagation();
+                    handleActivationKeyDown(keyEvent, () => onOpen(calendarEvent));
                   }}
                   role="button"
                   tabIndex={0}
                 >
-                  {event.timeLabel} {event.title}
+                  {calendarEvent.timeLabel} {calendarEvent.title}
                 </span>
               ))}
             </div>
@@ -1646,6 +1831,11 @@ function MonthView({
                 )}
                 key={day.id}
                 onClick={() => onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })}
+                onKeyDown={(event) =>
+                  handleActivationKeyDown(event, () =>
+                    onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })
+                  )
+                }
                 role="gridcell"
                 tabIndex={0}
               >
@@ -1659,6 +1849,10 @@ function MonthView({
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
                       onOpen(day.events[0]);
+                    }}
+                    onKeyDown={(keyEvent) => {
+                      keyEvent.stopPropagation();
+                      handleActivationKeyDown(keyEvent, () => onOpen(day.events[0]));
                     }}
                     role="button"
                     tabIndex={0}
@@ -1791,6 +1985,7 @@ function CalendarView(): JSX.Element {
         <div className="flex items-center gap-2" role="tablist" aria-label="Calendar views">
           {(["agenda", "day", "week", "month"] as CalendarViewId[]).map((viewId) => (
             <CalendarTabButton
+              actionId={calendarViewActionId(viewId)}
               active={viewId === activeViewId}
               key={viewId}
               onClick={() => setCalendarView(viewId)}
@@ -1801,9 +1996,15 @@ function CalendarView(): JSX.Element {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => openCreate()} size="sm" variant="primary">
+          <Button
+            data-action-id="calendar.create"
+            onClick={() => openCreate()}
+            size="sm"
+            title={actionDescription("calendar.create")}
+            variant="primary"
+          >
             <Plus aria-hidden="true" size={14} />
-            New event
+            {actionLabel("calendar.create")}
           </Button>
           <Badge tone={source.syncStatus.pendingMutationCount > 0 ? "warning" : "accent"}>
             {source.syncStatus.pendingMutationCount > 0
@@ -1942,6 +2143,19 @@ function NotesView(): JSX.Element {
     };
   }, [selectedNote?.id]);
 
+  useEffect(() => {
+    function handleNoteCommand(event: Event): void {
+      const detail = (event as CustomEvent<{ action: string }>).detail;
+
+      if (detail?.action === "new-note") {
+        void createNote();
+      }
+    }
+
+    window.addEventListener("hcb:note-command", handleNoteCommand);
+    return () => window.removeEventListener("hcb:note-command", handleNoteCommand);
+  });
+
   if (
     (source.dataState === "loading" ||
       source.dataState === "offline" ||
@@ -2052,9 +2266,15 @@ function NotesView(): JSX.Element {
       sidebar={
         <Panel
           action={
-            <Button onClick={createNote} size="sm" variant="primary">
+            <Button
+              data-action-id="note.create"
+              onClick={createNote}
+              size="sm"
+              title={actionDescription("note.create")}
+              variant="primary"
+            >
               <Plus aria-hidden="true" size={14} />
-              New note
+              {actionLabel("note.create")}
             </Button>
           }
           title="Local notes"
@@ -2170,11 +2390,33 @@ function SearchView({
         />
       </div>
 
+      {search.parsed.chips.length > 0 ? (
+        <div aria-label="Parsed search filters" className="flex flex-wrap gap-2">
+          {search.parsed.chips.map((chip) => (
+            <Badge key={chip.id} tone="accent">
+              {chip.label}: {chip.value}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+
+      {search.parsed.errors.length > 0 ? (
+        <div
+          aria-live="polite"
+          className="rounded-hcbMd border border-warning bg-bg-secondary px-3 py-2 text-[var(--text-sm)] text-warning"
+          role="alert"
+        >
+          {search.parsed.errors[0]?.message ?? "Invalid search query."}
+        </div>
+      ) : null}
+
       <Panel
         action={<Badge tone={searchViewModel.state === "results" ? "success" : "neutral"}>{searchViewModel.summary}</Badge>}
         title="Search results"
         description={
-          search.state === "stale"
+          search.state === "invalid"
+            ? "Fix filter syntax to refresh local results"
+            : search.state === "stale"
             ? "Refreshing local results"
             : "Capped SQLite-backed local results"
         }
@@ -2404,11 +2646,16 @@ function SettingsView(): JSX.Element {
             </select>
           </label>
           <div className="flex items-center gap-2">
-            <Button disabled={source.settingsMutationPending} onClick={() => beginRecoveryAction("refresh")}>
+            <Button
+              data-action-id="sync.refresh"
+              disabled={source.settingsMutationPending}
+              onClick={() => beginRecoveryAction("refresh")}
+            >
               <RotateCcw aria-hidden="true" size={14} />
               Refresh
             </Button>
             <Button
+              data-action-id="sync.forceFullResync"
               disabled={source.settingsMutationPending}
               onClick={() => beginRecoveryAction("forceFullResync")}
               variant="danger"
@@ -2576,6 +2823,7 @@ function SettingsView(): JSX.Element {
       return (
         <div className="grid gap-3 p-3">
           <SettingsToggle
+            actionId="mcp.toggle"
             checked={settings.mcpEnabled}
             label="Enable MCP server"
             onChange={(checked) => updateSettings({ mcpEnabled: checked })}
@@ -2672,7 +2920,13 @@ function SettingsView(): JSX.Element {
       <div className="grid gap-3">
         <Panel
           action={
-            <Button onClick={copyDiagnostics} size="sm" variant="ghost">
+            <Button
+              data-action-id="diagnostics.copy"
+              onClick={copyDiagnostics}
+              size="sm"
+              title={actionDescription("diagnostics.copy")}
+              variant="ghost"
+            >
               <Copy aria-hidden="true" size={14} />
               Copy diagnostics
             </Button>
@@ -2772,16 +3026,21 @@ function SettingsRows({
 }
 
 function SettingsToggle({
+  actionId,
   checked,
   label,
   onChange
 }: {
+  actionId?: PlannerActionId;
   checked: boolean;
   label: string;
   onChange: (checked: boolean) => void;
 }): JSX.Element {
   return (
-    <label className="flex min-h-9 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary">
+    <label
+      className="flex min-h-9 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary"
+      data-action-id={actionId}
+    >
       <input
         checked={checked}
         className="accent-[var(--color-accent)]"

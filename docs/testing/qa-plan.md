@@ -122,6 +122,12 @@ Later smoke tests:
 - OAuth setup screen renders
 - offline cache renders after restart
 
+CI smoke artifact policy:
+
+- The tracked GitHub Actions smoke job runs on `macos-14`.
+- On failure or cancellation it uploads Playwright traces, screenshots, and any release diagnostics under `output/playwright/`, `test-results/`, `playwright-report/`, and `artifacts/release/`.
+- Smoke artifacts may contain screenshots of local fixture data. Do not upload real user app data paths or private databases.
+
 ## Performance Smoke Tests
 
 Performance smoke tests must use generated local data and temporary app/database paths. They must not call Google or read a user's real application data.
@@ -152,6 +158,8 @@ Manual checks are required for platform-specific OS behavior:
 - signed/notarized install once enabled
 
 Use [Manual macOS Native Shell Checklist](manual-macos-native-shell.md) for tray/menu bar, global quick capture hotkey, local notification, and `hotcrossbuns://` deep-link verification.
+
+Use [Mac Preview Support](../support/mac-preview-support.md) for unsigned preview install, checksum verification, support diagnostics, and rollback guidance.
 
 Record manual verification notes in release PRs.
 

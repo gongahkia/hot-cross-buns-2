@@ -26,6 +26,23 @@ The current macOS preview build is intentionally unsigned:
 - No signing certificates, Apple account credentials, or notarization secrets are stored in the repository.
 - Auto-update is not enabled.
 
+Current package metadata:
+
+| Field | Value |
+|---|---|
+| Package name | `hot-cross-buns-2` |
+| Product name | `Hot Cross Buns 2` |
+| Version source | `package.json` `version` |
+| Author metadata | `gongahkia` |
+| macOS bundle id | `dev.hotcrossbuns.hotcrossbuns2` |
+| Artifact pattern | `Hot-Cross-Buns-2-${version}-${os}-${arch}.${ext}` |
+| macOS category | `public.app-category.productivity` |
+| Dock/app icon | `build/icon.icns` generated from `assets/brand/app-icon.png` |
+| Renderer sidebar icon | `assets/brand/buns-app-icon-sidebar.png` |
+| Menu bar template icon | `assets/brand/menubar-template.png` and `assets/brand/menubar-template@2x.png` |
+| Extra packaged resources | `assets/brand` copied into `Contents/Resources/assets/brand` |
+| Update behavior | none wired in app runtime |
+
 ## Local Release Commands
 
 Run the full macOS preview release gate:
@@ -81,6 +98,14 @@ cd release
 shasum -a 256 -c SHASUMS256.txt
 cd -
 ```
+
+Optional install helper after downloading or building both an artifact and `SHASUMS256.txt`:
+
+```sh
+scripts/install-mac-preview.sh release/Hot-Cross-Buns-2-0.0.0-mac-arm64.dmg release/SHASUMS256.txt
+```
+
+The helper verifies the artifact checksum before copying the contained `.app` bundle. It does not sign, notarize, bypass Gatekeeper, or enable updates.
 
 ## Version Metadata
 
@@ -173,6 +198,8 @@ Zip install:
 4. Use the same first-launch `Open` flow if macOS blocks the app.
 
 Do not tell users to disable Gatekeeper. If the `Open` option is unavailable, use `System Settings > Privacy & Security` and choose `Open Anyway` for `Hot Cross Buns 2`.
+
+For support-ready preview guidance, including diagnostics, privacy summary, and reinstall/rollback notes, see [Mac Preview Support](../support/mac-preview-support.md).
 
 ## macOS Signing And Notarization
 

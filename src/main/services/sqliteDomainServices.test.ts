@@ -345,6 +345,57 @@ describe("SQLite-backed domain services", () => {
     );
   });
 
+  it("applies structured local search filters in SQLite", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    await domain.planner.updateTask({
+      id: "acct-1:task:inbox:task-1",
+      priority: "high"
+    });
+    await domain.planner.createNote({
+      title: "Empty scratchpad",
+      body: ""
+    });
+
+    const taskSearch = await domain.planner.search({
+      query: "source:tasks status:open due:2026-05-22 priority:high list:Inbox notes:yes triage",
+      limit: 10
+    });
+    const eventSearch = await domain.planner.search({
+      query: "source:calendar start:2026-05-22 calendar:Product body:yes startup",
+      limit: 10
+    });
+    const emptyNoteSearch = await domain.planner.search({
+      query: "source:notes body:no",
+      limit: 10
+    });
+
+    expect(taskSearch.items).toEqual([
+      expect.objectContaining({
+        domain: "tasks",
+        title: "Draft inbox triage rules"
+      })
+    ]);
+    expect(eventSearch.items).toEqual([
+      expect.objectContaining({
+        domain: "calendar",
+        title: "Planner shell standup"
+      })
+    ]);
+    expect(emptyNoteSearch.items).toEqual([
+      expect.objectContaining({
+        domain: "notes",
+        title: "Empty scratchpad"
+      })
+    ]);
+    expect(() =>
+      domain.planner.search({
+        query: "status:blocked",
+        limit: 10
+      })
+    ).toThrow("Unsupported task status");
+  });
+
   it("optimistically mutates tasks, subtasks, lists, and queue-backed task writes", async () => {
     const { domain, syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);

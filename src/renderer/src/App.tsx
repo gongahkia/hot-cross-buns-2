@@ -13,9 +13,10 @@ import {
   WifiOff
 } from "lucide-react";
 import appIconUrl from "../../../assets/brand/buns-app-icon-sidebar.png";
+import type { PlannerAction } from "./actions/plannerActions";
 import { CommandPalette } from "./components/CommandPalette";
 import { Badge, Button, IconButton, StatusBanner, cx } from "./components/primitives";
-import { getPlannerSection, plannerSections, type MockCommand, type SectionId } from "./data/mockPlanner";
+import { getPlannerSection, plannerSections, type SectionId } from "./data/mockPlanner";
 import { SectionContent, type TaskSurfaceCommand } from "./features/core/CoreScreens";
 import {
   CoreDataProvider,
@@ -230,7 +231,7 @@ function AppShell(): JSX.Element {
   const handleNativeAction = useCallback(
     (action: NativeAction): void => {
       if (action.type === "quickCapture") {
-        triggerTaskCommand("quick-capture");
+        triggerTaskCommand("task.quickCapture");
         return;
       }
 
@@ -276,15 +277,27 @@ function AppShell(): JSX.Element {
   );
 
   const handlePaletteCommand = useCallback(
-    (command: MockCommand): boolean => {
-      if (command.id !== "new-task" && command.id !== "quick-capture") {
+    (command: PlannerAction): boolean => {
+      if (command.id === "sync.refresh") {
+        source.refresh();
+        navigateToSection("today");
+        return true;
+      }
+
+      if (command.searchQuery !== undefined) {
+        setSearchQuery(command.searchQuery);
+        navigateToSection("search");
+        return true;
+      }
+
+      if (command.taskCommand === undefined) {
         return false;
       }
 
-      triggerTaskCommand(command.id as TaskSurfaceCommand["id"]);
+      triggerTaskCommand(command.taskCommand as TaskSurfaceCommand["id"]);
       return true;
     },
-    [triggerTaskCommand]
+    [navigateToSection, source.refresh, triggerTaskCommand]
   );
 
   const focusSection = useCallback(
@@ -458,6 +471,7 @@ function AppShell(): JSX.Element {
               </span>
             </Button>
             <IconButton
+              data-action-id="sync.refresh"
               icon={RefreshCw}
               label="Refresh local cache"
               onClick={source.refresh}
@@ -491,6 +505,13 @@ function AppShell(): JSX.Element {
 
       <RenderTimingBoundary id="command-palette">
         <CommandPalette
+          actionContext={{
+            hasTaskLists: source.taskLists.length > 0,
+            hasCalendars: source.calendarSources.length > 0,
+            hasSelectedTask: false,
+            canWriteTasks: !source.taskMutationPending,
+            canWriteEvents: true
+          }}
           onCommand={handlePaletteCommand}
           onNavigate={navigateToSection}
           onOpenChange={setCommandPaletteOpen}

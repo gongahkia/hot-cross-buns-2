@@ -74,3 +74,9 @@ When CI exists:
 - Run performance smoke nightly or before release until thresholds stabilize.
 - Run packaging on release branches or tags.
 
+Current CI implementation:
+
+- `.github/workflows/ci.yml` installs dependencies with `pnpm@9.15.4`, runs `pnpm typecheck`, and runs `pnpm test` on Ubuntu.
+- The Electron smoke job runs `pnpm test:smoke` on `macos-14`, where the app can launch under Playwright Electron.
+- The performance smoke job runs on scheduled/manual workflows only while performance thresholds remain report-only.
+- Failed or cancelled smoke/performance jobs upload available artifacts from `output/playwright/`, `test-results/`, `playwright-report/`, `artifacts/perf/`, and `artifacts/release/`.

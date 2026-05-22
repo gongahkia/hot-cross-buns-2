@@ -62,6 +62,8 @@ SQLite query plans were indexed for task, event, note, search, checkpoint, and p
 
 SQLite adapter follow-up on 2026-05-22: the direct medium-fixture data path moved from the Python bridge to the native adapter and improved materially (`fixtures.seed-medium-sqlite` 2768.22ms -> 81.65ms, `sqlite.task-lists.medium` 275.86ms -> 0.9ms, `search.medium-local` 277.82ms -> 3.58ms). The latest unpackaged Electron startup measurements were cold shell visible 6270ms, cold cached render 10733ms, warm shell visible 6799ms, and warm cached render 13293ms because Electron used the Python compatibility fallback for the local native ABI mismatch. Package-level native adapter verification remains required.
 
+Search DSL follow-up on 2026-05-23: the local structured parser/filter slice keeps direct medium-fixture `search.medium-local` within budget at 13.94ms, but the warm Electron Search UI update was 467.51ms and remains BLOCKED against the <100ms user-perceived target. The cold app-shell perf capture timed out in the same run. The perf harness now seeds setup completion in its temporary profile so onboarding does not block planner measurements, and it tolerates slower first-window capture for local report-only runs.
+
 ## PRD Success Criteria
 
 | Criterion | RC status | Owner |

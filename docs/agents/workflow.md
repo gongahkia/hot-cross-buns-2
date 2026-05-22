@@ -15,6 +15,7 @@ Read:
 5. the subsystem spec for the requested work
 6. the relevant `docs/performance/` guide when touching startup, renderer surfaces, IPC, SQLite, sync, search, packaging, or tests
 7. the relevant `docs/ports/` guide when touching platform adapters, packaging, tray, shortcuts, notifications, paths, credentials, deep links, or updater behavior
+8. `docs/improvements/05-general-parity-and-release-polish.md` when touching CI, contributor setup, preview install, release commands, or support guidance
 
 If the requested work conflicts with these docs, update or propose a doc change before implementing code.
 

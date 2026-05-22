@@ -12,7 +12,8 @@ const forbiddenAliases = ["@main/", "@preload/"];
 const allowedSharedContracts = [
   "@shared/ipc",
   "@shared/preloadApi",
-  "@shared/result"
+  "@shared/result",
+  "@shared/search"
 ];
 const importPattern = /\b(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g;
 
