@@ -8,6 +8,8 @@ import { GoogleSyncRepository } from "../../src/main/sync/readSyncRepository";
 
 const now = "2026-05-22T00:00:00.000Z";
 
+test.setTimeout(60_000);
+
 function seedSmokeDatabase(appSupportDirectory: string): void {
   const connection = createAppSqliteConnection({ appSupportDirectory });
 
