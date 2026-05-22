@@ -22,7 +22,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: fromRoot("src/main/index.ts")
-        }
+        },
+        external: ["better-sqlite3"]
       }
     }
   },

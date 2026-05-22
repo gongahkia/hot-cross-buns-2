@@ -9,6 +9,12 @@ files:
   - out/**/*
   - package.json
   - "!node_modules/**"
+  - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
+  - node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/**/*
+  - node_modules/.pnpm/bindings@*/node_modules/bindings/**/*
+  - node_modules/.pnpm/file-uri-to-path@*/node_modules/file-uri-to-path/**/*
   - "!**/*.map"
   - "!src/**"
   - "!docs/**"
@@ -18,8 +24,10 @@ files:
   - "!output/**"
 
 asar: true
+asarUnpack:
+  - node_modules/**/better_sqlite3.node
 compression: normal
-npmRebuild: false
+npmRebuild: true
 
 extraResources:
   - from: assets/brand

@@ -41,6 +41,25 @@ Core query families that need indexes:
 - pending mutations by status, next retry time, and resource type
 - sync checkpoints by account/resource
 
+## SQLite Adapter Measurements - 2026-05-22
+
+The Python subprocess bridge has been replaced on the primary Node/main-process path with `better-sqlite3`, production pragmas, and cached prepared statements. A Python subprocess compatibility adapter remains only for missing or ABI-mismatched native bindings.
+
+`pnpm test:perf` direct SQLite timings improved sharply on the medium fixture:
+
+| Measurement | Python bridge baseline | Native adapter | Result |
+|---|---:|---:|---|
+| Seed medium SQLite fixture | 2768.22ms | 81.65ms | Improved |
+| Task lists | 275.86ms | 0.9ms | Improved |
+| Active tasks by list | 273.83ms | 0.71ms | Improved |
+| Visible calendar range | 271.6ms | 1.31ms | Improved |
+| Recent notes | 271.16ms | 0.19ms | Improved |
+| Local search | 277.82ms | 3.58ms | Improved |
+| Checkpoint read | 88.58ms | 0.05ms | Improved |
+| Pending mutations ready | 90.82ms | 0.03ms | Improved |
+
+Startup timing did not improve in the unpackaged Electron perf run because the local native module was installed for host Node ABI 141 while Electron expected ABI 130, so Electron used the compatibility fallback. The latest measured startup was cold shell visible 6270ms, cold cached render 10733ms, warm shell visible 6799ms, and warm cached render 13293ms. The next performance gate is a packaged preview smoke that verifies `electron-builder` rebuilds and unpacks `better_sqlite3.node` so Electron uses the native adapter.
+
 ## Search And Indexing
 
 Search must be local-first. It should not call Google on each keypress.

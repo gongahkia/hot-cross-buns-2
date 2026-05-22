@@ -18,6 +18,36 @@ Current Electron rebuild:
 
 Hot Cross Buns 2 already uses SQLite, WAL, FTS5, local migrations, indexed Google mirror tables, pending mutations, checkpoints, and query timing diagnostics. The main gap is that the current connection is a Python subprocess bridge and the database lacks the legacy app's richer derived indexes, persistent prepared statements, incremental apply profiles, and repair paths.
 
+## Status - 2026-05-22 SQLite Adapter Pass
+
+Implemented in this pass:
+
+- `src/main/data/sqliteConnection.ts` now uses `better-sqlite3` as the primary main-process adapter while preserving the repository-facing synchronous `SqliteConnection` methods.
+- The Python subprocess bridge is contained as `python-subprocess-compat` fallback only when the native binding is missing or built for the wrong Electron ABI.
+- Production pragmas are applied by the native adapter: foreign keys, WAL, synchronous normal, temp store memory, cache size, mmap size, and busy timeout. The compatibility fallback initializes durable WAL once and applies connection-local pragmas per subprocess command.
+- The connection exposes `prepare(sql)` and caches native prepared statements by SQL string, so repeated repository reads/writes do not rebuild statements in the primary adapter.
+- Tests now cover migrations, production pragmas after reopen, explicit prepared statements, FTS queries, transaction rollback on injected failure, and static package compatibility metadata.
+- Build packaging metadata externalizes `better-sqlite3`, enables native rebuild, unpacks `better_sqlite3.node`, and allows the documented native external in bundle review.
+
+Measured `pnpm test:perf` direct SQLite delta against the pre-change Python bridge baseline:
+
+| Measurement | Before | After | Status |
+|---|---:|---:|---|
+| `fixtures.seed-medium-sqlite` | 2768.22ms | 81.65ms | Improved |
+| `sqlite.task-lists.medium` | 275.86ms | 0.9ms | Improved |
+| `sqlite.tasks.active-list.medium` | 273.83ms | 0.71ms | Improved |
+| `sqlite.events.visible-range.medium` | 271.6ms | 1.31ms | Improved |
+| `sqlite.notes.recent.medium` | 271.16ms | 0.19ms | Improved |
+| `search.medium-local` | 277.82ms | 3.58ms | Improved |
+| `sqlite.checkpoint.read` | 88.58ms | 0.05ms | Improved |
+| `sqlite.pending-mutations.ready` | 90.82ms | 0.03ms | Improved |
+
+Remaining data-path blockers:
+
+- The local unpackaged Electron perf run still used the compatibility fallback because the installed `better-sqlite3` binary was built for host Node ABI 141 while Electron expected ABI 130. `electron-builder` is configured to rebuild/unpack the native module, but a packaged preview smoke must prove the native adapter is used in the `.app`.
+- Startup timings in the same perf run therefore remain blocked: cold shell visible 6270ms and cached render 10733ms; warm shell visible 6799ms and cached render 13293ms.
+- Derived render tables, content-hash skip logic, incremental apply profiles, and repair/maintenance paths remain future work.
+
 ## Improvements To Add
 
 ### 1. Replace The Python SQLite Bridge

@@ -57,6 +57,7 @@ const devOnlyRuntimeDependencies = new Set([
   "vite",
   "vitest"
 ]);
+const nativeExternalRuntimeDependencies = new Set(["better-sqlite3"]);
 
 interface FileSize {
   path: string;
@@ -267,6 +268,9 @@ async function main(): Promise<void> {
     [join(MAIN_DIR, "index.js"), join(PRELOAD_DIR, "index.js")],
     runtimeDependencies
   );
+  const unexpectedExternalMainOrPreloadRequires = externalMainOrPreloadRequires.filter(
+    (dependency) => !nativeExternalRuntimeDependencies.has(dependency)
+  );
   const rendererImportViolations = await importViolations(
     RENDERER_SOURCE_DIR,
     forbiddenRendererImportPrefixes
@@ -277,7 +281,7 @@ async function main(): Promise<void> {
   );
   const issues = [
     ...dependencyIssues(runtimeDependencies),
-    ...externalMainOrPreloadRequires.map(
+    ...unexpectedExternalMainOrPreloadRequires.map(
       (dependency) =>
         `${dependency} is required externally by main/preload; bundle it or document why it must ship in node_modules.`
     ),

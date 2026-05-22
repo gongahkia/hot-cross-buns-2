@@ -60,6 +60,8 @@ Mode: report-only. Fixture data was generated locally and used a temporary app d
 
 SQLite query plans were indexed for task, event, note, search, checkpoint, and pending-mutation paths. Slow IPC outliers in the perf report: `diagnostics.summary` around 757ms and `settings.get` around 376ms.
 
+SQLite adapter follow-up on 2026-05-22: the direct medium-fixture data path moved from the Python bridge to the native adapter and improved materially (`fixtures.seed-medium-sqlite` 2768.22ms -> 81.65ms, `sqlite.task-lists.medium` 275.86ms -> 0.9ms, `search.medium-local` 277.82ms -> 3.58ms). The latest unpackaged Electron startup measurements were cold shell visible 6270ms, cold cached render 10733ms, warm shell visible 6799ms, and warm cached render 13293ms because Electron used the Python compatibility fallback for the local native ABI mismatch. Package-level native adapter verification remains required.
+
 ## PRD Success Criteria
 
 | Criterion | RC status | Owner |
@@ -83,6 +85,7 @@ SQLite query plans were indexed for task, event, note, search, checkpoint, and p
 | Sync / Data | Authenticated Google transport construction, account selection, and real sync scheduling remain deferred; the mutation worker is implemented and tested but production app startup still uses noop Google transports unless explicit transports are injected. | Wire OAuth/Keychain-backed transport factories, account selection, scheduler triggers, conflict recovery UX, and manual diagnostics actions. |
 | MCP / Native Shell | MCP status/settings are stateful, but no live local listener starts from app settings, and MCP bearer token storage is not Keychain-backed. | Start/stop `LocalMcpServer` safely after app interactive, persist bearer token in OS credentials, and expose usable connection details. |
 | Performance / Main / Renderer | Startup shell-visible, cached render, search UI, and task-complete feedback miss `docs/performance/performance-strategy.md` budgets. | Profile startup staging and renderer/data IPC paths; record accepted baseline or fix before RC sign-off. |
+| Data Runtime / Packaging | The primary SQLite path now uses `better-sqlite3`, but the latest unpackaged Electron perf run used the Python compatibility fallback because local `better-sqlite3` was built for host Node ABI 141 while Electron expected ABI 130. | Run packaged preview smoke after `electron-builder` native rebuild/unpack and verify Electron uses the native SQLite adapter instead of fallback. |
 | Native Shell / Release QA | Tray/menu bar, global hotkey, notifications, and `hotcrossbuns://` protocol behavior were not manually verified on the packaged app. | Run `docs/testing/manual-macos-native-shell.md` against the packaged app and record results. |
 | Release Packaging | Unsigned preview artifacts build, but package metadata still lacks author metadata and is not notarization-ready. | Add author metadata for preview polish; signing/notarization remains required before broad distribution. |
 
@@ -100,6 +103,10 @@ Docs updated during this QA pass:
 - `.gitignore`: anchored generated release artifacts as `/release/` so `docs/release/` reports are not ignored.
 - `assets/brand/` and `build/icon.icns`: copied legacy logo/icon assets and generated the macOS package icon from the round bun mark on a white rounded background.
 - `electron-builder.yml`: wired the macOS package icon and copied brand assets into packaged resources.
+- `electron-builder.yml`: externalizes and rebuilds the packaged `better-sqlite3` native module, with `better_sqlite3.node` unpacked from ASAR.
+- `electron.vite.config.ts` and `scripts/review-bundle.ts`: keep the native SQLite dependency external while allowing the documented main-process native require.
+- `src/main/data/sqliteConnection.ts`: replaced the primary Python SQLite bridge with a `better-sqlite3` adapter, production pragmas, prepared statement caching, and a Python compatibility fallback for native ABI mismatch.
+- `src/main/data/sqliteConnection.test.ts`: added pragma, reopen, migration, FTS, prepared-statement, rollback, and package-compatibility coverage.
 - `src/main/index.ts`: applies the copied app icon to the Electron browser window.
 - `src/main/native/electronMacAdapter.ts`: uses the copied menu bar icon/app icon assets and exposes left-click panel plus right-click utility menu behavior.
 - `src/main/native/service.ts`: provides menu-bar agenda snapshots from cached tasks/events.

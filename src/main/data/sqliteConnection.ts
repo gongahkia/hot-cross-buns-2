@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import type { Database, Statement } from "better-sqlite3";
 
 export type SqlitePrimitive = string | number | boolean | null;
 export type SqliteParams = readonly SqlitePrimitive[] | Record<string, SqlitePrimitive>;
@@ -27,9 +29,18 @@ export interface SqliteExecutor extends SqliteWriteExecutor {
   get<T extends Record<string, unknown>>(sql: string, params?: SqliteParams): T | undefined;
 }
 
+export interface SqlitePreparedStatement {
+  run(params?: SqliteParams): SqliteRunResult;
+  query<T extends Record<string, unknown>>(params?: SqliteParams): T[];
+  get<T extends Record<string, unknown>>(params?: SqliteParams): T | undefined;
+}
+
 export interface SqliteConnection extends SqliteExecutor {
   readonly databasePath: string;
+  readonly adapterKind: "better-sqlite3" | "python-subprocess-compat";
+  prepare(sql: string): SqlitePreparedStatement;
   executeTransaction(operations: readonly SqliteWriteOperation[]): void;
+  pragma<T extends Record<string, unknown>>(sql: string): T[];
   close(): void;
 }
 
@@ -57,11 +68,197 @@ export class SqliteExecutionError extends Error {
 
 const DEFAULT_DATABASE_FILENAME = "hot-cross-buns-2.sqlite3";
 const PYTHON_BINARY = process.env.HCB_SQLITE_PYTHON ?? "python3";
+const require = createRequire(import.meta.url);
+
+const PRODUCTION_PRAGMAS = [
+  "foreign_keys = ON",
+  "journal_mode = WAL",
+  "synchronous = NORMAL",
+  "temp_store = MEMORY",
+  "cache_size = -65536",
+  "mmap_size = 268435456",
+  "busy_timeout = 30000"
+] as const;
+
+class BetterSqliteConnection implements SqliteConnection {
+  readonly databasePath: string;
+  readonly adapterKind = "better-sqlite3" as const;
+  private readonly database: Database;
+  private readonly statementCache = new Map<string, Statement>();
+  private closed = false;
+
+  constructor(databasePath: string) {
+    this.databasePath = databasePath;
+    this.database = new (loadBetterSqliteConstructor())(databasePath);
+    this.applyProductionPragmas();
+  }
+
+  exec(sql: string): void {
+    this.ensureOpen();
+
+    try {
+      this.database.exec(sql);
+    } catch (error) {
+      throw sqliteError(error);
+    }
+  }
+
+  query<T extends Record<string, unknown>>(sql: string, params?: SqliteParams): T[] {
+    return this.prepare(sql).query<T>(params);
+  }
+
+  get<T extends Record<string, unknown>>(sql: string, params?: SqliteParams): T | undefined {
+    return this.prepare(sql).get<T>(params);
+  }
+
+  run(sql: string, params?: SqliteParams): SqliteRunResult {
+    return this.prepare(sql).run(params);
+  }
+
+  prepare(sql: string): SqlitePreparedStatement {
+    this.ensureOpen();
+
+    try {
+      let statement = this.statementCache.get(sql);
+
+      if (statement === undefined) {
+        statement = this.database.prepare(sql);
+        this.statementCache.set(sql, statement);
+      }
+
+      return new BetterSqlitePreparedStatement(statement);
+    } catch (error) {
+      throw sqliteError(error);
+    }
+  }
+
+  executeTransaction(operations: readonly SqliteWriteOperation[]): void {
+    this.ensureOpen();
+
+    if (operations.length === 0) {
+      return;
+    }
+
+    try {
+      this.database.exec("BEGIN IMMEDIATE;");
+
+      try {
+        for (const operation of operations) {
+          if (operation.kind === "exec") {
+            this.database.exec(operation.sql);
+          } else {
+            runPreparedStatement(this.cachedStatement(operation.sql), operation.params);
+          }
+        }
+
+        this.database.exec("COMMIT;");
+      } catch (error) {
+        try {
+          this.database.exec("ROLLBACK;");
+        } catch {
+          // Preserve the original SQLite error.
+        }
+
+        throw error;
+      }
+    } catch (error) {
+      throw sqliteError(error);
+    }
+  }
+
+  pragma<T extends Record<string, unknown>>(sql: string): T[] {
+    this.ensureOpen();
+
+    try {
+      return this.database.pragma(sql, { simple: false }) as T[];
+    } catch (error) {
+      throw sqliteError(error);
+    }
+  }
+
+  close(): void {
+    if (this.closed) {
+      return;
+    }
+
+    this.statementCache.clear();
+    this.database.close();
+    this.closed = true;
+  }
+
+  private cachedStatement(sql: string): Statement {
+    let statement = this.statementCache.get(sql);
+
+    if (statement === undefined) {
+      statement = this.database.prepare(sql);
+      this.statementCache.set(sql, statement);
+    }
+
+    return statement;
+  }
+
+  private applyProductionPragmas(): void {
+    for (const pragma of PRODUCTION_PRAGMAS) {
+      this.database.pragma(pragma);
+    }
+  }
+
+  private ensureOpen(): void {
+    if (this.closed) {
+      throw new SqliteExecutionError("SQLite connection is closed");
+    }
+  }
+}
+
+class BetterSqlitePreparedStatement implements SqlitePreparedStatement {
+  constructor(private readonly statement: Statement) {}
+
+  run(params?: SqliteParams): SqliteRunResult {
+    try {
+      return runPreparedStatement(this.statement, params);
+    } catch (error) {
+      throw sqliteError(error);
+    }
+  }
+
+  query<T extends Record<string, unknown>>(params?: SqliteParams): T[] {
+    try {
+      const normalizedParams = normalizeParams(params);
+
+      return (normalizedParams === undefined
+        ? this.statement.all()
+        : this.statement.all(normalizedParams)) as T[];
+    } catch (error) {
+      throw sqliteError(error);
+    }
+  }
+
+  get<T extends Record<string, unknown>>(params?: SqliteParams): T | undefined {
+    try {
+      const normalizedParams = normalizeParams(params);
+
+      return (normalizedParams === undefined
+        ? this.statement.get()
+        : this.statement.get(normalizedParams)) as T | undefined;
+    } catch (error) {
+      throw sqliteError(error);
+    }
+  }
+}
 
 const PYTHON_SQLITE_RUNNER = String.raw`
 import json
 import sqlite3
 import sys
+
+CONNECTION_PRAGMAS = (
+    "PRAGMA foreign_keys = ON",
+    "PRAGMA synchronous = NORMAL",
+    "PRAGMA temp_store = MEMORY",
+    "PRAGMA cache_size = -65536",
+    "PRAGMA mmap_size = 268435456",
+    "PRAGMA busy_timeout = 30000",
+)
 
 def split_sql_script(script):
     statements = []
@@ -80,14 +277,17 @@ def split_sql_script(script):
 def connect(path):
     connection = sqlite3.connect(path, timeout=30)
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute("PRAGMA busy_timeout = 30000")
-    connection.execute("PRAGMA journal_mode = WAL")
+    for pragma in CONNECTION_PRAGMAS:
+        connection.execute(pragma)
     return connection
 
 def normalize_params(params):
     if params is None:
         return []
+    if isinstance(params, list):
+        return [int(value) if isinstance(value, bool) else value for value in params]
+    if isinstance(params, dict):
+        return {key: int(value) if isinstance(value, bool) else value for key, value in params.items()}
     return params
 
 def row_to_dict(row):
@@ -100,7 +300,10 @@ try:
     connection = connect(command["path"])
     kind = command["kind"]
 
-    if kind == "exec":
+    if kind == "initialize":
+        connection.execute("PRAGMA journal_mode = WAL")
+        result = {"changes": connection.total_changes}
+    elif kind == "exec":
         connection.executescript(command["sql"])
         connection.commit()
         result = {"changes": connection.total_changes}
@@ -114,6 +317,9 @@ try:
             "changes": max(cursor.rowcount, 0),
             "lastInsertRowid": cursor.lastrowid,
         }
+    elif kind == "pragma":
+        cursor = connection.execute("PRAGMA " + command["sql"])
+        result = {"rows": [row_to_dict(row) for row in cursor.fetchall()]}
     elif kind == "transaction":
         operation_results = []
         connection.isolation_level = None
@@ -169,12 +375,12 @@ interface PythonSqliteResponse<T> {
   };
 }
 
-class PythonBackedSqliteConnection implements SqliteConnection {
-  readonly databasePath: string;
+class PythonCompatSqliteConnection implements SqliteConnection {
+  readonly adapterKind = "python-subprocess-compat" as const;
   private closed = false;
 
-  constructor(databasePath: string) {
-    this.databasePath = databasePath;
+  constructor(readonly databasePath: string) {
+    this.execute<{ changes: number }>({ kind: "initialize", path: this.databasePath });
   }
 
   exec(sql: string): void {
@@ -206,6 +412,10 @@ class PythonBackedSqliteConnection implements SqliteConnection {
     });
   }
 
+  prepare(sql: string): SqlitePreparedStatement {
+    return new PythonCompatPreparedStatement(this, sql);
+  }
+
   executeTransaction(operations: readonly SqliteWriteOperation[]): void {
     this.ensureOpen();
 
@@ -218,6 +428,15 @@ class PythonBackedSqliteConnection implements SqliteConnection {
       path: this.databasePath,
       operations
     });
+  }
+
+  pragma<T extends Record<string, unknown>>(sql: string): T[] {
+    this.ensureOpen();
+    return this.execute<{ rows: T[] }>({
+      kind: "pragma",
+      path: this.databasePath,
+      sql
+    }).rows;
   }
 
   close(): void {
@@ -254,6 +473,25 @@ class PythonBackedSqliteConnection implements SqliteConnection {
   }
 }
 
+class PythonCompatPreparedStatement implements SqlitePreparedStatement {
+  constructor(
+    private readonly connection: PythonCompatSqliteConnection,
+    private readonly sql: string
+  ) {}
+
+  run(params?: SqliteParams): SqliteRunResult {
+    return this.connection.run(this.sql, params);
+  }
+
+  query<T extends Record<string, unknown>>(params?: SqliteParams): T[] {
+    return this.connection.query<T>(this.sql, params);
+  }
+
+  get<T extends Record<string, unknown>>(params?: SqliteParams): T | undefined {
+    return this.connection.get<T>(this.sql, params);
+  }
+}
+
 export function createSqliteConnection(databasePath: string): SqliteConnection {
   const parentDirectory = dirname(databasePath);
 
@@ -261,9 +499,15 @@ export function createSqliteConnection(databasePath: string): SqliteConnection {
     mkdirSync(parentDirectory, { recursive: true });
   }
 
-  const connection = new PythonBackedSqliteConnection(databasePath);
-  connection.exec("PRAGMA foreign_keys = ON;");
-  return connection;
+  try {
+    return new BetterSqliteConnection(databasePath);
+  } catch (error) {
+    if (!isNativeBindingLoadFailure(error)) {
+      throw error;
+    }
+
+    return new PythonCompatSqliteConnection(databasePath);
+  }
 }
 
 export function createAppSqliteConnection(
@@ -291,6 +535,78 @@ export function createTemporarySqliteConnection(
       rmSync(directory, { recursive: true, force: true });
     }
   };
+}
+
+function loadBetterSqliteConstructor(): typeof import("better-sqlite3") {
+  try {
+    return require("better-sqlite3") as typeof import("better-sqlite3");
+  } catch (error) {
+    throw sqliteError(error);
+  }
+}
+
+function runPreparedStatement(statement: Statement, params?: SqliteParams): SqliteRunResult {
+  const normalizedParams = normalizeParams(params);
+  const result =
+    normalizedParams === undefined ? statement.run() : statement.run(normalizedParams);
+
+  return {
+    changes: result.changes,
+    lastInsertRowid:
+      typeof result.lastInsertRowid === "number"
+        ? result.lastInsertRowid
+        : Number(result.lastInsertRowid)
+  };
+}
+
+function normalizeParams(
+  params: SqliteParams | undefined
+): readonly (string | number | null)[] | Record<string, string | number | null> | undefined {
+  if (params === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(params)) {
+    return params.map(sqliteValue);
+  }
+
+  return Object.fromEntries(
+    Object.entries(params).map(([key, value]) => [key, sqliteValue(value)])
+  );
+}
+
+function sqliteValue(value: SqlitePrimitive): string | number | null {
+  return typeof value === "boolean" ? Number(value) : value;
+}
+
+function sqliteError(error: unknown): SqliteExecutionError {
+  if (error instanceof SqliteExecutionError) {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    const errorWithCode = error as Error & { code?: string };
+
+    return new SqliteExecutionError(error.message, errorWithCode.code ?? error.name);
+  }
+
+  return new SqliteExecutionError("SQLite command failed");
+}
+
+function isNativeBindingLoadFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const errorWithCode = error as Error & { code?: string };
+  const message = `${errorWithCode.message} ${errorWithCode.code ?? ""}`.toLowerCase();
+
+  return (
+    message.includes("node_module_version") ||
+    message.includes("was compiled against a different node.js version") ||
+    message.includes("cannot find module") ||
+    message.includes("better_sqlite3.node")
+  );
 }
 
 function mkTemporaryDirectory(prefix: string): string {
