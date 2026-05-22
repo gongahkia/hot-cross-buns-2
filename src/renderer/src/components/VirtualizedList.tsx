@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
+import { useRef } from "react";
 import type { Key, ReactNode, UIEvent } from "react";
+import {
+  rendererNow,
+  reportRendererTimingSince
+} from "../hooks/useRenderTiming";
 
 interface VirtualizedListProps<T> {
   ariaLabel: string;
@@ -8,6 +13,7 @@ interface VirtualizedListProps<T> {
   getKey: (item: T, index: number) => Key;
   items: T[];
   overscan?: number;
+  performanceLabel?: string;
   renderRow: (item: T, index: number) => ReactNode;
   viewportHeight?: number;
 }
@@ -19,10 +25,12 @@ export function VirtualizedList<T>({
   getKey,
   items,
   overscan = 4,
+  performanceLabel,
   renderRow,
   viewportHeight = 320
 }: VirtualizedListProps<T>): JSX.Element {
   const [scrollTop, setScrollTop] = useState(0);
+  const lastScrollReportAt = useRef(0);
 
   const windowState = useMemo(() => {
     const visibleCount = Math.ceil(viewportHeight / estimateRowHeight);
@@ -38,7 +46,19 @@ export function VirtualizedList<T>({
   }, [estimateRowHeight, items.length, overscan, scrollTop, viewportHeight]);
 
   function handleScroll(event: UIEvent<HTMLDivElement>): void {
+    const startedAt = rendererNow();
+
     setScrollTop(event.currentTarget.scrollTop);
+
+    if (performanceLabel && startedAt !== null && startedAt - lastScrollReportAt.current > 250) {
+      lastScrollReportAt.current = startedAt;
+      window.requestAnimationFrame(() => {
+        reportRendererTimingSince(`${performanceLabel}.scroll`, startedAt, {
+          itemCount: items.length,
+          renderedCount: Math.max(0, windowState.endIndex - windowState.startIndex)
+        });
+      });
+    }
   }
 
   if (items.length === 0) {

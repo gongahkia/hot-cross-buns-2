@@ -66,6 +66,7 @@ export interface MockCommand {
   category: string;
   keywords: string[];
   sectionId?: SectionId;
+  calendarAction?: "new-event" | "agenda" | "day" | "week" | "month";
 }
 
 export const plannerSections: PlannerSection[] = [
@@ -73,7 +74,7 @@ export const plannerSections: PlannerSection[] = [
     id: "today",
     label: "Today",
     title: "Today",
-    subtitle: "Daily agenda from local mock cache",
+    subtitle: "Daily agenda from local cache",
     metric: "9 items",
     icon: SunMedium
   },
@@ -105,8 +106,8 @@ export const plannerSections: PlannerSection[] = [
     id: "search",
     label: "Search",
     title: "Search",
-    subtitle: "Local-first search shell",
-    metric: "mock",
+    subtitle: "Local-first search",
+    metric: "local",
     icon: Search
   },
   {
@@ -284,28 +285,33 @@ export const mockCommands: MockCommand[] = [
     label: "New task",
     description: "Open the future task composer",
     category: "Create",
-    keywords: ["task", "todo", "inbox"]
+    keywords: ["task", "todo", "inbox"],
+    sectionId: "tasks"
   },
   {
     id: "new-event",
     label: "New event",
-    description: "Open the future calendar composer",
+    description: "Open the calendar event composer",
     category: "Create",
-    keywords: ["calendar", "event"]
+    keywords: ["calendar", "event"],
+    sectionId: "calendar",
+    calendarAction: "new-event"
   },
   {
     id: "new-note",
     label: "New note",
     description: "Start a local-only note",
     category: "Create",
-    keywords: ["note", "local"]
+    keywords: ["note", "local"],
+    sectionId: "notes"
   },
   {
     id: "quick-capture",
     label: "Quick capture",
     description: "Open the capture surface",
     category: "Create",
-    keywords: ["capture", "inbox"]
+    keywords: ["capture", "inbox"],
+    sectionId: "today"
   },
   {
     id: "go-today",
@@ -329,7 +335,35 @@ export const mockCommands: MockCommand[] = [
     description: "Show the agenda preview",
     category: "Navigate",
     keywords: ["calendar", "agenda", "events"],
-    sectionId: "calendar"
+    sectionId: "calendar",
+    calendarAction: "agenda"
+  },
+  {
+    id: "calendar-day",
+    label: "Calendar day view",
+    description: "Show one day of cached events",
+    category: "Calendar",
+    keywords: ["calendar", "day", "today"],
+    sectionId: "calendar",
+    calendarAction: "day"
+  },
+  {
+    id: "calendar-week",
+    label: "Calendar week view",
+    description: "Show the visible event week",
+    category: "Calendar",
+    keywords: ["calendar", "week"],
+    sectionId: "calendar",
+    calendarAction: "week"
+  },
+  {
+    id: "calendar-month",
+    label: "Calendar month view",
+    description: "Show the month event grid",
+    category: "Calendar",
+    keywords: ["calendar", "month"],
+    sectionId: "calendar",
+    calendarAction: "month"
   },
   {
     id: "go-notes",
@@ -352,28 +386,32 @@ export const mockCommands: MockCommand[] = [
     label: "Refresh",
     description: "Queue a future sync refresh",
     category: "Sync",
-    keywords: ["sync", "refresh"]
+    keywords: ["sync", "refresh"],
+    sectionId: "today"
   },
   {
     id: "force-resync",
     label: "Force full resync",
     description: "Reset checkpoints in the future sync service",
     category: "Sync",
-    keywords: ["sync", "reset", "checkpoint"]
+    keywords: ["sync", "reset", "checkpoint"],
+    sectionId: "settings"
   },
   {
     id: "toggle-mcp",
     label: "Toggle MCP server",
     description: "Switch future local agent access",
     category: "Agent",
-    keywords: ["mcp", "agent", "server"]
+    keywords: ["mcp", "agent", "server"],
+    sectionId: "settings"
   },
   {
     id: "copy-diagnostics",
     label: "Copy diagnostics summary",
     description: "Copy a sanitized diagnostics snapshot",
     category: "Diagnostics",
-    keywords: ["diagnostics", "copy", "logs"]
+    keywords: ["diagnostics", "copy", "logs"],
+    sectionId: "settings"
   }
 ];
 

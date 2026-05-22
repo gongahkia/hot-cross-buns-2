@@ -99,7 +99,40 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
       list: (request = {}) =>
         invokeContract(ipc, ipcContracts.tasks.list, request, "Task list request failed"),
       get: (request) =>
-        invokeContract(ipc, ipcContracts.tasks.get, request, "Task detail request failed")
+        invokeContract(ipc, ipcContracts.tasks.get, request, "Task detail request failed"),
+      create: (request) =>
+        invokeContract(ipc, ipcContracts.tasks.create, request, "Task create request failed"),
+      update: (request) =>
+        invokeContract(ipc, ipcContracts.tasks.update, request, "Task update request failed"),
+      complete: (request) =>
+        invokeContract(ipc, ipcContracts.tasks.complete, request, "Task complete request failed"),
+      reopen: (request) =>
+        invokeContract(ipc, ipcContracts.tasks.reopen, request, "Task reopen request failed"),
+      move: (request) =>
+        invokeContract(ipc, ipcContracts.tasks.move, request, "Task move request failed"),
+      delete: (request) =>
+        invokeContract(ipc, ipcContracts.tasks.delete, request, "Task delete request failed"),
+      createTaskList: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.tasks.createTaskList,
+          request,
+          "Task list create request failed"
+        ),
+      renameTaskList: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.tasks.renameTaskList,
+          request,
+          "Task list rename request failed"
+        ),
+      deleteTaskList: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.tasks.deleteTaskList,
+          request,
+          "Task list delete request failed"
+        )
     },
     calendar: {
       listCalendars: (request = {}) =>
@@ -115,6 +148,29 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           ipcContracts.calendar.listEvents,
           request,
           "Calendar range request failed"
+        ),
+      get: (request) =>
+        invokeContract(ipc, ipcContracts.calendar.get, request, "Calendar event request failed"),
+      create: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.calendar.create,
+          request,
+          "Calendar event create request failed"
+        ),
+      update: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.calendar.update,
+          request,
+          "Calendar event update request failed"
+        ),
+      delete: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.calendar.delete,
+          request,
+          "Calendar event delete request failed"
         )
     },
     notes: {

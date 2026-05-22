@@ -1,6 +1,6 @@
 # Hot Cross Buns 2 Documentation
 
-Hot Cross Buns 2 is the Electron-first rebuild of Hot Cross Buns. The repository started with specs first, and now includes the initial Electron, React, TypeScript, IPC, renderer shell, performance harness, and local SQLite connection foundations.
+Hot Cross Buns 2 is the Electron-first rebuild of Hot Cross Buns. The repository started with specs first, and now includes the initial Electron, React, TypeScript, IPC, renderer shell, performance harness, local SQLite connection foundations, and cache-backed core product workflows.
 
 ## Starting Point For Agents
 
@@ -26,10 +26,10 @@ Then read the spec for the subsystem you are changing. Do not scaffold app code 
 ## Implementation Status
 
 - Electron/Vite/React scaffold exists with hardened renderer settings and a typed preload bridge.
-- Phase 2 renderer screens still use local mock data, but the mock rows are isolated behind a `coreViewModelSource` adapter so Phase 3 can replace the source with preload-backed calls without rewriting screen components.
-- Phase 2 IPC contracts are versioned under `src/shared/ipc/`, with core planner, sync, settings, MCP, and native handlers now returning bounded placeholder DTOs instead of broad not-implemented stubs.
-- Main-side placeholder domain services are shared by IPC handlers and MCP tool handlers; the implementation is intentionally in-memory until SQLite repositories and Google-backed mutation services are wired.
-- Local data currently provides connection factories and temporary-database test coverage. Full migrations and repositories remain planned before real sync/data wiring.
+- Renderer screens read bounded task, calendar, note, settings, sync, diagnostics, and search view models through the typed preload bridge. Local mock data remains only as fixture fallback for isolated renderer tests and command metadata.
+- Core IPC contracts are versioned under `src/shared/ipc/`, with read and write routes for tasks, task lists, calendar events, notes, local search, sync, settings, MCP, native capabilities, and diagnostics.
+- Main-side SQLite domain services are shared by UI IPC handlers and MCP tool handlers. Task and calendar writes update optimistic local mirror rows and enqueue Google-backed pending mutations; notes stay local-only.
+- Local data now includes migrations, repositories, temporary-database integration tests, search over current task/event/note state, pending mutation tracking, and sanitized performance timing storage.
 - Performance smoke runs in report-only mode with generated local fixtures and temporary app data paths.
 
 ## Documentation Map

@@ -77,6 +77,17 @@ export type EmptyRequest = z.infer<typeof emptyRequestSchema>;
 const idSchema = z.string().min(1).max(256);
 const cursorSchema = z.string().min(1).max(512);
 const isoDateTimeSchema = z.string().datetime({ offset: true });
+const guestEmailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email()
+  .min(3)
+  .max(254);
+const reminderMinutesSchema = z.number().int().min(0).max(28 * 24 * 60);
+const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+  message: "Expected YYYY-MM-DD"
+});
 
 const listLimitSchema = z.number().int().min(1).max(MAX_LIST_LIMIT).default(DEFAULT_LIST_LIMIT);
 const rangeLimitSchema = z
@@ -125,12 +136,14 @@ export const mutationAckSchema = z
 
 export type MutationAck = z.infer<typeof mutationAckSchema>;
 
-export const taskStatusSchema = z.enum(["active", "completed"]);
+export const taskStatusSchema = z.enum(["active", "completed", "hidden", "deleted"]);
+export const taskPrioritySchema = z.enum(["none", "low", "medium", "high"]);
+export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
 export const taskListRequestSchema = z
   .object({
     listId: idSchema.optional(),
-    status: z.enum(["all", "active", "completed"]).default("active"),
+    status: z.enum(["all", "active", "completed", "hidden", "deleted"]).default("active"),
     cursor: cursorSchema.optional(),
     limit: listLimitSchema
   })
@@ -173,7 +186,12 @@ export const taskSummarySchema = z
     title: z.string().min(1).max(500),
     status: taskStatusSchema,
     dueAt: isoDateTimeSchema.nullable().optional(),
-    updatedAt: isoDateTimeSchema
+    updatedAt: isoDateTimeSchema,
+    notes: z.string().max(10_000).optional(),
+    parentId: idSchema.nullable().optional(),
+    priority: taskPrioritySchema.default("none"),
+    sortOrder: z.number().int().optional(),
+    mutationState: z.enum(["synced", "queued", "failed"]).optional()
   })
   .strict();
 
@@ -184,12 +202,99 @@ export type TaskListResponse = z.infer<typeof taskListResponseSchema>;
 
 export const taskDetailSchema = taskSummarySchema
   .extend({
-    notes: z.string().max(10_000).optional(),
-    parentId: idSchema.nullable().optional()
+    notes: z.string().max(10_000).optional()
   })
   .strict();
 
 export type TaskDetail = z.infer<typeof taskDetailSchema>;
+
+export const taskCreateRequestSchema = z
+  .object({
+    title: z.string().min(1).max(500),
+    notes: z.string().max(10_000).default(""),
+    dueDate: dateOnlySchema.nullable().optional(),
+    listId: idSchema,
+    parentId: idSchema.nullable().optional(),
+    previousSiblingId: idSchema.nullable().optional(),
+    priority: taskPrioritySchema.default("none")
+  })
+  .strict();
+
+export type TaskCreateRequest = z.input<typeof taskCreateRequestSchema>;
+
+export const taskUpdateRequestSchema = z
+  .object({
+    id: idSchema,
+    title: z.string().min(1).max(500).optional(),
+    notes: z.string().max(10_000).optional(),
+    dueDate: dateOnlySchema.nullable().optional(),
+    listId: idSchema.optional(),
+    parentId: idSchema.nullable().optional(),
+    previousSiblingId: idSchema.nullable().optional(),
+    priority: taskPrioritySchema.optional()
+  })
+  .strict()
+  .refine(
+    (request) =>
+      request.title !== undefined ||
+      request.notes !== undefined ||
+      request.dueDate !== undefined ||
+      request.listId !== undefined ||
+      request.parentId !== undefined ||
+      request.previousSiblingId !== undefined ||
+      request.priority !== undefined,
+    {
+      message: "At least one task field must be supplied"
+    }
+  );
+
+export type TaskUpdateRequest = z.input<typeof taskUpdateRequestSchema>;
+
+export const taskCompletionRequestSchema = entityByIdRequestSchema;
+export type TaskCompletionRequest = z.input<typeof taskCompletionRequestSchema>;
+
+export const taskMoveRequestSchema = z
+  .object({
+    id: idSchema,
+    listId: idSchema.optional(),
+    parentId: idSchema.nullable().optional(),
+    previousSiblingId: idSchema.nullable().optional()
+  })
+  .strict()
+  .refine(
+    (request) =>
+      request.listId !== undefined ||
+      request.parentId !== undefined ||
+      request.previousSiblingId !== undefined,
+    {
+      message: "At least one task move field must be supplied"
+    }
+  );
+
+export type TaskMoveRequest = z.input<typeof taskMoveRequestSchema>;
+
+export const taskDeleteRequestSchema = entityByIdRequestSchema;
+export type TaskDeleteRequest = z.input<typeof taskDeleteRequestSchema>;
+
+export const taskListCreateRequestSchema = z
+  .object({
+    title: z.string().min(1).max(500)
+  })
+  .strict();
+
+export type TaskListCreateRequest = z.input<typeof taskListCreateRequestSchema>;
+
+export const taskListRenameRequestSchema = z
+  .object({
+    id: idSchema,
+    title: z.string().min(1).max(500)
+  })
+  .strict();
+
+export type TaskListRenameRequest = z.input<typeof taskListRenameRequestSchema>;
+
+export const taskListDeleteRequestSchema = entityByIdRequestSchema;
+export type TaskListDeleteRequest = z.input<typeof taskListDeleteRequestSchema>;
 
 export const calendarRangeRequestSchema = z
   .object({
@@ -256,12 +361,19 @@ export type CalendarListResponse = z.infer<typeof calendarListResponseSchema>;
 export const calendarEventSummarySchema = z
   .object({
     id: idSchema,
+    eventId: idSchema.optional(),
     calendarId: idSchema,
     title: z.string().min(1).max(500),
     startsAt: isoDateTimeSchema,
     endsAt: isoDateTimeSchema,
     allDay: z.boolean(),
-    updatedAt: isoDateTimeSchema
+    updatedAt: isoDateTimeSchema,
+    location: z.string().max(1_000).optional(),
+    notes: z.string().max(20_000).optional(),
+    guestEmails: z.array(guestEmailSchema).max(50).optional(),
+    reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
+    recurringEventId: z.string().min(1).max(256).nullable().optional(),
+    originalStartAt: isoDateTimeSchema.nullable().optional()
   })
   .strict();
 
@@ -273,6 +385,87 @@ export const calendarRangeResponseSchema = pagedListResponseSchema(
 );
 
 export type CalendarRangeResponse = z.infer<typeof calendarRangeResponseSchema>;
+
+export const calendarEventDetailSchema = calendarEventSummarySchema
+  .extend({
+    calendarTitle: z.string().min(1).max(500),
+    deepLink: z.string().min(1).max(1_000)
+  })
+  .strict();
+
+export type CalendarEventDetail = z.infer<typeof calendarEventDetailSchema>;
+
+const calendarEventWriteFieldsSchema = z
+  .object({
+    title: z.string().trim().min(1).max(500),
+    calendarId: idSchema,
+    startsAt: isoDateTimeSchema,
+    endsAt: isoDateTimeSchema,
+    allDay: z.boolean().default(false),
+    location: z.string().trim().max(1_000).default(""),
+    notes: z.string().max(20_000).default(""),
+    guestEmails: z.array(guestEmailSchema).max(50).default([]),
+    reminderMinutes: z.array(reminderMinutesSchema).max(10).default([])
+  })
+  .strict()
+  .superRefine((request, context) => {
+    const startMs = Date.parse(request.startsAt);
+    const endMs = Date.parse(request.endsAt);
+
+    if (!Number.isFinite(startMs)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["startsAt"],
+        message: "Start must be a valid ISO date-time"
+      });
+    }
+
+    if (!Number.isFinite(endMs) || endMs <= startMs) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endsAt"],
+        message: "End must be after start"
+      });
+    }
+  });
+
+export const calendarEventCreateRequestSchema = calendarEventWriteFieldsSchema;
+export type CalendarEventCreateRequest = z.input<typeof calendarEventCreateRequestSchema>;
+
+export const calendarEventUpdateRequestSchema = z
+  .object({
+    id: idSchema,
+    title: z.string().trim().min(1).max(500).optional(),
+    calendarId: idSchema.optional(),
+    startsAt: isoDateTimeSchema.optional(),
+    endsAt: isoDateTimeSchema.optional(),
+    allDay: z.boolean().optional(),
+    location: z.string().trim().max(1_000).optional(),
+    notes: z.string().max(20_000).optional(),
+    guestEmails: z.array(guestEmailSchema).max(50).optional(),
+    reminderMinutes: z.array(reminderMinutesSchema).max(10).optional()
+  })
+  .strict()
+  .refine(
+    (request) =>
+      request.title !== undefined ||
+      request.calendarId !== undefined ||
+      request.startsAt !== undefined ||
+      request.endsAt !== undefined ||
+      request.allDay !== undefined ||
+      request.location !== undefined ||
+      request.notes !== undefined ||
+      request.guestEmails !== undefined ||
+      request.reminderMinutes !== undefined,
+    {
+      message: "At least one event field must be supplied"
+    }
+  );
+
+export type CalendarEventUpdateRequest = z.input<typeof calendarEventUpdateRequestSchema>;
+
+export const calendarEventDeleteRequestSchema = entityByIdRequestSchema;
+export type CalendarEventDeleteRequest = z.input<typeof calendarEventDeleteRequestSchema>;
 
 export const noteListRequestSchema = z
   .object({
@@ -600,7 +793,36 @@ export const ipcContracts = {
       taskListsResponseSchema
     ),
     list: defineIpcContract("tasks", "list", taskListRequestSchema, taskListResponseSchema),
-    get: defineIpcContract("tasks", "get", entityByIdRequestSchema, taskDetailSchema)
+    get: defineIpcContract("tasks", "get", entityByIdRequestSchema, taskDetailSchema),
+    create: defineIpcContract("tasks", "create", taskCreateRequestSchema, taskDetailSchema),
+    update: defineIpcContract("tasks", "update", taskUpdateRequestSchema, taskDetailSchema),
+    complete: defineIpcContract(
+      "tasks",
+      "complete",
+      taskCompletionRequestSchema,
+      taskDetailSchema
+    ),
+    reopen: defineIpcContract("tasks", "reopen", taskCompletionRequestSchema, taskDetailSchema),
+    move: defineIpcContract("tasks", "move", taskMoveRequestSchema, taskDetailSchema),
+    delete: defineIpcContract("tasks", "delete", taskDeleteRequestSchema, mutationAckSchema),
+    createTaskList: defineIpcContract(
+      "tasks",
+      "createTaskList",
+      taskListCreateRequestSchema,
+      taskListSummarySchema
+    ),
+    renameTaskList: defineIpcContract(
+      "tasks",
+      "renameTaskList",
+      taskListRenameRequestSchema,
+      taskListSummarySchema
+    ),
+    deleteTaskList: defineIpcContract(
+      "tasks",
+      "deleteTaskList",
+      taskListDeleteRequestSchema,
+      mutationAckSchema
+    )
   },
   calendar: {
     listCalendars: defineIpcContract(
@@ -614,6 +836,25 @@ export const ipcContracts = {
       "listEvents",
       calendarRangeRequestSchema,
       calendarRangeResponseSchema
+    ),
+    get: defineIpcContract("calendar", "get", entityByIdRequestSchema, calendarEventDetailSchema),
+    create: defineIpcContract(
+      "calendar",
+      "create",
+      calendarEventCreateRequestSchema,
+      calendarEventDetailSchema
+    ),
+    update: defineIpcContract(
+      "calendar",
+      "update",
+      calendarEventUpdateRequestSchema,
+      calendarEventDetailSchema
+    ),
+    delete: defineIpcContract(
+      "calendar",
+      "delete",
+      calendarEventDeleteRequestSchema,
+      mutationAckSchema
     )
   },
   notes: {

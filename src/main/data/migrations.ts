@@ -56,6 +56,45 @@ CREATE TABLE IF NOT EXISTS local_performance_timings (
 CREATE INDEX IF NOT EXISTS idx_local_performance_timings_recent
   ON local_performance_timings(created_at DESC, kind);
 `
+  },
+  {
+    version: 2,
+    name: "local notes fts index",
+    sql: `
+CREATE VIRTUAL TABLE IF NOT EXISTS local_notes_fts
+  USING fts5(title, body, content='local_notes', content_rowid='rowid');
+
+CREATE TABLE IF NOT EXISTS local_search_index_state (
+  name TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS local_notes_fts_ai
+AFTER INSERT ON local_notes
+BEGIN
+  INSERT INTO local_notes_fts(rowid, title, body)
+  VALUES (new.rowid, new.title, new.body);
+END;
+
+CREATE TRIGGER IF NOT EXISTS local_notes_fts_ad
+AFTER DELETE ON local_notes
+BEGIN
+  INSERT INTO local_notes_fts(local_notes_fts, rowid, title, body)
+  VALUES ('delete', old.rowid, old.title, old.body);
+END;
+
+CREATE TRIGGER IF NOT EXISTS local_notes_fts_au
+AFTER UPDATE ON local_notes
+BEGIN
+  INSERT INTO local_notes_fts(local_notes_fts, rowid, title, body)
+  VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO local_notes_fts(rowid, title, body)
+  VALUES (new.rowid, new.title, new.body);
+END;
+
+INSERT INTO local_notes_fts(local_notes_fts) VALUES ('rebuild');
+`
   }
 ];
 

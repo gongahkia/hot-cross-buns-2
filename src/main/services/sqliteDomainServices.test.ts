@@ -1,0 +1,593 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { runLocalDataMigrations } from "../data/migrations";
+import {
+  LocalPerformanceRepository,
+  LocalPlannerRepository,
+  LocalSettingsRepository
+} from "../data/localRepositories";
+import {
+  createTemporarySqliteConnection,
+  type TemporarySqliteConnection
+} from "../data/sqliteConnection";
+import { GoogleSyncRepository } from "../sync/readSyncRepository";
+import { createSqliteDomainServices } from "./sqliteDomainServices";
+
+const now = "2026-05-22T00:00:00.000Z";
+
+let temp: TemporarySqliteConnection | undefined;
+
+afterEach(() => {
+  temp?.cleanup();
+  temp = undefined;
+});
+
+function createTestServices() {
+  temp = createTemporarySqliteConnection("hcb2-domain-services-");
+  runLocalDataMigrations(temp.connection);
+
+  const performanceRepository = new LocalPerformanceRepository(temp.connection);
+  const plannerRepository = new LocalPlannerRepository(temp.connection, performanceRepository);
+  const settingsRepository = new LocalSettingsRepository(temp.connection);
+  const syncRepository = new GoogleSyncRepository(temp.connection);
+  const domain = createSqliteDomainServices({
+    plannerRepository,
+    settingsRepository,
+    syncRepository
+  });
+
+  return {
+    domain,
+    plannerRepository,
+    settingsRepository,
+    syncRepository,
+    performanceRepository
+  };
+}
+
+function seedGoogleMirrors(syncRepository: GoogleSyncRepository): void {
+  syncRepository.writeTaskLists(
+    "acct-1",
+    [
+      {
+        id: "inbox",
+        title: "Inbox",
+        updatedAt: now
+      }
+    ],
+    now
+  );
+  syncRepository.writeTasks(
+    "acct-1",
+    "inbox",
+    [
+      {
+        id: "task-1",
+        taskListId: "inbox",
+        title: "Draft inbox triage rules",
+        notes: "Local search should find task notes.",
+        status: "needsAction",
+        dueAt: now,
+        deleted: false,
+        hidden: false,
+        updatedAt: now
+      },
+      {
+        id: "task-2",
+        taskListId: "inbox",
+        title: "Completed task",
+        status: "completed",
+        completedAt: now,
+        deleted: false,
+        hidden: false,
+        updatedAt: now
+      }
+    ],
+    {
+      fullSync: true,
+      now
+    }
+  );
+  syncRepository.writeCalendarLists(
+    "acct-1",
+    [
+      {
+        id: "product",
+        summary: "Product",
+        timeZone: "UTC",
+        isSelected: true,
+        isHidden: false,
+        isPrimary: true,
+        updatedAt: now
+      }
+    ],
+    now
+  );
+  syncRepository.writeCalendarEvents(
+    "acct-1",
+    "product",
+    [
+      {
+        id: "event-1",
+        calendarId: "product",
+        status: "confirmed",
+        summary: "Planner shell standup",
+        description: "Review cache-first startup.",
+        location: "Desk",
+        startAt: "2026-05-22T09:30:00.000Z",
+        endAt: "2026-05-22T09:50:00.000Z",
+        isAllDay: false,
+        updatedAt: now
+      }
+    ],
+    {
+      fullSync: true,
+      now
+    }
+  );
+}
+
+describe("SQLite-backed domain services", () => {
+  it("renders empty bounded responses from a fresh migrated database", async () => {
+    const { domain } = createTestServices();
+
+    expect(await domain.planner.listTaskLists({ limit: 10 })).toEqual({
+      items: [],
+      page: {
+        limit: 10,
+        totalKnown: 0
+      }
+    });
+    expect(await domain.planner.listTasks({ status: "all", limit: 10 })).toEqual({
+      items: [],
+      page: {
+        limit: 10,
+        totalKnown: 0
+      }
+    });
+    expect(await domain.planner.listNotes({ limit: 10 })).toEqual({
+      items: [],
+      page: {
+        limit: 10,
+        totalKnown: 0
+      }
+    });
+  });
+
+  it("reads seeded task, calendar, note, settings, search, and timing data from SQLite", async () => {
+    const { domain, syncRepository, performanceRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+
+    const createdNote = await domain.planner.createNote({
+      title: "Cache-first startup",
+      body: "Renderer should paint from SQLite before fresh sync completes."
+    });
+    const updatedSettings = await domain.settings.update({
+      theme: "dark",
+      mcpEnabled: true
+    });
+    const tasks = await domain.planner.listTasks({ status: "all", limit: 10 });
+    const events = await domain.planner.listCalendarEvents({
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-23T00:00:00.000Z",
+      limit: 10
+    });
+    const search = await domain.planner.search({
+      query: "startup",
+      domains: ["calendar", "notes"],
+      limit: 10
+    });
+
+    expect(updatedSettings).toMatchObject({
+      theme: "dark",
+      mcpEnabled: true
+    });
+    expect(tasks.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "acct-1:task:inbox:task-1",
+          title: "Draft inbox triage rules"
+        })
+      ])
+    );
+    expect(events.items).toEqual([
+      expect.objectContaining({
+        id: "acct-1:event:product:event-1",
+        title: "Planner shell standup"
+      })
+    ]);
+    expect(search.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          domain: "calendar",
+          title: "Planner shell standup"
+        }),
+        expect.objectContaining({
+          domain: "notes",
+          title: "Cache-first startup"
+        })
+      ])
+    );
+
+    const updatedNote = await domain.planner.updateNote({
+      id: createdNote.id,
+      body: "Updated body"
+    });
+    const deleted = await domain.planner.deleteNote({ id: createdNote.id });
+
+    expect(updatedNote.body).toBe("Updated body");
+    expect(deleted).toMatchObject({
+      id: createdNote.id,
+      queued: false
+    });
+    expect(performanceRepository.listRecent(20)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "sqlite_query" }),
+        expect.objectContaining({ kind: "search" })
+      ])
+    );
+  });
+
+  it("uses the same local note service through MCP and planner search", async () => {
+    const { domain } = createTestServices();
+
+    const created = await domain.mcpTools.notes.createNote({
+      title: "MCP shared note",
+      body: "Created through the shared domain service."
+    });
+    const search = await domain.planner.search({
+      query: "shared domain",
+      domains: ["notes"],
+      limit: 10
+    });
+
+    expect(created).toMatchObject({
+      kind: "note",
+      title: "MCP shared note"
+    });
+    expect(search.items).toContainEqual(
+      expect.objectContaining({
+        domain: "notes",
+        title: "MCP shared note"
+      })
+    );
+  });
+
+  it("optimistically mutates tasks, subtasks, lists, and queue-backed task writes", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const listId = "acct-1:task-list:inbox";
+    const parentId = "acct-1:task:inbox:task-1";
+
+    const created = await domain.planner.createTask({
+      title: "Write task queue tests",
+      notes: "Covers local optimistic task writes.",
+      dueDate: "2026-05-23",
+      listId,
+      parentId,
+      priority: "high"
+    });
+
+    expect(created).toMatchObject({
+      title: "Write task queue tests",
+      status: "active",
+      dueAt: "2026-05-23T00:00:00.000Z",
+      parentId,
+      priority: "high",
+      mutationState: "queued"
+    });
+    expect((await domain.sync.status()).pendingMutationCount).toBe(1);
+
+    const updated = await domain.planner.updateTask({
+      id: created.id,
+      title: "Write task mutation tests",
+      notes: "Updated notes.",
+      dueDate: null,
+      priority: "low"
+    });
+    const completed = await domain.planner.completeTask({ id: created.id });
+    const reopened = await domain.planner.reopenTask({ id: created.id });
+    const moved = await domain.planner.moveTask({ id: created.id, parentId: null });
+    const deleted = await domain.planner.deleteTask({ id: created.id });
+
+    expect(updated).toMatchObject({
+      title: "Write task mutation tests",
+      dueAt: null,
+      priority: "low"
+    });
+    expect(completed.status).toBe("completed");
+    expect(reopened.status).toBe("active");
+    expect(moved.parentId).toBeNull();
+    expect(deleted).toMatchObject({ id: created.id, queued: true });
+
+    const taskList = await domain.planner.createTaskList({ title: "Errands" });
+    const renamedList = await domain.planner.renameTaskList({
+      id: taskList.id,
+      title: "Errands renamed"
+    });
+    const deletedList = await domain.planner.deleteTaskList({ id: taskList.id });
+
+    expect(renamedList.title).toBe("Errands renamed");
+    expect(deletedList).toMatchObject({ id: taskList.id, queued: true });
+    expect((await domain.sync.status()).pendingMutationCount).toBe(9);
+
+    const operations = temp!.connection.query<{ resourceType: string; operation: string }>(
+      `SELECT resource_type AS resourceType, operation
+       FROM google_pending_mutations
+       ORDER BY rowid ASC;`
+    );
+
+    expect(operations).toEqual([
+      { resourceType: "task", operation: "task.create" },
+      { resourceType: "task", operation: "task.update" },
+      { resourceType: "task", operation: "task.complete" },
+      { resourceType: "task", operation: "task.reopen" },
+      { resourceType: "task", operation: "task.move" },
+      { resourceType: "task", operation: "task.delete" },
+      { resourceType: "task_list", operation: "task_list.create" },
+      { resourceType: "task_list", operation: "task_list.rename" },
+      { resourceType: "task_list", operation: "task_list.delete" }
+    ]);
+  });
+
+  it("uses task indexes for list, status, due date, parent, and sort-order paths", () => {
+    const { syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const details = (sql: string, params: readonly (string | number | boolean | null)[]) =>
+      temp!.connection.query<{ detail: string }>(sql, params).map((row) => row.detail).join("\n");
+
+    const listStatusDuePlan = details(
+      `EXPLAIN QUERY PLAN
+       SELECT id
+       FROM google_tasks
+       WHERE account_id = ?
+         AND task_list_id = ?
+         AND status = ?
+         AND due_at >= ?
+       ORDER BY due_at ASC, sort_order ASC
+       LIMIT ?;`,
+      ["acct-1", "acct-1:task-list:inbox", "needsAction", "2026-05-22T00:00:00.000Z", 20]
+    );
+    const visibleSortPlan = details(
+      `EXPLAIN QUERY PLAN
+       SELECT id
+       FROM google_tasks
+       WHERE task_list_id = ?
+         AND deleted_at IS NULL
+         AND is_hidden = 0
+         AND status = ?
+       ORDER BY due_at ASC, sort_order ASC, updated_at DESC, id ASC
+       LIMIT ?;`,
+      ["acct-1:task-list:inbox", "needsAction", 20]
+    );
+    const parentPlan = details(
+      `EXPLAIN QUERY PLAN
+       SELECT id
+       FROM google_tasks
+       WHERE parent_task_id = ?
+         AND deleted_at IS NULL
+       ORDER BY sort_order ASC, id ASC
+       LIMIT ?;`,
+      ["acct-1:task:inbox:task-1", 20]
+    );
+
+    expect(listStatusDuePlan).toContain("idx_google_tasks_list_status_due");
+    expect(visibleSortPlan).toContain("idx_google_tasks_visible_list_due");
+    expect(parentPlan).toContain("idx_google_tasks_parent_visible");
+  });
+
+  it("uses FTS-backed indexes for task, event, and note search", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    await domain.planner.createNote({
+      title: "Cache-first startup",
+      body: "Renderer local search should find note body text."
+    });
+
+    const search = await domain.planner.search({
+      query: "local search",
+      limit: 10
+    });
+    const planDetails = (sql: string, params: readonly (string | number | boolean | null)[]) =>
+      temp!.connection.query<{ detail: string }>(sql, params).map((row) => row.detail).join("\n");
+
+    const taskFtsPlan = planDetails(
+      `EXPLAIN QUERY PLAN
+       SELECT tasks.id
+       FROM google_tasks_fts
+       INNER JOIN google_tasks tasks ON tasks.rowid = google_tasks_fts.rowid
+       WHERE google_tasks_fts MATCH ?
+         AND tasks.deleted_at IS NULL
+       LIMIT ?;`,
+      ["local*", 10]
+    );
+    const eventFtsPlan = planDetails(
+      `EXPLAIN QUERY PLAN
+       SELECT events.id
+       FROM google_calendar_events_fts
+       INNER JOIN google_calendar_events events ON events.rowid = google_calendar_events_fts.rowid
+       WHERE google_calendar_events_fts MATCH ?
+         AND events.deleted_at IS NULL
+       LIMIT ?;`,
+      ["startup*", 10]
+    );
+    const noteFtsPlan = planDetails(
+      `EXPLAIN QUERY PLAN
+       SELECT notes.id
+       FROM local_notes_fts
+       INNER JOIN local_notes notes ON notes.rowid = local_notes_fts.rowid
+       WHERE local_notes_fts MATCH ?
+         AND notes.deleted_at IS NULL
+       LIMIT ?;`,
+      ["search*", 10]
+    );
+
+    expect(search.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          domain: "tasks",
+          title: "Draft inbox triage rules"
+        }),
+        expect.objectContaining({
+          domain: "notes",
+          title: "Cache-first startup"
+        })
+      ])
+    );
+    expect(taskFtsPlan).toContain("VIRTUAL TABLE INDEX");
+    expect(eventFtsPlan).toContain("VIRTUAL TABLE INDEX");
+    expect(noteFtsPlan).toContain("VIRTUAL TABLE INDEX");
+  });
+
+  it("creates, updates, deletes, and queues all-day calendar event mutations", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+
+    const created = await domain.planner.createCalendarEvent({
+      title: "Release blackout",
+      calendarId: "acct-1:calendar:product",
+      startsAt: "2026-05-22T15:30:00.000Z",
+      endsAt: "2026-05-22T15:30:00.000Z",
+      allDay: true,
+      location: "Remote",
+      notes: "No deploys.",
+      guestEmails: ["ADA@example.com", "ada@example.com", "bad-paste"],
+      reminderMinutes: [30, 10, 10]
+    });
+
+    expect(created).toMatchObject({
+      title: "Release blackout",
+      allDay: true,
+      startsAt: "2026-05-22T00:00:00.000Z",
+      endsAt: "2026-05-23T00:00:00.000Z",
+      guestEmails: ["ada@example.com"],
+      reminderMinutes: [10, 30]
+    });
+    expect((await domain.sync.status()).pendingMutationCount).toBe(1);
+
+    const updated = await domain.planner.updateCalendarEvent({
+      id: created.id,
+      title: "Release freeze",
+      allDay: false,
+      startsAt: "2026-05-22T09:00:00.000Z",
+      endsAt: "2026-05-22T10:00:00.000Z",
+      reminderMinutes: [15]
+    });
+
+    expect(updated).toMatchObject({
+      title: "Release freeze",
+      allDay: false,
+      startsAt: "2026-05-22T09:00:00.000Z",
+      endsAt: "2026-05-22T10:00:00.000Z",
+      reminderMinutes: [15]
+    });
+    expect((await domain.sync.status()).pendingMutationCount).toBe(2);
+
+    const visible = await domain.planner.listCalendarEvents({
+      calendarIds: ["acct-1:calendar:product"],
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-23T00:00:00.000Z",
+      limit: 20
+    });
+
+    expect(visible.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: created.eventId,
+          title: "Release freeze"
+        })
+      ])
+    );
+
+    const deleted = await domain.planner.deleteCalendarEvent({ id: created.id });
+    const afterDelete = await domain.planner.listCalendarEvents({
+      calendarIds: ["acct-1:calendar:product"],
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-23T00:00:00.000Z",
+      limit: 20
+    });
+
+    expect(deleted).toMatchObject({ id: created.eventId, queued: true });
+    expect(afterDelete.items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: created.eventId
+        })
+      ])
+    );
+    expect((await domain.sync.status()).pendingMutationCount).toBe(3);
+  });
+
+  it("returns materialized recurring instances from visible range queries", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    syncRepository.writeCalendarEvents(
+      "acct-1",
+      "product",
+      [
+        {
+          id: "event-daily-root",
+          calendarId: "product",
+          status: "confirmed",
+          summary: "Daily planning",
+          startAt: "2026-05-22T08:00:00.000Z",
+          endAt: "2026-05-22T08:30:00.000Z",
+          isAllDay: false,
+          recurrenceRule: "RRULE:FREQ=DAILY;COUNT=3",
+          updatedAt: now
+        }
+      ],
+      {
+        fullSync: false,
+        now
+      }
+    );
+
+    const events = await domain.planner.listCalendarEvents({
+      calendarIds: ["acct-1:calendar:product"],
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-25T00:00:00.000Z",
+      limit: 20
+    });
+    const dailyInstances = events.items.filter((event) => event.title === "Daily planning");
+
+    expect(dailyInstances).toHaveLength(3);
+    expect(dailyInstances.map((event) => event.startsAt)).toEqual([
+      "2026-05-22T08:00:00.000Z",
+      "2026-05-23T08:00:00.000Z",
+      "2026-05-24T08:00:00.000Z"
+    ]);
+  });
+
+  it("uses the calendar visible-range index for calendar id and start/end paths", () => {
+    const { syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+
+    const rows = temp!.connection.query<{ detail: string }>(
+      `EXPLAIN QUERY PLAN
+       SELECT instances.id
+       FROM google_calendar_event_instances instances
+       INNER JOIN google_calendar_events events ON events.id = instances.event_id
+       INNER JOIN google_calendar_lists calendars ON calendars.id = instances.calendar_id
+       WHERE instances.deleted_at IS NULL
+         AND instances.status != 'cancelled'
+         AND calendars.deleted_at IS NULL
+         AND events.deleted_at IS NULL
+         AND instances.start_at < ?
+         AND instances.end_at > ?
+         AND instances.calendar_id IN (?)
+       ORDER BY instances.start_at ASC, instances.end_at ASC, instances.id ASC
+       LIMIT ? OFFSET ?;`,
+      [
+        "2026-05-23T00:00:00.000Z",
+        "2026-05-22T00:00:00.000Z",
+        "acct-1:calendar:product",
+        20,
+        0
+      ]
+    );
+
+    expect(rows.map((row) => row.detail).join("\n")).toContain(
+      "idx_google_calendar_event_instances_visible_range"
+    );
+  });
+});

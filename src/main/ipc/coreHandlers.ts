@@ -1,6 +1,9 @@
 import {
   ipcContracts,
   type CalendarListRequest,
+  type CalendarEventCreateRequest,
+  type CalendarEventDeleteRequest,
+  type CalendarEventUpdateRequest,
   type CalendarRangeRequest,
   type EntityByIdRequest,
   type McpSetEnabledRequest,
@@ -11,8 +14,16 @@ import {
   type SearchQueryRequest,
   type SettingsUpdateRequest,
   type SyncRunNowRequest,
+  type TaskCompletionRequest,
+  type TaskCreateRequest,
+  type TaskDeleteRequest,
+  type TaskListCreateRequest,
+  type TaskListDeleteRequest,
+  type TaskListRenameRequest,
   type TaskListsRequest,
-  type TaskListRequest
+  type TaskListRequest,
+  type TaskMoveRequest,
+  type TaskUpdateRequest
 } from "@shared/ipc/contracts";
 import type { AppDomainServices } from "../services/domainInterfaces";
 import type { IpcHandlerDefinition } from "./registry";
@@ -32,12 +43,64 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
       handle: (request) => services.planner.getTask(request as EntityByIdRequest)
     },
     {
+      contract: ipcContracts.tasks.create,
+      handle: (request) => services.planner.createTask(request as TaskCreateRequest)
+    },
+    {
+      contract: ipcContracts.tasks.update,
+      handle: (request) => services.planner.updateTask(request as TaskUpdateRequest)
+    },
+    {
+      contract: ipcContracts.tasks.complete,
+      handle: (request) => services.planner.completeTask(request as TaskCompletionRequest)
+    },
+    {
+      contract: ipcContracts.tasks.reopen,
+      handle: (request) => services.planner.reopenTask(request as TaskCompletionRequest)
+    },
+    {
+      contract: ipcContracts.tasks.move,
+      handle: (request) => services.planner.moveTask(request as TaskMoveRequest)
+    },
+    {
+      contract: ipcContracts.tasks.delete,
+      handle: (request) => services.planner.deleteTask(request as TaskDeleteRequest)
+    },
+    {
+      contract: ipcContracts.tasks.createTaskList,
+      handle: (request) => services.planner.createTaskList(request as TaskListCreateRequest)
+    },
+    {
+      contract: ipcContracts.tasks.renameTaskList,
+      handle: (request) => services.planner.renameTaskList(request as TaskListRenameRequest)
+    },
+    {
+      contract: ipcContracts.tasks.deleteTaskList,
+      handle: (request) => services.planner.deleteTaskList(request as TaskListDeleteRequest)
+    },
+    {
       contract: ipcContracts.calendar.listCalendars,
       handle: (request) => services.planner.listCalendars(request as CalendarListRequest)
     },
     {
       contract: ipcContracts.calendar.listEvents,
       handle: (request) => services.planner.listCalendarEvents(request as CalendarRangeRequest)
+    },
+    {
+      contract: ipcContracts.calendar.get,
+      handle: (request) => services.planner.getCalendarEvent(request as EntityByIdRequest)
+    },
+    {
+      contract: ipcContracts.calendar.create,
+      handle: (request) => services.planner.createCalendarEvent(request as CalendarEventCreateRequest)
+    },
+    {
+      contract: ipcContracts.calendar.update,
+      handle: (request) => services.planner.updateCalendarEvent(request as CalendarEventUpdateRequest)
+    },
+    {
+      contract: ipcContracts.calendar.delete,
+      handle: (request) => services.planner.deleteCalendarEvent(request as CalendarEventDeleteRequest)
     },
     {
       contract: ipcContracts.notes.list,

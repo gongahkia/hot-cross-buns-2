@@ -32,6 +32,8 @@ type CalendarRecord = CalendarEventSummary & {
   calendarTitle: string;
   location?: string;
   notes?: string;
+  guestEmails?: string[];
+  reminderMinutes?: number[];
 };
 
 type SearchDomain = SearchResultItem["domain"];
@@ -75,7 +77,8 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         dueAt: "2026-05-22T00:00:00.000Z",
         updatedAt: nowIso,
         notes: "Define keyboard-first review states before sync writes exist.",
-        parentId: null
+        parentId: null,
+        priority: "high"
       },
       {
         id: "task-calendar-fixtures",
@@ -86,7 +89,8 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         dueAt: "2026-05-22T00:00:00.000Z",
         updatedAt: nowIso,
         notes: "Keep visible rows stable for future agenda virtualization.",
-        parentId: null
+        parentId: null,
+        priority: "medium"
       },
       {
         id: "task-shell-visible",
@@ -97,7 +101,8 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         dueAt: null,
         updatedAt: "2026-05-21T08:00:00.000Z",
         notes: "Mock-only diagnostics call is already available through preload.",
-        parentId: null
+        parentId: null,
+        priority: "low"
       },
       ...Array.from({ length: 140 }, (_, index): TaskRecord => ({
         id: `task-window-${index + 1}`,
@@ -108,7 +113,8 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         dueAt: index % 3 === 0 ? "2026-05-23T00:00:00.000Z" : null,
         updatedAt: nowIso,
         notes: "Placeholder row for paginated preload calls.",
-        parentId: null
+        parentId: null,
+        priority: "none"
       }))
     ],
     calendars: [
@@ -248,6 +254,112 @@ export function createPlaceholderDomainServices(): AppDomainServices {
 
         return taskDetail(task);
       },
+      createTask: (request) => {
+        const id = `task-local-${state.tasks.length + 1}`;
+        const list = state.taskLists.find((candidate) => candidate.id === request.listId);
+        const task: TaskRecord = {
+          id,
+          listId: request.listId,
+          listTitle: list?.title ?? "Inbox",
+          title: request.title,
+          status: "active",
+          dueAt: request.dueDate === null || request.dueDate === undefined ? null : `${request.dueDate}T00:00:00.000Z`,
+          updatedAt: new Date().toISOString(),
+          notes: request.notes ?? "",
+          parentId: request.parentId ?? null,
+          priority: request.priority ?? "none"
+        };
+
+        state.tasks.unshift(task);
+        state.sync.pendingMutationCount += 1;
+        return taskDetail(task);
+      },
+      updateTask: (request) => {
+        const task = requiredById(state.tasks, request.id, "Task");
+        Object.assign(task, {
+          ...(request.title === undefined ? {} : { title: request.title }),
+          ...(request.notes === undefined ? {} : { notes: request.notes }),
+          ...(request.dueDate === undefined
+            ? {}
+            : { dueAt: request.dueDate === null ? null : `${request.dueDate}T00:00:00.000Z` }),
+          ...(request.listId === undefined ? {} : { listId: request.listId }),
+          ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
+          updatedAt: new Date().toISOString()
+        });
+        state.sync.pendingMutationCount += 1;
+        return taskDetail(task);
+      },
+      completeTask: ({ id }) => {
+        const task = requiredById(state.tasks, id, "Task");
+        task.status = "completed";
+        task.updatedAt = new Date().toISOString();
+        state.sync.pendingMutationCount += 1;
+        return taskDetail(task);
+      },
+      reopenTask: ({ id }) => {
+        const task = requiredById(state.tasks, id, "Task");
+        task.status = "active";
+        task.updatedAt = new Date().toISOString();
+        state.sync.pendingMutationCount += 1;
+        return taskDetail(task);
+      },
+      moveTask: (request) => {
+        const task = requiredById(state.tasks, request.id, "Task");
+        if (request.listId !== undefined) {
+          const list = state.taskLists.find((candidate) => candidate.id === request.listId);
+          task.listId = request.listId;
+          task.listTitle = list?.title ?? task.listTitle;
+        }
+        if (request.parentId !== undefined) {
+          task.parentId = request.parentId;
+        }
+        task.updatedAt = new Date().toISOString();
+        state.sync.pendingMutationCount += 1;
+        return taskDetail(task);
+      },
+      deleteTask: ({ id }) => {
+        const index = state.tasks.findIndex((candidate) => candidate.id === id);
+        if (index < 0) {
+          throw new Error("Task was not found.");
+        }
+        state.tasks.splice(index, 1);
+        state.sync.pendingMutationCount += 1;
+        return { id, queued: true, revision: new Date().toISOString() };
+      },
+      createTaskList: (request) => {
+        const list = { id: `list-local-${state.taskLists.length + 1}`, title: request.title };
+        state.taskLists.push(list);
+        state.sync.pendingMutationCount += 1;
+        return {
+          id: list.id,
+          title: list.title,
+          updatedAt: new Date().toISOString(),
+          taskCount: 0,
+          activeTaskCount: 0
+        };
+      },
+      renameTaskList: (request) => {
+        const list = requiredById(state.taskLists, request.id, "Task list");
+        list.title = request.title;
+        state.sync.pendingMutationCount += 1;
+        return {
+          id: list.id,
+          title: list.title,
+          updatedAt: new Date().toISOString(),
+          taskCount: state.tasks.filter((task) => task.listId === list.id).length,
+          activeTaskCount: state.tasks.filter((task) => task.listId === list.id && task.status === "active").length
+        };
+      },
+      deleteTaskList: ({ id }) => {
+        const index = state.taskLists.findIndex((candidate) => candidate.id === id);
+        if (index < 0) {
+          throw new Error("Task list was not found.");
+        }
+        state.taskLists.splice(index, 1);
+        state.tasks = state.tasks.filter((task) => task.listId !== id);
+        state.sync.pendingMutationCount += 1;
+        return { id, queued: true, revision: new Date().toISOString() };
+      },
       listCalendarEvents: (request) => {
         const startMs = Date.parse(request.start);
         const endMs = Date.parse(request.end);
@@ -273,7 +385,62 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           throw new Error("Calendar event was not found.");
         }
 
-        return calendarJson(event);
+        return calendarDetail(event);
+      },
+      createCalendarEvent: (request) => {
+        const id = `event-local-${state.calendarEvents.length + 1}`;
+        const calendar = state.calendars.find((candidate) => candidate.id === request.calendarId);
+        const event: CalendarRecord = {
+          id,
+          calendarId: request.calendarId,
+          calendarTitle: calendar?.title ?? "Calendar",
+          title: request.title,
+          startsAt: request.startsAt,
+          endsAt: request.endsAt,
+          allDay: request.allDay ?? false,
+          updatedAt: new Date().toISOString(),
+          location: request.location ?? "",
+          notes: request.notes ?? "",
+          guestEmails: request.guestEmails ?? [],
+          reminderMinutes: request.reminderMinutes ?? []
+        };
+
+        state.calendarEvents.unshift(event);
+        state.sync.pendingMutationCount += 1;
+        return calendarDetail(event);
+      },
+      updateCalendarEvent: (request) => {
+        const event = state.calendarEvents.find((candidate) => candidate.id === request.id);
+
+        if (!event) {
+          throw new Error("Calendar event was not found.");
+        }
+
+        Object.assign(event, {
+          ...(request.title === undefined ? {} : { title: request.title }),
+          ...(request.calendarId === undefined ? {} : { calendarId: request.calendarId }),
+          ...(request.startsAt === undefined ? {} : { startsAt: request.startsAt }),
+          ...(request.endsAt === undefined ? {} : { endsAt: request.endsAt }),
+          ...(request.allDay === undefined ? {} : { allDay: request.allDay }),
+          ...(request.location === undefined ? {} : { location: request.location }),
+          ...(request.notes === undefined ? {} : { notes: request.notes }),
+          ...(request.guestEmails === undefined ? {} : { guestEmails: request.guestEmails }),
+          ...(request.reminderMinutes === undefined ? {} : { reminderMinutes: request.reminderMinutes }),
+          updatedAt: new Date().toISOString()
+        });
+        state.sync.pendingMutationCount += 1;
+        return calendarDetail(event);
+      },
+      deleteCalendarEvent: ({ id }) => {
+        const index = state.calendarEvents.findIndex((candidate) => candidate.id === id);
+
+        if (index < 0) {
+          throw new Error("Calendar event was not found.");
+        }
+
+        state.calendarEvents.splice(index, 1);
+        state.sync.pendingMutationCount += 1;
+        return { id, queued: true, revision: new Date().toISOString() };
       },
       listCalendars: (request) =>
         pageItems(
@@ -540,7 +707,8 @@ function createMcpDomainServices(state: PlaceholderState): McpDomainServices {
           dueAt: optionalText(input, "dueDate") ?? null,
           updatedAt: new Date().toISOString(),
           notes: optionalText(input, "notes"),
-          parentId: null
+          parentId: null,
+          priority: "none"
         };
 
         state.tasks.unshift(task);
@@ -746,7 +914,11 @@ function taskSummary(task: TaskRecord): TaskSummary {
     title: task.title,
     status: task.status,
     dueAt: task.dueAt,
-    updatedAt: task.updatedAt
+    updatedAt: task.updatedAt,
+    notes: task.notes,
+    parentId: task.parentId,
+    priority: "none",
+    mutationState: "synced"
   };
 }
 
@@ -761,12 +933,27 @@ function taskDetail(task: TaskRecord): TaskDetail {
 function calendarSummary(event: CalendarRecord): CalendarEventSummary {
   return {
     id: event.id,
+    eventId: event.eventId ?? event.id,
     calendarId: event.calendarId,
     title: event.title,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
     allDay: event.allDay,
-    updatedAt: event.updatedAt
+    updatedAt: event.updatedAt,
+    location: event.location ?? "",
+    notes: event.notes ?? "",
+    guestEmails: event.guestEmails ?? [],
+    reminderMinutes: event.reminderMinutes ?? [],
+    recurringEventId: event.recurringEventId ?? null,
+    originalStartAt: event.originalStartAt ?? null
+  };
+}
+
+function calendarDetail(event: CalendarRecord) {
+  return {
+    ...calendarSummary(event),
+    calendarTitle: event.calendarTitle,
+    deepLink: `hotcrossbuns://event/${event.id}`
   };
 }
 

@@ -116,7 +116,9 @@ Required tests:
 - Invalid Calendar sync token triggers full resync for that calendar.
 - Offline mutation queue retries and reconciles a successful Google response.
 
-## Current Phase 2 Contract Notes
+## Current Implementation Notes
 
 - Read-sync service diagnostics and progress events store resource names, counts, durations, retry delays, and sanitized error codes only.
-- Core `sync.status` and `sync.runNow` IPC handlers are wired through a startup-safe placeholder control service. They do not perform Google network work during app startup; real scheduling and account selection remain Phase 3 wiring.
+- Task, task-list, and calendar-event UI writes now share SQLite-backed domain services with MCP tools. Those services apply optimistic local mirror changes and insert rows into `google_pending_mutations`.
+- Pending mutation behavior is consistent for task and event writes: successful local writes return queued acknowledgements or queued detail DTOs, pending counts come from SQLite, and Google reconciliation remains deferred to the mutation worker.
+- Core `sync.status` and `sync.runNow` IPC handlers remain startup-safe. They do not perform Google network work during app startup; real scheduling, account selection, and pending-mutation replay remain Phase 3 wiring.

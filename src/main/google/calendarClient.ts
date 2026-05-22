@@ -34,6 +34,8 @@ export interface GoogleCalendarEventMirror {
   recurrenceRule?: string | null;
   transparency?: string | null;
   visibility?: string | null;
+  attendeeEmails?: string[];
+  reminderMinutes?: number[];
   etag?: string | null;
   sequence?: number | null;
   updatedAt?: string | null;
@@ -95,6 +97,8 @@ interface GoogleEventDto {
   sequence?: number;
   transparency?: string;
   visibility?: string;
+  attendees?: GoogleEventAttendeeDto[];
+  reminders?: GoogleEventRemindersDto;
 }
 
 interface GoogleEventDateDto {
@@ -103,10 +107,18 @@ interface GoogleEventDateDto {
   timeZone?: string;
 }
 
+interface GoogleEventAttendeeDto {
+  email?: string;
+}
+
+interface GoogleEventRemindersDto {
+  overrides?: Array<{ method?: string; minutes?: number }>;
+}
+
 const CALENDAR_LIST_FIELDS =
   "items(id,summary,description,timeZone,backgroundColor,foregroundColor,selected,hidden,primary,accessRole,etag,updated)";
 const EVENTS_FIELDS =
-  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility)";
+  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)))";
 
 export class GoogleCalendarHttpAdapter implements GoogleCalendarReadTransport {
   private readonly transport: GoogleApiTransport;
@@ -211,10 +223,58 @@ function mapEvent(
     recurrenceRule: item.recurrence?.join("\n") ?? null,
     transparency: item.transparency ?? null,
     visibility: item.visibility ?? null,
+    attendeeEmails: normalizeAttendeeEmails(item.attendees),
+    reminderMinutes: normalizeReminderMinutes(item.reminders),
     etag: item.etag ?? null,
     sequence: item.sequence ?? null,
     updatedAt: normalizeIsoDateTime(item.updated)
   };
+}
+
+function normalizeAttendeeEmails(attendees: GoogleEventAttendeeDto[] | undefined): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const attendee of attendees ?? []) {
+    const email = attendee.email?.trim().toLowerCase();
+
+    if (email === undefined || email.length === 0 || seen.has(email)) {
+      continue;
+    }
+
+    seen.add(email);
+    result.push(email);
+  }
+
+  return result;
+}
+
+function normalizeReminderMinutes(reminders: GoogleEventRemindersDto | undefined): number[] {
+  const seen = new Set<number>();
+  const result: number[] = [];
+
+  for (const reminder of reminders?.overrides ?? []) {
+    if (reminder.method !== "popup" && reminder.method !== "email") {
+      continue;
+    }
+
+    const minutes = reminder.minutes;
+
+    if (
+      minutes === undefined ||
+      !Number.isInteger(minutes) ||
+      minutes < 0 ||
+      minutes > 28 * 24 * 60 ||
+      seen.has(minutes)
+    ) {
+      continue;
+    }
+
+    seen.add(minutes);
+    result.push(minutes);
+  }
+
+  return result.sort((left, right) => left - right);
 }
 
 function eventDateToIso(value: GoogleEventDateDto | undefined, fallback: string): string {

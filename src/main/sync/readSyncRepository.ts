@@ -1,13 +1,19 @@
+import { randomUUID } from "node:crypto";
 import type { JsonValue } from "@shared/domain/localData";
+import {
+  addUtcDays,
+  normalizeGuestEmails,
+  normalizeReminderMinutes
+} from "@shared/domain/calendar";
 import type { HcbErrorCode } from "@shared/ipc/result";
 import type { SqliteConnection, SqliteWriteOperation } from "../data/sqliteConnection";
+import { sanitizeGoogleAccountConnectionStatus } from "../google";
 import type {
   GoogleAccountConnectionStatusDto,
   GoogleCalendarEventMirror,
   GoogleCalendarListMirror,
   GoogleTaskListMirror,
-  GoogleTaskMirror,
-  sanitizeGoogleAccountConnectionStatus
+  GoogleTaskMirror
 } from "../google";
 import type {
   ReadSyncResource,
@@ -36,6 +42,72 @@ export class GoogleSyncRepository {
 
   ensureSchema(): void {
     this.connection.exec(GOOGLE_SYNC_SCHEMA);
+    this.ensureTaskColumns();
+    this.ensureEventColumns();
+    this.ensureSearchIndexes();
+  }
+
+  private ensureTaskColumns(): void {
+    const existingColumns = new Set(
+      this.connection
+        .query<{ name: string }>("PRAGMA table_info(google_tasks);")
+        .map((row) => row.name)
+    );
+
+    if (!existingColumns.has("local_priority")) {
+      this.connection.exec(
+        "ALTER TABLE google_tasks ADD COLUMN local_priority TEXT NOT NULL DEFAULT 'none';"
+      );
+    }
+  }
+
+  private ensureEventColumns(): void {
+    const existingColumns = new Set(
+      this.connection
+        .query<{ name: string }>("PRAGMA table_info(google_calendar_events);")
+        .map((row) => row.name)
+    );
+    const addColumn = (name: string, definition: string) => {
+      if (!existingColumns.has(name)) {
+        this.connection.exec(`ALTER TABLE google_calendar_events ADD COLUMN ${definition};`);
+      }
+    };
+
+    addColumn("attendee_emails_json", "attendee_emails_json TEXT NOT NULL DEFAULT '[]'");
+    addColumn("reminder_minutes_json", "reminder_minutes_json TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  private ensureSearchIndexes(): void {
+    const stateName = "google-fts-v1";
+    const current = this.connection.get<{ version: number }>(
+      `SELECT version
+       FROM local_search_index_state
+       WHERE name = ?
+       LIMIT 1;`,
+      [stateName]
+    );
+
+    if (current?.version === 1) {
+      return;
+    }
+
+    for (const table of [
+      "google_task_lists_fts",
+      "google_tasks_fts",
+      "google_calendar_lists_fts",
+      "google_calendar_events_fts"
+    ]) {
+      this.connection.run(`INSERT INTO ${table}(${table}) VALUES ('rebuild');`);
+    }
+
+    this.connection.run(
+      `INSERT INTO local_search_index_state (name, version, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET
+         version = excluded.version,
+         updated_at = excluded.updated_at;`,
+      [stateName, 1, new Date().toISOString()]
+    );
   }
 
   upsertAccountStatus(status: GoogleAccountConnectionStatusDto): void {
@@ -247,8 +319,8 @@ export class GoogleSyncRepository {
         sql: `INSERT INTO google_tasks (
           id, account_id, task_list_id, google_id, parent_task_id, title, notes,
           status, due_at, due_time_zone, completed_at, position, sort_order,
-          is_hidden, etag, google_updated_at, created_at, updated_at, deleted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          is_hidden, local_priority, etag, google_updated_at, created_at, updated_at, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(account_id, task_list_id, google_id) DO UPDATE SET
           parent_task_id = excluded.parent_task_id,
           title = excluded.title,
@@ -281,6 +353,7 @@ export class GoogleSyncRepository {
           task.position ?? null,
           index,
           boolInt(task.hidden),
+          "none",
           task.etag ?? null,
           task.updatedAt ?? null,
           options.now,
@@ -359,17 +432,27 @@ export class GoogleSyncRepository {
               WHERE account_id = ? AND calendar_id = ? AND deleted_at IS NULL;`,
         params: [options.now, options.now, accountId, calendarId]
       });
+      operations.push({
+        kind: "run",
+        sql: `UPDATE google_calendar_event_instances
+              SET deleted_at = ?, updated_at = ?
+              WHERE account_id = ? AND calendar_id = ? AND deleted_at IS NULL;`,
+        params: [options.now, options.now, accountId, calendarId]
+      });
     }
 
-    operations.push(
-      ...events.map((event) => ({
-        kind: "run" as const,
+    for (const event of events) {
+      const localEventId = eventLocalId(accountId, calendarGoogleId, event.id);
+
+      operations.push({
+        kind: "run",
         sql: `INSERT INTO google_calendar_events (
           id, account_id, calendar_id, google_id, recurring_event_id, original_start_at,
           status, summary, description, location, start_at, start_time_zone, end_at,
           end_time_zone, is_all_day, recurrence_rule, transparency, visibility, etag,
-          sequence, google_updated_at, created_at, updated_at, deleted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          sequence, attendee_emails_json, reminder_minutes_json, google_updated_at,
+          created_at, updated_at, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(account_id, calendar_id, google_id) DO UPDATE SET
           recurring_event_id = excluded.recurring_event_id,
           original_start_at = excluded.original_start_at,
@@ -387,11 +470,13 @@ export class GoogleSyncRepository {
           visibility = excluded.visibility,
           etag = excluded.etag,
           sequence = excluded.sequence,
+          attendee_emails_json = excluded.attendee_emails_json,
+          reminder_minutes_json = excluded.reminder_minutes_json,
           google_updated_at = excluded.google_updated_at,
           updated_at = excluded.updated_at,
           deleted_at = excluded.deleted_at;`,
         params: [
-          eventLocalId(accountId, calendarGoogleId, event.id),
+          localEventId,
           accountId,
           calendarId,
           event.id,
@@ -411,15 +496,56 @@ export class GoogleSyncRepository {
           event.visibility ?? null,
           event.etag ?? null,
           event.sequence ?? null,
+          JSON.stringify(normalizeGuestEmails(event.attendeeEmails)),
+          JSON.stringify(normalizeReminderMinutes(event.reminderMinutes)),
           event.updatedAt ?? null,
           options.now,
           options.now,
           event.status === "cancelled" ? options.now : null
         ]
-      }))
-    );
+      });
+
+      operations.push(...calendarEventInstanceOperations({
+        accountId,
+        calendarId,
+        calendarGoogleId,
+        event,
+        eventId: localEventId,
+        now: options.now
+      }));
+    }
 
     this.connection.executeTransaction(operations);
+  }
+
+  enqueuePendingMutation(input: {
+    accountId: string | null;
+    resourceType: "task" | "task_list" | "event";
+    resourceId: string;
+    operation: string;
+    payload: JsonValue;
+    now: string;
+  }): { id: string; queued: true } {
+    const id = `mutation:${input.resourceType}:${randomUUID()}`;
+
+    this.connection.run(
+      `INSERT INTO google_pending_mutations (
+        id, account_id, resource_type, resource_id, operation, payload_json, status,
+        attempt_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?);`,
+      [
+        id,
+        input.accountId,
+        input.resourceType,
+        input.resourceId,
+        input.operation,
+        JSON.stringify(input.payload),
+        input.now,
+        input.now
+      ]
+    );
+
+    return { id, queued: true };
   }
 
   recordProgressEvent(event: SyncProgressEvent): void {
@@ -557,7 +683,226 @@ function boolInt(value: boolean): number {
   return value ? 1 : 0;
 }
 
+interface CalendarEventInstanceInput {
+  id: string;
+  startAt: string;
+  endAt: string;
+  originalStartAt: string | null;
+}
+
+interface ParsedRRule {
+  freq: "DAILY" | "WEEKLY" | "MONTHLY";
+  interval: number;
+  count?: number;
+  until?: Date;
+}
+
+function calendarEventInstanceOperations(options: {
+  accountId: string;
+  calendarId: string;
+  calendarGoogleId: string;
+  event: GoogleCalendarEventMirror;
+  eventId: string;
+  now: string;
+}): SqliteWriteOperation[] {
+  const operations: SqliteWriteOperation[] = [
+    {
+      kind: "run",
+      sql: `UPDATE google_calendar_event_instances
+            SET deleted_at = ?, updated_at = ?
+            WHERE event_id = ? AND deleted_at IS NULL;`,
+      params: [options.now, options.now, options.eventId]
+    }
+  ];
+
+  if (options.event.status === "cancelled") {
+    return operations;
+  }
+
+  operations.push(
+    ...materializedCalendarEventInstances(options.event, options.eventId).map((instance) => ({
+      kind: "run" as const,
+      sql: `INSERT INTO google_calendar_event_instances (
+        id, account_id, calendar_id, event_id, google_event_id, recurring_event_id,
+        original_start_at, start_at, end_at, is_all_day, status, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      ON CONFLICT(id) DO UPDATE SET
+        calendar_id = excluded.calendar_id,
+        event_id = excluded.event_id,
+        google_event_id = excluded.google_event_id,
+        recurring_event_id = excluded.recurring_event_id,
+        original_start_at = excluded.original_start_at,
+        start_at = excluded.start_at,
+        end_at = excluded.end_at,
+        is_all_day = excluded.is_all_day,
+        status = excluded.status,
+        updated_at = excluded.updated_at,
+        deleted_at = NULL;`,
+      params: [
+        instance.id,
+        options.accountId,
+        options.calendarId,
+        options.eventId,
+        options.event.id,
+        options.event.recurringEventId ?? null,
+        instance.originalStartAt,
+        instance.startAt,
+        instance.endAt,
+        boolInt(options.event.isAllDay),
+        options.event.status,
+        options.now
+      ]
+    }))
+  );
+
+  return operations;
+}
+
+function materializedCalendarEventInstances(
+  event: GoogleCalendarEventMirror,
+  eventId: string
+): CalendarEventInstanceInput[] {
+  const singleInstance = {
+    id: eventId,
+    startAt: event.startAt,
+    endAt: event.endAt,
+    originalStartAt: event.originalStartAt ?? null
+  };
+
+  if (event.recurringEventId !== null && event.recurringEventId !== undefined) {
+    return [singleInstance];
+  }
+
+  const rrule = parseRRule(event.recurrenceRule);
+
+  if (rrule === null) {
+    return [singleInstance];
+  }
+
+  const start = new Date(event.startAt);
+  const end = new Date(event.endAt);
+  const durationMs = end.getTime() - start.getTime();
+
+  if (
+    !Number.isFinite(start.getTime()) ||
+    !Number.isFinite(end.getTime()) ||
+    durationMs <= 0
+  ) {
+    return [singleInstance];
+  }
+
+  const hardLimit = Math.min(rrule.count ?? 730, 730);
+  const boundedUntil = rrule.until ?? addUtcDays(start, 730);
+  const instances: CalendarEventInstanceInput[] = [];
+  let cursor = start;
+
+  for (let index = 0; index < hardLimit; index += 1) {
+    if (cursor.getTime() > boundedUntil.getTime()) {
+      break;
+    }
+
+    const instanceStart = new Date(cursor.getTime());
+    const instanceEnd = new Date(instanceStart.getTime() + durationMs);
+    instances.push({
+      id: index === 0 ? eventId : `${eventId}:instance:${instanceSuffix(instanceStart, event.isAllDay)}`,
+      startAt: instanceStart.toISOString(),
+      endAt: instanceEnd.toISOString(),
+      originalStartAt: instanceStart.toISOString()
+    });
+    cursor = nextRecurrenceDate(cursor, rrule);
+  }
+
+  return instances.length > 0 ? instances : [singleInstance];
+}
+
+function parseRRule(value: string | null | undefined): ParsedRRule | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const line = value
+    .split("\n")
+    .map((candidate) => candidate.trim())
+    .find((candidate) => candidate.startsWith("RRULE:"));
+
+  if (line === undefined) {
+    return null;
+  }
+
+  const parts = Object.fromEntries(
+    line
+      .slice("RRULE:".length)
+      .split(";")
+      .map((part) => part.split("=", 2))
+      .filter((part): part is [string, string] => part.length === 2)
+  );
+  const freq = parts.FREQ;
+
+  if (freq !== "DAILY" && freq !== "WEEKLY" && freq !== "MONTHLY") {
+    return null;
+  }
+
+  return {
+    freq,
+    interval: Math.max(1, Number.parseInt(parts.INTERVAL ?? "1", 10) || 1),
+    ...(parts.COUNT === undefined
+      ? {}
+      : { count: Math.max(1, Number.parseInt(parts.COUNT, 10) || 1) }),
+    ...(parts.UNTIL === undefined ? {} : { until: parseRRuleUntil(parts.UNTIL) })
+  };
+}
+
+function parseRRuleUntil(value: string): Date | undefined {
+  const parsed =
+    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(value) ??
+    /^(\d{4})(\d{2})(\d{2})$/.exec(value);
+
+  if (parsed === null) {
+    return undefined;
+  }
+
+  const [, year, month, day, hour = "00", minute = "00", second = "00"] = parsed;
+  const date = new Date(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    )
+  );
+
+  return Number.isFinite(date.getTime()) ? date : undefined;
+}
+
+function nextRecurrenceDate(date: Date, rrule: ParsedRRule): Date {
+  const next = new Date(date.getTime());
+
+  if (rrule.freq === "DAILY") {
+    next.setUTCDate(next.getUTCDate() + rrule.interval);
+  } else if (rrule.freq === "WEEKLY") {
+    next.setUTCDate(next.getUTCDate() + rrule.interval * 7);
+  } else {
+    next.setUTCMonth(next.getUTCMonth() + rrule.interval);
+  }
+
+  return next;
+}
+
+function instanceSuffix(startAt: Date, allDay: boolean): string {
+  const compact = startAt.toISOString().replace(/[-:]/g, "").replace(".000", "");
+
+  return allDay ? compact.slice(0, 8) : compact;
+}
+
 const GOOGLE_SYNC_SCHEMA = `
+CREATE TABLE IF NOT EXISTS local_search_index_state (
+  name TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS google_accounts (
   id TEXT PRIMARY KEY,
   google_account_id TEXT,
@@ -591,6 +936,35 @@ CREATE TABLE IF NOT EXISTS google_task_lists (
   UNIQUE(account_id, google_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_google_task_lists_visible_sort
+  ON google_task_lists(deleted_at, sort_order, title, id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS google_task_lists_fts
+  USING fts5(title, content='google_task_lists', content_rowid='rowid');
+
+CREATE TRIGGER IF NOT EXISTS google_task_lists_fts_ai
+AFTER INSERT ON google_task_lists
+BEGIN
+  INSERT INTO google_task_lists_fts(rowid, title)
+  VALUES (new.rowid, new.title);
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_task_lists_fts_ad
+AFTER DELETE ON google_task_lists
+BEGIN
+  INSERT INTO google_task_lists_fts(google_task_lists_fts, rowid, title)
+  VALUES ('delete', old.rowid, old.title);
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_task_lists_fts_au
+AFTER UPDATE ON google_task_lists
+BEGIN
+  INSERT INTO google_task_lists_fts(google_task_lists_fts, rowid, title)
+  VALUES ('delete', old.rowid, old.title);
+  INSERT INTO google_task_lists_fts(rowid, title)
+  VALUES (new.rowid, new.title);
+END;
+
 CREATE TABLE IF NOT EXISTS google_tasks (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
@@ -606,6 +980,7 @@ CREATE TABLE IF NOT EXISTS google_tasks (
   position TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_hidden INTEGER NOT NULL DEFAULT 0,
+  local_priority TEXT NOT NULL DEFAULT 'none',
   etag TEXT,
   google_updated_at TEXT,
   created_at TEXT NOT NULL,
@@ -616,6 +991,44 @@ CREATE TABLE IF NOT EXISTS google_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_google_tasks_list_status_due
   ON google_tasks(account_id, task_list_id, status, due_at, sort_order);
+
+CREATE INDEX IF NOT EXISTS idx_google_tasks_visible_list_due
+  ON google_tasks(task_list_id, deleted_at, is_hidden, status, due_at, sort_order, updated_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_google_tasks_counts_by_list
+  ON google_tasks(task_list_id, deleted_at, is_hidden, status);
+
+CREATE INDEX IF NOT EXISTS idx_google_tasks_parent_visible
+  ON google_tasks(parent_task_id, deleted_at, sort_order, id);
+
+CREATE INDEX IF NOT EXISTS idx_google_tasks_search_recent
+  ON google_tasks(deleted_at, is_hidden, updated_at DESC, id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS google_tasks_fts
+  USING fts5(title, notes, content='google_tasks', content_rowid='rowid');
+
+CREATE TRIGGER IF NOT EXISTS google_tasks_fts_ai
+AFTER INSERT ON google_tasks
+BEGIN
+  INSERT INTO google_tasks_fts(rowid, title, notes)
+  VALUES (new.rowid, new.title, COALESCE(new.notes, ''));
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_tasks_fts_ad
+AFTER DELETE ON google_tasks
+BEGIN
+  INSERT INTO google_tasks_fts(google_tasks_fts, rowid, title, notes)
+  VALUES ('delete', old.rowid, old.title, COALESCE(old.notes, ''));
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_tasks_fts_au
+AFTER UPDATE ON google_tasks
+BEGIN
+  INSERT INTO google_tasks_fts(google_tasks_fts, rowid, title, notes)
+  VALUES ('delete', old.rowid, old.title, COALESCE(old.notes, ''));
+  INSERT INTO google_tasks_fts(rowid, title, notes)
+  VALUES (new.rowid, new.title, COALESCE(new.notes, ''));
+END;
 
 CREATE TABLE IF NOT EXISTS google_calendar_lists (
   id TEXT PRIMARY KEY,
@@ -638,6 +1051,35 @@ CREATE TABLE IF NOT EXISTS google_calendar_lists (
   UNIQUE(account_id, google_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_google_calendar_lists_visible
+  ON google_calendar_lists(deleted_at, is_hidden, is_primary, summary, id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS google_calendar_lists_fts
+  USING fts5(summary, content='google_calendar_lists', content_rowid='rowid');
+
+CREATE TRIGGER IF NOT EXISTS google_calendar_lists_fts_ai
+AFTER INSERT ON google_calendar_lists
+BEGIN
+  INSERT INTO google_calendar_lists_fts(rowid, summary)
+  VALUES (new.rowid, new.summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_calendar_lists_fts_ad
+AFTER DELETE ON google_calendar_lists
+BEGIN
+  INSERT INTO google_calendar_lists_fts(google_calendar_lists_fts, rowid, summary)
+  VALUES ('delete', old.rowid, old.summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_calendar_lists_fts_au
+AFTER UPDATE ON google_calendar_lists
+BEGIN
+  INSERT INTO google_calendar_lists_fts(google_calendar_lists_fts, rowid, summary)
+  VALUES ('delete', old.rowid, old.summary);
+  INSERT INTO google_calendar_lists_fts(rowid, summary)
+  VALUES (new.rowid, new.summary);
+END;
+
 CREATE TABLE IF NOT EXISTS google_calendar_events (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL,
@@ -657,6 +1099,8 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
   recurrence_rule TEXT,
   transparency TEXT,
   visibility TEXT,
+  attendee_emails_json TEXT NOT NULL DEFAULT '[]',
+  reminder_minutes_json TEXT NOT NULL DEFAULT '[]',
   etag TEXT,
   sequence INTEGER,
   google_updated_at TEXT,
@@ -668,6 +1112,61 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
 
 CREATE INDEX IF NOT EXISTS idx_google_calendar_events_range
   ON google_calendar_events(account_id, calendar_id, start_at, end_at, status);
+
+CREATE INDEX IF NOT EXISTS idx_google_calendar_events_visible_range
+  ON google_calendar_events(calendar_id, deleted_at, status, start_at, end_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_google_calendar_events_search_recent
+  ON google_calendar_events(deleted_at, status, updated_at DESC, id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS google_calendar_events_fts
+  USING fts5(summary, description, location, content='google_calendar_events', content_rowid='rowid');
+
+CREATE TRIGGER IF NOT EXISTS google_calendar_events_fts_ai
+AFTER INSERT ON google_calendar_events
+BEGIN
+  INSERT INTO google_calendar_events_fts(rowid, summary, description, location)
+  VALUES (new.rowid, new.summary, COALESCE(new.description, ''), COALESCE(new.location, ''));
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_calendar_events_fts_ad
+AFTER DELETE ON google_calendar_events
+BEGIN
+  INSERT INTO google_calendar_events_fts(google_calendar_events_fts, rowid, summary, description, location)
+  VALUES ('delete', old.rowid, old.summary, COALESCE(old.description, ''), COALESCE(old.location, ''));
+END;
+
+CREATE TRIGGER IF NOT EXISTS google_calendar_events_fts_au
+AFTER UPDATE ON google_calendar_events
+BEGIN
+  INSERT INTO google_calendar_events_fts(google_calendar_events_fts, rowid, summary, description, location)
+  VALUES ('delete', old.rowid, old.summary, COALESCE(old.description, ''), COALESCE(old.location, ''));
+  INSERT INTO google_calendar_events_fts(rowid, summary, description, location)
+  VALUES (new.rowid, new.summary, COALESCE(new.description, ''), COALESCE(new.location, ''));
+END;
+
+CREATE TABLE IF NOT EXISTS google_calendar_event_instances (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  google_event_id TEXT NOT NULL,
+  recurring_event_id TEXT,
+  original_start_at TEXT,
+  start_at TEXT NOT NULL,
+  end_at TEXT NOT NULL,
+  is_all_day INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  UNIQUE(account_id, calendar_id, event_id, start_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_google_calendar_event_instances_visible_range
+  ON google_calendar_event_instances(calendar_id, deleted_at, status, start_at, end_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_google_calendar_event_instances_event
+  ON google_calendar_event_instances(event_id, deleted_at);
 
 CREATE TABLE IF NOT EXISTS google_sync_checkpoints (
   id TEXT PRIMARY KEY,
@@ -681,6 +1180,9 @@ CREATE TABLE IF NOT EXISTS google_sync_checkpoints (
   updated_at TEXT NOT NULL,
   UNIQUE(account_id, resource_type, resource_id, checkpoint_type)
 );
+
+CREATE INDEX IF NOT EXISTS idx_google_sync_checkpoints_lookup
+  ON google_sync_checkpoints(account_id, resource_type, resource_id, checkpoint_type);
 
 CREATE TABLE IF NOT EXISTS google_sync_diagnostics (
   run_id TEXT PRIMARY KEY,
@@ -735,4 +1237,7 @@ CREATE TABLE IF NOT EXISTS google_pending_mutations (
 
 CREATE INDEX IF NOT EXISTS idx_google_pending_mutations_status_retry
   ON google_pending_mutations(status, next_retry_at, resource_type);
+
+CREATE INDEX IF NOT EXISTS idx_google_pending_mutations_resource
+  ON google_pending_mutations(resource_type, resource_id, status, created_at);
 `;

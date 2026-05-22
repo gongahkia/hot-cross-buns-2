@@ -1,10 +1,21 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SearchResultItem, TaskDetail } from "@shared/ipc/contracts";
+import type { HcbApi } from "@shared/ipc/preloadApi";
+import { err, ok } from "@shared/ipc/result";
 import App from "./App";
+
+const originalHcb = window.hcb;
+const now = "2026-05-22T00:00:00.000Z";
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
+  Object.defineProperty(window, "hcb", {
+    configurable: true,
+    value: originalHcb
+  });
 });
 
 function primaryNavigation(): HTMLElement {
@@ -16,209 +27,779 @@ async function goToSection(label: string): Promise<void> {
   await user.click(within(primaryNavigation()).getByRole("button", { name: new RegExp(label) }));
 }
 
+async function runPaletteCommand(user: ReturnType<typeof userEvent.setup>, query: string, label: RegExp): Promise<void> {
+  await user.keyboard("{Control>}k{/Control}");
+  const dialog = await screen.findByRole("dialog", { name: "Command palette" });
+  const input = within(dialog).getByRole("searchbox", { name: "Filter commands" });
+
+  await user.type(input, query);
+  await user.click(within(dialog).getByRole("option", { name: label }));
+}
+
+function installHcb(api: HcbApi | undefined): void {
+  Object.defineProperty(window, "hcb", {
+    configurable: true,
+    value: api
+  });
+}
+
+function seededTaskDetail(id: string, overrides: Partial<TaskDetail> = {}): TaskDetail {
+  return {
+    id,
+    listId: id === "task-inbox-rules" ? "list-inbox" : "list-planning",
+    title:
+      id === "task-done"
+        ? "Report shell-visible timing"
+        : id === "task-calendar-fixtures"
+          ? "Review calendar fixture shape"
+          : "Draft inbox triage rules",
+    status: id === "task-done" ? "completed" as const : "active" as const,
+    priority:
+      id === "task-inbox-rules"
+        ? "high" as const
+        : id === "task-calendar-fixtures"
+          ? "medium" as const
+          : "low" as const,
+    dueAt: id === "task-done" ? null : now,
+    updatedAt: now,
+    notes:
+      id === "task-done"
+        ? "Already complete."
+        : id === "task-calendar-fixtures"
+          ? "Keep visible rows stable for future agenda virtualization."
+          : "Define keyboard-first review states.",
+    parentId: null,
+    ...overrides
+  };
+}
+
+function seededHcb(): HcbApi {
+  const api = originalHcb!;
+  let createdTaskCount = 0;
+
+  return {
+    ...api,
+    tasks: {
+      ...api.tasks,
+      listTaskLists: vi.fn(async () =>
+        ok({
+          items: [
+            {
+              id: "list-inbox",
+              title: "Inbox",
+              updatedAt: now,
+              taskCount: 2,
+              activeTaskCount: 1
+            },
+            {
+              id: "list-planning",
+              title: "Planning",
+              updatedAt: now,
+              taskCount: 1,
+              activeTaskCount: 1
+            }
+          ],
+          page: { limit: 100, totalKnown: 2 }
+        })
+      ),
+      list: vi.fn(async () =>
+        ok({
+          items: [
+            {
+              id: "task-inbox-rules",
+              listId: "list-inbox",
+              title: "Draft inbox triage rules",
+              status: "active" as const,
+              priority: "high" as const,
+              dueAt: now,
+              updatedAt: now
+            },
+            {
+              id: "task-calendar-fixtures",
+              listId: "list-planning",
+              title: "Review calendar fixture shape",
+              status: "active" as const,
+              priority: "medium" as const,
+              dueAt: now,
+              updatedAt: now
+            },
+            {
+              id: "task-done",
+              listId: "list-planning",
+              title: "Report shell-visible timing",
+              status: "completed" as const,
+              priority: "low" as const,
+              dueAt: null,
+              updatedAt: now
+            }
+          ],
+          page: { limit: 100, totalKnown: 3 }
+        })
+      ),
+      get: vi.fn(async ({ id }) => ok(seededTaskDetail(id))),
+      create: vi.fn(async (request) =>
+        ok({
+          id: `task-created-${++createdTaskCount}`,
+          listId: request.listId,
+          title: request.title,
+          status: "active" as const,
+          priority: request.priority ?? "none",
+          dueAt: request.dueDate ? `${request.dueDate}T00:00:00.000Z` : null,
+          updatedAt: now,
+          notes: request.notes ?? "",
+          parentId: request.parentId ?? null
+        })
+      ),
+      update: vi.fn(async (request) =>
+        ok(
+          seededTaskDetail(request.id, {
+            ...(request.title === undefined ? {} : { title: request.title }),
+            ...(request.notes === undefined ? {} : { notes: request.notes }),
+            ...(request.dueDate === undefined
+              ? {}
+              : { dueAt: request.dueDate ? `${request.dueDate}T00:00:00.000Z` : null }),
+            ...(request.listId === undefined ? {} : { listId: request.listId }),
+            ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
+            ...(request.priority === undefined ? {} : { priority: request.priority })
+          })
+        )
+      ),
+      complete: vi.fn(async ({ id }) => ok(seededTaskDetail(id, { status: "completed" }))),
+      reopen: vi.fn(async ({ id }) => ok(seededTaskDetail(id, { status: "active" }))),
+      move: vi.fn(async (request) =>
+        ok(
+          seededTaskDetail(request.id, {
+            ...(request.listId === undefined ? {} : { listId: request.listId }),
+            ...(request.parentId === undefined ? {} : { parentId: request.parentId })
+          })
+        )
+      ),
+      delete: vi.fn(async ({ id }) => ok({ id, queued: true, revision: now })),
+      createTaskList: vi.fn(async (request) =>
+        ok({
+          id: "list-created",
+          title: request.title,
+          updatedAt: now,
+          taskCount: 0,
+          activeTaskCount: 0
+        })
+      ),
+      renameTaskList: vi.fn(async (request) =>
+        ok({
+          id: request.id,
+          title: request.title,
+          updatedAt: now,
+          taskCount: request.id === "list-inbox" ? 2 : 1,
+          activeTaskCount: request.id === "list-inbox" ? 1 : 1
+        })
+      ),
+      deleteTaskList: vi.fn(async ({ id }) => ok({ id, queued: true, revision: now }))
+    },
+    calendar: {
+      ...api.calendar,
+      listCalendars: vi.fn(async () =>
+        ok({
+          items: [
+            {
+              id: "cal-product",
+              title: "Product",
+              selected: true,
+              timeZone: "UTC",
+              updatedAt: now,
+              eventCount: 1
+            }
+          ],
+          page: { limit: 100, totalKnown: 1 }
+        })
+      ),
+      listEvents: vi.fn(async () =>
+        ok({
+          items: [
+            {
+              id: "event-standup",
+              calendarId: "cal-product",
+              title: "Planner shell standup",
+              startsAt: "2026-05-22T09:30:00.000Z",
+              endsAt: "2026-05-22T09:50:00.000Z",
+              allDay: false,
+              updatedAt: now
+            },
+            {
+              id: "event-review",
+              calendarId: "cal-product",
+              title: "Renderer acceptance review",
+              startsAt: "2026-05-22T15:30:00.000Z",
+              endsAt: "2026-05-22T16:15:00.000Z",
+              allDay: false,
+              updatedAt: now
+            }
+          ],
+          page: { limit: 250, totalKnown: 2 }
+        })
+      )
+    },
+    notes: {
+      ...api.notes,
+      list: vi.fn(async () =>
+        ok({
+          items: [
+            {
+              id: "note-cache-first",
+              title: "Cache-first startup",
+              preview: "Renderer paints from SQLite.",
+              updatedAt: now
+            }
+          ],
+          page: { limit: 50, totalKnown: 1 }
+        })
+      ),
+      get: vi.fn(async ({ id }) =>
+        ok({
+          id,
+          title: "Cache-first startup",
+          preview: "Renderer paints from SQLite.",
+          body: "Renderer paints from SQLite before fresh sync completes.",
+          updatedAt: now
+        })
+      ),
+      create: vi.fn(async (request) =>
+        ok({
+          id: "note-created",
+          title: request.title,
+          preview: request.body ?? "Empty local note",
+          body: request.body ?? "",
+          updatedAt: now
+        })
+      ),
+      update: vi.fn(async (request) =>
+        ok({
+          id: request.id,
+          title: request.title ?? "Untitled note",
+          preview: request.body ?? "",
+          body: request.body ?? "",
+          updatedAt: now
+        })
+      ),
+      delete: vi.fn(async (request) =>
+        ok({
+          id: request.id,
+          queued: false,
+          revision: now
+        })
+      )
+    },
+    search: {
+      query: vi.fn(async (request) => {
+        const query = request.query.toLowerCase();
+        const items: SearchResultItem[] = [];
+
+        if (query.includes("triage") || query.includes("task")) {
+          items.push({
+            id: "task-inbox-rules",
+            domain: "tasks" as const,
+            title: "Draft inbox triage rules",
+            snippet: "Task in Inbox",
+            updatedAt: now
+          });
+        }
+
+        if (query.includes("review") || query.includes("event")) {
+          items.push({
+            id: "event-review",
+            domain: "calendar" as const,
+            title: "Renderer acceptance review",
+            snippet: "Calendar event at 15:30",
+            updatedAt: now
+          });
+        }
+
+        if (query.includes("cache") || query.includes("note")) {
+          items.push({
+            id: "note-cache-first",
+            domain: "notes" as const,
+            title: "Cache-first startup",
+            snippet: "Local note updated from cache",
+            updatedAt: now
+          });
+        }
+
+        return ok({
+          items,
+          page: { limit: 30, totalKnown: items.length }
+        });
+      })
+    },
+    sync: {
+      ...api.sync,
+      status: vi.fn(async () =>
+        ok({
+          state: "idle" as const,
+          pendingMutationCount: 0,
+          lastCompletedAt: now,
+          offline: false,
+          stale: false
+        })
+      )
+    }
+  };
+}
+
+function loadingHcb(): HcbApi {
+  const api = originalHcb!;
+  const pendingRead = new Promise<never>(() => undefined);
+
+  return {
+    ...api,
+    tasks: {
+      ...api.tasks,
+      listTaskLists: vi.fn(() => pendingRead)
+    }
+  };
+}
+
 describe("App shell", () => {
-  it("renders the compact planner frame and primary sections", async () => {
+  it("renders the loading cache state while preload reads are pending", () => {
+    installHcb(loadingHcb());
+    render(<App />);
+
+    expect(screen.getByText("Loading local cache")).toBeInTheDocument();
+    expect(screen.getByText("Reading cached planner data from SQLite.")).toBeInTheDocument();
+  });
+
+  it("renders from an empty fresh local cache and invokes preload read APIs", async () => {
     render(<App />);
 
     expect(screen.getByTestId("app-shell")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "Planner actions" })).toBeInTheDocument();
-    expect(screen.getByText("Offline mock mode")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Today" })[0]).toBeInTheDocument();
 
     for (const label of ["Today", "Tasks", "Calendar", "Notes", "Search", "Settings"]) {
       expect(within(primaryNavigation()).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
 
-    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(await screen.findByText("Fresh local cache")).toBeInTheDocument();
+    expect(screen.getByText("Nothing cached yet")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(originalHcb?.tasks.listTaskLists).toHaveBeenCalled();
+      expect(originalHcb?.tasks.list).toHaveBeenCalled();
+      expect(originalHcb?.calendar.listCalendars).toHaveBeenCalled();
+      expect(originalHcb?.calendar.listEvents).toHaveBeenCalled();
+      expect(originalHcb?.notes.list).toHaveBeenCalled();
+      expect(originalHcb?.sync.status).toHaveBeenCalled();
+    });
   });
 
-  it("navigates sections with pointer and sidebar arrow keys", async () => {
+  it("navigates sections and opens the command palette", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(within(primaryNavigation()).getByRole("button", { name: /Tasks/ }));
-    expect(screen.getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
-    expect(within(primaryNavigation()).getByRole("button", { name: /Tasks/ })).toHaveAttribute(
-      "aria-current",
-      "page"
-    );
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
 
     const tasksButton = within(primaryNavigation()).getByRole("button", { name: /Tasks/ });
     tasksButton.focus();
     await user.keyboard("{ArrowDown}");
 
-    expect(screen.getByRole("heading", { name: "Calendar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
     expect(within(primaryNavigation()).getByRole("button", { name: /Calendar/ })).toHaveFocus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const dialog = await screen.findByRole("dialog", { name: "Command palette" });
+
+    await user.type(within(dialog).getByRole("searchbox", { name: "Filter commands" }), "note");
+    expect(within(dialog).getByRole("option", { name: /New note/ })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("option", { name: /Go to Notes/ }));
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
   });
 
-  it("opens and filters the command palette", async () => {
+  it("routes palette action command shells without waiting on sync or search", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.keyboard("{Control>}k{/Control}");
+    await runPaletteCommand(user, "new task", /New task/);
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
 
-    const dialog = await screen.findByRole("dialog", { name: "Command palette" });
-    const input = within(dialog).getByRole("searchbox", { name: "Filter commands" });
+    await runPaletteCommand(user, "new event", /New event/);
+    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
 
-    await user.type(input, "note");
+    await runPaletteCommand(user, "quick capture", /Quick capture/);
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Quick capture" })).toBeInTheDocument();
 
-    expect(within(dialog).getByRole("option", { name: /New note/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole("option", { name: /Go to Notes/ })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("option", { name: /New event/ })).not.toBeInTheDocument();
+    await runPaletteCommand(user, "refresh", /Refresh/);
+    expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("option", { name: /Go to Notes/ }));
+    await runPaletteCommand(user, "force", /Force full resync/);
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
 
-    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument();
+    await runPaletteCommand(user, "mcp", /Toggle MCP server/);
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+
+    await runPaletteCommand(user, "diagnostics", /Copy diagnostics summary/);
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
   });
-});
 
-describe("core screen mock coverage", () => {
-  it("shows Today tasks and calendar agenda rows", () => {
+  it("renders seeded SQLite-shaped data and uses local search", async () => {
+    const api = seededHcb();
+    installHcb(api);
     render(<App />);
 
-    expect(screen.getByText("Open tasks")).toBeInTheDocument();
-    expect(screen.getByText("Timeline")).toBeInTheDocument();
-    expect(screen.getByText("Planner shell standup")).toBeInTheDocument();
+    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
     expect(screen.getAllByText("Draft inbox triage rules")[0]).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Today timeline" })).toBeInTheDocument();
+    expect(screen.getByText("Planner shell standup")).toBeInTheDocument();
+
+    await goToSection("Tasks");
+    expect(screen.getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Planning" })).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+
+    await goToSection("Calendar");
+    expect(screen.getByText("Agenda view")).toBeInTheDocument();
+    expect(screen.getByText("Product")).toBeInTheDocument();
+
+    await goToSection("Search");
+    await userEvent.setup().type(screen.getByRole("textbox", { name: "Search local cache" }), "triage");
+    expect(await screen.findByText(/Task in Inbox/)).toBeInTheDocument();
+    expect(api.search.query).toHaveBeenCalledWith({ query: "triage", limit: 30 });
   });
 
-  it("shows task grouping, completion state, subtasks, filters, empty state, and error state", async () => {
+  it("renders task groups, subtasks, completion, empty state, and error state", async () => {
+    const api = seededHcb();
+    installHcb(api);
     const user = userEvent.setup();
     render(<App />);
 
     await goToSection("Tasks");
 
-    expect(screen.getAllByText("Inbox")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Planning")[0]).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Planning" })).toBeInTheDocument();
     expect(screen.getByText("Map shortcut states")).toBeInTheDocument();
+    expect(screen.getByText("Month grid shell")).toBeInTheDocument();
 
-    const completeButton = screen.getByRole("button", { name: "Complete Draft inbox triage rules" });
-    await user.click(completeButton);
-    expect(completeButton).toHaveAttribute("aria-pressed", "true");
+    const filters = screen.getByRole("toolbar", { name: "Task filters" });
+    await user.click(screen.getByRole("button", { name: "Complete Draft inbox triage rules" }));
+    expect(api.tasks.complete).toHaveBeenCalledWith({ id: "task-inbox-rules" });
+    await user.click(within(filters).getByRole("button", { name: /Completed/ }));
+    expect(await screen.findByRole("button", { name: "Reopen Draft inbox triage rules" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reopen Draft inbox triage rules" }));
+    expect(api.tasks.reopen).toHaveBeenCalledWith({ id: "task-inbox-rules" });
 
-    await user.click(screen.getByRole("button", { name: /Completed/ }));
-    expect(screen.getByText("Completed history")).toBeInTheDocument();
-    expect(screen.getByText("Report shell-visible timing")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Hidden/ }));
-    expect(screen.getByText("Legacy import comparison")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Deleted/ }));
-    expect(screen.getByText("Remove stale demo row")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Empty/ }));
+    await user.click(within(filters).getByRole("button", { name: /Empty/ }));
     expect(screen.getByText("No tasks in this filter")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Error/ }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Shortcut conflict");
+    await user.click(within(filters).getByRole("button", { name: /Error/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong");
   });
 
-  it("shows calendar agenda, day, week, and month view shells", async () => {
+  it("creates, edits, deletes, and quick-captures tasks through preload", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Tasks");
+    expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "Task title" }), "Send status recap");
+    fireEvent.change(screen.getByLabelText("Task due date"), { target: { value: "2026-05-23" } });
+    await user.selectOptions(screen.getByLabelText("Task priority"), "medium");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.tasks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Send status recap",
+          listId: "list-inbox",
+          dueDate: "2026-05-23",
+          priority: "medium",
+          parentId: null
+        })
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: /Draft inbox triage rules Today/ }));
+    const titleInput = screen.getByRole("textbox", { name: "Task title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Draft inbox triage rules v2");
+    await user.selectOptions(screen.getByLabelText("Task list"), "list-planning");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.tasks.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "task-inbox-rules",
+          title: "Draft inbox triage rules v2",
+          listId: "list-planning"
+        })
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: /Review calendar fixture shape Today/ }));
+    await user.click(screen.getByRole("button", { name: "Delete selected task" }));
+    expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-calendar-fixtures" });
+
+    await runPaletteCommand(user, "quick capture", /Quick capture/);
+    await user.type(screen.getByRole("textbox", { name: "Quick capture task" }), "Review notes 2026-05-23 #Planning");
+    await user.click(screen.getByRole("button", { name: "Capture" }));
+
+    await waitFor(() => {
+      expect(api.tasks.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          title: "Review notes",
+          listId: "list-planning",
+          dueDate: "2026-05-23"
+        })
+      );
+    });
+  });
+
+  it("reverts optimistic task creation and retries recoverable task errors", async () => {
+    const api = seededHcb();
+    api.tasks.create = vi.fn()
+      .mockResolvedValueOnce(
+        err({
+          code: "SERVICE_UNAVAILABLE",
+          message: "Task queue is temporarily unavailable.",
+          recoverable: true
+        })
+      )
+      .mockResolvedValueOnce(
+        ok({
+          id: "task-retry-created",
+          listId: "list-inbox",
+          title: "Retry optimistic write",
+          status: "active" as const,
+          priority: "none" as const,
+          dueAt: null,
+          updatedAt: now,
+          notes: "",
+          parentId: null
+        })
+      );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Tasks");
+    expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "Task title" }), "Retry optimistic write");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Task write not saved")).toBeInTheDocument();
+    expect(screen.queryByText("Retry optimistic write")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(api.tasks.create).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText("Retry optimistic write").length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText("Task write not saved")).not.toBeInTheDocument();
+  });
+
+  it("creates, renames, and deletes task lists through preload", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Tasks");
+    expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "New task list title" }), "Errands");
+    await user.click(screen.getByRole("button", { name: "Create task list" }));
+    expect(api.tasks.createTaskList).toHaveBeenCalledWith({ title: "Errands" });
+
+    const inboxTitle = screen.getByRole("textbox", { name: "Rename Inbox" });
+    await user.clear(inboxTitle);
+    await user.type(inboxTitle, "Inbox renamed");
+    await user.click(screen.getByRole("button", { name: "Save Inbox" }));
+    expect(api.tasks.renameTaskList).toHaveBeenCalledWith({
+      id: "list-inbox",
+      title: "Inbox renamed"
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete Planning" }));
+    expect(api.tasks.deleteTaskList).toHaveBeenCalledWith({ id: "list-planning" });
+  });
+
+  it("switches calendar agenda, day, week, and month shells", async () => {
+    installHcb(seededHcb());
     const user = userEvent.setup();
     render(<App />);
 
     await goToSection("Calendar");
-
-    expect(screen.getByText("Agenda view shell")).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Calendar agenda" })).toBeInTheDocument();
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
     expect(screen.getByText("Planner shell standup")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Day" }));
-    expect(screen.getByText("Day view shell")).toBeInTheDocument();
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
     expect(screen.getByRole("grid", { name: "Calendar day view" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Week" }));
-    expect(screen.getByText("Week view shell")).toBeInTheDocument();
+    await user.click(within(tabs).getByRole("tab", { name: "Week" }));
     expect(screen.getByRole("grid", { name: "Calendar week view" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Month" }));
-    expect(screen.getByText("Month view shell")).toBeInTheDocument();
+    await user.click(within(tabs).getByRole("tab", { name: "Month" }));
     expect(screen.getByRole("grid", { name: "Calendar month view" })).toBeInTheDocument();
   });
 
-  it("creates, edits, and deletes local notes in renderer state", async () => {
+  it("creates, edits, and deletes calendar events through preload", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /New event/ }));
+    await user.type(screen.getByRole("textbox", { name: "Event title" }), "Design review");
+    fireEvent.change(screen.getByLabelText("Event starts"), { target: { value: "2026-05-22T11:00" } });
+    fireEvent.change(screen.getByLabelText("Event ends"), { target: { value: "2026-05-22T12:00" } });
+    await user.type(screen.getByRole("textbox", { name: "Event location" }), "Room 3");
+    await user.type(screen.getByRole("textbox", { name: "Event guests" }), "ada@example.com");
+    await user.selectOptions(screen.getByLabelText("Event reminder"), "15");
+    await user.type(screen.getByRole("textbox", { name: "Event notes" }), "Bring mocks.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Design review",
+          calendarId: "cal-product",
+          startsAt: "2026-05-22T11:00:00.000Z",
+          endsAt: "2026-05-22T12:00:00.000Z",
+          allDay: false,
+          location: "Room 3",
+          notes: "Bring mocks.",
+          guestEmails: ["ada@example.com"],
+          reminderMinutes: [15]
+        })
+      );
+    });
+
+    await user.click(screen.getByText("Planner shell standup"));
+    const titleInput = screen.getByRole("textbox", { name: "Event title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Planner shell sync");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "event-standup",
+          title: "Planner shell sync"
+        })
+      );
+    });
+
+    await user.click(screen.getByText("Planner shell standup"));
+    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    expect(api.calendar.delete).toHaveBeenCalledWith({ id: "event-standup" });
+  });
+
+  it("runs calendar-focused command palette actions", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await runPaletteCommand(user, "calendar week", /Calendar week view/);
+    expect(await screen.findByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+    expect(await screen.findByText("Week view")).toBeInTheDocument();
+
+    await runPaletteCommand(user, "new event", /New event/);
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+  });
+
+  it("creates, edits, and deletes local notes through preload", async () => {
+    const api = seededHcb();
+    installHcb(api);
     const user = userEvent.setup();
     render(<App />);
 
     await goToSection("Notes");
-
-    expect(screen.getByDisplayValue("Cache-first startup")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Cache-first startup")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New note/ }));
-    const titleInput = screen.getByRole("textbox", { name: "Note title" });
+    const titleInput = await screen.findByRole("textbox", { name: "Note title" });
     const bodyInput = screen.getByRole("textbox", { name: "Note body" });
 
-    expect(titleInput).toHaveValue("Untitled note");
     await user.clear(titleInput);
     await user.type(titleInput, "Release note draft");
-    await user.type(bodyInput, "Document mock screens before real preload data lands.");
+    await user.type(bodyInput, "Document local cache flow.");
+    await user.tab();
 
-    expect(screen.getAllByText("Release note draft")[0]).toBeInTheDocument();
-    expect(screen.getAllByText(/Document mock screens/)[0]).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.notes.create).toHaveBeenCalled();
+      expect(api.notes.update).toHaveBeenCalledWith({
+        id: "note-created",
+        title: "Release note draft",
+        body: "Document local cache flow."
+      });
+    });
 
     await user.click(screen.getByRole("button", { name: "Delete selected note" }));
+    expect(api.notes.delete).toHaveBeenCalledWith({ id: "note-created" });
 
-    expect(screen.queryByDisplayValue("Release note draft")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Cache-first startup")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete selected note" }));
+    expect(api.notes.delete).toHaveBeenCalledWith({ id: "note-cache-first" });
+    expect(screen.getByText("No note selected")).toBeInTheDocument();
   });
 
-  it("searches precomputed task, event, and note buckets with empty states", async () => {
+  it("renders search results for task, event, note, and empty local queries", async () => {
+    const api = seededHcb();
+    installHcb(api);
     const user = userEvent.setup();
     render(<App />);
 
     await goToSection("Search");
+    const input = screen.getByRole("textbox", { name: "Search local cache" });
 
-    expect(screen.getAllByText("Search waits for a local query")[0]).toBeInTheDocument();
+    await user.type(input, "review");
+    expect(await screen.findByText("Renderer acceptance review")).toBeInTheDocument();
+    expect(screen.getByText(/hotcrossbuns:\/\/calendar\/event-review/)).toBeInTheDocument();
 
-    const searchInput = screen.getByRole("textbox", { name: "Search local mock data" });
+    await user.clear(input);
+    await user.type(input, "cache");
+    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
+    expect(screen.getByText(/hotcrossbuns:\/\/notes\/note-cache-first/)).toBeInTheDocument();
 
-    await user.type(searchInput, "task");
-    expect(screen.getByText("Draft inbox triage rules")).toBeInTheDocument();
-    expect(screen.getAllByText("task")[0]).toBeInTheDocument();
-
-    await user.clear(searchInput);
-    await user.type(searchInput, "event");
-    expect(screen.getByText("Renderer acceptance review")).toBeInTheDocument();
-    expect(screen.getAllByText("event")[0]).toBeInTheDocument();
-
-    await user.clear(searchInput);
-    await user.type(searchInput, "note");
-    expect(screen.getByText("Command palette surface")).toBeInTheDocument();
-    expect(screen.getAllByText("note")[0]).toBeInTheDocument();
-
-    await user.clear(searchInput);
-    await user.type(searchInput, "zzzz");
-    expect(screen.getByText("No matching mock results")).toBeInTheDocument();
+    await user.clear(input);
+    await user.type(input, "missing");
+    expect(await screen.findByText("No matching results")).toBeInTheDocument();
+    expect(api.search.query).toHaveBeenLastCalledWith({ query: "missing", limit: 30 });
   });
 
-  it("shows required settings sections and recoverable hotkey error state", async () => {
+  it("renders required settings sections and section controls", async () => {
+    installHcb(seededHcb());
     const user = userEvent.setup();
     render(<App />);
 
     await goToSection("Settings");
 
-    const settingsSupport = screen.getByLabelText("Settings support");
-    for (const label of [
-      "Google",
-      "Sync",
-      "Appearance",
-      "Hotkeys",
-      "Tray",
-      "Notifications",
-      "MCP",
-      "Diagnostics"
-    ]) {
+    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
+    for (const label of ["Google", "Sync", "Appearance", "Hotkeys", "Tray", "Notifications", "MCP", "Diagnostics"]) {
       expect(within(settingsSupport).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
 
-    expect(screen.getByText("OAuth setup shell only. The renderer never receives tokens or client secrets.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Copy diagnostics/ })).toBeInTheDocument();
-
     await user.click(within(settingsSupport).getByRole("button", { name: /Hotkeys/ }));
+    expect(screen.getByText("Shortcut attention")).toBeInTheDocument();
 
-    expect(screen.getByText("Quick capture shortcut state remains recoverable and visible.")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Shortcut conflict");
+    await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
+    expect(screen.getByRole("button", { name: /Copy diagnostics/ })).toBeInTheDocument();
+    expect(screen.getByText("Secret exposure")).toBeInTheDocument();
+  });
+
+  it("handles an unavailable preload bridge as an offline state", async () => {
+    installHcb(undefined);
+    render(<App />);
+
+    expect((await screen.findAllByText("Offline cache"))[0]).toBeInTheDocument();
+    expect(screen.getByText("The preload bridge is unavailable in this renderer context.")).toBeInTheDocument();
   });
 });

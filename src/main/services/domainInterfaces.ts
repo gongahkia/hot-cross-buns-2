@@ -1,6 +1,10 @@
 import type {
   CalendarRangeRequest,
   CalendarRangeResponse,
+  CalendarEventCreateRequest,
+  CalendarEventDeleteRequest,
+  CalendarEventDetail,
+  CalendarEventUpdateRequest,
   CalendarListRequest,
   CalendarListResponse,
   EntityByIdRequest,
@@ -21,11 +25,20 @@ import type {
   SyncRunNowRequest,
   SyncRunNowResponse,
   SyncStatusResponse,
+  TaskCompletionRequest,
+  TaskCreateRequest,
+  TaskDeleteRequest,
   TaskDetail,
+  TaskListCreateRequest,
+  TaskListDeleteRequest,
+  TaskListRenameRequest,
   TaskListsRequest,
   TaskListsResponse,
+  TaskMoveRequest,
   TaskListRequest,
-  TaskListResponse
+  TaskListResponse,
+  TaskListSummary,
+  TaskUpdateRequest
 } from "@shared/ipc/contracts";
 
 export type DomainJsonPrimitive = string | number | boolean | null;
@@ -101,9 +114,25 @@ export interface PlannerViewDomainService {
   listTaskLists: (request: TaskListsRequest) => MaybePromise<TaskListsResponse>;
   listTasks: (request: TaskListRequest) => MaybePromise<TaskListResponse>;
   getTask: (request: EntityByIdRequest) => MaybePromise<TaskDetail>;
+  createTask: (request: TaskCreateRequest) => MaybePromise<TaskDetail>;
+  updateTask: (request: TaskUpdateRequest) => MaybePromise<TaskDetail>;
+  completeTask: (request: TaskCompletionRequest) => MaybePromise<TaskDetail>;
+  reopenTask: (request: TaskCompletionRequest) => MaybePromise<TaskDetail>;
+  moveTask: (request: TaskMoveRequest) => MaybePromise<TaskDetail>;
+  deleteTask: (request: TaskDeleteRequest) => MaybePromise<{ id: string; queued: boolean; revision?: string }>;
+  createTaskList: (request: TaskListCreateRequest) => MaybePromise<TaskListSummary>;
+  renameTaskList: (request: TaskListRenameRequest) => MaybePromise<TaskListSummary>;
+  deleteTaskList: (request: TaskListDeleteRequest) => MaybePromise<{ id: string; queued: boolean; revision?: string }>;
   listCalendars: (request: CalendarListRequest) => MaybePromise<CalendarListResponse>;
   listCalendarEvents: (request: CalendarRangeRequest) => MaybePromise<CalendarRangeResponse>;
-  getCalendarEvent: (request: EntityByIdRequest) => MaybePromise<DomainJsonObject>;
+  getCalendarEvent: (request: EntityByIdRequest) => MaybePromise<CalendarEventDetail>;
+  createCalendarEvent: (request: CalendarEventCreateRequest) => MaybePromise<CalendarEventDetail>;
+  updateCalendarEvent: (request: CalendarEventUpdateRequest) => MaybePromise<CalendarEventDetail>;
+  deleteCalendarEvent: (request: CalendarEventDeleteRequest) => MaybePromise<{
+    id: string;
+    queued: boolean;
+    revision?: string;
+  }>;
   listNotes: (request: NoteListRequest) => MaybePromise<NoteListResponse>;
   getNote: (request: EntityByIdRequest) => MaybePromise<NoteDetail>;
   createNote: (request: NoteCreateRequest) => MaybePromise<NoteDetail>;

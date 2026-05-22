@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_LIST_LIMIT,
   MAX_RANGE_LIMIT,
+  calendarEventCreateRequestSchema,
+  calendarEventUpdateRequestSchema,
   calendarRangeRequestSchema,
   hcbDomainSchema,
+  taskCreateRequestSchema,
+  taskUpdateRequestSchema,
   taskListRequestSchema
 } from "./contracts";
 import { hcbErrorSchema, hcbResultSchema, ok, validationError } from "./result";
@@ -87,5 +91,55 @@ describe("shared IPC contracts", () => {
         end: "2026-01-01T00:00:00.000Z"
       }).success
     ).toBe(false);
+  });
+
+  it("validates calendar event write payloads", () => {
+    expect(
+      calendarEventCreateRequestSchema.parse({
+        title: "Design review",
+        calendarId: "cal-1",
+        startsAt: "2026-05-22T09:00:00.000Z",
+        endsAt: "2026-05-22T10:00:00.000Z",
+        guestEmails: ["ADA@example.com"],
+        reminderMinutes: [10]
+      })
+    ).toMatchObject({
+      title: "Design review",
+      guestEmails: ["ada@example.com"],
+      allDay: false
+    });
+    expect(
+      calendarEventCreateRequestSchema.safeParse({
+        title: "Bad event",
+        calendarId: "cal-1",
+        startsAt: "2026-05-22T10:00:00.000Z",
+        endsAt: "2026-05-22T09:00:00.000Z"
+      }).success
+    ).toBe(false);
+    expect(calendarEventUpdateRequestSchema.safeParse({ id: "event-1" }).success).toBe(false);
+  });
+
+  it("validates task write payloads as date-only Google Tasks mutations", () => {
+    expect(
+      taskCreateRequestSchema.parse({
+        title: "Review notes",
+        listId: "list-1",
+        dueDate: "2026-05-22",
+        parentId: null,
+        priority: "medium"
+      })
+    ).toMatchObject({
+      title: "Review notes",
+      dueDate: "2026-05-22",
+      priority: "medium"
+    });
+    expect(
+      taskCreateRequestSchema.safeParse({
+        title: "Timed task",
+        listId: "list-1",
+        dueDate: "2026-05-22T10:00:00.000Z"
+      }).success
+    ).toBe(false);
+    expect(taskUpdateRequestSchema.safeParse({ id: "task-1" }).success).toBe(false);
   });
 });

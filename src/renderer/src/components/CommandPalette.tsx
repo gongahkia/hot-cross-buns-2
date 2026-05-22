@@ -5,6 +5,7 @@ import { mockCommands, type MockCommand, type SectionId } from "../data/mockPlan
 import { Badge, Button, IconButton, Input, cx } from "./primitives";
 
 interface CommandPaletteProps {
+  onCommand?: (command: MockCommand) => boolean | void;
   onNavigate: (sectionId: SectionId) => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
@@ -23,7 +24,25 @@ function commandMatches(command: MockCommand, query: string): boolean {
     .includes(normalizedQuery);
 }
 
+function dispatchCalendarCommand(command: MockCommand): void {
+  if (!command.calendarAction) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("hcb:calendar-command", {
+        detail:
+          command.calendarAction === "new-event"
+            ? { action: "new-event" }
+            : { action: "set-view", viewId: command.calendarAction }
+      })
+    );
+  }, 0);
+}
+
 export function CommandPalette({
+  onCommand,
   onNavigate,
   onOpenChange,
   open
@@ -68,9 +87,16 @@ export function CommandPalette({
       return;
     }
 
+    if (onCommand?.(command)) {
+      closePalette();
+      return;
+    }
+
     if (command.sectionId) {
       onNavigate(command.sectionId);
     }
+
+    dispatchCalendarCommand(command);
 
     closePalette();
   }

@@ -39,13 +39,19 @@ function StateBlock({
   );
 }
 
-export function LoadingState(): JSX.Element {
+export function LoadingState({
+  description = "Reading local data.",
+  title = "Loading"
+}: {
+  title?: string;
+  description?: string;
+} = {}): JSX.Element {
   return (
     <StateBlock
-      description="Waiting on a future local cache read. No network or database request is active in this shell."
+      description={description}
       icon={Loader2}
       role="status"
-      title="Loading preview"
+      title={title}
     />
   );
 }
@@ -60,25 +66,39 @@ export function EmptyState({
   return <StateBlock description={description} icon={FolderSearch} title={title} />;
 }
 
-export function OfflineState(): JSX.Element {
+export function OfflineState({
+  description = "Google sync is disconnected. Cached local data remains available.",
+  title = "Offline cache"
+}: {
+  title?: string;
+  description?: string;
+} = {}): JSX.Element {
   return (
     <StateBlock
       actionLabel="Retry later"
-      description="The renderer is showing local mock rows while sync services are intentionally disconnected."
+      description={description}
       icon={WifiOff}
-      title="Offline cache mode"
+      title={title}
     />
   );
 }
 
-export function ErrorState(): JSX.Element {
+export function ErrorState({
+  actionLabel = "Retry",
+  description = "The request did not complete. The app remains usable with cached state where available.",
+  title = "Something went wrong"
+}: {
+  title?: string;
+  description?: string;
+  actionLabel?: string;
+} = {}): JSX.Element {
   return (
     <StateBlock
-      actionLabel="Open hotkeys"
-      description="Quick capture shortcut is unavailable in this mock state. The app stays usable."
+      actionLabel={actionLabel}
+      description={description}
       icon={AlertTriangle}
       role="alert"
-      title="Shortcut conflict"
+      title={title}
     />
   );
 }

@@ -1,13 +1,40 @@
-import { _electron as electron, type ElectronApplication } from "@playwright/test";
+import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
-import type { StartupTimingSnapshot } from "../src/shared/ipc/contracts";
-import { summarizeAllPerfFixtureSets } from "./perf/fixtures";
+import { REQUIRED_GOOGLE_SCOPES } from "../src/main/google/types";
+import {
+  LocalPerformanceRepository,
+  LocalPlannerRepository
+} from "../src/main/data/localRepositories";
+import { runLocalDataMigrations } from "../src/main/data/migrations";
+import { createAppSqliteConnection, type SqliteConnection } from "../src/main/data/sqliteConnection";
+import {
+  calendarLocalId,
+  eventLocalId,
+  GoogleSyncRepository,
+  taskListLocalId,
+  taskLocalId
+} from "../src/main/sync/readSyncRepository";
+import type {
+  DiagnosticsHealthResponse,
+  DiagnosticsIpcMetricsResponse,
+  StartupTimingSnapshot
+} from "../src/shared/ipc/contracts";
+import type { HcbResult } from "../src/shared/ipc/result";
+import {
+  generatePerfFixtureSet,
+  summarizeAllPerfFixtureSets,
+  type PerfFixtureSet
+} from "./perf/fixtures";
 import {
   writePerformanceReport,
+  type PerfIpcRouteReport,
+  type PerfLaunchCapture,
   type PerfMeasurement,
+  type PerfQueryPlanReport,
+  type PerfQueryPlanRow,
   type PerfReport,
   type StartupTimingCapture
 } from "./perf/report";
@@ -15,6 +42,25 @@ import {
 const rootDir = process.cwd();
 const artifactDir = resolve(rootDir, "artifacts", "perf");
 const mode = "report-only" as const;
+const accountId = "perf-generated-account";
+const mediumFixture = generatePerfFixtureSet("medium");
+type DiagnosticsHealthResult = HcbResult<DiagnosticsHealthResponse> | null;
+
+interface QueryPlanRow extends Record<string, unknown> {
+  id: number;
+  parent: number;
+  detail: string;
+}
+
+interface SeedResult {
+  databasePath: string;
+  durationMs: number;
+}
+
+interface SqliteBaselineResult {
+  measurements: PerfMeasurement[];
+  queryPlans: PerfQueryPlanReport[];
+}
 
 function redactSensitiveText(text: string): string {
   const home = process.env.HOME;
@@ -35,19 +81,521 @@ function sanitizeError(error: unknown): string {
   return redactSensitiveText(message).slice(0, 500);
 }
 
-async function collectStartupTiming(): Promise<StartupTimingCapture> {
+function roundMs(value: number): number {
+  return Math.max(0, Math.round(value * 100) / 100);
+}
+
+function temporaryUserDataDir(): { root: string; userDataDir: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), "hcb2-perf-"));
+  const userDataDir = join(root, "user-data");
+
+  return {
+    root,
+    userDataDir,
+    cleanup: () => {
+      rmSync(root, { recursive: true, force: true });
+    }
+  };
+}
+
+function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
+  const startedAt = performance.now();
+  const connection = createAppSqliteConnection({ appSupportDirectory: userDataDir });
+
+  try {
+    runLocalDataMigrations(connection);
+    const syncRepository = new GoogleSyncRepository(connection);
+    const now = mediumFixture.baseTime;
+
+    syncRepository.upsertAccountStatus({
+      accountId,
+      googleAccountId: "generated-perf-account",
+      email: "generated-perf@example.invalid",
+      displayName: "Generated Performance Account",
+      avatarUrl: null,
+      locale: "en",
+      timeZone: "UTC",
+      connectionState: "connected",
+      grantedScopes: REQUIRED_GOOGLE_SCOPES,
+      missingScopes: [],
+      lastAuthenticatedAt: now,
+      updatedAt: now
+    });
+    syncRepository.writeTaskLists(
+      accountId,
+      mediumFixture.taskLists.map((list) => ({
+        id: list.id,
+        title: list.title,
+        updatedAt: now
+      })),
+      now
+    );
+
+    for (const taskList of mediumFixture.taskLists) {
+      syncRepository.writeTasks(
+        accountId,
+        taskList.id,
+        mediumFixture.tasks
+          .filter((task) => task.taskListId === taskList.id)
+          .map((task) => ({
+            id: task.id,
+            taskListId: task.taskListId,
+            parentId: task.parentTaskId,
+            title: task.title,
+            notes: `Generated local task notes for ${task.title}`,
+            status: task.status,
+            dueAt: task.dueAt,
+            completedAt: task.completedAt,
+            deleted: false,
+            hidden: false,
+            position: String(task.sortOrder).padStart(12, "0"),
+            updatedAt: task.updatedAt
+          })),
+        {
+          fullSync: true,
+          now
+        }
+      );
+    }
+
+    syncRepository.writeCalendarLists(
+      accountId,
+      mediumFixture.calendars.map((calendar, index) => ({
+        id: calendar.id,
+        summary: calendar.title,
+        timeZone: "UTC",
+        isSelected: true,
+        isHidden: false,
+        isPrimary: index === 0,
+        updatedAt: now
+      })),
+      now
+    );
+
+    for (const calendar of mediumFixture.calendars) {
+      syncRepository.writeCalendarEvents(
+        accountId,
+        calendar.id,
+        mediumFixture.eventInstances
+          .filter((event) => event.calendarId === calendar.id)
+          .map((event) => ({
+            id: event.id,
+            calendarId: event.calendarId,
+            status: "confirmed" as const,
+            summary: event.title,
+            description: `Generated local calendar description for ${event.title}`,
+            location: "Generated local fixture",
+            startAt: event.startsAt,
+            endAt: event.endsAt,
+            isAllDay: event.isAllDay,
+            updatedAt: event.updatedAt
+          })),
+        {
+          fullSync: true,
+          now
+        }
+      );
+    }
+
+    connection.executeTransaction(
+      mediumFixture.notes.map((note) => ({
+        kind: "run",
+        sql: `INSERT INTO local_notes (
+          id, title, body, linked_task_id, linked_event_id, created_at, updated_at, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+        ON CONFLICT(id) DO UPDATE SET
+          title = excluded.title,
+          body = excluded.body,
+          linked_task_id = excluded.linked_task_id,
+          linked_event_id = excluded.linked_event_id,
+          updated_at = excluded.updated_at,
+          deleted_at = NULL;`,
+        params: [
+          note.id,
+          note.title,
+          note.body,
+          linkedTaskId(mediumFixture, note.linkedResourceType, note.linkedResourceId),
+          linkedEventId(mediumFixture, note.linkedResourceType, note.linkedResourceId),
+          note.updatedAt,
+          note.updatedAt
+        ]
+      }))
+    );
+
+    syncRepository.saveCheckpoint({
+      accountId,
+      resourceType: "tasks",
+      resourceId: mediumFixture.taskLists[0].id,
+      checkpointType: "syncToken",
+      checkpointValue: "generated-task-checkpoint",
+      metadata: { fixture: "medium" },
+      now
+    });
+    syncRepository.saveCheckpoint({
+      accountId,
+      resourceType: "calendar",
+      resourceId: mediumFixture.calendars[0].id,
+      checkpointType: "syncToken",
+      checkpointValue: "generated-calendar-checkpoint",
+      metadata: { fixture: "medium" },
+      now
+    });
+    connection.run(
+      `INSERT INTO google_pending_mutations (
+        id, account_id, resource_type, resource_id, operation, payload_json, status,
+        attempt_count, next_retry_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status,
+        next_retry_at = excluded.next_retry_at,
+        updated_at = excluded.updated_at;`,
+      [
+        "perf-pending-mutation-1",
+        accountId,
+        "task",
+        taskLocalId(accountId, mediumFixture.taskLists[0].id, mediumFixture.tasks[0].id),
+        "update",
+        JSON.stringify({ generated: true }),
+        "pending",
+        0,
+        now,
+        now,
+        now
+      ]
+    );
+
+    return {
+      databasePath: connection.databasePath,
+      durationMs: roundMs(performance.now() - startedAt)
+    };
+  } finally {
+    connection.close();
+  }
+}
+
+function linkedTaskId(
+  fixture: PerfFixtureSet,
+  type: "task" | "event" | null,
+  resourceId: string | null
+): string | null {
+  if (type !== "task" || resourceId === null) {
+    return null;
+  }
+
+  const task = fixture.tasks.find((candidate) => candidate.id === resourceId);
+  return task === undefined ? null : taskLocalId(accountId, task.taskListId, task.id);
+}
+
+function linkedEventId(
+  fixture: PerfFixtureSet,
+  type: "task" | "event" | null,
+  resourceId: string | null
+): string | null {
+  if (type !== "event" || resourceId === null) {
+    return null;
+  }
+
+  const event = fixture.eventInstances.find((candidate) => candidate.id === resourceId);
+  return event === undefined ? null : eventLocalId(accountId, event.calendarId, event.id);
+}
+
+function collectSqliteBaseline(userDataDir: string): SqliteBaselineResult {
+  const connection = createAppSqliteConnection({ appSupportDirectory: userDataDir });
+
+  try {
+    runLocalDataMigrations(connection);
+    const performanceRepository = new LocalPerformanceRepository(connection);
+    const plannerRepository = new LocalPlannerRepository(connection, performanceRepository);
+    const syncRepository = new GoogleSyncRepository(connection);
+    const measurements: PerfMeasurement[] = [];
+
+    measure(measurements, "sqlite.task-lists.medium", () =>
+      plannerRepository.listTaskLists({ limit: 100 })
+    );
+    measure(measurements, "sqlite.tasks.active-list.medium", () =>
+      plannerRepository.listTasks({
+        listId: taskListLocalId(accountId, mediumFixture.taskLists[0].id),
+        status: "active",
+        limit: 100
+      })
+    );
+    measure(measurements, "sqlite.events.visible-range.medium", () =>
+      plannerRepository.listCalendarEvents({
+        calendarIds: [calendarLocalId(accountId, mediumFixture.calendars[0].id)],
+        start: mediumFixture.baseTime,
+        end: "2026-02-10T00:00:00.000Z",
+        limit: 250
+      })
+    );
+    measure(measurements, "sqlite.notes.recent.medium", () =>
+      plannerRepository.listNotes({ limit: 50 })
+    );
+    measure(measurements, "search.medium-local", () =>
+      plannerRepository.search({
+        query: "generated",
+        limit: 30
+      })
+    );
+    measure(measurements, "sqlite.checkpoint.read", () =>
+      syncRepository.readCheckpoint({
+        accountId,
+        resourceType: "tasks",
+        resourceId: mediumFixture.taskLists[0].id,
+        checkpointType: "syncToken"
+      })
+    );
+    measure(measurements, "sqlite.pending-mutations.ready", () =>
+      connection.get<{ count: number }>(
+        `SELECT COUNT(*) AS count
+         FROM google_pending_mutations
+         WHERE status IN ('pending', 'failed', 'applying')
+           AND (next_retry_at IS NULL OR next_retry_at <= ?);`,
+        [mediumFixture.baseTime]
+      )
+    );
+
+    return {
+      measurements,
+      queryPlans: collectQueryPlans(connection)
+    };
+  } catch (error) {
+    return {
+      measurements: [
+        {
+          name: "sqlite.baseline",
+          status: "skipped",
+          reason: sanitizeError(error)
+        }
+      ],
+      queryPlans: []
+    };
+  } finally {
+    connection.close();
+  }
+}
+
+function measure(measurements: PerfMeasurement[], name: string, operation: () => unknown): void {
+  const startedAt = performance.now();
+
+  try {
+    operation();
+    measurements.push({
+      name,
+      status: "collected",
+      valueMs: roundMs(performance.now() - startedAt)
+    });
+  } catch (error) {
+    measurements.push({
+      name,
+      status: "skipped",
+      reason: sanitizeError(error)
+    });
+  }
+}
+
+function collectQueryPlans(connection: SqliteConnection): PerfQueryPlanReport[] {
+  const taskListId = taskListLocalId(accountId, mediumFixture.taskLists[0].id);
+  const calendarId = calendarLocalId(accountId, mediumFixture.calendars[0].id);
+  const parentTask = mediumFixture.tasks.find((task) => task.parentTaskId !== null);
+  const parentTaskId =
+    parentTask?.parentTaskId === null || parentTask?.parentTaskId === undefined
+      ? taskLocalId(accountId, mediumFixture.taskLists[0].id, mediumFixture.tasks[0].id)
+      : taskLocalId(accountId, parentTask.taskListId, parentTask.parentTaskId);
+  const ftsQuery = "generated*";
+
+  return [
+    queryPlan(connection, {
+      name: "task.active-by-list",
+      category: "task",
+      sql: `SELECT tasks.id, tasks.title, tasks.due_at
+            FROM google_tasks tasks
+            INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+            WHERE tasks.deleted_at IS NULL
+              AND tasks.is_hidden = 0
+              AND lists.deleted_at IS NULL
+              AND tasks.task_list_id = ?
+              AND tasks.status != 'completed'
+            ORDER BY
+              CASE WHEN tasks.due_at IS NULL THEN 1 ELSE 0 END,
+              tasks.due_at ASC,
+              tasks.sort_order ASC,
+              tasks.updated_at DESC,
+              tasks.id ASC
+            LIMIT ? OFFSET ?`,
+      params: [taskListId, 100, 0]
+    }),
+    queryPlan(connection, {
+      name: "task.subtasks-by-parent",
+      category: "task",
+      sql: `SELECT id, title, status
+            FROM google_tasks
+            WHERE parent_task_id = ?
+              AND deleted_at IS NULL
+            ORDER BY sort_order ASC, id ASC
+            LIMIT ?`,
+      params: [parentTaskId, 50]
+    }),
+    queryPlan(connection, {
+      name: "event.visible-range",
+      category: "event",
+      sql: `SELECT events.id, events.summary, events.start_at, events.end_at
+            FROM google_calendar_events events
+            INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+            WHERE events.deleted_at IS NULL
+              AND events.status != 'cancelled'
+              AND calendars.deleted_at IS NULL
+              AND events.start_at < ?
+              AND events.end_at > ?
+              AND events.calendar_id IN (?)
+            ORDER BY events.start_at ASC, events.end_at ASC, events.id ASC
+            LIMIT ? OFFSET ?`,
+      params: ["2026-02-10T00:00:00.000Z", mediumFixture.baseTime, calendarId, 250, 0]
+    }),
+    queryPlan(connection, {
+      name: "note.recent",
+      category: "note",
+      sql: `SELECT id, title, body, updated_at
+            FROM local_notes
+            WHERE deleted_at IS NULL
+            ORDER BY updated_at DESC, id ASC
+            LIMIT ? OFFSET ?`,
+      params: [50, 0]
+    }),
+    queryPlan(connection, {
+      name: "search.tasks-fts",
+      category: "search",
+      sql: `SELECT tasks.id, tasks.title, tasks.updated_at
+            FROM google_tasks_fts
+            INNER JOIN google_tasks tasks ON tasks.rowid = google_tasks_fts.rowid
+            INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+            WHERE google_tasks_fts MATCH ?
+              AND tasks.deleted_at IS NULL
+              AND tasks.is_hidden = 0
+              AND lists.deleted_at IS NULL
+            ORDER BY tasks.updated_at DESC, tasks.id ASC
+            LIMIT ?`,
+      params: [ftsQuery, 30]
+    }),
+    queryPlan(connection, {
+      name: "search.events-fts",
+      category: "search",
+      sql: `SELECT events.id, events.summary, events.updated_at
+            FROM google_calendar_events_fts
+            INNER JOIN google_calendar_events events ON events.rowid = google_calendar_events_fts.rowid
+            INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+            WHERE google_calendar_events_fts MATCH ?
+              AND events.deleted_at IS NULL
+              AND events.status != 'cancelled'
+              AND calendars.deleted_at IS NULL
+            ORDER BY events.updated_at DESC, events.id ASC
+            LIMIT ?`,
+      params: [ftsQuery, 30]
+    }),
+    queryPlan(connection, {
+      name: "search.notes-fts",
+      category: "search",
+      sql: `SELECT notes.id, notes.title, notes.body, notes.updated_at
+            FROM local_notes_fts
+            INNER JOIN local_notes notes ON notes.rowid = local_notes_fts.rowid
+            WHERE local_notes_fts MATCH ?
+              AND notes.deleted_at IS NULL
+            ORDER BY notes.updated_at DESC, notes.id ASC
+            LIMIT ?`,
+      params: [ftsQuery, 30]
+    }),
+    queryPlan(connection, {
+      name: "checkpoint.lookup",
+      category: "checkpoint",
+      sql: `SELECT checkpoint_value
+            FROM google_sync_checkpoints
+            WHERE account_id = ?
+              AND resource_type = ?
+              AND resource_id = ?
+              AND checkpoint_type = ?`,
+      params: [accountId, "tasks", mediumFixture.taskLists[0].id, "syncToken"]
+    }),
+    queryPlan(connection, {
+      name: "pending-mutation.ready",
+      category: "pending_mutation",
+      sql: `SELECT id, resource_type, resource_id
+            FROM google_pending_mutations
+            WHERE status IN ('pending', 'failed', 'applying')
+              AND (next_retry_at IS NULL OR next_retry_at <= ?)
+            ORDER BY next_retry_at ASC, created_at ASC
+            LIMIT ?`,
+      params: [mediumFixture.baseTime, 50]
+    })
+  ];
+}
+
+function queryPlan(
+  connection: SqliteConnection,
+  request: {
+    name: string;
+    category: PerfQueryPlanReport["category"];
+    sql: string;
+    params: readonly (string | number | boolean | null)[];
+  }
+): PerfQueryPlanReport {
+  try {
+    const rows = connection.query<QueryPlanRow>(`EXPLAIN QUERY PLAN ${request.sql}`, request.params);
+    const normalizedRows: PerfQueryPlanRow[] = rows.map((row) => ({
+      id: row.id,
+      parent: row.parent,
+      detail: row.detail
+    }));
+
+    return {
+      name: request.name,
+      category: request.category,
+      status: "collected",
+      rows: normalizedRows,
+      usesIndex: normalizedRows.some((row) => usesIndex(row.detail)),
+      hasFullTableScan: normalizedRows.some((row) => hasFullTableScan(row.detail))
+    };
+  } catch (error) {
+    return {
+      name: request.name,
+      category: request.category,
+      status: "skipped",
+      reason: sanitizeError(error)
+    };
+  }
+}
+
+function usesIndex(detail: string): boolean {
+  return /\bUSING (?:COVERING )?(?:INDEX|AUTOMATIC INDEX|INTEGER PRIMARY KEY)\b/i.test(detail) ||
+    /\bVIRTUAL TABLE INDEX\b/i.test(detail);
+}
+
+function hasFullTableScan(detail: string): boolean {
+  return /\bSCAN\s+\w+\b/i.test(detail) && !/\bUSING\b|\bVIRTUAL TABLE INDEX\b/i.test(detail);
+}
+
+async function collectLaunchTiming(
+  name: PerfLaunchCapture["name"],
+  userDataDir: string
+): Promise<{
+  launch: PerfLaunchCapture;
+  measurements: PerfMeasurement[];
+  ipcRoutes: PerfIpcRouteReport[];
+}> {
   const mainOutputPath = resolve(rootDir, "out", "main", "index.js");
+  const skippedLaunch: PerfLaunchCapture = {
+    name,
+    status: "skipped",
+    reason: "Build output is missing. Run pnpm build before collecting startup timings."
+  };
 
   if (!existsSync(mainOutputPath)) {
     return {
-      status: "skipped",
-      reason: "Build output is missing. Run pnpm build before collecting startup timings."
+      launch: skippedLaunch,
+      measurements: launchSkippedMeasurements(name, skippedLaunch.reason),
+      ipcRoutes: []
     };
   }
 
   let electronApp: ElectronApplication | undefined;
-  const tempRoot = mkdtempSync(join(tmpdir(), "hcb2-perf-"));
-  const userDataDir = join(tempRoot, "user-data");
   const startedAt = performance.now();
 
   try {
@@ -66,76 +614,385 @@ async function collectStartupTiming(): Promise<StartupTimingCapture> {
     await page.getByTestId("app-shell").waitFor({ state: "visible", timeout: 15_000 });
     await page
       .waitForFunction(
-        async () => {
+        `(async () => {
           const result = await window.hcb?.diagnostics.health();
-          return Boolean(result?.ok && result.data.startup.shellVisibleMs !== undefined);
-        },
+          return Boolean(
+            result?.ok &&
+              result.data.startup.shellVisibleMs !== undefined &&
+              result.data.startup.cachedDataRenderedMs !== undefined
+          );
+        })()`,
         undefined,
-        { timeout: 5_000 }
+        { timeout: 10_000 }
       )
       .catch(() => undefined);
 
-    const health = await page.evaluate(async () => {
+    const health = (await page.evaluate(`(async () => {
       const result = await window.hcb?.diagnostics.health();
       return result ?? null;
-    });
+    })()`)) as DiagnosticsHealthResult;
 
     if (!health?.ok) {
       return {
-        status: "skipped",
-        reason: "Diagnostics health did not return startup timings."
+        launch: {
+          name,
+          status: "skipped",
+          reason: "Diagnostics health did not return startup timings."
+        },
+        measurements: launchSkippedMeasurements(
+          name,
+          "Diagnostics health did not return startup timings."
+        ),
+        ipcRoutes: []
       };
     }
 
-    return {
+    const commandPaletteOpenMs = await measureCommandPaletteOpen(page);
+    const rendererMeasurements = await collectRendererMeasurements(page, name);
+    const rendererFlowMeasurements = await collectRendererFlowMeasurements(page, name);
+    const ipcMetrics = (await page.evaluate(`(async () => {
+      const result = await window.hcb?.diagnostics.ipcMetrics();
+      return result?.ok ? result.data : null;
+    })()`)) as DiagnosticsIpcMetricsResponse | null;
+
+    const launch: PerfLaunchCapture = {
+      name,
       status: "collected",
       timings: health.data.startup,
-      wallClockMs: Math.round(performance.now() - startedAt)
+      wallClockMs: roundMs(performance.now() - startedAt),
+      commandPaletteOpenMs
+    };
+
+    return {
+      launch,
+      measurements: [
+        ...startupMeasurements(launch),
+        {
+          name: `${name}.command-palette.open`,
+          status: "collected",
+          valueMs: commandPaletteOpenMs
+        },
+        ...rendererMeasurements,
+        ...rendererFlowMeasurements
+      ],
+      ipcRoutes: ipcRouteReports(ipcMetrics)
     };
   } catch (error) {
+    const reason = sanitizeError(error);
+
     return {
-      status: "skipped",
-      reason: sanitizeError(error)
+      launch: {
+        name,
+        status: "skipped",
+        reason
+      },
+      measurements: launchSkippedMeasurements(name, reason),
+      ipcRoutes: []
     };
   } finally {
     await electronApp?.close();
-    rmSync(tempRoot, { recursive: true, force: true });
   }
 }
 
-function startupMeasurements(startup: StartupTimingCapture): PerfMeasurement[] {
+async function measureCommandPaletteOpen(page: Page): Promise<number> {
+  const startedAt = performance.now();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  const dialog = page.getByRole("dialog", { name: "Command palette" });
+  await dialog.waitFor({ state: "visible", timeout: 5_000 });
+  const durationMs = roundMs(performance.now() - startedAt);
+  await page.keyboard.press("Escape").catch(() => undefined);
+  await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(async () => {
+    await page
+      .getByRole("button", { name: "Close command palette" })
+      .click({ timeout: 1_000 })
+      .catch(() => undefined);
+  });
+  return durationMs;
+}
+
+async function collectRendererMeasurements(
+  page: Page,
+  launchName: string
+): Promise<PerfMeasurement[]> {
+  return page.evaluate(`(async () => {
+    const evaluatedLaunchName = ${JSON.stringify(launchName)};
+
+    async function measureIpc(name, operation) {
+      const startedAt = performance.now();
+
+      try {
+        await operation();
+        return {
+          name: evaluatedLaunchName + "." + name,
+          status: "collected",
+          valueMs: Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100)
+        };
+      } catch (error) {
+        return {
+          name: evaluatedLaunchName + "." + name,
+          status: "skipped",
+          reason: error instanceof Error ? error.message.slice(0, 160) : "Renderer measurement failed."
+        };
+      }
+    }
+
+    if (!window.hcb) {
+      return [
+        {
+          name: evaluatedLaunchName + ".ipc.health-roundtrip",
+          status: "skipped",
+          reason: "Preload bridge unavailable."
+        }
+      ];
+    }
+
+    return [
+      await measureIpc("ipc.health-roundtrip", async () => window.hcb.diagnostics.health()),
+      await measureIpc("ipc.tasks-list-roundtrip", async () =>
+        window.hcb.tasks.list({ status: "active", limit: 100 })
+      ),
+      await measureIpc("ipc.calendar-range-roundtrip", async () =>
+        window.hcb.calendar.listEvents({
+          start: "2026-01-05T00:00:00.000Z",
+          end: "2026-02-10T00:00:00.000Z",
+          limit: 250
+        })
+      ),
+      await measureIpc("search.medium-local", async () =>
+        window.hcb.search.query({ query: "generated", limit: 30 })
+      )
+    ];
+  })()`) as Promise<PerfMeasurement[]>;
+}
+
+async function collectRendererFlowMeasurements(
+  page: Page,
+  launchName: string
+): Promise<PerfMeasurement[]> {
+  const measurements: PerfMeasurement[] = [];
+
+  measurements.push(
+    await measurePageFlow(
+      launchName,
+      "quick-capture.open",
+      async () => {
+        await navigateToSection(page, "Tasks");
+        const quickCaptureInput = page.getByRole("textbox", { name: "Quick capture task" });
+        const quickCaptureButton = page.getByRole("button", { name: /^Quick capture$/ }).first();
+
+        if (await quickCaptureInput.count() > 0) {
+          await quickCaptureButton.click();
+          await quickCaptureInput.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
+        }
+      },
+      async () => {
+        const quickCaptureInput = page.getByRole("textbox", { name: "Quick capture task" });
+        const quickCaptureButton = page.getByRole("button", { name: /^Quick capture$/ }).first();
+
+        await quickCaptureButton.click();
+        await quickCaptureInput.waitFor({ state: "visible", timeout: 5_000 });
+      }
+    )
+  );
+
+  measurements.push(
+    await measurePageFlow(
+      launchName,
+      "tasks.complete",
+      async () => {
+        await navigateToSection(page, "Tasks");
+      },
+      async () => {
+        const completeButton = page.getByRole("button", { name: /^Complete / }).first();
+        const taskName = await completeButton.getAttribute("aria-label");
+
+        await completeButton.click();
+
+        if (taskName) {
+          await page
+            .getByRole("button", { name: taskName })
+            .waitFor({ state: "hidden", timeout: 5_000 })
+            .catch(() => undefined);
+        }
+      }
+    )
+  );
+
+  measurements.push(
+    await measurePageFlow(
+      launchName,
+      "tasks.scroll",
+      async () => {
+        await navigateToSection(page, "Tasks");
+      },
+      async () => {
+        const taskList = page.getByRole("list", { name: /tasks$/i }).first();
+
+        await taskList.evaluate((element) => {
+          element.scrollTop = element.scrollHeight;
+          element.dispatchEvent(new Event("scroll", { bubbles: true }));
+        });
+        await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+      }
+    )
+  );
+
+  measurements.push(
+    await measurePageFlow(
+      launchName,
+      "calendar.month-navigation",
+      async () => {
+        await navigateToSection(page, "Calendar");
+        await page.getByRole("tab", { name: "Agenda" }).click().catch(() => undefined);
+      },
+      async () => {
+        await page.getByRole("tab", { name: "Month" }).click();
+        await page.getByRole("grid", { name: "Calendar month view" }).waitFor({
+          state: "visible",
+          timeout: 5_000
+        });
+      }
+    )
+  );
+
+  measurements.push(
+    await measurePageFlow(
+      launchName,
+      "notes.edit",
+      async () => {
+        await navigateToSection(page, "Notes");
+        await page.getByRole("textbox", { name: "Note body" }).waitFor({
+          state: "visible",
+          timeout: 5_000
+        });
+      },
+      async () => {
+        const body = page.getByRole("textbox", { name: "Note body" });
+
+        await body.fill("Performance smoke edit with generated local data.");
+        await body.blur();
+      }
+    )
+  );
+
+  measurements.push(
+    await measurePageFlow(
+      launchName,
+      "search.ui",
+      async () => {
+        await navigateToSection(page, "Search");
+      },
+      async () => {
+        await page.getByRole("textbox", { name: "Search local cache" }).fill("generated");
+        await page
+          .getByText(/Generated (task|event|note)/)
+          .first()
+          .waitFor({ state: "visible", timeout: 5_000 });
+      }
+    )
+  );
+
+  return measurements;
+}
+
+async function navigateToSection(page: Page, label: string): Promise<void> {
+  await page.getByRole("button", { name: new RegExp(`^${label}\\b`) }).click();
+  await page.locator("#planner-title").filter({ hasText: label }).waitFor({
+    state: "visible",
+    timeout: 5_000
+  });
+}
+
+async function measurePageFlow(
+  launchName: string,
+  flowName: string,
+  setup: () => Promise<void>,
+  operation: () => Promise<void>
+): Promise<PerfMeasurement> {
+  try {
+    await setup();
+    const startedAt = performance.now();
+    await operation();
+    return {
+      name: `${launchName}.${flowName}`,
+      status: "collected",
+      valueMs: roundMs(performance.now() - startedAt)
+    };
+  } catch (error) {
+    return {
+      name: `${launchName}.${flowName}`,
+      status: "skipped",
+      reason: sanitizeError(error)
+    };
+  }
+}
+
+function ipcRouteReports(
+  metrics: DiagnosticsIpcMetricsResponse | null
+): PerfIpcRouteReport[] {
+  return (metrics?.routes ?? []).map((route) => ({
+    route: route.route,
+    totalCalls: route.totalCalls,
+    averageDurationMs: route.averageDurationMs,
+    ...(route.lastDurationMs === undefined ? {} : { lastDurationMs: route.lastDurationMs })
+  }));
+}
+
+function launchSkippedMeasurements(name: string, reason: string | undefined): PerfMeasurement[] {
+  return [
+    {
+      name: `${name}.startup.shell-visible`,
+      status: "skipped",
+      reason: reason ?? "Launch skipped."
+    },
+    {
+      name: `${name}.startup.cached-data-rendered`,
+      status: "skipped",
+      reason: reason ?? "Launch skipped."
+    },
+    {
+      name: `${name}.command-palette.open`,
+      status: "skipped",
+      reason: reason ?? "Launch skipped."
+    }
+  ];
+}
+
+function startupMeasurements(startup: StartupTimingCapture & { name?: string }): PerfMeasurement[] {
   if (startup.status !== "collected" || !startup.timings) {
     return [
       {
-        name: "startup.shell-visible",
+        name: `${startup.name ?? "startup"}.startup.shell-visible`,
         status: "skipped",
         reason: startup.reason ?? "Startup timing unavailable."
       }
     ];
   }
 
+  const prefix = startup.name === undefined ? "startup" : `${startup.name}.startup`;
   const measurements: PerfMeasurement[] = [];
 
   for (const [field, name] of [
-    ["appReadyMs", "startup.app-ready"],
-    ["windowCreatedMs", "startup.main-window-created"],
-    ["rendererLoadedMs", "startup.renderer-loaded"],
-    ["shellVisibleMs", "startup.shell-visible"],
-    ["databaseReadyMs", "startup.database-ready"]
+    ["appReadyMs", "app-ready"],
+    ["windowCreatedMs", "main-window-created"],
+    ["rendererLoadedMs", "renderer-loaded"],
+    ["shellVisibleMs", "shell-visible"],
+    ["databaseReadyMs", "database-ready"],
+    ["cachedDataRenderedMs", "cached-data-rendered"]
   ] as const) {
-    const value = startup.timings[field];
+    const value = startup.timings[field as keyof StartupTimingSnapshot];
     measurements.push(
       value === undefined
         ? {
-            name,
+            name: `${prefix}.${name}`,
             status: "skipped",
             reason:
               field === "databaseReadyMs"
-                ? "No database initialization exists in the scaffold yet."
+                ? "No database initialization was reported."
                 : "Startup mark was not reported."
           }
         : {
-            name,
+            name: `${prefix}.${name}`,
             status: "collected",
             valueMs: value
           }
@@ -146,68 +1003,99 @@ function startupMeasurements(startup: StartupTimingCapture): PerfMeasurement[] {
 }
 
 async function main(): Promise<void> {
-  const fixtureStartedAt = performance.now();
-  const fixtures = summarizeAllPerfFixtureSets();
-  const fixtureGenerationMs = Math.round(performance.now() - fixtureStartedAt);
-  const startup = await collectStartupTiming();
+  const temp = temporaryUserDataDir();
 
-  const report: PerfReport = {
-    schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
-    mode,
-    status: "completed",
-    artifactConvention: {
-      json: "artifacts/perf/latest.json",
-      markdown: "artifacts/perf/latest.md"
-    },
-    environment: {
-      node: process.version,
-      platform: process.platform,
-      arch: process.arch
-    },
-    fixtures,
-    startup,
-    measurements: [
-      {
-        name: "fixtures.generate-all",
-        status: "collected",
-        valueMs: fixtureGenerationMs
+  try {
+    const fixtureStartedAt = performance.now();
+    const fixtures = summarizeAllPerfFixtureSets();
+    const fixtureGenerationMs = roundMs(performance.now() - fixtureStartedAt);
+    const seedResult = seedMediumFixtureDatabase(temp.userDataDir);
+    const sqlite = collectSqliteBaseline(temp.userDataDir);
+    const cold = await collectLaunchTiming("cold", temp.userDataDir);
+    const warm = await collectLaunchTiming("warm", temp.userDataDir);
+    const launches = [cold.launch, warm.launch];
+    const report: PerfReport = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      mode,
+      status: "completed",
+      artifactConvention: {
+        json: "artifacts/perf/latest.json",
+        markdown: "artifacts/perf/latest.md"
       },
-      ...startupMeasurements(startup),
-      {
-        name: "search.medium-local",
-        status: "skipped",
-        reason: "Search product flow and local index are not implemented yet."
+      environment: {
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch
       },
-      {
-        name: "tasks.large-scroll",
-        status: "skipped",
-        reason: "Tasks list product flow is not implemented yet."
-      },
-      {
-        name: "calendar.large-month-navigation",
-        status: "skipped",
-        reason: "Calendar product flow is not implemented yet."
-      }
-    ],
-    futureHooks: [
-      "Load generated fixtures into the temporary SQLite path once migrations and repositories exist.",
-      "Record cold and warm launch separately once packaged app launch paths are stable.",
-      "Measure command palette and quick capture latency once those flows exist.",
-      "Add local search, task list scroll, calendar navigation, and SQLite query-plan measurements after the relevant features land.",
-      "Introduce hard failure thresholds only after stable baselines are accepted."
-    ],
-    notes: [
-      "Report-only mode records numbers and skipped hooks without failing on product flows that do not exist yet.",
-      "Fixture data is generated locally and deterministically; the harness does not call Google or read user app data.",
-      "Electron security settings are left unchanged for measurement."
-    ]
-  };
+      fixtures,
+      startup: launches[0],
+      launches,
+      measurements: [
+        {
+          name: "fixtures.generate-all",
+          status: "collected",
+          valueMs: fixtureGenerationMs
+        },
+        {
+          name: "fixtures.seed-medium-sqlite",
+          status: "collected",
+          valueMs: seedResult.durationMs
+        },
+        ...sqlite.measurements,
+        ...cold.measurements,
+        ...warm.measurements
+      ],
+      queryPlans: sqlite.queryPlans,
+      ipcRoutes: mergeIpcRoutes([...cold.ipcRoutes, ...warm.ipcRoutes]),
+      futureHooks: [
+        "Add native global-hotkey quick capture latency once the OS shortcut flow is implemented.",
+        "Add large-fixture Electron launch coverage once seeded startup time is stable enough for local developer machines.",
+        "Introduce hard failure thresholds only after stable baselines are accepted."
+      ],
+      notes: [
+        "Report-only mode records numbers and query plans without failing on local timing variance.",
+        "Fixture data is generated locally and deterministically; the harness does not call Google or read user app data.",
+        "The medium fixture is seeded into a temporary app data path before launch and deleted after reporting.",
+        "Electron security settings and renderer isolation are left unchanged for measurement.",
+        `Temporary database path during run: ${redactSensitiveText(seedResult.databasePath)}`
+      ]
+    };
 
-  const written = writePerformanceReport(report, artifactDir);
+    const written = writePerformanceReport(report, artifactDir);
 
-  console.log(`Wrote performance report to ${written.jsonPath}`);
-  console.log(`Wrote performance markdown to ${written.markdownPath}`);
+    console.log(`Wrote performance report to ${written.jsonPath}`);
+    console.log(`Wrote performance markdown to ${written.markdownPath}`);
+  } finally {
+    temp.cleanup();
+  }
+}
+
+function mergeIpcRoutes(routes: PerfIpcRouteReport[]): PerfIpcRouteReport[] {
+  const merged = new Map<string, PerfIpcRouteReport>();
+
+  for (const route of routes) {
+    const existing = merged.get(route.route);
+
+    if (!existing) {
+      merged.set(route.route, { ...route });
+      continue;
+    }
+
+    const totalCalls = existing.totalCalls + route.totalCalls;
+    const averageDurationMs =
+      (existing.averageDurationMs * existing.totalCalls + route.averageDurationMs * route.totalCalls) /
+      totalCalls;
+
+    merged.set(route.route, {
+      route: route.route,
+      totalCalls,
+      averageDurationMs: roundMs(averageDurationMs),
+      lastDurationMs: route.lastDurationMs ?? existing.lastDurationMs
+    });
+  }
+
+  return [...merged.values()].sort((left, right) => left.route.localeCompare(right.route));
 }
 
 void main().catch((error) => {

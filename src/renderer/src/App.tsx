@@ -3,9 +3,19 @@ import type { KeyboardEvent } from "react";
 import { CheckCircle2, Command, RefreshCw, WifiOff } from "lucide-react";
 import { CommandPalette } from "./components/CommandPalette";
 import { Badge, Button, IconButton, StatusBanner, cx } from "./components/primitives";
-import { getPlannerSection, plannerSections, type SectionId } from "./data/mockPlanner";
-import { SectionContent } from "./features/core/CoreScreens";
-import { RenderTimingBoundary, useRenderTiming } from "./hooks/useRenderTiming";
+import { getPlannerSection, plannerSections, type MockCommand, type SectionId } from "./data/mockPlanner";
+import { SectionContent, type TaskSurfaceCommand } from "./features/core/CoreScreens";
+import {
+  CoreDataProvider,
+  type CoreViewModelSource,
+  useCoreViewModelSource
+} from "./features/core/coreViewModelSource";
+import {
+  RenderTimingBoundary,
+  rendererNow,
+  reportRendererTimingSince,
+  useRenderTiming
+} from "./hooks/useRenderTiming";
 
 function scheduleFrame(callback: () => void): void {
   if (typeof window.requestAnimationFrame === "function") {
@@ -16,14 +26,153 @@ function scheduleFrame(callback: () => void): void {
   window.setTimeout(callback, 0);
 }
 
+function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): string {
+  if (sectionId === "tasks") {
+    return source.taskFilterViewModels.find((filter) => filter.id === "open")?.countLabel ?? "0";
+  }
+
+  if (sectionId === "calendar") {
+    return String(source.calendarAgendaEvents.length);
+  }
+
+  if (sectionId === "notes") {
+    return String(source.initialNotes.length);
+  }
+
+  if (sectionId === "search") {
+    return "local";
+  }
+
+  if (sectionId === "settings") {
+    return source.syncStatus.state;
+  }
+
+  return source.todayViewModel.metrics[0]?.value ?? "0";
+}
+
+function statusLabel(source: CoreViewModelSource): string {
+  if (source.dataState === "loading") {
+    return "Loading";
+  }
+
+  if (source.dataState === "error") {
+    return "Error";
+  }
+
+  if (source.isOffline) {
+    return "Offline";
+  }
+
+  if (source.isStale) {
+    return "Stale";
+  }
+
+  if (source.dataState === "empty") {
+    return "Empty";
+  }
+
+  return "Ready";
+}
+
+function statusTitle(source: CoreViewModelSource): string {
+  if (source.dataState === "loading") {
+    return "Loading local cache";
+  }
+
+  if (source.dataState === "error") {
+    return "Local cache unavailable";
+  }
+
+  if (source.isOffline) {
+    return "Offline cache";
+  }
+
+  if (source.isStale || source.dataState === "stale") {
+    return "Refreshing local cache";
+  }
+
+  if (source.dataState === "empty") {
+    return "Fresh local cache";
+  }
+
+  return "Local cache ready";
+}
+
+function statusDescription(source: CoreViewModelSource): string {
+  if (source.errorMessage) {
+    return source.errorMessage;
+  }
+
+  if (source.dataState === "loading") {
+    return "Opening SQLite and reading cached planner data.";
+  }
+
+  if (source.dataState === "empty") {
+    return "No cached tasks, events, or notes are stored yet.";
+  }
+
+  if (source.isOffline) {
+    return "Google sync is not connected; cached local data remains available.";
+  }
+
+  if (source.isStale || source.dataState === "stale") {
+    return "Rendering cached rows while a newer read is pending.";
+  }
+
+  return "Tasks, events, notes, settings, and diagnostics are loaded from local services.";
+}
+
+function statusTone(source: CoreViewModelSource): "neutral" | "success" | "warning" | "danger" {
+  if (source.dataState === "error") {
+    return "danger";
+  }
+
+  if (source.dataState === "ready") {
+    return "success";
+  }
+
+  if (source.dataState === "loading") {
+    return "neutral";
+  }
+
+  return "warning";
+}
+
+function bannerTone(source: CoreViewModelSource): "info" | "success" | "warning" | "danger" | "offline" {
+  if (source.dataState === "error") {
+    return "danger";
+  }
+
+  if (source.isOffline) {
+    return "offline";
+  }
+
+  if (source.dataState === "ready") {
+    return "success";
+  }
+
+  return "info";
+}
+
 export default function App(): JSX.Element {
+  return (
+    <CoreDataProvider>
+      <AppShell />
+    </CoreDataProvider>
+  );
+}
+
+function AppShell(): JSX.Element {
   useRenderTiming("App");
 
+  const source = useCoreViewModelSource();
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("today");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
   const [healthLabel, setHealthLabel] = useState("Starting");
   const [searchQuery, setSearchQuery] = useState("");
   const shellVisibleReported = useRef(false);
+  const commandPaletteOpenStartedAt = useRef<number | null>(null);
   const sectionButtonRefs = useRef(new Map<SectionId, HTMLButtonElement>());
 
   const activeSection = getPlannerSection(activeSectionId);
@@ -44,6 +193,27 @@ export default function App(): JSX.Element {
   const navigateToSection = useCallback((sectionId: SectionId): void => {
     setActiveSectionId(sectionId);
   }, []);
+
+  const openCommandPalette = useCallback((): void => {
+    commandPaletteOpenStartedAt.current = rendererNow();
+    setCommandPaletteOpen(true);
+  }, []);
+
+  const handlePaletteCommand = useCallback(
+    (command: MockCommand): boolean => {
+      if (command.id !== "new-task" && command.id !== "quick-capture") {
+        return false;
+      }
+
+      navigateToSection("tasks");
+      setTaskCommand((current) => ({
+        id: command.id as TaskSurfaceCommand["id"],
+        nonce: (current?.nonce ?? 0) + 1
+      }));
+      return true;
+    },
+    [navigateToSection]
+  );
 
   const focusSection = useCallback(
     (sectionId: SectionId): void => {
@@ -110,13 +280,24 @@ export default function App(): JSX.Element {
     function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setCommandPaletteOpen(true);
+        openCommandPalette();
       }
     }
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, []);
+  }, [openCommandPalette]);
+
+  useEffect(() => {
+    if (!commandPaletteOpen) {
+      return;
+    }
+
+    scheduleFrame(() => {
+      reportRendererTimingSince("command-palette.open", commandPaletteOpenStartedAt.current);
+      commandPaletteOpenStartedAt.current = null;
+    });
+  }, [commandPaletteOpen]);
 
   return (
     <div
@@ -130,7 +311,7 @@ export default function App(): JSX.Element {
           </div>
           <div className="min-w-0">
             <div className="truncate text-[var(--text-md)] font-semibold">Hot Cross Buns 2</div>
-            <div className="text-[var(--text-xs)] text-text-muted">Local planner shell</div>
+            <div className="text-[var(--text-xs)] text-text-muted">Local planner</div>
           </div>
         </div>
 
@@ -156,7 +337,9 @@ export default function App(): JSX.Element {
               >
                 <Icon aria-hidden="true" size={16} strokeWidth={2} />
                 <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                <span className="shrink-0 text-[var(--text-xs)] text-text-muted">{section.metric}</span>
+                <span className="shrink-0 text-[var(--text-xs)] text-text-muted">
+                  {sectionMetric(source, section.id)}
+                </span>
               </button>
             );
           })}
@@ -187,7 +370,7 @@ export default function App(): JSX.Element {
           <div className="flex shrink-0 items-center gap-2" role="toolbar" aria-label="Planner actions">
             <Button
               aria-keyshortcuts="Control+K Meta+K"
-              onClick={() => setCommandPaletteOpen(true)}
+              onClick={openCommandPalette}
               variant="secondary"
             >
               <Command aria-hidden="true" size={15} />
@@ -196,7 +379,12 @@ export default function App(): JSX.Element {
                 Ctrl K
               </span>
             </Button>
-            <IconButton icon={RefreshCw} label="Mock refresh" variant="ghost" />
+            <IconButton
+              icon={RefreshCw}
+              label="Refresh local cache"
+              onClick={source.refresh}
+              variant="ghost"
+            />
           </div>
         </header>
 
@@ -205,11 +393,11 @@ export default function App(): JSX.Element {
           className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4"
         >
           <StatusBanner
-            action={<Badge tone="warning">No real data access</Badge>}
-            description="Using local mock rows only. SQLite, Google, MCP, and filesystem services are not wired."
-            icon={WifiOff}
-            title="Offline mock mode"
-            tone="offline"
+            action={<Badge tone={statusTone(source)}>{statusLabel(source)}</Badge>}
+            description={statusDescription(source)}
+            icon={source.isOffline ? WifiOff : RefreshCw}
+            title={statusTitle(source)}
+            tone={bannerTone(source)}
           />
 
           <RenderTimingBoundary id={`section:${activeSectionId}`}>
@@ -217,6 +405,7 @@ export default function App(): JSX.Element {
               activeSectionId={activeSectionId}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
+              taskCommand={taskCommand}
             />
           </RenderTimingBoundary>
         </section>
@@ -224,6 +413,7 @@ export default function App(): JSX.Element {
 
       <RenderTimingBoundary id="command-palette">
         <CommandPalette
+          onCommand={handlePaletteCommand}
           onNavigate={navigateToSection}
           onOpenChange={setCommandPaletteOpen}
           open={commandPaletteOpen}

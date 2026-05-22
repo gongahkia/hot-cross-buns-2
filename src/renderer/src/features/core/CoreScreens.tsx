@@ -1,21 +1,36 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import type {
+  CalendarEventCreateRequest,
+  CalendarEventUpdateRequest,
+  TaskCreateRequest,
+  TaskUpdateRequest
+} from "@shared/ipc/contracts";
 import {
   CalendarDays,
   CheckCircle2,
   Circle,
   Copy,
+  ListPlus,
+  Pencil,
   Filter,
   Plus,
+  RotateCcw,
+  Save,
   Search,
   Settings2,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
-import { Badge, Button, IconButton, Input, ListRow, Panel, cx } from "../../components/primitives";
+import { Badge, Button, IconButton, Input, ListRow, Panel, StatusBanner, cx } from "../../components/primitives";
 import { EmptyState, ErrorState, LoadingState, OfflineState } from "../../components/states";
 import { VirtualizedList } from "../../components/VirtualizedList";
 import type { SectionId } from "../../data/mockPlanner";
-import { useCoreViewModelSource } from "./coreViewModelSource";
+import {
+  rendererNow,
+  reportRendererTimingSince
+} from "../../hooks/useRenderTiming";
+import { useCoreViewModelSource, useLocalSearch } from "./coreViewModelSource";
 import type {
   CalendarEventViewModel,
   CalendarViewId,
@@ -80,6 +95,94 @@ function settingTone(status: string): "neutral" | "success" | "warning" | "info"
   return "neutral";
 }
 
+const guestEmailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+function scheduleRendererFrame(callback: () => void): void {
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(callback);
+    return;
+  }
+
+  window.setTimeout(callback, 0);
+}
+
+function normalizeGuestEmails(values: readonly string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values ?? []) {
+    const email = value.trim().toLowerCase();
+
+    if (!guestEmailPattern.test(email) || seen.has(email)) {
+      continue;
+    }
+
+    seen.add(email);
+    normalized.push(email);
+  }
+
+  return normalized;
+}
+
+function normalizeReminderMinutes(values: readonly number[] | undefined): number[] {
+  const seen = new Set<number>();
+  const normalized: number[] = [];
+
+  for (const value of values ?? []) {
+    if (!Number.isInteger(value) || value < 0 || value > 28 * 24 * 60 || seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    normalized.push(value);
+  }
+
+  return normalized.sort((left, right) => left - right);
+}
+
+function startOfUtcDayIso(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
+}
+
+function addUtcDaysIso(value: string | Date, days: number): string {
+  const date = typeof value === "string" ? new Date(value) : new Date(value.getTime());
+
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString();
+}
+
+function dateInputValue(value: string): string {
+  const parsed = new Date(value);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function dateInputToIso(value: string): string {
+  return `${value}T00:00:00.000Z`;
+}
+
+function dateTimeLocalInputValue(value: string): string {
+  const parsed = new Date(value);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 16);
+}
+
+function dateTimeLocalInputToIso(value: string): string {
+  const parsed = new Date(`${value}:00.000Z`);
+
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString();
+}
+
 function MetricTile({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <div className="min-w-0 rounded-hcbMd border border-border bg-bg-secondary px-3 py-2">
@@ -87,6 +190,47 @@ function MetricTile({ label, value }: { label: string; value: string }): JSX.Ele
       <div className="mt-1 truncate text-[var(--text-lg)] font-semibold text-text-primary">{value}</div>
     </div>
   );
+}
+
+function CacheStatePanel({ title }: { title: string }): JSX.Element | null {
+  const source = useCoreViewModelSource();
+
+  if (source.dataState === "loading") {
+    return (
+      <Panel title={title} description="Local cache">
+        <LoadingState description="Reading cached planner data from SQLite." />
+      </Panel>
+    );
+  }
+
+  if (source.dataState === "error" && !source.hasCachedData) {
+    return (
+      <Panel title={title} description="Local cache">
+        <ErrorState description={source.errorMessage ?? "The local cache request failed."} />
+      </Panel>
+    );
+  }
+
+  if (source.dataState === "offline" && !source.hasCachedData) {
+    return (
+      <Panel title={title} description="Local cache">
+        <OfflineState description="The preload bridge is unavailable in this renderer context." />
+      </Panel>
+    );
+  }
+
+  if (source.dataState === "empty" && !source.hasCachedData) {
+    return (
+      <Panel title={title} description="Local cache">
+        <EmptyState
+          description="No cached tasks, events, or notes are stored in SQLite yet."
+          title="Nothing cached yet"
+        />
+      </Panel>
+    );
+  }
+
+  return null;
 }
 
 function SectionChrome({
@@ -137,21 +281,34 @@ function TaskCompletionButton({
 
 function TaskRow({
   completed,
+  onDelete,
+  onSelect,
   onToggle,
+  selected,
   task
 }: {
   completed: boolean;
+  onDelete: (taskId: string) => void;
+  onSelect: (taskId: string) => void;
   onToggle: (taskId: string) => void;
+  selected: boolean;
   task: TaskViewModel;
 }): JSX.Element {
   return (
     <div
-      className="min-h-[76px] border-b border-border bg-transparent px-3 py-2 last:border-b-0"
+      className={cx(
+        "min-h-[76px] border-b border-border px-3 py-2 last:border-b-0",
+        selected ? "bg-surface-0" : "bg-transparent"
+      )}
       role="listitem"
     >
       <div className="flex min-w-0 items-start gap-3">
         <TaskCompletionButton completed={completed} onToggle={onToggle} task={task} />
-        <div className="min-w-0 flex-1">
+        <button
+          className="min-w-0 flex-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onClick={() => onSelect(task.id)}
+          type="button"
+        >
           <div className="flex min-w-0 items-center gap-2">
             <span
               className={cx(
@@ -162,6 +319,11 @@ function TaskRow({
               {task.title}
             </span>
             <span className="shrink-0 text-[var(--text-xs)] text-text-muted">{task.dueLabel}</span>
+            {task.mutationState && task.mutationState !== "synced" ? (
+              <Badge tone={task.mutationState === "failed" ? "danger" : "warning"}>
+                {task.mutationState === "failed" ? "Failed" : "Queued"}
+              </Badge>
+            ) : null}
           </div>
           <p className="truncate text-[var(--text-sm)] text-text-muted">{task.detail}</p>
           {task.subtasks.length > 0 ? (
@@ -184,10 +346,16 @@ function TaskRow({
               ))}
             </div>
           ) : null}
-        </div>
+        </button>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={priorityTone(task.priority)}>{priorityLabel(task.priority)}</Badge>
           <Badge>{task.list}</Badge>
+          <IconButton
+            icon={Trash2}
+            label={`Delete ${task.title}`}
+            onClick={() => onDelete(task.id)}
+            variant="ghost"
+          />
         </div>
       </div>
     </div>
@@ -195,13 +363,17 @@ function TaskRow({
 }
 
 function TaskGroupPanel({
-  completionById,
   group,
-  onToggleTask
+  onDeleteTask,
+  onSelectTask,
+  onToggleTask,
+  selectedTaskId
 }: {
-  completionById: Record<string, boolean>;
   group: TaskGroupViewModel;
+  onDeleteTask: (taskId: string) => void;
+  onSelectTask: (taskId: string) => void;
   onToggleTask: (taskId: string) => void;
+  selectedTaskId: string | null;
 }): JSX.Element {
   return (
     <Panel
@@ -214,10 +386,14 @@ function TaskGroupPanel({
         estimateRowHeight={88}
         getKey={(task) => task.id}
         items={group.tasks}
+        performanceLabel={`tasks.${group.id}`}
         renderRow={(task) => (
           <TaskRow
-            completed={completionById[task.id] ?? task.status === "completed"}
+            completed={task.status === "completed"}
+            onDelete={onDeleteTask}
+            onSelect={onSelectTask}
             onToggle={onToggleTask}
+            selected={task.id === selectedTaskId}
             task={task}
           />
         )}
@@ -227,19 +403,51 @@ function TaskGroupPanel({
   );
 }
 
-function EventRow({ event }: { event: CalendarEventViewModel }): JSX.Element {
-  return (
-    <ListRow
-      description={`${event.calendar} - ${event.location} - ${event.notes}`}
-      leading={
-        <span className="flex h-7 w-16 shrink-0 items-center justify-center rounded-hcbSm border border-border bg-surface-0 font-mono text-[var(--text-xs)] text-text-secondary">
-          {event.timeLabel}
+function EventRow({
+  event,
+  onOpen
+}: {
+  event: CalendarEventViewModel;
+  onOpen?: (event: CalendarEventViewModel) => void;
+}): JSX.Element {
+  const content = (
+    <>
+      <span className="flex h-7 w-16 shrink-0 items-center justify-center rounded-hcbSm border border-border bg-surface-0 font-mono text-[var(--text-xs)] text-text-secondary">
+        {event.timeLabel}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[var(--text-md)] font-medium text-text-primary">{event.title}</span>
+          <span className="shrink-0 text-[var(--text-xs)] text-text-muted">{event.rangeLabel}</span>
         </span>
-      }
-      meta={event.rangeLabel}
-      title={event.title}
-      trailing={<Badge tone="accent">Event</Badge>}
-    />
+        <span className="block truncate text-[var(--text-sm)] text-text-muted">
+          {event.calendar} - {event.location} - {event.notes}
+        </span>
+      </span>
+      <Badge tone="accent">Event</Badge>
+    </>
+  );
+
+  if (onOpen) {
+    return (
+      <button
+        className="flex min-h-11 w-full items-center gap-3 border-b border-border bg-transparent px-3 py-2 text-left last:border-b-0 transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        onClick={() => onOpen(event)}
+        role="listitem"
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className="flex min-h-11 w-full items-center gap-3 border-b border-border bg-transparent px-3 py-2 last:border-b-0"
+      role="listitem"
+    >
+      {content}
+    </div>
   );
 }
 
@@ -277,6 +485,16 @@ function TodayView(): JSX.Element {
     [source]
   );
 
+  if (
+    (source.dataState === "loading" ||
+      source.dataState === "empty" ||
+      source.dataState === "offline" ||
+      source.dataState === "error") &&
+    !source.hasCachedData
+  ) {
+    return <CacheStatePanel title="Today" />;
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="grid grid-cols-4 gap-3">
@@ -294,6 +512,7 @@ function TodayView(): JSX.Element {
               estimateRowHeight={58}
               getKey={(task) => task.id}
               items={source.todayViewModel.focusTasks}
+              performanceLabel="today.focus-tasks"
               renderRow={(task) => (
                 <ListRow
                   description={task.detail}
@@ -308,12 +527,13 @@ function TodayView(): JSX.Element {
           </Panel>
         }
       >
-        <Panel title="Timeline" description="Tasks and calendar agenda from mock preload data">
+        <Panel title="Timeline" description="Tasks and calendar agenda from the local cache">
           <VirtualizedList
             ariaLabel="Today timeline"
             estimateRowHeight={58}
             getKey={(row, index) => `${row.kind}-${index}`}
             items={timelineRows}
+            performanceLabel="today.timeline"
             renderRow={(row) => <TodayTimelineRow row={row} />}
             viewportHeight={306}
           />
@@ -323,32 +543,421 @@ function TodayView(): JSX.Element {
   );
 }
 
-function TasksView(): JSX.Element {
+export interface TaskSurfaceCommand {
+  id: "new-task" | "quick-capture";
+  nonce: number;
+}
+
+interface TaskDraft {
+  mode: "create" | "edit";
+  id?: string;
+  title: string;
+  notes: string;
+  dueDate: string;
+  listId: string;
+  parentId: string;
+  priority: CorePriority;
+}
+
+interface QuickTaskParseResult {
+  title: string;
+  dueDate: string;
+  listId: string;
+}
+
+function defaultTaskListId(source: ReturnType<typeof useCoreViewModelSource>): string {
+  return source.taskLists[0]?.id ?? "";
+}
+
+function newTaskDraft(
+  source: ReturnType<typeof useCoreViewModelSource>,
+  seed: Partial<Omit<TaskDraft, "mode">> = {}
+): TaskDraft {
+  return {
+    mode: "create",
+    title: seed.title ?? "",
+    notes: seed.notes ?? "",
+    dueDate: seed.dueDate ?? "",
+    listId: seed.listId ?? defaultTaskListId(source),
+    parentId: seed.parentId ?? "",
+    priority: seed.priority ?? "none"
+  };
+}
+
+function editTaskDraft(task: TaskViewModel): TaskDraft {
+  return {
+    mode: "edit",
+    id: task.id,
+    title: task.title,
+    notes: task.detail === "Task cached locally" ? "" : task.detail,
+    dueDate: task.dueDate ?? "",
+    listId: task.listId,
+    parentId: task.parentId ?? "",
+    priority: task.priority
+  };
+}
+
+function taskCreatePayload(draft: TaskDraft): TaskCreateRequest {
+  return {
+    title: draft.title.trim(),
+    notes: draft.notes.trim(),
+    dueDate: draft.dueDate || null,
+    listId: draft.listId,
+    parentId: draft.parentId || null,
+    priority: draft.priority
+  };
+}
+
+function taskUpdatePayload(draft: TaskDraft): TaskUpdateRequest {
+  return {
+    id: draft.id ?? "",
+    title: draft.title.trim(),
+    notes: draft.notes.trim(),
+    dueDate: draft.dueDate || null,
+    listId: draft.listId,
+    parentId: draft.parentId || null,
+    priority: draft.priority
+  };
+}
+
+function dateOnlyFromLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function addLocalDays(seed: Date, days: number): Date {
+  const date = new Date(seed.getTime());
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function endOfCurrentWeek(seed: Date): Date {
+  return addLocalDays(seed, (7 - seed.getDay()) % 7);
+}
+
+function endOfCurrentMonth(seed: Date): Date {
+  return new Date(seed.getFullYear(), seed.getMonth() + 1, 0);
+}
+
+function nextSaturday(seed: Date): Date {
+  return addLocalDays(seed, (6 - seed.getDay() + 7) % 7);
+}
+
+function normalizedListToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function parseQuickTaskInput(
+  input: string,
+  taskLists: readonly { id: string; title: string }[],
+  now = new Date()
+): QuickTaskParseResult {
+  const tokens = input.trim().split(/\s+/).filter(Boolean);
+  let dueDate = "";
+  let listId = taskLists[0]?.id ?? "";
+  const titleTokens: string[] = [];
+
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+
+    if (lower.startsWith("#") && lower.length > 1) {
+      const listToken = normalizedListToken(lower.slice(1));
+      const matchedList = taskLists.find((list) => normalizedListToken(list.title) === listToken);
+
+      if (matchedList) {
+        listId = matchedList.id;
+        continue;
+      }
+    }
+
+    if (lower === "today" || lower === "tdy") {
+      dueDate = dateOnlyFromLocalDate(now);
+      continue;
+    }
+
+    if (lower === "tomorrow" || lower === "tmr" || lower === "tom") {
+      dueDate = dateOnlyFromLocalDate(addLocalDays(now, 1));
+      continue;
+    }
+
+    if (lower === "eow") {
+      dueDate = dateOnlyFromLocalDate(endOfCurrentWeek(now));
+      continue;
+    }
+
+    if (lower === "eom") {
+      dueDate = dateOnlyFromLocalDate(endOfCurrentMonth(now));
+      continue;
+    }
+
+    if (lower === "weekend") {
+      dueDate = dateOnlyFromLocalDate(nextSaturday(now));
+      continue;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) {
+      dueDate = lower;
+      continue;
+    }
+
+    titleTokens.push(token);
+  }
+
+  return {
+    title: titleTokens.join(" ").trim(),
+    dueDate,
+    listId
+  };
+}
+
+function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.Element {
   const source = useCoreViewModelSource();
   const [activeFilterId, setActiveFilterId] = useState<TaskFilterId>("open");
-  const [completionById, setCompletionById] = useState<Record<string, boolean>>({});
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<TaskDraft>(() => newTaskDraft(source));
+  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [quickCaptureInput, setQuickCaptureInput] = useState("");
+  const [newListTitle, setNewListTitle] = useState("");
+  const [listTitleDrafts, setListTitleDrafts] = useState<Record<string, string>>({});
+  const handledCommandNonce = useRef<number | null>(null);
+  const quickCaptureOpenStartedAt = useRef<number | null>(null);
   const activeFilter = source.getTaskFilterViewModel(activeFilterId);
+  const selectedTask = selectedTaskId ? source.getTaskById(selectedTaskId) : null;
+  const parentOptions = source.largeTaskWindow.filter(
+    (task) => task.id !== draft.id && task.parentId === null && task.status !== "deleted"
+  );
+  const parsedQuickTask = parseQuickTaskInput(quickCaptureInput, source.taskLists);
+  const canSaveTask = draft.title.trim().length > 0 && draft.listId.length > 0 && !source.taskMutationPending;
+  const canCaptureTask =
+    parsedQuickTask.title.length > 0 && parsedQuickTask.listId.length > 0 && !source.taskMutationPending;
 
-  function toggleTask(taskId: string): void {
+  useEffect(() => {
+    const listId = defaultTaskListId(source);
+
+    if (!listId) {
+      return;
+    }
+
+    setDraft((current) => (current.listId ? current : { ...current, listId }));
+  }, [source.taskLists]);
+
+  useEffect(() => {
+    if (!command || handledCommandNonce.current === command.nonce) {
+      return;
+    }
+
+    handledCommandNonce.current = command.nonce;
+    setActiveFilterId("open");
+
+    if (command.id === "quick-capture") {
+      quickCaptureOpenStartedAt.current = rendererNow();
+      setQuickCaptureOpen(true);
+      return;
+    }
+
+    setSelectedTaskId(null);
+    setDraft(newTaskDraft(source));
+    setQuickCaptureOpen(false);
+  }, [command, source]);
+
+  useEffect(() => {
+    if (!quickCaptureOpen) {
+      return;
+    }
+
+    scheduleRendererFrame(() => {
+      reportRendererTimingSince("quick-capture.open", quickCaptureOpenStartedAt.current);
+      quickCaptureOpenStartedAt.current = null;
+    });
+  }, [quickCaptureOpen]);
+
+  if (
+    (source.dataState === "loading" ||
+      source.dataState === "offline" ||
+      source.dataState === "error") &&
+    !source.hasCachedData
+  ) {
+    return <CacheStatePanel title="Tasks" />;
+  }
+
+  function openNewTask(): void {
+    setSelectedTaskId(null);
+    setDraft(newTaskDraft(source));
+    setActiveFilterId("open");
+  }
+
+  function selectTask(taskId: string): void {
     const task = source.getTaskById(taskId);
-    setCompletionById((current) => ({
-      ...current,
-      [taskId]: !(current[taskId] ?? task.status === "completed")
-    }));
+    setSelectedTaskId(taskId);
+    setDraft(editTaskDraft(task));
+  }
+
+  async function saveTask(): Promise<void> {
+    if (!canSaveTask) {
+      return;
+    }
+
+    const saved = draft.mode === "edit"
+      ? await source.updateTask(taskUpdatePayload(draft))
+      : await source.createTask(taskCreatePayload(draft));
+
+    if (saved) {
+      setSelectedTaskId(null);
+      setDraft(newTaskDraft(source, { listId: draft.listId }));
+    }
+  }
+
+  async function toggleTask(taskId: string): Promise<void> {
+    const task = source.getTaskById(taskId);
+    const startedAt = rendererNow();
+    const action = task.status === "completed" ? "reopen" : "complete";
+    let saved = false;
+
+    if (task.status === "completed") {
+      saved = await source.reopenTask(taskId);
+      reportRendererTimingSince("tasks.completion", startedAt, {
+        action,
+        saved
+      });
+      return;
+    }
+
+    saved = await source.completeTask(taskId);
+    reportRendererTimingSince("tasks.completion", startedAt, {
+      action,
+      saved
+    });
+  }
+
+  function toggleQuickCapture(): void {
+    setQuickCaptureOpen((open) => {
+      if (!open) {
+        quickCaptureOpenStartedAt.current = rendererNow();
+      }
+
+      return !open;
+    });
+  }
+
+  async function deleteTask(taskId: string): Promise<void> {
+    const deleted = await source.deleteTask(taskId);
+
+    if (deleted && selectedTaskId === taskId) {
+      setSelectedTaskId(null);
+      setDraft(newTaskDraft(source));
+    }
+  }
+
+  async function captureQuickTask(): Promise<void> {
+    if (!canCaptureTask) {
+      return;
+    }
+
+    const created = await source.createTask({
+      title: parsedQuickTask.title,
+      notes: "",
+      dueDate: parsedQuickTask.dueDate || null,
+      listId: parsedQuickTask.listId,
+      parentId: null,
+      priority: "none"
+    });
+
+    if (created) {
+      setQuickCaptureInput("");
+      setQuickCaptureOpen(false);
+    }
+  }
+
+  async function createTaskList(): Promise<void> {
+    const title = newListTitle.trim();
+
+    if (!title || source.taskMutationPending) {
+      return;
+    }
+
+    const created = await source.createTaskList({ title });
+
+    if (created) {
+      setNewListTitle("");
+    }
+  }
+
+  async function renameTaskList(taskListId: string, currentTitle: string): Promise<void> {
+    const title = (listTitleDrafts[taskListId] ?? currentTitle).trim();
+
+    if (!title || title === currentTitle || source.taskMutationPending) {
+      return;
+    }
+
+    const renamed = await source.renameTaskList({ id: taskListId, title });
+
+    if (renamed) {
+      setListTitleDrafts((current) => {
+        const next = { ...current };
+        delete next[taskListId];
+        return next;
+      });
+    }
+  }
+
+  function addSubtaskDraft(): void {
+    if (!selectedTask) {
+      return;
+    }
+
+    setDraft(
+      newTaskDraft(source, {
+        listId: selectedTask.listId,
+        parentId: selectedTask.id
+      })
+    );
+  }
+
+  function deleteTaskList(taskListId: string): void {
+    void source.deleteTaskList(taskListId);
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2" role="toolbar" aria-label="Task actions">
-          <Button variant="primary">
+          <Button onClick={openNewTask} variant="primary">
             <Plus aria-hidden="true" size={15} />
             New task
           </Button>
-          <Button variant="ghost">Move</Button>
-          <Button variant="ghost">Delete</Button>
+          <Button onClick={toggleQuickCapture} variant="secondary">
+            <ListPlus aria-hidden="true" size={15} />
+            Quick capture
+          </Button>
+          <Button
+            disabled={!selectedTask}
+            onClick={() => selectedTask ? void toggleTask(selectedTask.id) : undefined}
+            variant="ghost"
+          >
+            {selectedTask?.status === "completed" ? (
+              <RotateCcw aria-hidden="true" size={15} />
+            ) : (
+              <CheckCircle2 aria-hidden="true" size={15} />
+            )}
+            {selectedTask?.status === "completed" ? "Reopen" : "Complete"}
+          </Button>
+          <Button
+            disabled={!selectedTask}
+            onClick={() => selectedTask ? void deleteTask(selectedTask.id) : undefined}
+            variant="danger"
+          >
+            <Trash2 aria-hidden="true" size={15} />
+            Delete
+          </Button>
         </div>
-        <Badge tone="success">Mutation queue idle</Badge>
+        <Badge tone={source.syncStatus.pendingMutationCount > 0 ? "warning" : "success"}>
+          {source.syncStatus.pendingMutationCount > 0
+            ? `${source.syncStatus.pendingMutationCount} pending`
+            : "Mutation queue idle"}
+        </Badge>
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto" role="toolbar" aria-label="Task filters">
@@ -367,37 +976,235 @@ function TasksView(): JSX.Element {
         ))}
       </div>
 
+      {source.taskMutationError ? (
+        <StatusBanner
+          action={
+            <div className="flex items-center gap-2">
+              <Button onClick={source.retryLastTaskMutation} size="sm" variant="secondary">
+                <RotateCcw aria-hidden="true" size={14} />
+                Retry
+              </Button>
+              <IconButton
+                icon={X}
+                label="Dismiss task write error"
+                onClick={source.clearTaskMutationError}
+                variant="ghost"
+              />
+            </div>
+          }
+          description={source.taskMutationError}
+          icon={RotateCcw}
+          title="Task write not saved"
+          tone="warning"
+        />
+      ) : null}
+
       <SectionChrome
         title="Tasks"
         sidebar={
           <div className="grid gap-3">
-            <Panel title="Large task window" description="Virtualized placeholder list">
-              <VirtualizedList
-                ariaLabel="Large task placeholder"
-                estimateRowHeight={52}
-                getKey={(task) => task.id}
-                items={source.largeTaskWindow}
-                renderRow={(task) => (
-                  <ListRow
-                    description={task.detail}
-                    meta={task.dueLabel}
-                    title={task.title}
-                    trailing={<Badge tone={priorityTone(task.priority)}>{priorityLabel(task.priority)}</Badge>}
+            <Panel
+              action={
+                <div className="flex items-center gap-2">
+                  {draft.mode === "edit" ? (
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete selected task"
+                      onClick={() => draft.id ? void deleteTask(draft.id) : undefined}
+                      variant="danger"
+                    />
+                  ) : null}
+                  <Button disabled={!canSaveTask} onClick={() => void saveTask()} size="sm" variant="primary">
+                    <Save aria-hidden="true" size={14} />
+                    Save
+                  </Button>
+                </div>
+              }
+              title={draft.mode === "edit" ? "Edit task" : "New task"}
+              description="Task details"
+            >
+              <div className="grid gap-3 p-3">
+                <Input
+                  aria-label="Task title"
+                  onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                  placeholder="Task title"
+                  value={draft.title}
+                />
+                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+                  <span>List</span>
+                  <select
+                    aria-label="Task list"
+                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    disabled={source.taskLists.length === 0}
+                    onChange={(event) => setDraft({ ...draft, listId: event.target.value })}
+                    value={draft.listId}
+                  >
+                    {source.taskLists.length === 0 ? <option value="">No lists available</option> : null}
+                    {source.taskLists.map((taskList) => (
+                      <option key={taskList.id} value={taskList.id}>
+                        {taskList.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    aria-label="Task due date"
+                    onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })}
+                    type="date"
+                    value={draft.dueDate}
                   />
-                )}
-                viewportHeight={210}
-              />
+                  <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+                    <span>Priority</span>
+                    <select
+                      aria-label="Task priority"
+                      className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      onChange={(event) =>
+                        setDraft({ ...draft, priority: event.target.value as CorePriority })
+                      }
+                      value={draft.priority}
+                    >
+                      <option value="none">None</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+                  <span>Parent</span>
+                  <select
+                    aria-label="Parent task"
+                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    onChange={(event) => setDraft({ ...draft, parentId: event.target.value })}
+                    value={draft.parentId}
+                  >
+                    <option value="">No parent</option>
+                    {parentOptions.map((task) => (
+                      <option key={task.id} value={task.id}>
+                        {task.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <textarea
+                  aria-label="Task notes"
+                  className="min-h-20 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+                  placeholder="Notes"
+                  value={draft.notes}
+                />
+                <div className="flex items-center gap-2">
+                  <Button disabled={!selectedTask} onClick={addSubtaskDraft} size="sm" variant="secondary">
+                    <ListPlus aria-hidden="true" size={14} />
+                    Add subtask
+                  </Button>
+                  <Button onClick={openNewTask} size="sm" variant="ghost">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             </Panel>
-            <Panel title="Loading state" description="Future cache read placeholder">
-              <LoadingState />
+            {quickCaptureOpen ? (
+              <Panel
+                action={
+                  <Button disabled={!canCaptureTask} onClick={() => void captureQuickTask()} size="sm" variant="primary">
+                    Capture
+                  </Button>
+                }
+                title="Quick capture"
+                description={
+                  parsedQuickTask.dueDate
+                    ? `${parsedQuickTask.dueDate} - ${source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "Inbox"}`
+                    : source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "No list"
+                }
+              >
+                <div className="grid gap-2 p-3">
+                  <Input
+                    aria-label="Quick capture task"
+                    onChange={(event) => setQuickCaptureInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void captureQuickTask();
+                      }
+                    }}
+                    placeholder="Follow up tomorrow #Inbox"
+                    value={quickCaptureInput}
+                  />
+                </div>
+              </Panel>
+            ) : null}
+            <Panel
+              title="Task lists"
+              description={source.taskLists.length === 0 ? "Task lists unavailable" : "Lists"}
+            >
+              <div className="grid gap-2 p-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="New task list title"
+                    onChange={(event) => setNewListTitle(event.target.value)}
+                    placeholder="New list"
+                    value={newListTitle}
+                  />
+                  <IconButton
+                    disabled={!newListTitle.trim() || source.taskMutationPending}
+                    icon={Plus}
+                    label="Create task list"
+                    onClick={() => void createTaskList()}
+                    variant="primary"
+                  />
+                </div>
+                {source.taskLists.map((taskList) => {
+                  const draftTitle = listTitleDrafts[taskList.id] ?? taskList.title;
+
+                  return (
+                    <div className="grid grid-cols-[minmax(0,1fr)_32px_32px] gap-2" key={taskList.id}>
+                      <Input
+                        aria-label={`Rename ${taskList.title}`}
+                        onChange={(event) =>
+                          setListTitleDrafts((current) => ({
+                            ...current,
+                            [taskList.id]: event.target.value
+                          }))
+                        }
+                        value={draftTitle}
+                      />
+                      <IconButton
+                        disabled={
+                          !draftTitle.trim() ||
+                          draftTitle.trim() === taskList.title ||
+                          source.taskMutationPending
+                        }
+                        icon={Save}
+                        label={`Save ${taskList.title}`}
+                        onClick={() => void renameTaskList(taskList.id, taskList.title)}
+                        variant="ghost"
+                      />
+                      <IconButton
+                        disabled={source.taskMutationPending}
+                        icon={Trash2}
+                        label={`Delete ${taskList.title}`}
+                        onClick={() => deleteTaskList(taskList.id)}
+                        variant="danger"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </Panel>
+            {source.dataState === "stale" ? (
+              <Panel title="Refresh state" description="Cached rows remain visible">
+                <LoadingState description="Refreshing local cache." title="Refreshing" />
+              </Panel>
+            ) : null}
           </div>
         }
       >
         {activeFilter.state === "empty" ? (
           <Panel title="Task list" description="Empty filtered state">
             <EmptyState
-              description="No tasks match this mock filter. Future cache results can render here without changing layout."
+              description="No cached tasks match this filter."
               title="No tasks in this filter"
             />
           </Panel>
@@ -409,16 +1216,283 @@ function TasksView(): JSX.Element {
           <div className="grid gap-3">
             {activeFilter.groups.map((group) => (
               <TaskGroupPanel
-                completionById={completionById}
                 group={group}
                 key={group.id}
-                onToggleTask={toggleTask}
+                onDeleteTask={(taskId) => void deleteTask(taskId)}
+                onSelectTask={selectTask}
+                onToggleTask={(taskId) => void toggleTask(taskId)}
+                selectedTaskId={selectedTaskId}
               />
             ))}
           </div>
         )}
       </SectionChrome>
     </div>
+  );
+}
+
+interface CalendarEventDraft {
+  mode: "create" | "edit";
+  id?: string;
+  title: string;
+  calendarId: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  location: string;
+  notes: string;
+  guests: string;
+  reminderMinutes: string;
+}
+
+function defaultCalendarId(source: ReturnType<typeof useCoreViewModelSource>): string {
+  return (
+    source.calendarSources.find((calendar) => calendar.selected)?.id ??
+    source.calendarSources[0]?.id ??
+    ""
+  );
+}
+
+function defaultTimedStart(seed?: string): string {
+  const base = seed ? new Date(seed) : new Date();
+
+  if (!Number.isFinite(base.getTime())) {
+    return new Date().toISOString();
+  }
+
+  base.setUTCMinutes(0, 0, 0);
+  return base.toISOString();
+}
+
+function newCalendarDraft(
+  source: ReturnType<typeof useCoreViewModelSource>,
+  seed?: { startsAt?: string; allDay?: boolean }
+): CalendarEventDraft {
+  const allDay = seed?.allDay ?? false;
+  const startsAt = allDay ? startOfUtcDayIso(seed?.startsAt ?? new Date().toISOString()) : defaultTimedStart(seed?.startsAt);
+  const endsAt = allDay ? addUtcDaysIso(startsAt, 1) : addUtcDaysIso(startsAt, 0);
+  const timedEnd = allDay ? endsAt : new Date(Date.parse(startsAt) + 60 * 60 * 1000).toISOString();
+
+  return {
+    mode: "create",
+    title: "",
+    calendarId: defaultCalendarId(source),
+    startsAt,
+    endsAt: allDay ? endsAt : timedEnd,
+    allDay,
+    location: "",
+    notes: "",
+    guests: "",
+    reminderMinutes: ""
+  };
+}
+
+function editCalendarDraft(event: CalendarEventViewModel): CalendarEventDraft {
+  return {
+    mode: "edit",
+    id: event.id,
+    title: event.title,
+    calendarId: event.calendarId,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    allDay: event.allDay,
+    location: event.location === "Scheduled" || event.location === "All day" ? "" : event.location,
+    notes: event.notes === "Calendar cache" ? "" : event.notes,
+    guests: event.guestEmails.join(", "),
+    reminderMinutes: event.reminderMinutes[0] === undefined ? "" : String(event.reminderMinutes[0])
+  };
+}
+
+function calendarEventPayload(draft: CalendarEventDraft): CalendarEventCreateRequest {
+  const reminderMinutes = draft.reminderMinutes === "" ? [] : normalizeReminderMinutes([Number(draft.reminderMinutes)]);
+
+  return {
+    title: draft.title.trim(),
+    calendarId: draft.calendarId,
+    startsAt: draft.startsAt,
+    endsAt: draft.endsAt,
+    allDay: draft.allDay,
+    location: draft.location,
+    notes: draft.notes,
+    guestEmails: normalizeGuestEmails(draft.guests.split(",")),
+    reminderMinutes
+  };
+}
+
+function allDayEndInputValue(endsAt: string): string {
+  const end = new Date(endsAt);
+  end.setUTCDate(end.getUTCDate() - 1);
+  return dateInputValue(end.toISOString());
+}
+
+function CalendarEventForm({
+  calendars,
+  draft,
+  error,
+  onCancel,
+  onDelete,
+  onSave,
+  setDraft
+}: {
+  calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
+  draft: CalendarEventDraft;
+  error?: string;
+  onCancel: () => void;
+  onDelete: () => void;
+  onSave: () => void;
+  setDraft: (draft: CalendarEventDraft) => void;
+}): JSX.Element {
+  function setAllDay(allDay: boolean): void {
+    if (allDay) {
+      const startsAt = startOfUtcDayIso(draft.startsAt);
+      setDraft({
+        ...draft,
+        allDay,
+        startsAt,
+        endsAt: addUtcDaysIso(startsAt, 1)
+      });
+      return;
+    }
+
+    const startsAt = `${dateInputValue(draft.startsAt)}T09:00:00.000Z`;
+    setDraft({
+      ...draft,
+      allDay,
+      startsAt,
+      endsAt: new Date(Date.parse(startsAt) + 60 * 60 * 1000).toISOString()
+    });
+  }
+
+  function setAllDayStart(value: string): void {
+    const startsAt = dateInputToIso(value);
+    const currentEnd = Date.parse(draft.endsAt);
+    const minimumEnd = Date.parse(addUtcDaysIso(startsAt, 1));
+    setDraft({
+      ...draft,
+      startsAt,
+      endsAt: currentEnd <= Date.parse(startsAt) ? new Date(minimumEnd).toISOString() : draft.endsAt
+    });
+  }
+
+  function setAllDayEnd(value: string): void {
+    setDraft({
+      ...draft,
+      endsAt: addUtcDaysIso(dateInputToIso(value), 1)
+    });
+  }
+
+  return (
+    <Panel
+      action={
+        <div className="flex items-center gap-2">
+          {draft.mode === "edit" ? (
+            <IconButton icon={Trash2} label="Delete event" onClick={onDelete} variant="danger" />
+          ) : null}
+          <Button onClick={onSave} size="sm" variant="primary">
+            Save
+          </Button>
+        </div>
+      }
+      title={draft.mode === "edit" ? "Edit event" : "New event"}
+      description="Google Calendar event"
+    >
+      <div className="grid gap-3 p-3">
+        {error ? <ErrorState description={error} title="Event not saved" /> : null}
+        <Input
+          aria-label="Event title"
+          onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+          placeholder="Title"
+          value={draft.title}
+        />
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span>Calendar</span>
+          <select
+            aria-label="Event calendar"
+            className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => setDraft({ ...draft, calendarId: event.target.value })}
+            value={draft.calendarId}
+          >
+            {calendars.map((calendar) => (
+              <option key={calendar.id} value={calendar.id}>
+                {calendar.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex min-h-8 items-center gap-2 text-[var(--text-sm)] text-text-secondary">
+          <input
+            checked={draft.allDay}
+            className="accent-[var(--color-accent)]"
+            onChange={(event) => setAllDay(event.target.checked)}
+            type="checkbox"
+          />
+          All day
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            aria-label="Event starts"
+            onChange={(event) =>
+              draft.allDay
+                ? setAllDayStart(event.target.value)
+                : setDraft({ ...draft, startsAt: dateTimeLocalInputToIso(event.target.value) })
+            }
+            type={draft.allDay ? "date" : "datetime-local"}
+            value={draft.allDay ? dateInputValue(draft.startsAt) : dateTimeLocalInputValue(draft.startsAt)}
+          />
+          <Input
+            aria-label="Event ends"
+            min={draft.allDay ? dateInputValue(draft.startsAt) : undefined}
+            onChange={(event) =>
+              draft.allDay
+                ? setAllDayEnd(event.target.value)
+                : setDraft({ ...draft, endsAt: dateTimeLocalInputToIso(event.target.value) })
+            }
+            type={draft.allDay ? "date" : "datetime-local"}
+            value={draft.allDay ? allDayEndInputValue(draft.endsAt) : dateTimeLocalInputValue(draft.endsAt)}
+          />
+        </div>
+        <Input
+          aria-label="Event location"
+          onChange={(event) => setDraft({ ...draft, location: event.target.value })}
+          placeholder="Location"
+          value={draft.location}
+        />
+        <Input
+          aria-label="Event guests"
+          onChange={(event) => setDraft({ ...draft, guests: event.target.value })}
+          placeholder="guest@example.com, team@example.com"
+          value={draft.guests}
+        />
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span>Reminder</span>
+          <select
+            aria-label="Event reminder"
+            className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => setDraft({ ...draft, reminderMinutes: event.target.value })}
+            value={draft.reminderMinutes}
+          >
+            <option value="">None</option>
+            <option value="0">At start</option>
+            <option value="5">5 minutes before</option>
+            <option value="10">10 minutes before</option>
+            <option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="1440">1 day before</option>
+          </select>
+        </label>
+        <textarea
+          aria-label="Event notes"
+          className="min-h-24 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+          placeholder="Notes"
+          value={draft.notes}
+        />
+        <Button onClick={onCancel} size="sm" variant="ghost">
+          Cancel
+        </Button>
+      </div>
+    </Panel>
   );
 }
 
@@ -444,17 +1518,34 @@ function CalendarTabButton({
   );
 }
 
-function DayView(): JSX.Element {
+function DayView({
+  onCreate,
+  onOpen
+}: {
+  onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
+  onOpen: (event: CalendarEventViewModel) => void;
+}): JSX.Element {
   const source = useCoreViewModelSource();
 
   return (
-    <Panel title="Day view shell" description={`${source.calendarDayView.weekday}, ${source.calendarDayView.dateLabel}`}>
+    <Panel
+      action={
+        <Button onClick={() => onCreate()} size="sm" variant="primary">
+          <Plus aria-hidden="true" size={14} />
+          New event
+        </Button>
+      }
+      title="Day view"
+      description={`${source.calendarDayView.weekday}, ${source.calendarDayView.dateLabel}`}
+    >
       <div className="grid gap-2 p-3" role="grid" aria-label="Calendar day view">
         {source.calendarDayView.events.map((event) => (
-          <div
-            className="grid min-h-14 grid-cols-[74px_minmax(0,1fr)] gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-2"
+          <button
+            className="grid min-h-14 grid-cols-[74px_minmax(0,1fr)] gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             key={event.id}
+            onClick={() => onOpen(event)}
             role="row"
+            type="button"
           >
             <div className="font-mono text-[var(--text-xs)] text-text-muted" role="gridcell">
               {event.rangeLabel}
@@ -463,27 +1554,44 @@ function DayView(): JSX.Element {
               <div className="truncate text-[var(--text-md)] font-medium text-text-primary">{event.title}</div>
               <div className="truncate text-[var(--text-xs)] text-text-muted">{event.location}</div>
             </div>
-          </div>
+          </button>
         ))}
+        {source.calendarDayView.events.length === 0 ? (
+          <button
+            className="min-h-24 rounded-hcbMd border border-dashed border-border bg-bg-tertiary text-[var(--text-sm)] text-text-muted hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={() => onCreate({ allDay: true })}
+            type="button"
+          >
+            New all-day event
+          </button>
+        ) : null}
       </div>
     </Panel>
   );
 }
 
-function WeekView(): JSX.Element {
+function WeekView({
+  onCreate,
+  onOpen
+}: {
+  onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
+  onOpen: (event: CalendarEventViewModel) => void;
+}): JSX.Element {
   const source = useCoreViewModelSource();
 
   return (
-    <Panel title="Week view shell" description="Visible week is pre-expanded by mock view model">
+    <Panel title="Week view" description="Visible week from cached event range">
       <div className="grid grid-cols-7 gap-2 p-3" role="grid" aria-label="Calendar week view">
         {source.calendarWeekDays.map((day) => (
           <div
             className={cx(
-              "min-h-44 rounded-hcbMd border border-border bg-bg-tertiary p-2",
+              "min-h-44 rounded-hcbMd border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
               day.isToday && "border-accent"
             )}
             key={day.id}
+            onClick={() => onCreate({ startsAt: `${day.id.slice("week-".length)}T00:00:00.000Z`, allDay: true })}
             role="gridcell"
+            tabIndex={0}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[var(--text-xs)] font-medium text-text-muted">{day.weekday}</span>
@@ -491,12 +1599,18 @@ function WeekView(): JSX.Element {
             </div>
             <div className="mt-2 grid gap-1">
               {day.events.slice(0, 3).map((event) => (
-                <div
+                <span
                   className="truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary"
                   key={event.id}
+                  onClick={(clickEvent) => {
+                    clickEvent.stopPropagation();
+                    onOpen(event);
+                  }}
+                  role="button"
+                  tabIndex={0}
                 >
                   {event.timeLabel} {event.title}
-                </div>
+                </span>
               ))}
             </div>
           </div>
@@ -506,32 +1620,48 @@ function WeekView(): JSX.Element {
   );
 }
 
-function MonthView(): JSX.Element {
+function MonthView({
+  onCreate,
+  onOpen
+}: {
+  onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
+  onOpen: (event: CalendarEventViewModel) => void;
+}): JSX.Element {
   const source = useCoreViewModelSource();
 
   return (
-    <Panel title="Month view shell" description="May 2026 mock month grid">
+    <Panel title="Month view" description="Cached event range by day">
       <div className="grid gap-1 p-3" role="grid" aria-label="Calendar month view">
         {source.calendarMonthWeeks.map((week) => (
           <div className="grid grid-cols-7 gap-1" key={week.id} role="row">
             {week.days.map((day) => (
               <div
                 className={cx(
-                  "min-h-20 rounded-hcbSm border border-border bg-bg-tertiary p-2",
+                  "min-h-20 rounded-hcbSm border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                   day.isToday && "border-accent",
                   day.isOutsideMonth && "opacity-55"
                 )}
                 key={day.id}
+                onClick={() => onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })}
                 role="gridcell"
+                tabIndex={0}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[var(--text-xs)] text-text-muted">{day.weekday}</span>
                   <span className="text-[var(--text-sm)] font-semibold text-text-primary">{day.dateLabel}</span>
                 </div>
                 {day.events[0] ? (
-                  <div className="mt-2 truncate rounded-hcbSm bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary">
+                  <span
+                    className="mt-2 block truncate rounded-hcbSm bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary"
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
+                      onOpen(day.events[0]);
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
                     {day.events[0].title}
-                  </div>
+                  </span>
                 ) : null}
               </div>
             ))}
@@ -545,6 +1675,112 @@ function MonthView(): JSX.Element {
 function CalendarView(): JSX.Element {
   const source = useCoreViewModelSource();
   const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
+  const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
+  const [formError, setFormError] = useState<string | undefined>();
+  const calendarNavigationStartedAt = useRef<number | null>(null);
+
+  function setCalendarView(viewId: CalendarViewId): void {
+    calendarNavigationStartedAt.current = rendererNow();
+    setActiveViewId(viewId);
+  }
+
+  useEffect(() => {
+    function handleCalendarCommand(event: Event): void {
+      const detail = (event as CustomEvent<{ action: string; viewId?: CalendarViewId }>).detail;
+
+      if (detail?.action === "new-event") {
+        setCalendarView("agenda");
+        setDraft(newCalendarDraft(source));
+        setFormError(undefined);
+      }
+
+      if (detail?.action === "set-view" && detail.viewId) {
+        setCalendarView(detail.viewId);
+      }
+    }
+
+    window.addEventListener("hcb:calendar-command", handleCalendarCommand);
+    return () => window.removeEventListener("hcb:calendar-command", handleCalendarCommand);
+  }, [source]);
+
+  useEffect(() => {
+    scheduleRendererFrame(() => {
+      reportRendererTimingSince("calendar.navigate", calendarNavigationStartedAt.current, {
+        view: activeViewId,
+        eventCount: source.calendarAgendaEvents.length
+      });
+      calendarNavigationStartedAt.current = null;
+    });
+  }, [activeViewId, source.calendarAgendaEvents.length]);
+
+  if (
+    (source.dataState === "loading" ||
+      source.dataState === "offline" ||
+      source.dataState === "error") &&
+    !source.hasCachedData
+  ) {
+    return <CacheStatePanel title="Calendar" />;
+  }
+
+  function openCreate(seed?: { startsAt?: string; allDay?: boolean }): void {
+    setDraft(newCalendarDraft(source, seed));
+    setFormError(undefined);
+  }
+
+  function openEdit(event: CalendarEventViewModel): void {
+    setDraft(editCalendarDraft(event));
+    setFormError(undefined);
+  }
+
+  async function saveDraft(): Promise<void> {
+    if (!draft) {
+      return;
+    }
+
+    const payload = calendarEventPayload(draft);
+
+    if (!payload.title) {
+      setFormError("Title is required.");
+      return;
+    }
+
+    if (!payload.calendarId) {
+      setFormError("Choose a calendar.");
+      return;
+    }
+
+    const result =
+      draft.mode === "create"
+        ? await window.hcb?.calendar.create(payload)
+        : await window.hcb?.calendar.update({
+            id: draft.id ?? "",
+            ...payload
+          } satisfies CalendarEventUpdateRequest);
+
+    if (!result?.ok) {
+      setFormError(result?.error.message ?? "Calendar event write failed.");
+      return;
+    }
+
+    setDraft(null);
+    source.refresh();
+  }
+
+  async function deleteDraft(): Promise<void> {
+    if (!draft?.id) {
+      return;
+    }
+
+    const result = await window.hcb?.calendar.delete({ id: draft.id });
+
+    if (!result?.ok) {
+      setFormError(result?.error.message ?? "Calendar event delete failed.");
+      return;
+    }
+
+    setDraft(null);
+    source.refresh();
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -554,53 +1790,83 @@ function CalendarView(): JSX.Element {
             <CalendarTabButton
               active={viewId === activeViewId}
               key={viewId}
-              onClick={() => setActiveViewId(viewId)}
+              onClick={() => setCalendarView(viewId)}
             >
               {viewId[0].toUpperCase()}
               {viewId.slice(1)}
             </CalendarTabButton>
           ))}
         </div>
-        <Badge tone="accent">Selected calendars: Product, Engineering, QA</Badge>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => openCreate()} size="sm" variant="primary">
+            <Plus aria-hidden="true" size={14} />
+            New event
+          </Button>
+          <Badge tone={source.syncStatus.pendingMutationCount > 0 ? "warning" : "accent"}>
+            {source.syncStatus.pendingMutationCount > 0
+              ? `${source.syncStatus.pendingMutationCount} pending`
+              : `Selected calendars: ${source.calendarSources.filter((calendar) => calendar.selected).length}`}
+          </Badge>
+        </div>
       </div>
 
       <SectionChrome
         title="Calendar"
         sidebar={
           <div className="grid gap-3">
-            <Panel title="Offline state" description="No Google Calendar call is made">
-              <OfflineState />
-            </Panel>
-            <Panel title="Calendar sources" description="Mock selected calendars">
+            {draft ? (
+              <CalendarEventForm
+                calendars={source.calendarSources}
+                draft={draft}
+                error={formError}
+                onCancel={() => setDraft(null)}
+                onDelete={() => void deleteDraft()}
+                onSave={() => void saveDraft()}
+                setDraft={setDraft}
+              />
+            ) : null}
+            {source.isOffline ? (
+              <Panel title="Offline state" description="Google sync">
+                <OfflineState />
+              </Panel>
+            ) : null}
+            <Panel title="Calendar sources" description="Selected local mirrors">
               <div role="list">
-                {["Product", "Engineering", "QA"].map((calendar) => (
+                {source.calendarSources.map((calendar) => (
                   <ListRow
-                    key={calendar}
+                    key={calendar.id}
                     leading={<CalendarDays aria-hidden="true" className="text-accent" size={16} />}
-                    title={calendar}
-                    trailing={<Badge tone="success">On</Badge>}
+                    title={calendar.title}
+                    trailing={<Badge tone={calendar.selected ? "success" : "neutral"}>{calendar.selected ? "On" : "Off"}</Badge>}
                   />
                 ))}
+                {source.calendarSources.length === 0 ? (
+                  <EmptyState
+                    description="No calendars have been cached yet."
+                    title="No calendars"
+                  />
+                ) : null}
               </div>
             </Panel>
           </div>
         }
       >
         {activeViewId === "agenda" ? (
-          <Panel title="Agenda view shell" description="Windowed rows for future event ranges">
+          <Panel title="Agenda view" description="Windowed rows from local event range">
             <VirtualizedList
               ariaLabel="Calendar agenda"
               estimateRowHeight={58}
               getKey={(event) => event.id}
               items={source.calendarAgendaEvents}
-              renderRow={(event) => <EventRow event={event} />}
+              performanceLabel="calendar.agenda"
+              renderRow={(event) => <EventRow event={event} onOpen={openEdit} />}
               viewportHeight={352}
             />
           </Panel>
         ) : null}
-        {activeViewId === "day" ? <DayView /> : null}
-        {activeViewId === "week" ? <WeekView /> : null}
-        {activeViewId === "month" ? <MonthView /> : null}
+        {activeViewId === "day" ? <DayView onCreate={openCreate} onOpen={openEdit} /> : null}
+        {activeViewId === "week" ? <WeekView onCreate={openCreate} onOpen={openEdit} /> : null}
+        {activeViewId === "month" ? <MonthView onCreate={openCreate} onOpen={openEdit} /> : null}
       </SectionChrome>
     </div>
   );
@@ -622,11 +1888,70 @@ function NotesView(): JSX.Element {
     source.initialNotes[0]?.id ?? null
   );
   const [draftCounter, setDraftCounter] = useState(1);
+  const requestedNoteDetails = useRef(new Set<string>());
+  const lastNoteEditReportAt = useRef(0);
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null;
 
-  function createNote(): void {
-    const nextNote: NoteViewModel = {
-      id: `note-draft-${draftCounter}`,
+  useEffect(() => {
+    requestedNoteDetails.current.clear();
+    setNotes(source.initialNotes);
+    setSelectedNoteId((current) =>
+      current && source.initialNotes.some((note) => note.id === current)
+        ? current
+        : source.initialNotes[0]?.id ?? null
+    );
+  }, [source.initialNotes]);
+
+  useEffect(() => {
+    if (
+      !selectedNote ||
+      selectedNote.id.startsWith("note-draft-") ||
+      requestedNoteDetails.current.has(selectedNote.id)
+    ) {
+      return;
+    }
+
+    requestedNoteDetails.current.add(selectedNote.id);
+    let cancelled = false;
+
+    void window.hcb?.notes.get({ id: selectedNote.id }).then((result) => {
+      if (cancelled || !result?.ok) {
+        return;
+      }
+
+      setNotes((current) =>
+        current.map((note) =>
+          note.id === selectedNote.id
+            ? {
+                id: result.data.id,
+                title: result.data.title,
+                body: result.data.body,
+                preview: result.data.preview,
+                updatedLabel: note.updatedLabel
+              }
+            : note
+        )
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedNote?.id]);
+
+  if (
+    (source.dataState === "loading" ||
+      source.dataState === "offline" ||
+      source.dataState === "error") &&
+    !source.hasCachedData
+  ) {
+    return <CacheStatePanel title="Notes" />;
+  }
+
+  async function createNote(): Promise<void> {
+    const fallbackId = `note-draft-${draftCounter}`;
+    const fallbackNote: NoteViewModel = {
+      id: fallbackId,
       title: "Untitled note",
       body: "",
       preview: "Empty local note",
@@ -634,8 +1959,29 @@ function NotesView(): JSX.Element {
     };
 
     setDraftCounter((current) => current + 1);
-    setNotes((current) => [nextNote, ...current]);
-    setSelectedNoteId(nextNote.id);
+    setNotes((current) => [fallbackNote, ...current]);
+    setSelectedNoteId(fallbackId);
+
+    const result = await window.hcb?.notes.create({
+      title: "Untitled note",
+      body: ""
+    });
+
+    if (result?.ok) {
+      requestedNoteDetails.current.add(result.data.id);
+      const persisted = {
+        id: result.data.id,
+        title: result.data.title,
+        body: result.data.body,
+        preview: result.data.preview,
+        updatedLabel: "Just now"
+      };
+
+      setNotes((current) =>
+        current.map((note) => (note.id === fallbackId ? persisted : note))
+      );
+      setSelectedNoteId(result.data.id);
+    }
   }
 
   function updateSelectedNote(updates: Partial<Pick<NoteViewModel, "title" | "body">>): void {
@@ -643,6 +1989,7 @@ function NotesView(): JSX.Element {
       return;
     }
 
+    const startedAt = rendererNow();
     setNotes((current) =>
       current.map((note) => {
         if (note.id !== selectedNote.id) {
@@ -658,11 +2005,37 @@ function NotesView(): JSX.Element {
         };
       })
     );
+
+    if (startedAt !== null && startedAt - lastNoteEditReportAt.current > 250) {
+      lastNoteEditReportAt.current = startedAt;
+      scheduleRendererFrame(() => {
+        reportRendererTimingSince("notes.edit.local", startedAt, {
+          field: updates.body === undefined ? "title" : "body",
+          noteCount: notes.length
+        });
+      });
+    }
   }
 
-  function deleteSelectedNote(): void {
+  async function persistSelectedNote(): Promise<void> {
+    if (!selectedNote || selectedNote.id.startsWith("note-draft-")) {
+      return;
+    }
+
+    await window.hcb?.notes.update({
+      id: selectedNote.id,
+      title: selectedNote.title,
+      body: selectedNote.body
+    });
+  }
+
+  async function deleteSelectedNote(): Promise<void> {
     if (!selectedNote) {
       return;
+    }
+
+    if (!selectedNote.id.startsWith("note-draft-")) {
+      await window.hcb?.notes.delete({ id: selectedNote.id });
     }
 
     const nextNotes = notes.filter((note) => note.id !== selectedNote.id);
@@ -682,19 +2055,20 @@ function NotesView(): JSX.Element {
             </Button>
           }
           title="Local notes"
-          description="Renderer state only"
+          description="Local SQLite notes"
         >
           <VirtualizedList
             ariaLabel="Local notes"
             emptyState={
               <EmptyState
-                description="Create a local mock note to repopulate this renderer state."
+                description="Create a local note to populate SQLite."
                 title="No local notes"
               />
             }
             estimateRowHeight={66}
             getKey={(note) => note.id}
             items={notes}
+            performanceLabel="notes.list"
             renderRow={(note) => (
               <div className="border-b border-border last:border-b-0" role="listitem">
                 <button
@@ -737,18 +2111,20 @@ function NotesView(): JSX.Element {
           />
         }
         title="Note editor"
-        description="Create, edit, and delete stay in local mock state"
+        description="Local-only note content"
       >
         {selectedNote ? (
           <div className="grid gap-3 p-3">
             <Input
               aria-label="Note title"
+              onBlur={() => void persistSelectedNote()}
               onChange={(event) => updateSelectedNote({ title: event.target.value })}
               value={selectedNote.title}
             />
             <textarea
               aria-label="Note body"
               className="min-h-[260px] w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onBlur={() => void persistSelectedNote()}
               onChange={(event) => updateSelectedNote({ body: event.target.value })}
               value={selectedNote.body}
             />
@@ -771,8 +2147,8 @@ function SearchView({
   query: string;
   setQuery: (query: string) => void;
 }): JSX.Element {
-  const source = useCoreViewModelSource();
-  const searchViewModel = useMemo(() => source.getSearchViewModel(query), [query, source]);
+  const search = useLocalSearch(query);
+  const searchViewModel = search.viewModel;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -783,7 +2159,7 @@ function SearchView({
           size={15}
         />
         <Input
-          aria-label="Search local mock data"
+          aria-label="Search local cache"
           className="pl-9"
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search tasks, events, and notes"
@@ -794,17 +2170,27 @@ function SearchView({
       <Panel
         action={<Badge tone={searchViewModel.state === "results" ? "success" : "neutral"}>{searchViewModel.summary}</Badge>}
         title="Search results"
-        description="Capped local result buckets; no Google requests per keystroke"
+        description={
+          search.state === "stale"
+            ? "Refreshing local results"
+            : "Capped SQLite-backed local results"
+        }
       >
-        {searchViewModel.state === "idle" ? (
+        {search.state === "loading" ? (
+          <LoadingState description="Searching the local cache." title="Searching" />
+        ) : search.state === "error" ? (
+          <ErrorState description={search.errorMessage ?? "Search failed."} />
+        ) : search.state === "offline" ? (
+          <OfflineState description="Search requires the preload bridge." />
+        ) : searchViewModel.state === "idle" ? (
           <EmptyState
-            description="Type a local query to preview task, event, and note result buckets."
-            title="Search waits for a local query"
+            description="Type a query to search cached tasks, events, and notes."
+            title="Search local cache"
           />
         ) : searchViewModel.state === "empty" ? (
           <EmptyState
-            description="Try a mock task, event, agenda, cache, command, or note query."
-            title="No matching mock results"
+            description="No cached tasks, events, or notes matched the query."
+            title="No matching results"
           />
         ) : (
           <VirtualizedList
@@ -812,6 +2198,7 @@ function SearchView({
             estimateRowHeight={60}
             getKey={(result) => result.id}
             items={searchViewModel.results}
+            performanceLabel="search.results"
             renderRow={(result) => (
               <ListRow
                 description={`${result.detail} - ${result.deepLinkLabel}`}
@@ -893,17 +2280,17 @@ function SettingsView(): JSX.Element {
                   defaultChecked={selectedSection.id !== "mcp"}
                   type="checkbox"
                 />
-                Enabled in mock settings
+                Enabled
               </label>
               <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
                 <span>Mode</span>
                 <select
                   aria-label={`${selectedSection.title} mode`}
                   className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  defaultValue="mock"
+                  defaultValue="local"
                 >
-                  <option value="mock">Mock</option>
-                  <option value="later">Wire later</option>
+                  <option value="local">Local</option>
+                  <option value="sync">Sync</option>
                 </select>
               </label>
             </div>
@@ -912,7 +2299,11 @@ function SettingsView(): JSX.Element {
 
         <Panel title="Diagnostics state" description="Sanitized status and recoverable errors">
           {selectedSection.id === "hotkeys" ? (
-            <ErrorState />
+            <ErrorState
+              actionLabel="Review"
+              description="Shortcut conflicts are shown as recoverable settings state."
+              title="Shortcut attention"
+            />
           ) : (
             <div className="grid grid-cols-3 gap-2 p-3">
               <div className="rounded-hcbMd border border-border bg-bg-tertiary p-3">
@@ -921,11 +2312,11 @@ function SettingsView(): JSX.Element {
               </div>
               <div className="rounded-hcbMd border border-border bg-bg-tertiary p-3">
                 <div className="text-[var(--text-xs)] text-text-muted">IPC contract</div>
-                <div className="mt-1 text-[var(--text-md)] font-semibold text-warning">Missing</div>
+                <div className="mt-1 text-[var(--text-md)] font-semibold text-success">Typed</div>
               </div>
               <div className="rounded-hcbMd border border-border bg-bg-tertiary p-3">
                 <div className="text-[var(--text-xs)] text-text-muted">Renderer mode</div>
-                <div className="mt-1 text-[var(--text-md)] font-semibold text-info">Mock</div>
+                <div className="mt-1 text-[var(--text-md)] font-semibold text-info">Preload</div>
               </div>
             </div>
           )}
@@ -938,14 +2329,16 @@ function SettingsView(): JSX.Element {
 export function SectionContent({
   activeSectionId,
   searchQuery,
-  setSearchQuery
+  setSearchQuery,
+  taskCommand
 }: {
   activeSectionId: SectionId;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  taskCommand?: TaskSurfaceCommand | null;
 }): JSX.Element {
   if (activeSectionId === "tasks") {
-    return <TasksView />;
+    return <TasksView command={taskCommand} />;
   }
 
   if (activeSectionId === "calendar") {

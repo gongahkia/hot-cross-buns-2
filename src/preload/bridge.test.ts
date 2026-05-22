@@ -72,7 +72,9 @@ describe("preload bridge", () => {
       Record<string, (value: unknown) => unknown>
     >;
     const calls: Array<[string, string, unknown]> = [
+      ["tasks", "listTaskLists", { limit: 10_000 }],
       ["tasks", "get", { id: "" }],
+      ["calendar", "listCalendars", { limit: 10_000 }],
       [
         "calendar",
         "listEvents",
@@ -81,7 +83,13 @@ describe("preload bridge", () => {
           end: "2026-01-01T00:00:00.000Z"
         }
       ],
+      ["calendar", "get", { id: "" }],
+      ["calendar", "create", { title: "", calendarId: "cal-1", startsAt: "2026-01-01T00:00:00.000Z", endsAt: "2026-01-01T01:00:00.000Z" }],
+      ["calendar", "update", { id: "event-1" }],
+      ["calendar", "delete", { id: "" }],
+      ["notes", "create", { title: "" }],
       ["notes", "get", { id: "" }],
+      ["notes", "update", { id: "note-1" }],
       ["search", "query", { query: "" }],
       ["sync", "runNow", { resources: [] }],
       ["settings", "update", {}],
@@ -152,6 +160,49 @@ describe("preload bridge", () => {
       })
     );
     expect(result.ok).toBe(true);
+  });
+
+  it("subscribes to sanitized sync status events only", () => {
+    const listeners = new Map<string, (event: unknown, payload: unknown) => void>();
+    const ipc: IpcBridge = {
+      invoke: vi.fn(),
+      on: vi.fn((channel, listener) => {
+        listeners.set(channel, listener);
+      }),
+      removeListener: vi.fn((channel) => {
+        listeners.delete(channel);
+      })
+    };
+    const listener = vi.fn();
+    const unsubscribe = createHcbApi(ipc).sync.subscribeStatus(listener);
+
+    listeners.get(IPC_CHANNELS.syncStatus)?.(
+      {},
+      {
+        state: "idle",
+        pendingMutationCount: 0,
+        offline: true
+      }
+    );
+    listeners.get(IPC_CHANNELS.syncStatus)?.(
+      {},
+      {
+        token: "not allowed"
+      }
+    );
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      state: "idle",
+      pendingMutationCount: 0,
+      offline: true
+    });
+
+    unsubscribe();
+    expect(ipc.removeListener).toHaveBeenCalledWith(
+      IPC_CHANNELS.syncStatus,
+      expect.any(Function)
+    );
   });
 
   it("exposes only the stable HCB domain namespaces", () => {

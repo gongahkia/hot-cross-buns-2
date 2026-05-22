@@ -1,7 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import {
+  addUtcDaysIso,
+  normalizeGuestEmails,
+  normalizeReminderMinutes,
+  startOfUtcDayIso
+} from "@shared/domain/calendar";
 import type {
+  CalendarEventCreateRequest,
+  CalendarEventDeleteRequest,
+  CalendarEventDetail,
   CalendarEventSummary,
+  CalendarEventUpdateRequest,
   CalendarListRequest,
   CalendarListResponse,
   CalendarListSummary,
@@ -20,16 +30,25 @@ import type {
   SearchResultItem,
   SettingsSnapshot,
   SettingsUpdateRequest,
+  TaskCompletionRequest,
+  TaskCreateRequest,
+  TaskDeleteRequest,
   TaskDetail,
+  TaskListCreateRequest,
+  TaskListDeleteRequest,
+  TaskListRenameRequest,
+  TaskMoveRequest,
   TaskListsRequest,
   TaskListsResponse,
   TaskListRequest,
   TaskListResponse,
   TaskListSummary,
-  TaskSummary
+  TaskPriority,
+  TaskSummary,
+  TaskUpdateRequest
 } from "@shared/ipc/contracts";
 import { HcbPublicError } from "@shared/ipc/result";
-import type { SqliteConnection, SqliteParams } from "./sqliteConnection";
+import type { SqliteConnection, SqliteParams, SqliteWriteOperation } from "./sqliteConnection";
 
 interface PageWindow<T> {
   items: T[];
@@ -42,27 +61,40 @@ interface PageWindow<T> {
 
 type SearchDomain = SearchResultItem["domain"];
 
-interface TaskListRow {
+interface TaskListRow extends Record<string, unknown> {
   id: string;
+  accountId?: string;
+  googleId?: string;
   title: string;
   updatedAt: string;
   taskCount: number;
   activeTaskCount: number;
+  sortOrder?: number;
+  etag?: string | null;
 }
 
-interface TaskRow {
+interface TaskRow extends Record<string, unknown> {
   id: string;
+  accountId?: string;
+  googleId?: string;
   listId: string;
+  listGoogleId?: string;
   listTitle: string;
   title: string;
   status: "needsAction" | "completed";
   notes: string | null;
   dueAt: string | null;
   parentId: string | null;
+  deletedAt?: string | null;
+  isHidden?: number;
+  priority?: TaskPriority | null;
+  sortOrder?: number;
+  etag?: string | null;
+  pendingMutationStatus?: "pending" | "applying" | "failed" | null;
   updatedAt: string;
 }
 
-interface CalendarListRow {
+interface CalendarListRow extends Record<string, unknown> {
   id: string;
   title: string;
   selected: number;
@@ -71,8 +103,10 @@ interface CalendarListRow {
   eventCount: number;
 }
 
-interface CalendarEventRow {
+interface CalendarEventRow extends Record<string, unknown> {
   id: string;
+  eventId: string;
+  accountId: string;
   calendarId: string;
   calendarTitle: string;
   title: string;
@@ -82,9 +116,22 @@ interface CalendarEventRow {
   updatedAt: string;
   location: string | null;
   notes: string | null;
+  guestEmailsJson: string | null;
+  reminderMinutesJson: string | null;
+  recurringEventId: string | null;
+  originalStartAt: string | null;
 }
 
-interface NoteRow {
+interface CalendarRow extends Record<string, unknown> {
+  id: string;
+  accountId: string;
+  googleId: string;
+  title: string;
+  timeZone: string | null;
+  accessRole: string | null;
+}
+
+interface NoteRow extends Record<string, unknown> {
   id: string;
   title: string;
   body: string;
@@ -186,11 +233,7 @@ export class LocalPlannerRepository {
   listTasks(request: TaskListRequest): TaskListResponse {
     return this.measureSqlite("tasks.list", () => {
       const { limit, offset } = pageBounds(request.cursor, request.limit, 50, 100);
-      const predicates = [
-        "tasks.deleted_at IS NULL",
-        "tasks.is_hidden = 0",
-        "lists.deleted_at IS NULL"
-      ];
+      const predicates = ["lists.deleted_at IS NULL"];
       const params: Array<string | number | boolean | null> = [];
 
       if (request.listId !== undefined) {
@@ -199,25 +242,52 @@ export class LocalPlannerRepository {
       }
 
       if ((request.status ?? "active") === "active") {
+        predicates.push("tasks.deleted_at IS NULL");
+        predicates.push("tasks.is_hidden = 0");
         predicates.push("tasks.status != 'completed'");
       } else if (request.status === "completed") {
+        predicates.push("tasks.deleted_at IS NULL");
+        predicates.push("tasks.is_hidden = 0");
         predicates.push("tasks.status = 'completed'");
+      } else if (request.status === "hidden") {
+        predicates.push("tasks.deleted_at IS NULL");
+        predicates.push("tasks.is_hidden = 1");
+      } else if (request.status === "deleted") {
+        predicates.push("tasks.deleted_at IS NOT NULL");
+      } else {
+        predicates.push("tasks.deleted_at IS NULL");
+        predicates.push("tasks.is_hidden = 0");
       }
 
       const where = predicates.join(" AND ");
       const rows = this.connection.query<TaskRow>(
         `SELECT
            tasks.id AS id,
+           tasks.account_id AS accountId,
+           tasks.google_id AS googleId,
            tasks.task_list_id AS listId,
+           lists.google_id AS listGoogleId,
            lists.title AS listTitle,
            tasks.title AS title,
            tasks.status AS status,
            tasks.notes AS notes,
            tasks.due_at AS dueAt,
            tasks.parent_task_id AS parentId,
+           tasks.deleted_at AS deletedAt,
+           tasks.is_hidden AS isHidden,
+           COALESCE(tasks.local_priority, 'none') AS priority,
+           tasks.sort_order AS sortOrder,
+           tasks.etag AS etag,
+           pending.status AS pendingMutationStatus,
            tasks.updated_at AS updatedAt
          FROM google_tasks tasks
          INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+         LEFT JOIN (
+           SELECT resource_id, MAX(status) AS status
+           FROM google_pending_mutations
+           WHERE status IN ('pending', 'applying', 'failed')
+           GROUP BY resource_id
+         ) pending ON pending.resource_id = tasks.id
          WHERE ${where}
          ORDER BY
            CASE WHEN tasks.due_at IS NULL THEN 1 ELSE 0 END,
@@ -246,16 +316,31 @@ export class LocalPlannerRepository {
       const row = this.connection.get<TaskRow>(
         `SELECT
            tasks.id AS id,
+           tasks.account_id AS accountId,
+           tasks.google_id AS googleId,
            tasks.task_list_id AS listId,
+           lists.google_id AS listGoogleId,
            lists.title AS listTitle,
            tasks.title AS title,
            tasks.status AS status,
            tasks.notes AS notes,
            tasks.due_at AS dueAt,
            tasks.parent_task_id AS parentId,
+           tasks.deleted_at AS deletedAt,
+           tasks.is_hidden AS isHidden,
+           COALESCE(tasks.local_priority, 'none') AS priority,
+           tasks.sort_order AS sortOrder,
+           tasks.etag AS etag,
+           pending.status AS pendingMutationStatus,
            tasks.updated_at AS updatedAt
          FROM google_tasks tasks
          INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+         LEFT JOIN (
+           SELECT resource_id, MAX(status) AS status
+           FROM google_pending_mutations
+           WHERE status IN ('pending', 'applying', 'failed')
+           GROUP BY resource_id
+         ) pending ON pending.resource_id = tasks.id
          WHERE tasks.id = ?
            AND tasks.deleted_at IS NULL
            AND lists.deleted_at IS NULL
@@ -268,6 +353,339 @@ export class LocalPlannerRepository {
       }
 
       return taskDetail(row);
+    });
+  }
+
+  createTask(request: TaskCreateRequest): TaskDetail {
+    return this.measureSqlite("tasks.create", () => {
+      const list = this.requireTaskListForMutation(request.listId);
+      const parent = request.parentId ? this.requireTaskForMutation(request.parentId) : null;
+
+      if (parent && parent.listId !== list.id) {
+        throw validationFailure("Subtasks must stay in the same task list as their parent.");
+      }
+
+      if (parent?.parentId) {
+        throw validationFailure("Google Tasks supports one subtask level in this app.");
+      }
+
+      const now = new Date().toISOString();
+      const id = `pending:task:${randomUUID()}`;
+      const sortOrder = this.nextTaskSortOrder(list.id, parent?.id ?? null);
+      const notes = request.notes ?? "";
+      const payload = {
+        localId: id,
+        title: request.title.trim(),
+        notes,
+        dueDate: request.dueDate ?? null,
+        taskListId: list.id,
+        taskListGoogleId: list.googleId ?? null,
+        parentId: parent?.id ?? null,
+        parentGoogleId: parent?.googleId ?? null,
+        previousSiblingId: request.previousSiblingId ?? null
+      };
+
+      this.connection.executeTransaction([
+        {
+          kind: "run",
+          sql: `INSERT INTO google_tasks (
+            id, account_id, task_list_id, google_id, parent_task_id, title, notes,
+            status, due_at, due_time_zone, completed_at, position, sort_order,
+            is_hidden, local_priority, etag, google_updated_at, created_at, updated_at, deleted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'needsAction', ?, NULL, NULL, NULL, ?, 0, ?, NULL, NULL, ?, ?, NULL);`,
+          params: [
+            id,
+            list.accountId,
+            list.id,
+            id,
+            parent?.id ?? null,
+            request.title.trim(),
+            notes,
+            dateOnlyToIso(request.dueDate ?? null),
+            sortOrder,
+            request.priority ?? "none",
+            now,
+            now
+          ]
+        },
+        this.pendingMutationOperation({
+          id: `mutation:${randomUUID()}`,
+          accountId: list.accountId,
+          resourceType: "task",
+          resourceId: id,
+          operation: "task.create",
+          payload,
+          now
+        })
+      ]);
+
+      return this.getTask(id);
+    });
+  }
+
+  updateTask(request: TaskUpdateRequest): TaskDetail {
+    return this.measureSqlite("tasks.update", () => {
+      const existing = this.requireTaskForMutation(request.id);
+      const targetList =
+        request.listId === undefined
+          ? this.requireTaskListForMutation(existing.listId)
+          : this.requireTaskListForMutation(request.listId);
+      const targetParent =
+        request.parentId === undefined || request.parentId === null
+          ? null
+          : this.requireTaskForMutation(request.parentId);
+
+      if (request.parentId === request.id) {
+        throw validationFailure("A task cannot be its own parent.");
+      }
+
+      if (targetParent && targetParent.listId !== targetList.id) {
+        throw validationFailure("Subtasks must stay in the same task list as their parent.");
+      }
+
+      if (targetParent?.parentId) {
+        throw validationFailure("Google Tasks supports one subtask level in this app.");
+      }
+
+      const now = new Date().toISOString();
+      const title = request.title?.trim() ?? existing.title;
+      const notes = request.notes ?? existing.notes ?? "";
+      const dueAt =
+        request.dueDate === undefined ? existing.dueAt ?? null : dateOnlyToIso(request.dueDate);
+      const priority = request.priority ?? existing.priority ?? "none";
+      const parentId = request.parentId === undefined ? existing.parentId : targetParent?.id ?? null;
+      const sortOrder =
+        request.previousSiblingId !== undefined ||
+        request.parentId !== undefined ||
+        request.listId !== undefined
+          ? this.nextTaskSortOrder(targetList.id, parentId)
+          : existing.sortOrder ?? 0;
+      const googleBackedPatch =
+        request.title !== undefined ||
+        request.notes !== undefined ||
+        request.dueDate !== undefined ||
+        request.listId !== undefined ||
+        request.parentId !== undefined ||
+        request.previousSiblingId !== undefined;
+      const operations: SqliteWriteOperation[] = [
+        {
+          kind: "run",
+          sql: `UPDATE google_tasks
+                SET task_list_id = ?,
+                    parent_task_id = ?,
+                    title = ?,
+                    notes = ?,
+                    due_at = ?,
+                    local_priority = ?,
+                    sort_order = ?,
+                    updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL;`,
+          params: [
+            targetList.id,
+            parentId,
+            title,
+            notes,
+            dueAt,
+            priority,
+            sortOrder,
+            now,
+            request.id
+          ]
+        }
+      ];
+
+      if (googleBackedPatch) {
+        operations.push(
+          this.pendingMutationOperation({
+            id: `mutation:${randomUUID()}`,
+            accountId: existing.accountId ?? targetList.accountId,
+            resourceType: "task",
+            resourceId: request.id,
+            operation: targetList.id !== existing.listId
+              ? "task.move_list"
+              : request.parentId !== undefined || request.previousSiblingId !== undefined
+                ? "task.move"
+                : "task.update",
+            payload: {
+              id: request.id,
+              googleId: existing.googleId ?? null,
+              fromTaskListId: existing.listId,
+              toTaskListId: targetList.id,
+              toTaskListGoogleId: targetList.googleId ?? null,
+              title,
+              notes,
+              dueDate: isoToDateOnly(dueAt),
+              parentId,
+              parentGoogleId: targetParent?.googleId ?? null,
+              previousSiblingId: request.previousSiblingId ?? null
+            },
+            now
+          })
+        );
+      }
+
+      this.connection.executeTransaction(operations);
+
+      return this.getTask(request.id);
+    });
+  }
+
+  completeTask(request: TaskCompletionRequest): TaskDetail {
+    return this.setTaskCompletion(request.id, true);
+  }
+
+  reopenTask(request: TaskCompletionRequest): TaskDetail {
+    return this.setTaskCompletion(request.id, false);
+  }
+
+  moveTask(request: TaskMoveRequest): TaskDetail {
+    return this.updateTask({
+      id: request.id,
+      ...(request.listId === undefined ? {} : { listId: request.listId }),
+      ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
+      ...(request.previousSiblingId === undefined
+        ? {}
+        : { previousSiblingId: request.previousSiblingId })
+    });
+  }
+
+  deleteTask(request: TaskDeleteRequest): { id: string; queued: boolean; revision: string } {
+    return this.measureSqlite("tasks.delete", () => {
+      const existing = this.requireTaskForMutation(request.id);
+      const now = new Date().toISOString();
+
+      this.connection.executeTransaction([
+        {
+          kind: "run",
+          sql: `UPDATE google_tasks
+                SET deleted_at = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL;`,
+          params: [now, now, request.id]
+        },
+        this.pendingMutationOperation({
+          id: `mutation:${randomUUID()}`,
+          accountId: existing.accountId ?? null,
+          resourceType: "task",
+          resourceId: request.id,
+          operation: "task.delete",
+          payload: {
+            id: request.id,
+            googleId: existing.googleId ?? null,
+            taskListId: existing.listId,
+            taskListGoogleId: existing.listGoogleId ?? null,
+            etag: existing.etag ?? null
+          },
+          now
+        })
+      ]);
+
+      return { id: request.id, queued: true, revision: now };
+    });
+  }
+
+  createTaskList(request: TaskListCreateRequest): TaskListSummary {
+    return this.measureSqlite("tasks.createTaskList", () => {
+      const now = new Date().toISOString();
+      const accountId = this.latestAccountId() ?? this.ensureLocalQueueAccount(now);
+      const id = `${accountId}:task-list:pending:${randomUUID()}`;
+      const sortOrder = this.nextTaskListSortOrder();
+
+      this.connection.executeTransaction([
+        {
+          kind: "run",
+          sql: `INSERT INTO google_task_lists (
+            id, account_id, google_id, title, etag, sort_order, is_selected,
+            sync_status, google_updated_at, created_at, updated_at, deleted_at
+          ) VALUES (?, ?, ?, ?, NULL, ?, 1, 'queued', NULL, ?, ?, NULL);`,
+          params: [id, accountId, id, request.title.trim(), sortOrder, now, now]
+        },
+        this.pendingMutationOperation({
+          id: `mutation:${randomUUID()}`,
+          accountId,
+          resourceType: "task_list",
+          resourceId: id,
+          operation: "task_list.create",
+          payload: {
+            localId: id,
+            title: request.title.trim()
+          },
+          now
+        })
+      ]);
+
+      return this.requireTaskListSummary(id);
+    });
+  }
+
+  renameTaskList(request: TaskListRenameRequest): TaskListSummary {
+    return this.measureSqlite("tasks.renameTaskList", () => {
+      const existing = this.requireTaskListForMutation(request.id);
+      const now = new Date().toISOString();
+
+      this.connection.executeTransaction([
+        {
+          kind: "run",
+          sql: `UPDATE google_task_lists
+                SET title = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL;`,
+          params: [request.title.trim(), now, request.id]
+        },
+        this.pendingMutationOperation({
+          id: `mutation:${randomUUID()}`,
+          accountId: existing.accountId,
+          resourceType: "task_list",
+          resourceId: request.id,
+          operation: "task_list.rename",
+          payload: {
+            id: request.id,
+            googleId: existing.googleId ?? null,
+            title: request.title.trim(),
+            etag: existing.etag ?? null
+          },
+          now
+        })
+      ]);
+
+      return this.requireTaskListSummary(request.id);
+    });
+  }
+
+  deleteTaskList(request: TaskListDeleteRequest): { id: string; queued: boolean; revision: string } {
+    return this.measureSqlite("tasks.deleteTaskList", () => {
+      const existing = this.requireTaskListForMutation(request.id);
+      const now = new Date().toISOString();
+
+      this.connection.executeTransaction([
+        {
+          kind: "run",
+          sql: `UPDATE google_task_lists
+                SET deleted_at = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL;`,
+          params: [now, now, request.id]
+        },
+        {
+          kind: "run",
+          sql: `UPDATE google_tasks
+                SET deleted_at = ?, updated_at = ?
+                WHERE task_list_id = ? AND deleted_at IS NULL;`,
+          params: [now, now, request.id]
+        },
+        this.pendingMutationOperation({
+          id: `mutation:${randomUUID()}`,
+          accountId: existing.accountId,
+          resourceType: "task_list",
+          resourceId: request.id,
+          operation: "task_list.delete",
+          payload: {
+            id: request.id,
+            googleId: existing.googleId ?? null,
+            etag: existing.etag ?? null
+          },
+          now
+        })
+      ]);
+
+      return { id: request.id, queued: true, revision: now };
     });
   }
 
@@ -310,43 +728,52 @@ export class LocalPlannerRepository {
       const { limit, offset } = pageBounds(request.cursor, request.limit, 100, 500);
       const params: Array<string | number | boolean | null> = [request.end, request.start];
       const predicates = [
-        "events.deleted_at IS NULL",
-        "events.status != 'cancelled'",
+        "instances.deleted_at IS NULL",
+        "instances.status != 'cancelled'",
         "calendars.deleted_at IS NULL",
-        "events.start_at < ?",
-        "events.end_at > ?"
+        "events.deleted_at IS NULL",
+        "instances.start_at < ?",
+        "instances.end_at > ?"
       ];
 
       if (request.calendarIds !== undefined && request.calendarIds.length > 0) {
-        predicates.push(`events.calendar_id IN (${request.calendarIds.map(() => "?").join(", ")})`);
+        predicates.push(`instances.calendar_id IN (${request.calendarIds.map(() => "?").join(", ")})`);
         params.push(...request.calendarIds);
       }
 
       const where = predicates.join(" AND ");
       const rows = this.connection.query<CalendarEventRow>(
         `SELECT
-           events.id AS id,
-           events.calendar_id AS calendarId,
+           instances.id AS id,
+           events.id AS eventId,
+           events.account_id AS accountId,
+           instances.calendar_id AS calendarId,
            calendars.summary AS calendarTitle,
            events.summary AS title,
-           events.start_at AS startsAt,
-           events.end_at AS endsAt,
-           events.is_all_day AS allDay,
-           events.updated_at AS updatedAt,
+           instances.start_at AS startsAt,
+           instances.end_at AS endsAt,
+           instances.is_all_day AS allDay,
+           instances.updated_at AS updatedAt,
            events.location AS location,
-           events.description AS notes
-         FROM google_calendar_events events
-         INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+           events.description AS notes,
+           events.attendee_emails_json AS guestEmailsJson,
+           events.reminder_minutes_json AS reminderMinutesJson,
+           instances.recurring_event_id AS recurringEventId,
+           instances.original_start_at AS originalStartAt
+         FROM google_calendar_event_instances instances
+         INNER JOIN google_calendar_events events ON events.id = instances.event_id
+         INNER JOIN google_calendar_lists calendars ON calendars.id = instances.calendar_id
          WHERE ${where}
-         ORDER BY events.start_at ASC, events.end_at ASC, events.id ASC
+         ORDER BY instances.start_at ASC, instances.end_at ASC, instances.id ASC
          LIMIT ? OFFSET ?;`,
         [...params, limit, offset]
       );
       const totalKnown = countRows(
         this.connection,
         `SELECT COUNT(*) AS count
-         FROM google_calendar_events events
-         INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+         FROM google_calendar_event_instances instances
+         INNER JOIN google_calendar_events events ON events.id = instances.event_id
+         INNER JOIN google_calendar_lists calendars ON calendars.id = instances.calendar_id
          WHERE ${where};`,
         params
       );
@@ -355,48 +782,226 @@ export class LocalPlannerRepository {
     });
   }
 
-  getCalendarEvent(id: string): Record<string, string | number | boolean | null> {
+  getCalendarEvent(id: string): CalendarEventDetail {
     return this.measureSqlite("calendar.getEvent", () => {
-      const row = this.connection.get<CalendarEventRow>(
-        `SELECT
-           events.id AS id,
-           events.calendar_id AS calendarId,
-           calendars.summary AS calendarTitle,
-           events.summary AS title,
-           events.start_at AS startsAt,
-           events.end_at AS endsAt,
-           events.is_all_day AS allDay,
-           events.updated_at AS updatedAt,
-           events.location AS location,
-           events.description AS notes
-         FROM google_calendar_events events
-         INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
-         WHERE events.id = ?
-           AND events.deleted_at IS NULL
-           AND calendars.deleted_at IS NULL
-         LIMIT 1;`,
-        [id]
-      );
+      const row = this.findCalendarEventRow(id);
 
       if (!row) {
         throw notFound("Calendar event was not found.");
       }
 
+      return calendarEventDetail(row);
+    });
+  }
+
+  createCalendarEvent(request: CalendarEventCreateRequest): CalendarEventDetail {
+    return this.measureSqlite("calendar.create", () => {
+      const calendar = this.requireCalendar(request.calendarId);
+      const now = new Date().toISOString();
+      const googleId = `local-${randomUUID()}`;
+      const id = `${calendar.accountId}:event:${calendar.googleId}:${googleId}`;
+      const normalized = normalizeCalendarWrite({
+        title: request.title,
+        calendarId: calendar.id,
+        startsAt: request.startsAt,
+        endsAt: request.endsAt,
+        allDay: request.allDay ?? false,
+        location: request.location ?? "",
+        notes: request.notes ?? "",
+        guestEmails: request.guestEmails ?? [],
+        reminderMinutes: request.reminderMinutes ?? []
+      });
+      const mutationId = `mutation:event:${randomUUID()}`;
+
+      this.connection.executeTransaction([
+        eventInsertOperation({
+          id,
+          accountId: calendar.accountId,
+          googleId,
+          now,
+          ...normalized,
+          calendarId: calendar.id
+        }),
+        instanceDeleteOperation(id, now),
+        instanceInsertOperation({
+          id,
+          accountId: calendar.accountId,
+          calendarId: calendar.id,
+          eventId: id,
+          googleEventId: googleId,
+          startsAt: normalized.startsAt,
+          endsAt: normalized.endsAt,
+          allDay: normalized.allDay,
+          status: "confirmed",
+          updatedAt: now
+        }),
+        mutationInsertOperation({
+          id: mutationId,
+          accountId: calendar.accountId,
+          resourceId: id,
+          operation: "calendar.events.create",
+          payload: mutationPayload(normalized),
+          now
+        })
+      ]);
+
+      return this.getCalendarEvent(id);
+    });
+  }
+
+  updateCalendarEvent(request: CalendarEventUpdateRequest): CalendarEventDetail {
+    return this.measureSqlite("calendar.update", () => {
+      const existing = this.findCalendarEventRow(request.id);
+
+      if (!existing) {
+        throw notFound("Calendar event was not found.");
+      }
+
+      const targetCalendar = this.requireCalendar(request.calendarId ?? existing.calendarId);
+      const now = new Date().toISOString();
+      const normalized = normalizeCalendarWrite({
+        title: request.title ?? existing.title,
+        calendarId: targetCalendar.id,
+        startsAt: request.startsAt ?? existing.startsAt,
+        endsAt: request.endsAt ?? existing.endsAt,
+        allDay: request.allDay ?? existing.allDay === 1,
+        location: request.location ?? existing.location ?? "",
+        notes: request.notes ?? existing.notes ?? "",
+        guestEmails: request.guestEmails ?? parseStringArray(existing.guestEmailsJson),
+        reminderMinutes: request.reminderMinutes ?? parseNumberArray(existing.reminderMinutesJson)
+      });
+      const mutationId = `mutation:event:${randomUUID()}`;
+
+      this.connection.executeTransaction([
+        eventUpdateOperation({
+          id: existing.eventId,
+          now,
+          ...normalized,
+          calendarId: targetCalendar.id
+        }),
+        instanceDeleteOperation(existing.eventId, now),
+        instanceInsertOperation({
+          id: existing.eventId,
+          accountId: targetCalendar.accountId,
+          calendarId: targetCalendar.id,
+          eventId: existing.eventId,
+          googleEventId: googleEventIdFromLocalEventId(existing.eventId),
+          startsAt: normalized.startsAt,
+          endsAt: normalized.endsAt,
+          allDay: normalized.allDay,
+          status: "confirmed",
+          updatedAt: now
+        }),
+        mutationInsertOperation({
+          id: mutationId,
+          accountId: targetCalendar.accountId,
+          resourceId: existing.eventId,
+          operation: "calendar.events.update",
+          payload: mutationPayload(normalized),
+          now
+        })
+      ]);
+
+      return this.getCalendarEvent(existing.eventId);
+    });
+  }
+
+  deleteCalendarEvent(request: CalendarEventDeleteRequest): { id: string; queued: boolean; revision: string } {
+    return this.measureSqlite("calendar.delete", () => {
+      const existing = this.findCalendarEventRow(request.id);
+
+      if (!existing) {
+        throw notFound("Calendar event was not found.");
+      }
+
+      const now = new Date().toISOString();
+      const mutationId = `mutation:event:${randomUUID()}`;
+
+      this.connection.executeTransaction([
+        {
+          kind: "run",
+          sql: `UPDATE google_calendar_events
+                SET status = 'cancelled', deleted_at = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL;`,
+          params: [now, now, existing.eventId]
+        },
+        instanceDeleteOperation(existing.eventId, now),
+        mutationInsertOperation({
+          id: mutationId,
+          accountId: existing.accountId,
+          resourceId: existing.eventId,
+          operation: "calendar.events.delete",
+          payload: {
+            id: existing.eventId,
+            calendarId: existing.calendarId
+          },
+          now
+        })
+      ]);
+
       return {
-        kind: "event",
-        id: row.id,
-        calendarId: row.calendarId,
-        calendarTitle: row.calendarTitle,
-        title: row.title,
-        startsAt: row.startsAt,
-        endsAt: row.endsAt,
-        allDay: row.allDay === 1,
-        updatedAt: row.updatedAt,
-        location: row.location ?? "",
-        notes: row.notes ?? "",
-        deepLink: `hotcrossbuns://event/${row.id}`
+        id: existing.eventId,
+        queued: true,
+        revision: now
       };
     });
+  }
+
+  private findCalendarEventRow(id: string): CalendarEventRow | undefined {
+    return this.connection.get<CalendarEventRow>(
+        `SELECT
+           COALESCE(instances.id, events.id) AS id,
+           events.id AS eventId,
+           events.account_id AS accountId,
+           events.calendar_id AS calendarId,
+           calendars.summary AS calendarTitle,
+           events.summary AS title,
+           COALESCE(instances.start_at, events.start_at) AS startsAt,
+           COALESCE(instances.end_at, events.end_at) AS endsAt,
+           COALESCE(instances.is_all_day, events.is_all_day) AS allDay,
+           COALESCE(instances.updated_at, events.updated_at) AS updatedAt,
+           events.location AS location,
+           events.description AS notes,
+           events.attendee_emails_json AS guestEmailsJson,
+           events.reminder_minutes_json AS reminderMinutesJson,
+           COALESCE(instances.recurring_event_id, events.recurring_event_id) AS recurringEventId,
+           instances.original_start_at AS originalStartAt
+         FROM google_calendar_events events
+         LEFT JOIN google_calendar_event_instances instances
+           ON instances.event_id = events.id
+          AND instances.deleted_at IS NULL
+          AND instances.id = ?
+         INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+         WHERE (events.id = ? OR instances.id = ?)
+           AND events.deleted_at IS NULL
+           AND calendars.deleted_at IS NULL
+         LIMIT 1;`,
+      [id, id, id]
+      );
+  }
+
+  private requireCalendar(id: string): CalendarRow {
+    const row = this.connection.get<CalendarRow>(
+      `SELECT
+         id,
+         account_id AS accountId,
+         google_id AS googleId,
+         summary AS title,
+         time_zone AS timeZone,
+         access_role AS accessRole
+       FROM google_calendar_lists
+       WHERE id = ?
+         AND deleted_at IS NULL
+         AND is_hidden = 0
+       LIMIT 1;`,
+      [id]
+    );
+
+    if (!row) {
+      throw notFound("Calendar was not found.");
+    }
+
+    return row;
   }
 
   listNotes(request: NoteListRequest): NoteListResponse {
@@ -503,19 +1108,41 @@ export class LocalPlannerRepository {
       const result = this.measureSqlite("search.query.sqlite", () => {
         const domains = new Set<SearchDomain>(request.domains ?? ["tasks", "calendar", "notes"]);
         const limit = Math.max(1, Math.min(50, request.limit ?? 20));
-        const like = `%${escapeLike(request.query.trim().toLowerCase())}%`;
+        const ftsQuery = ftsMatchQuery(request.query);
         const results: SearchResultItem[] = [];
 
+        if (!ftsQuery) {
+          return {
+            items: [],
+            page: {
+              limit,
+              totalKnown: 0
+            }
+          };
+        }
+
+        if (domains.size === 3 && domains.has("tasks") && domains.has("calendar") && domains.has("notes")) {
+          const items = this.searchAllDomains(ftsQuery, limit);
+
+          return {
+            items,
+            page: {
+              limit,
+              totalKnown: items.length
+            }
+          };
+        }
+
         if (domains.has("tasks")) {
-          results.push(...this.searchTasks(like, limit));
+          results.push(...this.searchTasks(ftsQuery, limit));
         }
 
         if (domains.has("calendar")) {
-          results.push(...this.searchEvents(like, limit));
+          results.push(...this.searchEvents(ftsQuery, limit));
         }
 
         if (domains.has("notes")) {
-          results.push(...this.searchNotes(like, limit));
+          results.push(...this.searchNotes(ftsQuery, limit));
         }
 
         const sorted = results
@@ -554,7 +1181,315 @@ export class LocalPlannerRepository {
     }
   }
 
-  private searchTasks(like: string, limit: number): SearchResultItem[] {
+  private setTaskCompletion(id: string, completed: boolean): TaskDetail {
+    return this.measureSqlite(completed ? "tasks.complete" : "tasks.reopen", () => {
+      const existing = this.requireTaskForMutation(id);
+      const now = new Date().toISOString();
+      const completedAt = completed ? now : null;
+      const status = completed ? "completed" : "needsAction";
+
+      this.connection.executeTransaction([
+        {
+          kind: "run",
+          sql: `UPDATE google_tasks
+                SET status = ?, completed_at = ?, updated_at = ?
+                WHERE id = ? AND deleted_at IS NULL;`,
+          params: [status, completedAt, now, id]
+        },
+        this.pendingMutationOperation({
+          id: `mutation:${randomUUID()}`,
+          accountId: existing.accountId ?? null,
+          resourceType: "task",
+          resourceId: id,
+          operation: completed ? "task.complete" : "task.reopen",
+          payload: {
+            id,
+            googleId: existing.googleId ?? null,
+            taskListId: existing.listId,
+            taskListGoogleId: existing.listGoogleId ?? null,
+            completed,
+            etag: existing.etag ?? null
+          },
+          now
+        })
+      ]);
+
+      return this.getTask(id);
+    });
+  }
+
+  private requireTaskForMutation(id: string): TaskRow {
+    const row = this.connection.get<TaskRow>(
+      `SELECT
+         tasks.id AS id,
+         tasks.account_id AS accountId,
+         tasks.google_id AS googleId,
+         tasks.task_list_id AS listId,
+         lists.google_id AS listGoogleId,
+         lists.title AS listTitle,
+         tasks.title AS title,
+         tasks.status AS status,
+         tasks.notes AS notes,
+         tasks.due_at AS dueAt,
+         tasks.parent_task_id AS parentId,
+         tasks.deleted_at AS deletedAt,
+         tasks.is_hidden AS isHidden,
+         COALESCE(tasks.local_priority, 'none') AS priority,
+         tasks.sort_order AS sortOrder,
+         tasks.etag AS etag,
+         tasks.updated_at AS updatedAt
+       FROM google_tasks tasks
+       INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+       WHERE tasks.id = ?
+         AND tasks.deleted_at IS NULL
+         AND lists.deleted_at IS NULL
+       LIMIT 1;`,
+      [id]
+    );
+
+    if (!row) {
+      throw notFound("Task was not found.");
+    }
+
+    return row;
+  }
+
+  private requireTaskListForMutation(id: string): Required<Pick<TaskListRow, "id" | "accountId" | "googleId" | "title" | "updatedAt">> & TaskListRow {
+    const row = this.connection.get<TaskListRow>(
+      `SELECT
+         id,
+         account_id AS accountId,
+         google_id AS googleId,
+         title,
+         sort_order AS sortOrder,
+         etag,
+         updated_at AS updatedAt,
+         0 AS taskCount,
+         0 AS activeTaskCount
+       FROM google_task_lists
+       WHERE id = ? AND deleted_at IS NULL
+       LIMIT 1;`,
+      [id]
+    );
+
+    if (!row || !row.accountId || !row.googleId) {
+      throw notFound("Task list was not found.");
+    }
+
+    return row as Required<Pick<TaskListRow, "id" | "accountId" | "googleId" | "title" | "updatedAt">> & TaskListRow;
+  }
+
+  private requireTaskListSummary(id: string): TaskListSummary {
+    const row = this.connection.get<TaskListRow>(
+      `SELECT
+         lists.id AS id,
+         lists.title AS title,
+         lists.updated_at AS updatedAt,
+         COUNT(tasks.id) AS taskCount,
+         COALESCE(SUM(CASE WHEN tasks.status != 'completed'
+                            AND tasks.deleted_at IS NULL
+                            AND tasks.is_hidden = 0
+                            THEN 1 ELSE 0 END), 0) AS activeTaskCount
+       FROM google_task_lists lists
+       LEFT JOIN google_tasks tasks
+         ON tasks.task_list_id = lists.id
+        AND tasks.deleted_at IS NULL
+       WHERE lists.id = ? AND lists.deleted_at IS NULL
+       GROUP BY lists.id
+       LIMIT 1;`,
+      [id]
+    );
+
+    if (!row) {
+      throw notFound("Task list was not found.");
+    }
+
+    return taskListSummary(row);
+  }
+
+  private latestAccountId(): string | null {
+    return (
+      this.connection.get<{ id: string }>(
+        `SELECT id
+         FROM google_accounts
+         WHERE deleted_at IS NULL
+         ORDER BY
+           CASE WHEN connection_state = 'connected' THEN 0 ELSE 1 END,
+           updated_at DESC
+         LIMIT 1;`
+      )?.id ?? null
+    );
+  }
+
+  private ensureLocalQueueAccount(now: string): string {
+    const accountId = "local-google-account";
+
+    this.connection.run(
+      `INSERT INTO google_accounts (
+        id, connection_state, granted_scopes_json, missing_scopes_json, updated_at
+      ) VALUES (?, 'signed_out', '[]', '[]', ?)
+      ON CONFLICT(id) DO UPDATE SET
+        updated_at = excluded.updated_at,
+        deleted_at = NULL;`,
+      [accountId, now]
+    );
+
+    return accountId;
+  }
+
+  private nextTaskListSortOrder(): number {
+    return (
+      (this.connection.get<{ maxSort: number | null }>(
+        `SELECT MAX(sort_order) AS maxSort
+         FROM google_task_lists
+         WHERE deleted_at IS NULL;`
+      )?.maxSort ?? -1) + 1
+    );
+  }
+
+  private nextTaskSortOrder(listId: string, parentId: string | null): number {
+    return (
+      (this.connection.get<{ maxSort: number | null }>(
+        `SELECT MAX(sort_order) AS maxSort
+         FROM google_tasks
+         WHERE task_list_id = ?
+           AND (${parentId === null ? "parent_task_id IS NULL" : "parent_task_id = ?"})
+           AND deleted_at IS NULL;`,
+        parentId === null ? [listId] : [listId, parentId]
+      )?.maxSort ?? -1) + 1
+    );
+  }
+
+  private pendingMutationOperation(input: {
+    id: string;
+    accountId: string | null;
+    resourceType: string;
+    resourceId: string;
+    operation: string;
+    payload: unknown;
+    now: string;
+  }): SqliteWriteOperation {
+    return {
+      kind: "run",
+      sql: `INSERT INTO google_pending_mutations (
+        id, account_id, resource_type, resource_id, operation, payload_json, status,
+        attempt_count, next_retry_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, ?, ?);`,
+      params: [
+        input.id,
+        input.accountId,
+        input.resourceType,
+        input.resourceId,
+        input.operation,
+        JSON.stringify(input.payload),
+        input.now,
+        input.now
+      ]
+    };
+  }
+
+  private searchAllDomains(ftsQuery: string, limit: number): SearchResultItem[] {
+    return this.connection
+      .query<{
+        id: string;
+        domain: SearchDomain;
+        title: string;
+        snippet: string | null;
+        updatedAt: string;
+      }>(
+        `WITH task_matches AS (
+           SELECT tasks.rowid AS taskRowid, bm25(google_tasks_fts) AS rank
+           FROM google_tasks_fts
+           INNER JOIN google_tasks tasks ON tasks.rowid = google_tasks_fts.rowid
+           WHERE google_tasks_fts MATCH ?
+
+           UNION ALL
+
+           SELECT tasks.rowid AS taskRowid, bm25(google_task_lists_fts) + 2.0 AS rank
+           FROM google_task_lists_fts
+           INNER JOIN google_task_lists lists ON lists.rowid = google_task_lists_fts.rowid
+           INNER JOIN google_tasks tasks ON tasks.task_list_id = lists.id
+           WHERE google_task_lists_fts MATCH ?
+         ),
+         task_ranked AS (
+           SELECT taskRowid, MIN(rank) AS rank
+           FROM task_matches
+           GROUP BY taskRowid
+         ),
+         event_matches AS (
+           SELECT events.rowid AS eventRowid, bm25(google_calendar_events_fts) AS rank
+           FROM google_calendar_events_fts
+           INNER JOIN google_calendar_events events ON events.rowid = google_calendar_events_fts.rowid
+           WHERE google_calendar_events_fts MATCH ?
+
+           UNION ALL
+
+           SELECT events.rowid AS eventRowid, bm25(google_calendar_lists_fts) + 2.0 AS rank
+           FROM google_calendar_lists_fts
+           INNER JOIN google_calendar_lists calendars ON calendars.rowid = google_calendar_lists_fts.rowid
+           INNER JOIN google_calendar_events events ON events.calendar_id = calendars.id
+           WHERE google_calendar_lists_fts MATCH ?
+         ),
+         event_ranked AS (
+           SELECT eventRowid, MIN(rank) AS rank
+           FROM event_matches
+           GROUP BY eventRowid
+         )
+         SELECT
+           tasks.id AS id,
+           'tasks' AS domain,
+           tasks.title AS title,
+           COALESCE(tasks.notes, lists.title) AS snippet,
+           tasks.updated_at AS updatedAt
+         FROM task_ranked
+         INNER JOIN google_tasks tasks ON tasks.rowid = task_ranked.taskRowid
+         INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+         WHERE tasks.deleted_at IS NULL
+           AND tasks.is_hidden = 0
+           AND lists.deleted_at IS NULL
+
+         UNION ALL
+
+         SELECT
+           events.id AS id,
+           'calendar' AS domain,
+           events.summary AS title,
+           COALESCE(events.description, events.location, calendars.summary) AS snippet,
+           events.updated_at AS updatedAt
+         FROM event_ranked
+         INNER JOIN google_calendar_events events ON events.rowid = event_ranked.eventRowid
+         INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+         WHERE events.deleted_at IS NULL
+           AND events.status != 'cancelled'
+           AND calendars.deleted_at IS NULL
+
+         UNION ALL
+
+         SELECT
+           notes.id AS id,
+           'notes' AS domain,
+           notes.title AS title,
+           notes.body AS snippet,
+           notes.updated_at AS updatedAt
+         FROM local_notes_fts
+         INNER JOIN local_notes notes ON notes.rowid = local_notes_fts.rowid
+         WHERE local_notes_fts MATCH ?
+           AND notes.deleted_at IS NULL
+
+         ORDER BY updatedAt DESC, id ASC
+         LIMIT ?;`,
+        [ftsQuery, ftsQuery, ftsQuery, ftsQuery, ftsQuery, limit]
+      )
+      .map((row) => ({
+        id: row.id,
+        domain: row.domain,
+        title: row.title,
+        snippet: row.domain === "notes" ? preview(row.snippet ?? "") : row.snippet ?? undefined,
+        updatedAt: row.updatedAt
+      }));
+  }
+
+  private searchTasks(ftsQuery: string, limit: number): SearchResultItem[] {
     return this.connection
       .query<{
         id: string;
@@ -562,24 +1497,39 @@ export class LocalPlannerRepository {
         snippet: string | null;
         updatedAt: string;
       }>(
-        `SELECT
+        `WITH matches AS (
+           SELECT tasks.rowid AS taskRowid, bm25(google_tasks_fts) AS rank
+           FROM google_tasks_fts
+           INNER JOIN google_tasks tasks ON tasks.rowid = google_tasks_fts.rowid
+           WHERE google_tasks_fts MATCH ?
+
+           UNION ALL
+
+           SELECT tasks.rowid AS taskRowid, bm25(google_task_lists_fts) + 2.0 AS rank
+           FROM google_task_lists_fts
+           INNER JOIN google_task_lists lists ON lists.rowid = google_task_lists_fts.rowid
+           INNER JOIN google_tasks tasks ON tasks.task_list_id = lists.id
+           WHERE google_task_lists_fts MATCH ?
+         ),
+         ranked AS (
+           SELECT taskRowid, MIN(rank) AS rank
+           FROM matches
+           GROUP BY taskRowid
+         )
+         SELECT
            tasks.id AS id,
            tasks.title AS title,
            COALESCE(tasks.notes, lists.title) AS snippet,
            tasks.updated_at AS updatedAt
-         FROM google_tasks tasks
+         FROM ranked
+         INNER JOIN google_tasks tasks ON tasks.rowid = ranked.taskRowid
          INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
          WHERE tasks.deleted_at IS NULL
            AND tasks.is_hidden = 0
            AND lists.deleted_at IS NULL
-           AND (
-             lower(tasks.title) LIKE ? ESCAPE '\\'
-             OR lower(COALESCE(tasks.notes, '')) LIKE ? ESCAPE '\\'
-             OR lower(lists.title) LIKE ? ESCAPE '\\'
-           )
-         ORDER BY tasks.updated_at DESC, tasks.id ASC
+         ORDER BY ranked.rank ASC, tasks.updated_at DESC, tasks.id ASC
          LIMIT ?;`,
-        [like, like, like, limit]
+        [ftsQuery, ftsQuery, limit]
       )
       .map((row) => ({
         id: row.id,
@@ -590,7 +1540,7 @@ export class LocalPlannerRepository {
       }));
   }
 
-  private searchEvents(like: string, limit: number): SearchResultItem[] {
+  private searchEvents(ftsQuery: string, limit: number): SearchResultItem[] {
     return this.connection
       .query<{
         id: string;
@@ -598,25 +1548,39 @@ export class LocalPlannerRepository {
         snippet: string | null;
         updatedAt: string;
       }>(
-        `SELECT
+        `WITH matches AS (
+           SELECT events.rowid AS eventRowid, bm25(google_calendar_events_fts) AS rank
+           FROM google_calendar_events_fts
+           INNER JOIN google_calendar_events events ON events.rowid = google_calendar_events_fts.rowid
+           WHERE google_calendar_events_fts MATCH ?
+
+           UNION ALL
+
+           SELECT events.rowid AS eventRowid, bm25(google_calendar_lists_fts) + 2.0 AS rank
+           FROM google_calendar_lists_fts
+           INNER JOIN google_calendar_lists calendars ON calendars.rowid = google_calendar_lists_fts.rowid
+           INNER JOIN google_calendar_events events ON events.calendar_id = calendars.id
+           WHERE google_calendar_lists_fts MATCH ?
+         ),
+         ranked AS (
+           SELECT eventRowid, MIN(rank) AS rank
+           FROM matches
+           GROUP BY eventRowid
+         )
+         SELECT
            events.id AS id,
            events.summary AS title,
            COALESCE(events.description, events.location, calendars.summary) AS snippet,
            events.updated_at AS updatedAt
-         FROM google_calendar_events events
+         FROM ranked
+         INNER JOIN google_calendar_events events ON events.rowid = ranked.eventRowid
          INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
          WHERE events.deleted_at IS NULL
            AND events.status != 'cancelled'
            AND calendars.deleted_at IS NULL
-           AND (
-             lower(events.summary) LIKE ? ESCAPE '\\'
-             OR lower(COALESCE(events.description, '')) LIKE ? ESCAPE '\\'
-             OR lower(COALESCE(events.location, '')) LIKE ? ESCAPE '\\'
-             OR lower(calendars.summary) LIKE ? ESCAPE '\\'
-           )
-         ORDER BY events.updated_at DESC, events.id ASC
+         ORDER BY ranked.rank ASC, events.updated_at DESC, events.id ASC
          LIMIT ?;`,
-        [like, like, like, like, limit]
+        [ftsQuery, ftsQuery, limit]
       )
       .map((row) => ({
         id: row.id,
@@ -627,7 +1591,7 @@ export class LocalPlannerRepository {
       }));
   }
 
-  private searchNotes(like: string, limit: number): SearchResultItem[] {
+  private searchNotes(ftsQuery: string, limit: number): SearchResultItem[] {
     return this.connection
       .query<{
         id: string;
@@ -635,16 +1599,14 @@ export class LocalPlannerRepository {
         body: string;
         updatedAt: string;
       }>(
-        `SELECT id, title, body, updated_at AS updatedAt
-         FROM local_notes
-         WHERE deleted_at IS NULL
-           AND (
-             lower(title) LIKE ? ESCAPE '\\'
-             OR lower(body) LIKE ? ESCAPE '\\'
-           )
-         ORDER BY updated_at DESC, id ASC
+        `SELECT notes.id AS id, notes.title AS title, notes.body AS body, notes.updated_at AS updatedAt
+         FROM local_notes_fts
+         INNER JOIN local_notes notes ON notes.rowid = local_notes_fts.rowid
+         WHERE local_notes_fts MATCH ?
+           AND notes.deleted_at IS NULL
+         ORDER BY bm25(local_notes_fts) ASC, notes.updated_at DESC, notes.id ASC
          LIMIT ?;`,
-        [like, like, limit]
+        [ftsQuery, limit]
       )
       .map((row) => ({
         id: row.id,
@@ -740,6 +1702,217 @@ export class LocalSettingsRepository {
   }
 }
 
+interface NormalizedCalendarWrite {
+  title: string;
+  calendarId: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  location: string;
+  notes: string;
+  guestEmails: string[];
+  reminderMinutes: number[];
+}
+
+function normalizeCalendarWrite(input: NormalizedCalendarWrite): NormalizedCalendarWrite {
+  const startsAt = input.allDay ? startOfUtcDayIso(input.startsAt) : new Date(input.startsAt).toISOString();
+  let endsAt = input.allDay ? startOfUtcDayIso(input.endsAt) : new Date(input.endsAt).toISOString();
+
+  if (input.allDay && Date.parse(endsAt) <= Date.parse(startsAt)) {
+    endsAt = addUtcDaysIso(startsAt, 1);
+  }
+
+  if (Date.parse(endsAt) <= Date.parse(startsAt)) {
+    throw validationFailed("Event end must be after start.");
+  }
+
+  return {
+    title: input.title.trim(),
+    calendarId: input.calendarId,
+    startsAt,
+    endsAt,
+    allDay: input.allDay,
+    location: input.location.trim(),
+    notes: input.notes,
+    guestEmails: normalizeGuestEmails(input.guestEmails),
+    reminderMinutes: normalizeReminderMinutes(input.reminderMinutes)
+  };
+}
+
+function eventInsertOperation(input: {
+  id: string;
+  accountId: string;
+  calendarId: string;
+  googleId: string;
+  now: string;
+} & NormalizedCalendarWrite) {
+  return {
+    kind: "run" as const,
+    sql: `INSERT INTO google_calendar_events (
+      id, account_id, calendar_id, google_id, status, summary, description, location,
+      start_at, end_at, is_all_day, attendee_emails_json, reminder_minutes_json,
+      created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+    params: [
+      input.id,
+      input.accountId,
+      input.calendarId,
+      input.googleId,
+      input.title,
+      nullIfEmpty(input.notes),
+      nullIfEmpty(input.location),
+      input.startsAt,
+      input.endsAt,
+      boolInt(input.allDay),
+      JSON.stringify(input.guestEmails),
+      JSON.stringify(input.reminderMinutes),
+      input.now,
+      input.now
+    ]
+  };
+}
+
+function eventUpdateOperation(input: {
+  id: string;
+  calendarId: string;
+  now: string;
+} & NormalizedCalendarWrite) {
+  return {
+    kind: "run" as const,
+    sql: `UPDATE google_calendar_events
+          SET calendar_id = ?,
+              summary = ?,
+              description = ?,
+              location = ?,
+              start_at = ?,
+              end_at = ?,
+              is_all_day = ?,
+              attendee_emails_json = ?,
+              reminder_minutes_json = ?,
+              updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL;`,
+    params: [
+      input.calendarId,
+      input.title,
+      nullIfEmpty(input.notes),
+      nullIfEmpty(input.location),
+      input.startsAt,
+      input.endsAt,
+      boolInt(input.allDay),
+      JSON.stringify(input.guestEmails),
+      JSON.stringify(input.reminderMinutes),
+      input.now,
+      input.id
+    ]
+  };
+}
+
+function instanceDeleteOperation(eventId: string, now: string) {
+  return {
+    kind: "run" as const,
+    sql: `UPDATE google_calendar_event_instances
+          SET deleted_at = ?, updated_at = ?
+          WHERE event_id = ? AND deleted_at IS NULL;`,
+    params: [now, now, eventId]
+  };
+}
+
+function instanceInsertOperation(input: {
+  id: string;
+  accountId: string;
+  calendarId: string;
+  eventId: string;
+  googleEventId: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  status: string;
+  updatedAt: string;
+}) {
+  return {
+    kind: "run" as const,
+    sql: `INSERT INTO google_calendar_event_instances (
+      id, account_id, calendar_id, event_id, google_event_id, start_at, end_at,
+      is_all_day, status, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    ON CONFLICT(id) DO UPDATE SET
+      calendar_id = excluded.calendar_id,
+      event_id = excluded.event_id,
+      start_at = excluded.start_at,
+      end_at = excluded.end_at,
+      is_all_day = excluded.is_all_day,
+      status = excluded.status,
+      updated_at = excluded.updated_at,
+      deleted_at = NULL;`,
+    params: [
+      input.id,
+      input.accountId,
+      input.calendarId,
+      input.eventId,
+      input.googleEventId,
+      input.startsAt,
+      input.endsAt,
+      boolInt(input.allDay),
+      input.status,
+      input.updatedAt
+    ]
+  };
+}
+
+function mutationInsertOperation(input: {
+  id: string;
+  accountId: string | null;
+  resourceId: string;
+  operation: string;
+  payload: object;
+  now: string;
+}) {
+  return {
+    kind: "run" as const,
+    sql: `INSERT INTO google_pending_mutations (
+      id, account_id, resource_type, resource_id, operation, payload_json, status,
+      attempt_count, created_at, updated_at
+    ) VALUES (?, ?, 'event', ?, ?, ?, 'pending', 0, ?, ?);`,
+    params: [
+      input.id,
+      input.accountId,
+      input.resourceId,
+      input.operation,
+      JSON.stringify(input.payload),
+      input.now,
+      input.now
+    ]
+  };
+}
+
+function mutationPayload(input: NormalizedCalendarWrite): object {
+  return {
+    title: input.title,
+    calendarId: input.calendarId,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    allDay: input.allDay,
+    location: input.location,
+    notes: input.notes,
+    guestEmails: input.guestEmails,
+    reminderMinutes: input.reminderMinutes
+  };
+}
+
+function nullIfEmpty(value: string): string | null {
+  const trimmed = value.trim();
+
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function googleEventIdFromLocalEventId(id: string): string {
+  return id.split(":").at(-1) ?? id;
+}
+
+function boolInt(value: boolean): number {
+  return value ? 1 : 0;
+}
+
 function pageBounds(
   cursor: string | undefined,
   requestedLimit: number | undefined,
@@ -788,21 +1961,26 @@ function taskListSummary(row: TaskListRow): TaskListSummary {
 }
 
 function taskSummary(row: TaskRow): TaskSummary {
+  const status = taskStatusFromRow(row);
+
   return {
     id: row.id,
     listId: row.listId,
     title: row.title,
-    status: row.status === "completed" ? "completed" : "active",
+    status,
     dueAt: row.dueAt,
-    updatedAt: row.updatedAt
+    updatedAt: row.updatedAt,
+    notes: row.notes ?? undefined,
+    parentId: row.parentId,
+    priority: row.priority ?? "none",
+    sortOrder: row.sortOrder,
+    mutationState: mutationState(row.pendingMutationStatus)
   };
 }
 
 function taskDetail(row: TaskRow): TaskDetail {
   return {
-    ...taskSummary(row),
-    notes: row.notes ?? undefined,
-    parentId: row.parentId
+    ...taskSummary(row)
   };
 }
 
@@ -820,12 +1998,27 @@ function calendarListSummary(row: CalendarListRow): CalendarListSummary {
 function calendarEventSummary(row: CalendarEventRow): CalendarEventSummary {
   return {
     id: row.id,
+    eventId: row.eventId,
     calendarId: row.calendarId,
     title: row.title,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
     allDay: row.allDay === 1,
-    updatedAt: row.updatedAt
+    updatedAt: row.updatedAt,
+    location: row.location ?? "",
+    notes: row.notes ?? "",
+    guestEmails: parseStringArray(row.guestEmailsJson),
+    reminderMinutes: parseNumberArray(row.reminderMinutesJson),
+    recurringEventId: row.recurringEventId,
+    originalStartAt: row.originalStartAt
+  };
+}
+
+function calendarEventDetail(row: CalendarEventRow): CalendarEventDetail {
+  return {
+    ...calendarEventSummary(row),
+    calendarTitle: row.calendarTitle,
+    deepLink: `hotcrossbuns://event/${row.eventId}`
   };
 }
 
@@ -855,8 +2048,58 @@ function preview(body: string): string {
   return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
 }
 
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+function ftsMatchQuery(value: string): string {
+  const tokens = value
+    .normalize("NFKD")
+    .toLowerCase()
+    .match(/[a-z0-9]+/g)
+    ?.slice(0, 8) ?? [];
+
+  return tokens.map((token) => `${token}*`).join(" ");
+}
+
+function taskStatusFromRow(row: TaskRow): TaskSummary["status"] {
+  if (row.deletedAt !== undefined && row.deletedAt !== null) {
+    return "deleted";
+  }
+
+  if (row.isHidden === 1) {
+    return "hidden";
+  }
+
+  return row.status === "completed" ? "completed" : "active";
+}
+
+function mutationState(status: TaskRow["pendingMutationStatus"]): TaskSummary["mutationState"] {
+  if (status === "failed") {
+    return "failed";
+  }
+
+  if (status === "pending" || status === "applying") {
+    return "queued";
+  }
+
+  return undefined;
+}
+
+function dateOnlyToIso(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return `${value}T00:00:00.000Z`;
+}
+
+function isoToDateOnly(value: string | null | undefined): string | null {
+  return value ? value.slice(0, 10) : null;
+}
+
+function validationFailure(message: string): HcbPublicError {
+  return new HcbPublicError({
+    code: "VALIDATION_ERROR",
+    message,
+    recoverable: true
+  });
 }
 
 function notFound(message: string): HcbPublicError {
@@ -865,4 +2108,44 @@ function notFound(message: string): HcbPublicError {
     message,
     recoverable: true
   });
+}
+
+function validationFailed(message: string): HcbPublicError {
+  return new HcbPublicError({
+    code: "VALIDATION_ERROR",
+    message,
+    recoverable: true
+  });
+}
+
+function parseStringArray(value: string | null): string[] {
+  if (value === null || value.length === 0) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseNumberArray(value: string | null): number[] {
+  if (value === null || value.length === 0) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is number => Number.isInteger(item))
+      : [];
+  } catch {
+    return [];
+  }
 }

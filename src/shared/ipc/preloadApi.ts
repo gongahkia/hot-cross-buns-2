@@ -1,6 +1,10 @@
 import type {
   CalendarRangeRequest,
   CalendarRangeResponse,
+  CalendarEventCreateRequest,
+  CalendarEventDeleteRequest,
+  CalendarEventDetail,
+  CalendarEventUpdateRequest,
   CalendarListRequest,
   CalendarListResponse,
   DiagnosticsCachedDataRenderedRequest,
@@ -29,11 +33,20 @@ import type {
   SyncRunNowRequest,
   SyncRunNowResponse,
   SyncStatusResponse,
+  TaskCompletionRequest,
+  TaskCreateRequest,
+  TaskDeleteRequest,
   TaskDetail,
+  TaskListCreateRequest,
+  TaskListDeleteRequest,
+  TaskListRenameRequest,
+  TaskListSummary,
   TaskListsRequest,
   TaskListsResponse,
+  TaskMoveRequest,
   TaskListRequest,
-  TaskListResponse
+  TaskListResponse,
+  TaskUpdateRequest
 } from "./contracts";
 import type { HcbResult } from "./result";
 
@@ -42,10 +55,23 @@ export interface HcbApi {
     listTaskLists: (request?: TaskListsRequest) => Promise<HcbResult<TaskListsResponse>>;
     list: (request?: TaskListRequest) => Promise<HcbResult<TaskListResponse>>;
     get: (request: EntityByIdRequest) => Promise<HcbResult<TaskDetail>>;
+    create: (request: TaskCreateRequest) => Promise<HcbResult<TaskDetail>>;
+    update: (request: TaskUpdateRequest) => Promise<HcbResult<TaskDetail>>;
+    complete: (request: TaskCompletionRequest) => Promise<HcbResult<TaskDetail>>;
+    reopen: (request: TaskCompletionRequest) => Promise<HcbResult<TaskDetail>>;
+    move: (request: TaskMoveRequest) => Promise<HcbResult<TaskDetail>>;
+    delete: (request: TaskDeleteRequest) => Promise<HcbResult<MutationAck>>;
+    createTaskList: (request: TaskListCreateRequest) => Promise<HcbResult<TaskListSummary>>;
+    renameTaskList: (request: TaskListRenameRequest) => Promise<HcbResult<TaskListSummary>>;
+    deleteTaskList: (request: TaskListDeleteRequest) => Promise<HcbResult<MutationAck>>;
   };
   calendar: {
     listCalendars: (request?: CalendarListRequest) => Promise<HcbResult<CalendarListResponse>>;
     listEvents: (request: CalendarRangeRequest) => Promise<HcbResult<CalendarRangeResponse>>;
+    get: (request: EntityByIdRequest) => Promise<HcbResult<CalendarEventDetail>>;
+    create: (request: CalendarEventCreateRequest) => Promise<HcbResult<CalendarEventDetail>>;
+    update: (request: CalendarEventUpdateRequest) => Promise<HcbResult<CalendarEventDetail>>;
+    delete: (request: CalendarEventDeleteRequest) => Promise<HcbResult<MutationAck>>;
   };
   notes: {
     list: (request?: NoteListRequest) => Promise<HcbResult<NoteListResponse>>;

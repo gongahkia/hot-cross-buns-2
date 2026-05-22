@@ -21,12 +21,16 @@ export interface TaskSubtaskViewModel {
 
 export interface TaskViewModel {
   id: string;
+  listId: string;
+  parentId: string | null;
   title: string;
   detail: string;
   list: string;
+  dueDate: string | null;
   dueLabel: string;
   priority: CorePriority;
   status: TaskStatus;
+  mutationState?: "synced" | "queued" | "failed";
   subtasks: TaskSubtaskViewModel[];
 }
 
@@ -48,12 +52,19 @@ export interface TaskFilterViewModel {
 
 export interface CalendarEventViewModel {
   id: string;
+  eventId: string;
+  calendarId: string;
   title: string;
   calendar: string;
   timeLabel: string;
   rangeLabel: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
   location: string;
   notes: string;
+  guestEmails: string[];
+  reminderMinutes: number[];
 }
 
 export interface CalendarDayViewModel {

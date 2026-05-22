@@ -96,3 +96,9 @@ Required tests:
 - transaction rollback on failed write
 - renderer cannot import database modules
 
+## Current Implementation Notes
+
+- SQLite repositories now back the core task, task-list, calendar-event, note, settings, search, sync-status, and performance-timing paths exposed through typed IPC.
+- UI IPC handlers and MCP tools share the same main-side domain services. Synced task and event writes update local mirrors and enqueue `google_pending_mutations`; note writes remain local-only and are not queued for Google.
+- Local search reads current task, event, and note rows from SQLite with capped results and indexed recent/search paths. Renderer search requests stay bounded and do not call Google.
+- The renderer receives DTOs only. It does not import SQLite modules, raw Google payloads, tokens, filesystem internals, or unbounded result sets.

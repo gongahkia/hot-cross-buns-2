@@ -33,9 +33,12 @@ export type {
 const inboxTasks: TaskViewModel[] = [
   {
     id: "task-inbox-rules",
+    listId: "list-inbox",
+    parentId: null,
     title: "Draft inbox triage rules",
     detail: "Define keyboard-first review states before sync writes exist.",
     list: "Inbox",
+    dueDate: "2026-05-22",
     dueLabel: "Today",
     priority: "high",
     status: "open",
@@ -46,9 +49,12 @@ const inboxTasks: TaskViewModel[] = [
   },
   {
     id: "task-calendar-fixtures",
+    listId: "list-inbox",
+    parentId: null,
     title: "Review calendar fixture shape",
     detail: "Keep visible rows stable for future agenda virtualization.",
     list: "Inbox",
+    dueDate: "2026-05-22",
     dueLabel: "Today",
     priority: "medium",
     status: "open",
@@ -62,9 +68,12 @@ const inboxTasks: TaskViewModel[] = [
 const planningTasks: TaskViewModel[] = [
   {
     id: "task-offline-copy",
+    listId: "list-planning",
+    parentId: null,
     title: "Tighten offline banner copy",
     detail: "Make retry and cache state explicit without exposing service details.",
     list: "Planning",
+    dueDate: "2026-05-23",
     dueLabel: "Tomorrow",
     priority: "low",
     status: "open",
@@ -75,9 +84,12 @@ const planningTasks: TaskViewModel[] = [
   },
   {
     id: "task-settings-states",
+    listId: "list-planning",
+    parentId: null,
     title: "Map settings empty and error states",
     detail: "Prepare rows for OAuth, hotkeys, diagnostics, MCP, and local data.",
     list: "Planning",
+    dueDate: "2026-05-29",
     dueLabel: "Friday",
     priority: "none",
     status: "open",
@@ -91,9 +103,12 @@ const planningTasks: TaskViewModel[] = [
 const completedTasks: TaskViewModel[] = [
   {
     id: "task-shell-visible",
+    listId: "list-performance",
+    parentId: null,
     title: "Report shell-visible timing",
     detail: "Mock-only diagnostics call is already available through preload.",
     list: "Performance",
+    dueDate: null,
     dueLabel: "Done",
     priority: "low",
     status: "completed",
@@ -104,9 +119,12 @@ const completedTasks: TaskViewModel[] = [
   },
   {
     id: "task-command-palette",
+    listId: "list-performance",
+    parentId: null,
     title: "Keep command palette cheap to mount",
     detail: "Command registry stays in memory and does not wait for cache hydration.",
     list: "Performance",
+    dueDate: null,
     dueLabel: "Done",
     priority: "medium",
     status: "completed",
@@ -120,9 +138,12 @@ const completedTasks: TaskViewModel[] = [
 const hiddenTasks: TaskViewModel[] = [
   {
     id: "task-hidden-legacy-import",
+    listId: "list-backlog",
+    parentId: null,
     title: "Legacy import comparison",
     detail: "Hidden until local data migrations exist.",
     list: "Backlog",
+    dueDate: null,
     dueLabel: "Hidden",
     priority: "none",
     status: "hidden",
@@ -133,9 +154,12 @@ const hiddenTasks: TaskViewModel[] = [
 const deletedTasks: TaskViewModel[] = [
   {
     id: "task-deleted-stale-demo",
+    listId: "list-backlog",
+    parentId: null,
     title: "Remove stale demo row",
     detail: "Deleted task shell for trash filters and recovery copy.",
     list: "Backlog",
+    dueDate: null,
     dueLabel: "Deleted",
     priority: "low",
     status: "deleted",
@@ -145,9 +169,12 @@ const deletedTasks: TaskViewModel[] = [
 
 export const largeTaskWindow: TaskViewModel[] = Array.from({ length: 96 }, (_, index) => ({
   id: `task-generated-${index + 1}`,
+  listId: index % 2 === 0 ? "list-inbox" : "list-planning",
+  parentId: null,
   title: `Generated planning task ${String(index + 1).padStart(2, "0")}`,
   detail: "Virtualized placeholder row for large local cache testing.",
   list: index % 2 === 0 ? "Inbox" : "Planning",
+  dueDate: index % 3 === 0 ? "2026-05-22" : null,
   dueLabel: index % 3 === 0 ? "This week" : "Later",
   priority: index % 5 === 0 ? "high" : index % 3 === 0 ? "medium" : "none",
   status: "open",
@@ -251,52 +278,110 @@ export const todayViewModel = {
   ]
 };
 
+function mockCalendarEvent({
+  allDay = false,
+  calendar,
+  calendarId,
+  endsAt,
+  id,
+  location,
+  notes,
+  rangeLabel,
+  startsAt,
+  timeLabel,
+  title
+}: {
+  allDay?: boolean;
+  calendar: string;
+  calendarId: string;
+  endsAt: string;
+  id: string;
+  location: string;
+  notes: string;
+  rangeLabel: string;
+  startsAt: string;
+  timeLabel: string;
+  title: string;
+}): CalendarEventViewModel {
+  return {
+    id,
+    eventId: id,
+    calendarId,
+    title,
+    calendar,
+    timeLabel,
+    rangeLabel,
+    startsAt,
+    endsAt,
+    allDay,
+    location,
+    notes,
+    guestEmails: [],
+    reminderMinutes: []
+  };
+}
+
 export const calendarEventsById: Record<string, CalendarEventViewModel> = {
-  "event-standup": {
+  "event-standup": mockCalendarEvent({
     id: "event-standup",
     title: "Planner shell standup",
+    calendarId: "cal-product",
     calendar: "Product",
     timeLabel: "09:30",
     rangeLabel: "09:30-09:50",
+    startsAt: "2026-05-22T09:30:00.000Z",
+    endsAt: "2026-05-22T09:50:00.000Z",
     location: "Local mock room",
     notes: "Review Today and Tasks shape."
-  },
-  "event-focus": {
+  }),
+  "event-focus": mockCalendarEvent({
     id: "event-focus",
     title: "Focused implementation block",
+    calendarId: "cal-engineering",
     calendar: "Engineering",
     timeLabel: "11:00",
     rangeLabel: "11:00-13:00",
+    startsAt: "2026-05-22T11:00:00.000Z",
+    endsAt: "2026-05-22T13:00:00.000Z",
     location: "Desk",
     notes: "Renderer-only feature work."
-  },
-  "event-sync-review": {
+  }),
+  "event-sync-review": mockCalendarEvent({
     id: "event-sync-review",
     title: "Sync contract review",
+    calendarId: "cal-engineering",
     calendar: "Engineering",
     timeLabel: "14:00",
     rangeLabel: "14:00-14:45",
+    startsAt: "2026-05-22T14:00:00.000Z",
+    endsAt: "2026-05-22T14:45:00.000Z",
     location: "Video",
     notes: "Confirm missing preload contracts."
-  },
-  "event-review": {
+  }),
+  "event-review": mockCalendarEvent({
     id: "event-review",
     title: "Renderer acceptance review",
+    calendarId: "cal-qa",
     calendar: "QA",
     timeLabel: "15:30",
     rangeLabel: "15:30-16:15",
+    startsAt: "2026-05-22T15:30:00.000Z",
+    endsAt: "2026-05-22T16:15:00.000Z",
     location: "Codex",
     notes: "Check screen coverage and tests."
-  },
-  "event-notes": {
+  }),
+  "event-notes": mockCalendarEvent({
     id: "event-notes",
     title: "Notes local state pass",
+    calendarId: "cal-product",
     calendar: "Product",
     timeLabel: "17:00",
     rangeLabel: "17:00-17:25",
+    startsAt: "2026-05-22T17:00:00.000Z",
+    endsAt: "2026-05-22T17:25:00.000Z",
     location: "Local mock room",
     notes: "Exercise create, edit, delete state."
-  }
+  })
 };
 
 export const calendarAgendaEvents: CalendarEventViewModel[] = [
@@ -305,15 +390,23 @@ export const calendarAgendaEvents: CalendarEventViewModel[] = [
   calendarEventsById["event-sync-review"],
   calendarEventsById["event-review"],
   calendarEventsById["event-notes"],
-  ...Array.from({ length: 42 }, (_, index) => ({
-    id: `event-generated-${index + 1}`,
-    title: `Generated agenda event ${String(index + 1).padStart(2, "0")}`,
-    calendar: index % 2 === 0 ? "Product" : "Engineering",
-    timeLabel: `${String(8 + (index % 10)).padStart(2, "0")}:15`,
-    rangeLabel: `${String(8 + (index % 10)).padStart(2, "0")}:15-${String(8 + (index % 10)).padStart(2, "0")}:45`,
-    location: "Mock calendar",
-    notes: "Virtualized agenda placeholder."
-  }))
+  ...Array.from({ length: 42 }, (_, index) => {
+    const hour = String(8 + (index % 10)).padStart(2, "0");
+    const calendar = index % 2 === 0 ? "Product" : "Engineering";
+
+    return mockCalendarEvent({
+      id: `event-generated-${index + 1}`,
+      title: `Generated agenda event ${String(index + 1).padStart(2, "0")}`,
+      calendarId: index % 2 === 0 ? "cal-product" : "cal-engineering",
+      calendar,
+      timeLabel: `${hour}:15`,
+      rangeLabel: `${hour}:15-${hour}:45`,
+      startsAt: `2026-05-22T${hour}:15:00.000Z`,
+      endsAt: `2026-05-22T${hour}:45:00.000Z`,
+      location: "Mock calendar",
+      notes: "Virtualized agenda placeholder."
+    });
+  })
 ];
 
 export const calendarDayView: CalendarDayViewModel = {

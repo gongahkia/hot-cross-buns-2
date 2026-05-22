@@ -1,6 +1,6 @@
 import type { JsonValue } from "@shared/domain/localData";
 
-export type FutureSyncMutationResource = "task" | "event";
+export type FutureSyncMutationResource = "task" | "task_list" | "event";
 
 export interface FutureSyncMutationInput {
   accountId: string;
