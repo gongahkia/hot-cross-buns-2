@@ -12,6 +12,7 @@ import {
   type NoteListRequest,
   type NoteUpdateRequest,
   type SearchQueryRequest,
+  type SettingsRecoveryActionRequest,
   type SettingsUpdateRequest,
   type SyncRunNowRequest,
   type TaskCompletionRequest,
@@ -141,6 +142,11 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     {
       contract: ipcContracts.settings.update,
       handle: (request) => services.settings.update(request as SettingsUpdateRequest)
+    },
+    {
+      contract: ipcContracts.settings.recoveryAction,
+      handle: (request) =>
+        services.settings.recoveryAction(request as SettingsRecoveryActionRequest)
     },
     {
       contract: ipcContracts.mcp.status,

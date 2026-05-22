@@ -16,6 +16,7 @@ import {
   type HcbErrorCode,
   type HcbResult
 } from "@shared/ipc/result";
+import { redactLogValue } from "@shared/redaction";
 
 export interface IpcMainLike {
   handle: (
@@ -106,7 +107,7 @@ function defaultDevLogger(): IpcDiagnosticsLogger | undefined {
 
   return {
     debug: (event) => {
-      console.debug("[hcb:ipc]", JSON.stringify(event));
+      console.debug("[hcb:ipc]", JSON.stringify(redactLogValue(event)));
     }
   };
 }
@@ -230,10 +231,10 @@ export function createIpcDispatcher(
     };
 
     options.metrics?.record(metricEvent);
-    logger?.debug({
+    logger?.debug(redactLogValue({
       channel: HCB_IPC_CHANNEL,
       ...metricEvent
-    });
+    }) as IpcLogEvent);
 
     return result;
   }

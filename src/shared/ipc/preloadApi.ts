@@ -12,6 +12,7 @@ import type {
   DiagnosticsIpcMetricsResponse,
   DiagnosticsPerformanceRequest,
   DiagnosticsPerformanceResponse,
+  DiagnosticsSummaryResponse,
   DiagnosticsShellVisibleRequest,
   EntityByIdRequest,
   McpSetEnabledRequest,
@@ -27,6 +28,8 @@ import type {
   NoteUpdateRequest,
   SearchQueryRequest,
   SearchQueryResponse,
+  SettingsRecoveryActionRequest,
+  SettingsRecoveryActionResponse,
   SettingsSnapshot,
   SettingsUpdateRequest,
   StartupTimingSnapshot,
@@ -91,6 +94,9 @@ export interface HcbApi {
   settings: {
     get: () => Promise<HcbResult<SettingsSnapshot>>;
     update: (request: SettingsUpdateRequest) => Promise<HcbResult<SettingsSnapshot>>;
+    recoveryAction: (
+      request: SettingsRecoveryActionRequest
+    ) => Promise<HcbResult<SettingsRecoveryActionResponse>>;
   };
   mcp: {
     status: () => Promise<HcbResult<McpStatusResponse>>;
@@ -114,5 +120,6 @@ export interface HcbApi {
     performance: (
       request?: DiagnosticsPerformanceRequest
     ) => Promise<HcbResult<DiagnosticsPerformanceResponse>>;
+    summary: () => Promise<HcbResult<DiagnosticsSummaryResponse>>;
   };
 }

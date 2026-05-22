@@ -20,6 +20,8 @@ import type {
   NoteUpdateRequest,
   SearchQueryRequest,
   SearchQueryResponse,
+  SettingsRecoveryActionRequest,
+  SettingsRecoveryActionResponse,
   SettingsSnapshot,
   SettingsUpdateRequest,
   SyncRunNowRequest,
@@ -150,6 +152,9 @@ export interface SyncControlDomainService {
 export interface SettingsDomainService {
   get: () => MaybePromise<SettingsSnapshot>;
   update: (request: SettingsUpdateRequest) => MaybePromise<SettingsSnapshot>;
+  recoveryAction: (
+    request: SettingsRecoveryActionRequest
+  ) => MaybePromise<SettingsRecoveryActionResponse>;
 }
 
 export interface McpControlDomainService {

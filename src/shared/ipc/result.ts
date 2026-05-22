@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { redactDiagnosticDetails, redactErrorMessage } from "../redaction";
 
 export const hcbErrorCodeSchema = z.enum([
   "VALIDATION_ERROR",
@@ -67,7 +68,7 @@ export function ok<T>(data: T): HcbResult<T> {
 }
 
 export function err(error: HcbError): HcbResult<never> {
-  return { ok: false, error };
+  return { ok: false, error: sanitizeHcbError(error) };
 }
 
 export function validationError(
@@ -114,12 +115,12 @@ export class HcbPublicError extends Error {
   }
 
   toHcbError(): HcbError {
-    return hcbErrorSchema.parse({
+    return sanitizeHcbError({
       code: this.code,
-      message: this.message,
+      message: redactErrorMessage(this.message),
       ...(this.recoverable === undefined ? {} : { recoverable: this.recoverable }),
       ...(this.retryAfterMs === undefined ? {} : { retryAfterMs: this.retryAfterMs }),
-      ...(this.details === undefined ? {} : { details: this.details })
+      ...(this.details === undefined ? {} : { details: redactDiagnosticDetails(this.details) })
     });
   }
 }
@@ -142,4 +143,14 @@ export function sanitizeThrownError(thrown: unknown): HcbError {
     message: "Internal application error",
     recoverable: false
   };
+}
+
+export function sanitizeHcbError(error: HcbError): HcbError {
+  return hcbErrorSchema.parse({
+    code: error.code,
+    message: redactErrorMessage(error.message),
+    ...(error.recoverable === undefined ? {} : { recoverable: error.recoverable }),
+    ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+    ...(error.details === undefined ? {} : { details: redactDiagnosticDetails(error.details) })
+  });
 }

@@ -594,13 +594,26 @@ export type SyncRunNowResponse = z.infer<typeof syncRunNowResponseSchema>;
 export const settingsGetRequestSchema = emptyRequestSchema;
 
 export const appThemeSchema = z.enum(["system", "light", "dark"]);
+export const syncModeSchema = z.enum(["manual", "balanced", "near-real-time"]);
+export const trayClickActionSchema = z.enum(["toggle-window", "quick-capture", "open-today"]);
+export const mcpPermissionModeSchema = z.enum(["read-only", "confirm-writes", "allow-writes"]);
 
 export const settingsSnapshotSchema = z
   .object({
     theme: appThemeSchema,
     startOnLogin: z.boolean(),
     quickCaptureShortcut: z.string().min(1).max(120).nullable(),
-    mcpEnabled: z.boolean()
+    selectedTaskListIds: z.array(idSchema).max(100),
+    selectedCalendarIds: z.array(idSchema).max(100),
+    syncMode: syncModeSchema,
+    showTrayIcon: z.boolean(),
+    trayClickAction: trayClickActionSchema,
+    notificationsEnabled: z.boolean(),
+    notificationLeadMinutes: z.number().int().min(0).max(28 * 24 * 60),
+    mcpEnabled: z.boolean(),
+    mcpPermissionMode: mcpPermissionModeSchema,
+    mcpPort: z.number().int().min(0).max(65535),
+    diagnosticsIncludePerformance: z.boolean()
   })
   .strict();
 
@@ -611,7 +624,17 @@ export const settingsUpdateRequestSchema = z
     theme: appThemeSchema.optional(),
     startOnLogin: z.boolean().optional(),
     quickCaptureShortcut: z.string().min(1).max(120).nullable().optional(),
-    mcpEnabled: z.boolean().optional()
+    selectedTaskListIds: z.array(idSchema).max(100).optional(),
+    selectedCalendarIds: z.array(idSchema).max(100).optional(),
+    syncMode: syncModeSchema.optional(),
+    showTrayIcon: z.boolean().optional(),
+    trayClickAction: trayClickActionSchema.optional(),
+    notificationsEnabled: z.boolean().optional(),
+    notificationLeadMinutes: z.number().int().min(0).max(28 * 24 * 60).optional(),
+    mcpEnabled: z.boolean().optional(),
+    mcpPermissionMode: mcpPermissionModeSchema.optional(),
+    mcpPort: z.number().int().min(0).max(65535).optional(),
+    diagnosticsIncludePerformance: z.boolean().optional()
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, {
@@ -619,6 +642,44 @@ export const settingsUpdateRequestSchema = z
   });
 
 export type SettingsUpdateRequest = z.input<typeof settingsUpdateRequestSchema>;
+
+export const settingsRecoveryActionSchema = z.enum([
+  "refresh",
+  "forceFullResync",
+  "clearGoogleCache",
+  "resetMcpToken"
+]);
+
+export const settingsRecoveryActionRequestSchema = z
+  .object({
+    action: settingsRecoveryActionSchema,
+    confirmation: z
+      .object({
+        accepted: z.boolean(),
+        phrase: z.string().trim().max(80).optional()
+      })
+      .strict()
+      .optional()
+  })
+  .strict();
+
+export type SettingsRecoveryActionRequest = z.input<
+  typeof settingsRecoveryActionRequestSchema
+>;
+
+export const settingsRecoveryActionResponseSchema = z
+  .object({
+    action: settingsRecoveryActionSchema,
+    accepted: z.boolean(),
+    destructive: z.boolean(),
+    requiresReload: z.boolean(),
+    message: z.string().min(1).max(500)
+  })
+  .strict();
+
+export type SettingsRecoveryActionResponse = z.infer<
+  typeof settingsRecoveryActionResponseSchema
+>;
 
 export const mcpStatusRequestSchema = emptyRequestSchema;
 
@@ -628,6 +689,10 @@ export const mcpStatusResponseSchema = z
     running: z.boolean(),
     readOnly: z.boolean(),
     confirmationRequired: z.boolean(),
+    permissionMode: mcpPermissionModeSchema,
+    port: z.number().int().min(0).max(65535),
+    tokenState: z.enum(["not_configured", "configured", "rotated"]),
+    lastTokenResetAt: isoDateTimeSchema.optional(),
     url: z.literal("http://127.0.0.1").optional()
   })
   .strict();
@@ -637,7 +702,9 @@ export type McpStatusResponse = z.infer<typeof mcpStatusResponseSchema>;
 export const mcpSetEnabledRequestSchema = z
   .object({
     enabled: z.boolean(),
-    confirmationRequired: z.boolean().optional()
+    confirmationRequired: z.boolean().optional(),
+    permissionMode: mcpPermissionModeSchema.optional(),
+    port: z.number().int().min(0).max(65535).optional()
   })
   .strict();
 
@@ -784,6 +851,144 @@ export type DiagnosticsPerformanceResponse = z.infer<
   typeof diagnosticsPerformanceResponseSchema
 >;
 
+export const diagnosticsSummaryRequestSchema = emptyRequestSchema;
+
+const diagnosticsResourceSelectionSchema = z
+  .object({
+    id: idSchema,
+    title: z.string().min(1).max(500),
+    selected: z.boolean()
+  })
+  .strict();
+
+const diagnosticsPendingMutationBucketSchema = z
+  .object({
+    resourceType: z.string().min(1).max(80),
+    count: z.number().int().nonnegative()
+  })
+  .strict();
+
+const diagnosticsSlowQuerySampleSchema = z
+  .object({
+    name: z.string().min(1).max(160),
+    durationMs: z.number().nonnegative(),
+    createdAt: isoDateTimeSchema
+  })
+  .strict();
+
+const diagnosticsMcpRequestCountsSchema = z
+  .object({
+    totalRequests: z.number().int().nonnegative(),
+    successCount: z.number().int().nonnegative(),
+    rejectedCount: z.number().int().nonnegative(),
+    errorCount: z.number().int().nonnegative(),
+    rateLimitedCount: z.number().int().nonnegative()
+  })
+  .strict();
+
+export const diagnosticsSummaryResponseSchema = z
+  .object({
+    status: z.literal("ok"),
+    generatedAt: isoDateTimeSchema,
+    account: z
+      .object({
+        state: z.enum(["signed_out", "connected", "reauth_required", "sync_paused"]),
+        accountId: idSchema.optional(),
+        email: z.string().email().max(254).optional(),
+        displayName: z.string().max(200).nullable().optional(),
+        grantedScopeCount: z.number().int().nonnegative(),
+        missingScopeCount: z.number().int().nonnegative(),
+        lastAuthenticatedAt: isoDateTimeSchema.optional(),
+        updatedAt: isoDateTimeSchema.optional()
+      })
+      .strict(),
+    sync: syncStatusResponseSchema.extend({ mode: syncModeSchema }).strict(),
+    cache: z
+      .object({
+        taskListCount: z.number().int().nonnegative(),
+        taskCount: z.number().int().nonnegative(),
+        calendarCount: z.number().int().nonnegative(),
+        eventCount: z.number().int().nonnegative(),
+        noteCount: z.number().int().nonnegative(),
+        performanceSampleCount: z.number().int().nonnegative(),
+        migrationVersion: z.number().int().nonnegative(),
+        migrationDurationMs: z.number().nonnegative()
+      })
+      .strict(),
+    selectedResources: z
+      .object({
+        taskLists: z.array(diagnosticsResourceSelectionSchema).max(100),
+        calendars: z.array(diagnosticsResourceSelectionSchema).max(100)
+      })
+      .strict(),
+    checkpoints: z
+      .object({
+        totalCount: z.number().int().nonnegative(),
+        tasksCount: z.number().int().nonnegative(),
+        calendarCount: z.number().int().nonnegative(),
+        lastUpdatedAt: isoDateTimeSchema.optional()
+      })
+      .strict(),
+    pendingMutations: z
+      .object({
+        totalCount: z.number().int().nonnegative(),
+        pendingCount: z.number().int().nonnegative(),
+        applyingCount: z.number().int().nonnegative(),
+        failedCount: z.number().int().nonnegative(),
+        byResourceType: z.array(diagnosticsPendingMutationBucketSchema).max(20)
+      })
+      .strict(),
+    mcp: z
+      .object({
+        enabled: z.boolean(),
+        running: z.boolean(),
+        permissionMode: mcpPermissionModeSchema,
+        confirmationRequired: z.boolean(),
+        url: z.literal("http://127.0.0.1").optional(),
+        port: z.number().int().min(0).max(65535),
+        tokenState: z.enum(["not_configured", "configured", "rotated"]),
+        lastTokenResetAt: isoDateTimeSchema.optional(),
+        requestCounts: diagnosticsMcpRequestCountsSchema
+      })
+      .strict(),
+    build: z
+      .object({
+        appName: z.string().min(1).max(120),
+        version: z.string().min(1).max(80),
+        environment: z.enum(["development", "test", "production"]),
+        electronVersion: z.string().min(1).max(80).optional(),
+        nodeVersion: z.string().min(1).max(80),
+        packaged: z.boolean()
+      })
+      .strict(),
+    performance: z
+      .object({
+        startup: startupTimingSnapshotSchema,
+        migrationDurationMs: z.number().nonnegative(),
+        lastSyncDurationMs: z.number().nonnegative().optional(),
+        slowQuerySamples: z.array(diagnosticsSlowQuerySampleSchema).max(10),
+        pendingMutationCounts: z
+          .object({
+            totalCount: z.number().int().nonnegative(),
+            failedCount: z.number().int().nonnegative()
+          })
+          .strict(),
+        mcpRequestCounts: diagnosticsMcpRequestCountsSchema
+      })
+      .strict(),
+    redaction: z
+      .object({
+        credentials: z.literal("redacted"),
+        googlePayloads: z.literal("omitted"),
+        mcpBearerTokens: z.literal("redacted"),
+        sensitiveBodies: z.literal("omitted")
+      })
+      .strict()
+  })
+  .strict();
+
+export type DiagnosticsSummaryResponse = z.infer<typeof diagnosticsSummaryResponseSchema>;
+
 export const ipcContracts = {
   tasks: {
     listTaskLists: defineIpcContract(
@@ -883,6 +1088,12 @@ export const ipcContracts = {
       "update",
       settingsUpdateRequestSchema,
       settingsSnapshotSchema
+    ),
+    recoveryAction: defineIpcContract(
+      "settings",
+      "recoveryAction",
+      settingsRecoveryActionRequestSchema,
+      settingsRecoveryActionResponseSchema
     )
   },
   mcp: {
@@ -938,6 +1149,12 @@ export const ipcContracts = {
       "performance",
       diagnosticsPerformanceRequestSchema,
       diagnosticsPerformanceResponseSchema
+    ),
+    summary: defineIpcContract(
+      "diagnostics",
+      "summary",
+      diagnosticsSummaryRequestSchema,
+      diagnosticsSummaryResponseSchema
     )
   }
 } as const;

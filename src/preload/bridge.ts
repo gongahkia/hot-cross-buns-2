@@ -216,7 +216,14 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
     settings: {
       get: () => invokeContract(ipc, ipcContracts.settings.get, {}, "Settings request failed"),
       update: (request) =>
-        invokeContract(ipc, ipcContracts.settings.update, request, "Settings update failed")
+        invokeContract(ipc, ipcContracts.settings.update, request, "Settings update failed"),
+      recoveryAction: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.recoveryAction,
+          request,
+          "Settings recovery action failed"
+        )
     },
     mcp: {
       status: () => invokeContract(ipc, ipcContracts.mcp.status, {}, "MCP status failed"),
@@ -264,6 +271,13 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           ipcContracts.diagnostics.performance,
           request,
           "Performance metrics request failed"
+        ),
+      summary: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.summary,
+          {},
+          "Diagnostics summary request failed"
         )
     }
   });

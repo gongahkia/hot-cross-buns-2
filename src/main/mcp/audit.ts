@@ -1,4 +1,5 @@
 import type { McpAuditEvent, McpAuditRecorder } from "./types";
+import { redactAuditText, redactSensitiveKey } from "@shared/redaction";
 
 export class MemoryMcpAuditRecorder implements McpAuditRecorder {
   readonly events: McpAuditEvent[] = [];
@@ -9,15 +10,10 @@ export class MemoryMcpAuditRecorder implements McpAuditRecorder {
 }
 
 export function sanitizeAuditText(value: string): string {
-  return value
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/\b(token|secret|password|credential)=([^,\s]+)/gi, "$1=[redacted]")
-    .replace(/[\r\n]/g, "")
-    .trim()
-    .slice(0, 120);
+  return redactAuditText(value);
 }
 
 export function argumentKeysDescription(argumentsObject: Record<string, unknown>): string {
-  const keys = Object.keys(argumentsObject).sort();
+  const keys = Object.keys(argumentsObject).map(redactSensitiveKey).sort();
   return keys.length === 0 ? "none" : keys.join(",");
 }
