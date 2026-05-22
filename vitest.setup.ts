@@ -288,7 +288,7 @@ const hcbApi: HcbApi = {
         startOnLogin: request.startOnLogin ?? false,
         selectedTaskListIds: request.selectedTaskListIds ?? [],
         selectedCalendarIds: request.selectedCalendarIds ?? [],
-        setupCompletedAt: request.setupCompletedAt ?? now,
+        setupCompletedAt: request.setupCompletedAt === undefined ? now : request.setupCompletedAt,
         syncMode: request.syncMode ?? "balanced",
         quickCaptureShortcut: request.quickCaptureShortcut ?? null,
         showTrayIcon: request.showTrayIcon ?? true,

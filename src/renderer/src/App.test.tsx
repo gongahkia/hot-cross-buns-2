@@ -445,6 +445,48 @@ function seededHcb(): HcbApi {
   };
 }
 
+function onboardingHcb(
+  overrides: Partial<SettingsSnapshot> = {}
+): { api: HcbApi; getSettings: () => SettingsSnapshot } {
+  const api = seededHcb();
+  let settings = testSettings({
+    setupCompletedAt: null,
+    selectedTaskListIds: [],
+    selectedCalendarIds: [],
+    ...overrides
+  });
+
+  api.settings.get = vi.fn(async () => ok(settings));
+  api.settings.update = vi.fn(async (request) => {
+    settings = testSettings({
+      ...settings,
+      ...request,
+      setupCompletedAt:
+        request.setupCompletedAt === undefined ? settings.setupCompletedAt : request.setupCompletedAt
+    });
+
+    return ok(settings);
+  });
+  api.settings.recoveryAction = vi.fn(async (request) => {
+    if (request.action === "resetOnboarding") {
+      settings = testSettings({
+        ...settings,
+        setupCompletedAt: null
+      });
+    }
+
+    return ok({
+      action: request.action,
+      accepted: true,
+      destructive: request.action !== "refresh" && request.action !== "resetOnboarding",
+      requiresReload: request.action === "clearGoogleCache",
+      message: "Recovery action accepted."
+    });
+  });
+
+  return { api, getSettings: () => settings };
+}
+
 function loadingHcb(): HcbApi {
   const api = originalHcb!;
   const pendingRead = new Promise<never>(() => undefined);
@@ -906,6 +948,94 @@ describe("App shell", () => {
     await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
     expect(screen.getByRole("button", { name: /Copy diagnostics/ })).toBeInTheDocument();
     expect(screen.getByText("Credentials")).toBeInTheDocument();
+  });
+
+  it("shows onboarding for a fresh database and completes setup through settings IPC", async () => {
+    const { api, getSettings } = onboardingHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
+
+    expect(within(dialog).getByText("1. Google runtime")).toBeInTheDocument();
+    expect(within(dialog).getByText("2. Task lists")).toBeInTheDocument();
+    expect(within(dialog).getByText("3. Calendars")).toBeInTheDocument();
+    expect(within(dialog).getByText("4. Sync mode")).toBeInTheDocument();
+    expect(within(dialog).getByText("5. Notifications")).toBeInTheDocument();
+    expect(within(dialog).getByText("6. MCP access")).toBeInTheDocument();
+
+    await user.selectOptions(within(dialog).getByLabelText("Onboarding sync mode"), "near-real-time");
+    await user.click(within(dialog).getByLabelText("Local notifications"));
+    await user.click(within(dialog).getByLabelText("Enable MCP"));
+    await user.click(within(dialog).getByRole("button", { name: "Finish setup" }));
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedTaskListIds: ["list-inbox", "list-planning"],
+          selectedCalendarIds: ["cal-product"],
+          syncMode: "near-real-time",
+          notificationsEnabled: true,
+          mcpEnabled: true,
+          setupCompletedAt: expect.any(String)
+        })
+      );
+      expect(getSettings().setupCompletedAt).toEqual(expect.any(String));
+      expect(screen.queryByRole("dialog", { name: "First-run setup" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("lets users skip Google setup and keep local notes and settings usable", async () => {
+    const { api } = onboardingHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
+    await user.click(within(dialog).getByRole("button", { name: "Use local-only" }));
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedTaskListIds: [],
+          selectedCalendarIds: [],
+          syncMode: "manual",
+          notificationsEnabled: false,
+          mcpEnabled: false,
+          mcpPermissionMode: "read-only",
+          setupCompletedAt: expect.any(String)
+        })
+      );
+      expect(screen.queryByRole("dialog", { name: "First-run setup" })).not.toBeInTheDocument();
+    });
+
+    await goToSection("Notes");
+    expect(await screen.findByDisplayValue("Cache-first startup")).toBeInTheDocument();
+
+    await goToSection("Settings");
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("resets onboarding from Settings without deleting planner data", async () => {
+    const { api } = onboardingHcb({ setupCompletedAt: now });
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    expect(await screen.findByDisplayValue("Cache-first startup")).toBeInTheDocument();
+
+    await goToSection("Settings");
+    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
+    await user.click(within(settingsSupport).getByRole("button", { name: /Local data/ }));
+    await user.click(screen.getByRole("button", { name: "Reset onboarding" }));
+
+    await waitFor(() => {
+      expect(api.settings.recoveryAction).toHaveBeenCalledWith({ action: "resetOnboarding" });
+    });
+    expect(await screen.findByRole("dialog", { name: "First-run setup" })).toBeInTheDocument();
+    expect(api.notes.delete).not.toHaveBeenCalled();
   });
 
   it("refreshes native status after settings changes", async () => {

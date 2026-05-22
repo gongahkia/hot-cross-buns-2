@@ -7,6 +7,9 @@ import {
   calendarRangeRequestSchema,
   hcbDomainSchema,
   nativeCapabilitiesResponseSchema,
+  settingsRecoveryActionRequestSchema,
+  settingsSnapshotSchema,
+  settingsUpdateRequestSchema,
   taskCreateRequestSchema,
   taskUpdateRequestSchema,
   taskListRequestSchema
@@ -142,6 +145,59 @@ describe("shared IPC contracts", () => {
       }).success
     ).toBe(false);
     expect(taskUpdateRequestSchema.safeParse({ id: "task-1" }).success).toBe(false);
+  });
+
+  it("validates first-run setup settings without secret fields", () => {
+    const completedAt = "2026-05-22T00:00:00.000Z";
+
+    expect(
+      settingsUpdateRequestSchema.parse({
+        setupCompletedAt: completedAt,
+        selectedTaskListIds: ["list-inbox"],
+        selectedCalendarIds: ["cal-product"],
+        syncMode: "manual",
+        notificationsEnabled: false,
+        mcpEnabled: false
+      })
+    ).toMatchObject({
+      setupCompletedAt: completedAt,
+      syncMode: "manual"
+    });
+    expect(
+      settingsSnapshotSchema.parse({
+        theme: "system",
+        startOnLogin: false,
+        quickCaptureShortcut: null,
+        selectedTaskListIds: [],
+        selectedCalendarIds: [],
+        setupCompletedAt: null,
+        syncMode: "balanced",
+        showTrayIcon: true,
+        trayClickAction: "open-menu",
+        menuBarPanelStyle: "adaptive",
+        showMenuBarBadge: true,
+        notificationsEnabled: false,
+        notificationLeadMinutes: 10,
+        mcpEnabled: false,
+        mcpPermissionMode: "confirm-writes",
+        mcpPort: 0,
+        diagnosticsIncludePerformance: true
+      }).setupCompletedAt
+    ).toBeNull();
+    expect(
+      settingsUpdateRequestSchema.safeParse({
+        setupCompletedAt: "not-a-date"
+      }).success
+    ).toBe(false);
+    expect(
+      settingsUpdateRequestSchema.safeParse({
+        setupCompletedAt: completedAt,
+        oauthClientSecret: "must-not-parse"
+      }).success
+    ).toBe(false);
+    expect(settingsRecoveryActionRequestSchema.parse({ action: "resetOnboarding" })).toEqual({
+      action: "resetOnboarding"
+    });
   });
 
   it("requires native capability reports for platform adapter status", () => {

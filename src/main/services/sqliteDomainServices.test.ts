@@ -231,6 +231,7 @@ describe("SQLite-backed domain services", () => {
     const { domain } = createTestServices();
 
     const updated = await domain.settings.update({
+      setupCompletedAt: "2026-05-22T00:00:00.000Z",
       theme: "dark",
       selectedTaskListIds: ["list-a", "list-b", "list-a"],
       selectedCalendarIds: ["cal-a"],
@@ -250,6 +251,7 @@ describe("SQLite-backed domain services", () => {
     const reread = await domain.settings.get();
 
     expect(updated).toMatchObject({
+      setupCompletedAt: "2026-05-22T00:00:00.000Z",
       theme: "dark",
       selectedTaskListIds: ["list-a", "list-b"],
       selectedCalendarIds: ["cal-a"],
@@ -267,6 +269,29 @@ describe("SQLite-backed domain services", () => {
       diagnosticsIncludePerformance: false
     });
     expect(reread).toEqual(updated);
+  });
+
+  it("resets onboarding without deleting planner data", async () => {
+    const { domain } = createTestServices();
+
+    await domain.settings.update({
+      setupCompletedAt: "2026-05-22T00:00:00.000Z"
+    });
+    const note = await domain.planner.createNote({
+      title: "Local note survives onboarding reset",
+      body: "No planner rows should be deleted."
+    });
+    const reset = await domain.settings.recoveryAction({ action: "resetOnboarding" });
+
+    expect(reset).toMatchObject({
+      accepted: true,
+      destructive: false,
+      requiresReload: false
+    });
+    expect((await domain.settings.get()).setupCompletedAt).toBeNull();
+    expect(await domain.planner.getNote({ id: note.id })).toMatchObject({
+      title: "Local note survives onboarding reset"
+    });
   });
 
   it("rejects destructive recovery actions without confirmation", async () => {

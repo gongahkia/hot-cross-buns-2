@@ -68,6 +68,47 @@ describe("core IPC handlers", () => {
       /fake-access-token|fake-refresh-token|fake-mcp-token|Bearer\s+[A-Za-z0-9._~+/=-]+|secret=/i
     );
   });
+
+  it("routes onboarding completion and reset through settings IPC without planner deletion", async () => {
+    const dispatch = createIpcDispatcher(createCoreIpcHandlers(createPlaceholderDomainServices()));
+    const completedAt = "2026-05-22T00:00:00.000Z";
+    const update = await dispatch(
+      {},
+      envelope("settings", "update", {
+        setupCompletedAt: completedAt,
+        selectedTaskListIds: ["list-inbox"],
+        selectedCalendarIds: ["cal-product"],
+        syncMode: "manual",
+        notificationsEnabled: false,
+        mcpEnabled: false
+      })
+    );
+    const reset = await dispatch({}, envelope("settings", "recoveryAction", { action: "resetOnboarding" }));
+    const settings = await dispatch({}, envelope("settings", "get", {}));
+
+    expect(update).toMatchObject({
+      ok: true,
+      data: {
+        setupCompletedAt: completedAt,
+        syncMode: "manual"
+      }
+    });
+    expect(reset).toMatchObject({
+      ok: true,
+      data: {
+        action: "resetOnboarding",
+        accepted: true,
+        destructive: false,
+        requiresReload: false
+      }
+    });
+    expect(settings).toMatchObject({
+      ok: true,
+      data: {
+        setupCompletedAt: null
+      }
+    });
+  });
 });
 
 function envelope(domain: HcbDomain, method: string, request: unknown) {
