@@ -145,7 +145,9 @@ const emptySettings: SettingsSnapshot = {
   syncMode: "balanced",
   quickCaptureShortcut: "Ctrl+Space",
   showTrayIcon: true,
-  trayClickAction: "toggle-window",
+  trayClickAction: "open-menu",
+  menuBarPanelStyle: "adaptive",
+  showMenuBarBadge: true,
   notificationsEnabled: false,
   notificationLeadMinutes: 10,
   mcpEnabled: false,
@@ -1256,6 +1258,8 @@ function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[
       rows: [
         { id: "icon", label: "Show icon", value: snapshot.settings.showTrayIcon ? "Yes" : "No" },
         { id: "click", label: "Click action", value: snapshot.settings.trayClickAction },
+        { id: "panel", label: "Panel style", value: snapshot.settings.menuBarPanelStyle },
+        { id: "badge", label: "Overdue badge", value: snapshot.settings.showMenuBarBadge ? "On" : "Off" },
         { id: "native", label: "Native state", value: snapshot.native.trayStatus.message ?? "No native status reported" }
       ]
     },

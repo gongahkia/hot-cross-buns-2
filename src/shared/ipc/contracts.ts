@@ -597,7 +597,8 @@ export const settingsGetRequestSchema = emptyRequestSchema;
 
 export const appThemeSchema = z.enum(["system", "light", "dark"]);
 export const syncModeSchema = z.enum(["manual", "balanced", "near-real-time"]);
-export const trayClickActionSchema = z.enum(["toggle-window", "quick-capture", "open-today"]);
+export const trayClickActionSchema = z.enum(["open-menu", "toggle-window", "quick-capture", "open-today"]);
+export const menuBarPanelStyleSchema = z.enum(["adaptive", "agenda", "compact"]);
 export const mcpPermissionModeSchema = z.enum(["read-only", "confirm-writes", "allow-writes"]);
 
 export const settingsSnapshotSchema = z
@@ -610,6 +611,8 @@ export const settingsSnapshotSchema = z
     syncMode: syncModeSchema,
     showTrayIcon: z.boolean(),
     trayClickAction: trayClickActionSchema,
+    menuBarPanelStyle: menuBarPanelStyleSchema,
+    showMenuBarBadge: z.boolean(),
     notificationsEnabled: z.boolean(),
     notificationLeadMinutes: z.number().int().min(0).max(28 * 24 * 60),
     mcpEnabled: z.boolean(),
@@ -631,6 +634,8 @@ export const settingsUpdateRequestSchema = z
     syncMode: syncModeSchema.optional(),
     showTrayIcon: z.boolean().optional(),
     trayClickAction: trayClickActionSchema.optional(),
+    menuBarPanelStyle: menuBarPanelStyleSchema.optional(),
+    showMenuBarBadge: z.boolean().optional(),
     notificationsEnabled: z.boolean().optional(),
     notificationLeadMinutes: z.number().int().min(0).max(28 * 24 * 60).optional(),
     mcpEnabled: z.boolean().optional(),

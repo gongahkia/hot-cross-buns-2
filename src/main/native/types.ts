@@ -4,6 +4,7 @@ import type {
   NativeCapabilitiesResponse,
   NativeFeatureState,
   NativeNotificationPermissionResponse,
+  NativeRoute,
   SettingsSnapshot,
   SyncRunNowRequest,
   TaskSummary
@@ -27,11 +28,36 @@ export interface NativePlatformCapabilities {
 }
 
 export interface NativeTrayActions {
+  primaryClick: () => void;
   showOrHideMainWindow: () => void;
   quickCapture: () => void;
   refresh: () => void;
   openSettings: () => void;
+  openRoute: (route: NativeRoute) => void;
+  snapshot: () => NativeMenuBarSnapshot;
   quit: () => void;
+}
+
+export interface NativeMenuBarItem {
+  label: string;
+  detail?: string;
+  route?: NativeRoute;
+  action?: "quickCapture" | "refresh" | "openSettings" | "showWindow";
+}
+
+export interface NativeMenuBarSection {
+  title?: string;
+  items: NativeMenuBarItem[];
+}
+
+export interface NativeMenuBarSnapshot {
+  panelStyle: SettingsSnapshot["menuBarPanelStyle"];
+  primaryClickAction: SettingsSnapshot["trayClickAction"];
+  title: string;
+  subtitle?: string;
+  badgeLabel?: string;
+  tooltip: string;
+  sections: NativeMenuBarSection[];
 }
 
 export interface NativeNotificationRequest {

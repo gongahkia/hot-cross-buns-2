@@ -197,7 +197,9 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       selectedCalendarIds: ["cal-product", "cal-engineering", "cal-qa"],
       syncMode: "balanced",
       showTrayIcon: true,
-      trayClickAction: "toggle-window",
+      trayClickAction: "open-menu",
+      menuBarPanelStyle: "adaptive",
+      showMenuBarBadge: true,
       notificationsEnabled: false,
       notificationLeadMinutes: 10,
       mcpEnabled: false,
@@ -1246,6 +1248,14 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
 
   if (request.trayClickAction !== undefined) {
     patch.trayClickAction = request.trayClickAction;
+  }
+
+  if (request.menuBarPanelStyle !== undefined) {
+    patch.menuBarPanelStyle = request.menuBarPanelStyle;
+  }
+
+  if (request.showMenuBarBadge !== undefined) {
+    patch.showMenuBarBadge = request.showMenuBarBadge;
   }
 
   if (request.notificationsEnabled !== undefined) {

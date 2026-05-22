@@ -2485,11 +2485,34 @@ function SettingsView(): JSX.Element {
               }
               value={settings.trayClickAction}
             >
+              <option value="open-menu">Open menu bar panel</option>
               <option value="toggle-window">Show or hide window</option>
               <option value="quick-capture">Quick capture</option>
               <option value="open-today">Open Today</option>
             </select>
           </label>
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Panel style</span>
+            <select
+              aria-label="Menu bar panel style"
+              className={settingsSelectClass}
+              onChange={(event) =>
+                updateSettings({
+                  menuBarPanelStyle: event.target.value as SettingsSnapshot["menuBarPanelStyle"]
+                })
+              }
+              value={settings.menuBarPanelStyle}
+            >
+              <option value="adaptive">Adaptive</option>
+              <option value="agenda">Agenda</option>
+              <option value="compact">Compact</option>
+            </select>
+          </label>
+          <SettingsToggle
+            checked={settings.showMenuBarBadge}
+            label="Show overdue badge"
+            onChange={(checked) => updateSettings({ showMenuBarBadge: checked })}
+          />
         </div>
       );
     }

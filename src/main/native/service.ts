@@ -1,15 +1,19 @@
 import { nativeActionSchema } from "@shared/ipc/contracts";
 import type {
+  CalendarEventSummary,
   NativeAction,
   NativeCapabilitiesResponse,
   NativeFeatureState,
   NativeNotificationPermissionResponse,
+  NativeRoute,
+  TaskSummary,
   SettingsSnapshot
 } from "@shared/ipc/contracts";
 import { redactDiagnosticText } from "@shared/redaction";
 import type { NativeDomainService } from "../services/domainInterfaces";
 import {
   HCB_DEEP_LINK_SCHEME,
+  type NativeMenuBarSnapshot,
   type NativeOperationResult,
   type NativePlannerSnapshotSource,
   type NativePlatformAdapter,
@@ -82,6 +86,8 @@ export class NativeShellService implements NativeDomainService {
         trayStatus: featureStatus("disabled", "Menu bar icon is disabled in Settings.")
       };
     } else if (this.deferredStarted && this.status.trayStatus.state === "disabled") {
+      this.setupTray();
+    } else if (this.deferredStarted && this.status.trayStatus.state === "ready") {
       this.setupTray();
     }
 
@@ -203,7 +209,8 @@ export class NativeShellService implements NativeDomainService {
 
   private actions() {
     return {
-      showOrHideMainWindow: () => this.handleTrayPrimaryAction(),
+      primaryClick: () => this.handleTrayPrimaryAction(),
+      showOrHideMainWindow: this.options.windows.showOrHideMainWindow,
       quickCapture: () => {
         this.options.windows.showMainWindow();
         this.options.windows.dispatchAction({ type: "quickCapture" });
@@ -221,6 +228,11 @@ export class NativeShellService implements NativeDomainService {
         this.options.windows.showMainWindow();
         this.options.windows.dispatchAction({ type: "openSettings" });
       },
+      openRoute: (route: NativeRoute) => {
+        this.options.windows.showMainWindow();
+        this.options.windows.dispatchAction({ type: "openRoute", route });
+      },
+      snapshot: () => this.menuBarSnapshot(),
       quit: this.options.windows.quit
     };
   }
@@ -524,6 +536,10 @@ export class NativeShellService implements NativeDomainService {
     if (action === "open-today") {
       this.options.windows.showMainWindow();
       this.options.windows.dispatchAction({ type: "openRoute", route: { kind: "today" } });
+      return;
+    }
+
+    if (action === "open-menu") {
       return;
     }
 

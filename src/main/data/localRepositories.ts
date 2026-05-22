@@ -148,7 +148,9 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   selectedCalendarIds: [],
   syncMode: "balanced",
   showTrayIcon: true,
-  trayClickAction: "toggle-window",
+  trayClickAction: "open-menu",
+  menuBarPanelStyle: "adaptive",
+  showMenuBarBadge: true,
   notificationsEnabled: false,
   notificationLeadMinutes: 10,
   mcpEnabled: false,
@@ -1685,6 +1687,12 @@ export class LocalSettingsRepository {
         "clickAction",
         DEFAULT_SETTINGS.trayClickAction
       ),
+      menuBarPanelStyle: this.readSetting(
+        "tray",
+        "panelStyle",
+        DEFAULT_SETTINGS.menuBarPanelStyle
+      ),
+      showMenuBarBadge: this.readSetting("tray", "showBadge", DEFAULT_SETTINGS.showMenuBarBadge),
       notificationsEnabled: this.readSetting(
         "notifications",
         "enabled",
@@ -1743,6 +1751,14 @@ export class LocalSettingsRepository {
 
     if (request.trayClickAction !== undefined) {
       this.writeSetting("tray", "clickAction", request.trayClickAction, now);
+    }
+
+    if (request.menuBarPanelStyle !== undefined) {
+      this.writeSetting("tray", "panelStyle", request.menuBarPanelStyle, now);
+    }
+
+    if (request.showMenuBarBadge !== undefined) {
+      this.writeSetting("tray", "showBadge", request.showMenuBarBadge, now);
     }
 
     if (request.notificationsEnabled !== undefined) {
