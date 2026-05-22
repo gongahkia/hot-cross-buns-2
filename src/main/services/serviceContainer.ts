@@ -11,6 +11,12 @@ import { createNoopNativeAdapter } from "../native/noopAdapter";
 import { NativeShellService } from "../native/service";
 import type { NativeAppPaths, NativePlatformAdapter, NativeShellWindowActions } from "../native/types";
 import { GoogleSyncRepository } from "../sync/readSyncRepository";
+import type {
+  GoogleCalendarReadTransport,
+  GoogleCalendarWriteTransport,
+  GoogleTasksReadTransport,
+  GoogleTasksWriteTransport
+} from "../google";
 import { markStartupTiming } from "../startupTiming";
 import type { AppDomainServices } from "./domainInterfaces";
 import { createSqliteDomainServices } from "./sqliteDomainServices";
@@ -40,6 +46,10 @@ export interface ServiceContainerOptions {
   databaseFilename?: string;
   nativeAdapter?: NativePlatformAdapter;
   nativeWindows?: NativeShellWindowActions;
+  syncTasksTransport?: GoogleTasksReadTransport;
+  syncCalendarTransport?: GoogleCalendarReadTransport;
+  syncTasksWriteTransport?: GoogleTasksWriteTransport;
+  syncCalendarWriteTransport?: GoogleCalendarWriteTransport;
 }
 
 const noopWindowActions: NativeShellWindowActions = {
@@ -72,7 +82,11 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const sqliteDomain = createSqliteDomainServices({
     plannerRepository,
     settingsRepository,
-    syncRepository
+    syncRepository,
+    syncTasksTransport: options.syncTasksTransport,
+    syncCalendarTransport: options.syncCalendarTransport,
+    syncTasksWriteTransport: options.syncTasksWriteTransport,
+    syncCalendarWriteTransport: options.syncCalendarWriteTransport
   });
   const nativeShell = new NativeShellService({
     adapter: options.nativeAdapter ?? createNoopNativeAdapter(),

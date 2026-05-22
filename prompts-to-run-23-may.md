@@ -7,8 +7,9 @@ Before running any prompt below, use the improvement docs as Electron-specific p
 - `docs/improvements/03-database-optimizations.md`
 - `docs/improvements/04-test-coverage-parity.md`
 - `docs/improvements/05-general-parity-and-release-polish.md`
+- `docs/improvements/06-frontend-ux-ui-competitive-improvements.md`
 
-These docs compare Hot Cross Buns 2 with the legacy Swift app, but they are not instructions to port Swift APIs directly. Preserve the Electron, React, TypeScript, SQLite, and platform-adapter architecture. Treat Swift-only surfaces as reference behavior only, then decide whether each parity item belongs in Electron platform code, shared backend code, docs, tests, manual QA, or explicit backlog.
+The first five docs compare Hot Cross Buns 2 with the legacy Swift app; the frontend UX/UI doc synthesizes competitive product references. They are not instructions to port Swift APIs directly or copy another product's visual design. Preserve the Electron, React, TypeScript, SQLite, and platform-adapter architecture. Treat Swift-only and competitor-specific surfaces as reference behavior only, then decide whether each parity item belongs in Electron platform code, shared backend code, docs, tests, manual QA, or explicit backlog.
 
 ## Mac V1 Improvement Prompts
 
@@ -125,6 +126,7 @@ Read first:
 - docs/testing/qa-plan.md
 - docs/improvements/01-user-facing-feature-parity.md
 - docs/improvements/05-general-parity-and-release-polish.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
 
 Implement:
 - Add a first-run onboarding route or modal that appears when local settings show setup has not completed.
@@ -167,6 +169,7 @@ Read first:
 - docs/improvements/01-user-facing-feature-parity.md
 - docs/improvements/03-database-optimizations.md
 - docs/improvements/04-test-coverage-parity.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
 
 Implement:
 - Add structured local search parsing for a small initial DSL: domain/source, task status, due/start date windows, priority, list/calendar title, and notes/body presence.
@@ -189,7 +192,50 @@ Acceptance checks:
 - Document implemented query syntax and known deferred planner parity.
 ```
 
-### P7E Release Polish, CI, And Support Readiness
+### P7E Frontend UX/UI Competitive Polish
+
+Run after P7C/P7D if the main runtime and data foundations are stable enough to make frontend polish meaningful. Keep this to a coherent interaction slice, not a full clone of any reference product.
+
+```text
+You are Codex 5.5 running with extra-high reasoning in /Users/gongahkia/Desktop/coding/projects/hot-cross-buns-2.
+
+Goal: bring the current React/Electron screens closer to the synthesized UX standard from Linear, Notion and Notion Calendar, TickTick, Sorted3, OmniFocus 4, and Obsidian.
+
+Read first:
+- docs/README.md
+- docs/agents/workflow.md
+- docs/product/prd.md
+- docs/specs/core-app.md
+- docs/design/design-system.md
+- docs/performance/renderer-performance.md
+- docs/testing/qa-plan.md
+- docs/improvements/01-user-facing-feature-parity.md
+- docs/improvements/04-test-coverage-parity.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
+
+Implement:
+- Tighten screen hierarchy, density, keyboard focus, loading/empty/error/stale states, toolbar actions, and inspector/detail patterns across Today, Tasks, Calendar, Notes, Search, Settings, and command palette.
+- Add a shared action model or local equivalent so visible controls and command palette entries use the same action IDs, disabled states, and selected-item context where feasible.
+- Add the first small slice of saved display options, inspector polish, or Today timeline polish, choosing the least backend-heavy path that still improves daily use.
+- Add renderer tests for navigation, keyboard behavior, state rendering, command palette action availability, and the selected frontend polish slice.
+- Update docs with implemented competitive takeaways and deferred backlog items.
+
+Do not:
+- Copy competitor branding, screenshots, or copyrighted UI assets into the product.
+- Add network calls for search, filtering, note links, or display options.
+- Promise full auto-scheduling, habits, Pomodoro, graph, canvas, or AI scheduling unless implemented.
+- Break the existing Electron, React, TypeScript, SQLite, typed IPC, and platform-adapter architecture.
+- Replace compact work-surface UI with a marketing-style redesign.
+
+Acceptance checks:
+- Run focused renderer tests.
+- Run `pnpm typecheck`.
+- Run `pnpm build`.
+- Run a visual/manual smoke pass for Today, Tasks, Calendar, Notes, Search, Settings, and command palette.
+- Produce a concise status note listing competitive takeaways implemented, backend dependencies found, and remaining frontend backlog.
+```
+
+### P7F Release Polish, CI, And Support Readiness
 
 Run after the main Mac v1 runtime blockers are stable enough that release evidence is worth automating.
 
@@ -259,6 +305,7 @@ Read first:
 - docs/improvements/03-database-optimizations.md
 - docs/improvements/04-test-coverage-parity.md
 - docs/improvements/05-general-parity-and-release-polish.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
 
 Implement:
 - Identify current Mac-only assumptions in platform paths, credentials, tray, menu, shortcuts, notifications, custom protocol, autostart, updater, diagnostics, OAuth, MCP, packaging, and tests.
@@ -304,6 +351,7 @@ Read first:
 - docs/improvements/02-backend-optimizations.md
 - docs/improvements/04-test-coverage-parity.md
 - docs/improvements/05-general-parity-and-release-polish.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
 
 Implement:
 - Linux adapter implementations or stubs for app paths, credentials, tray/status area, global shortcuts, notifications, custom protocol, autostart, updater metadata, external open behavior, and diagnostics.
@@ -395,6 +443,7 @@ Read first:
 - docs/improvements/02-backend-optimizations.md
 - docs/improvements/04-test-coverage-parity.md
 - docs/improvements/05-general-parity-and-release-polish.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
 
 Implement:
 - Windows adapter implementations or stubs for app paths, credential storage, tray, global shortcuts, notifications, custom protocol, autostart, updater metadata, external open behavior, and diagnostics.

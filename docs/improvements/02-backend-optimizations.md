@@ -26,6 +26,8 @@ Hot Cross Buns 2 already records pending mutations, performs Google read sync wi
 
 Legacy has optimistic write behavior and offline queue tests around applying pending mutations to Google.
 
+Current status as of 2026-05-22: a main-process `GooglePendingMutationWorker` exists for task, task-list, and calendar-event queued writes. It is guarded by a process-local lock, selects due `pending`/retryable `failed` rows, applies Google write transports, updates local mirror rows with remote Google IDs/ETags, schedules exponential retry backoff for 429/5xx responses, marks 401/403 failures as account reauth-required, and keeps the worker out of renderer/preload source. Production OAuth transport construction and recurring scheduler triggers are still blockers.
+
 Add a main-process mutation worker that consumes `google_pending_mutations`, calls Google Tasks/Calendar write APIs, updates local mirror rows with authoritative Google IDs/ETags, and transitions mutation status through `pending`, `applying`, `failed`, `applied`, or `cancelled`.
 
 Implementation requirements:

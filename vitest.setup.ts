@@ -498,6 +498,8 @@ const hcbApi: HcbApi = {
           pendingCount: 0,
           applyingCount: 0,
           failedCount: 0,
+          retryableCount: 0,
+          authPausedCount: 0,
           byResourceType: []
         },
         mcp: {

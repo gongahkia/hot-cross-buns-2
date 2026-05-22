@@ -31,9 +31,12 @@ import type {
 import { HcbPublicError } from "@shared/ipc/result";
 import type {
   GoogleAccountConnectionStatusDto,
+  GoogleCalendarWriteTransport,
   GoogleCalendarReadTransport,
-  GoogleTasksReadTransport
+  GoogleTasksReadTransport,
+  GoogleTasksWriteTransport
 } from "../google";
+import { GooglePendingMutationWorker } from "../sync/mutationWorker";
 import type { LocalPlannerRepository, LocalSettingsRepository } from "../data/localRepositories";
 import { GoogleReadSyncService } from "../sync/readSyncService";
 import type { GoogleSyncRepository } from "../sync/readSyncRepository";
@@ -58,6 +61,8 @@ export interface SqliteDomainServiceOptions {
   syncRepository: GoogleSyncRepository;
   syncTasksTransport?: GoogleTasksReadTransport;
   syncCalendarTransport?: GoogleCalendarReadTransport;
+  syncTasksWriteTransport?: GoogleTasksWriteTransport;
+  syncCalendarWriteTransport?: GoogleCalendarWriteTransport;
 }
 
 type SyncStatusListener = (status: SyncStatusResponse) => void;
@@ -75,10 +80,19 @@ const noopCalendarTransport: GoogleCalendarReadTransport = {
 export function createSqliteDomainServices(
   options: SqliteDomainServiceOptions
 ): AppDomainServices {
+  const mutationWorker =
+    options.syncTasksWriteTransport && options.syncCalendarWriteTransport
+      ? new GooglePendingMutationWorker({
+          repository: options.syncRepository,
+          tasks: options.syncTasksWriteTransport,
+          calendar: options.syncCalendarWriteTransport
+        })
+      : undefined;
   const sync = new LocalSyncControlService({
     repository: options.syncRepository,
     tasksTransport: options.syncTasksTransport ?? noopTasksTransport,
-    calendarTransport: options.syncCalendarTransport ?? noopCalendarTransport
+    calendarTransport: options.syncCalendarTransport ?? noopCalendarTransport,
+    mutationWorker
   });
   const initialSettings = options.settingsRepository.get();
   const initialMcpTokenState = options.settingsRepository.mcpTokenState();
@@ -224,6 +238,7 @@ export function createSqliteDomainServices(
 class LocalSyncControlService implements SyncControlDomainService {
   private readonly repository: GoogleSyncRepository;
   private readonly readSync: GoogleReadSyncService;
+  private readonly mutationWorker: GooglePendingMutationWorker | undefined;
   private readonly listeners = new Set<SyncStatusListener>();
   private running = false;
 
@@ -231,8 +246,10 @@ class LocalSyncControlService implements SyncControlDomainService {
     repository: GoogleSyncRepository;
     tasksTransport: GoogleTasksReadTransport;
     calendarTransport: GoogleCalendarReadTransport;
+    mutationWorker?: GooglePendingMutationWorker;
   }) {
     this.repository = options.repository;
+    this.mutationWorker = options.mutationWorker;
     this.readSync = new GoogleReadSyncService({
       repository: options.repository,
       tasks: options.tasksTransport,
@@ -276,6 +293,7 @@ class LocalSyncControlService implements SyncControlDomainService {
     this.emit();
 
     try {
+      await this.mutationWorker?.drainDue();
       await this.readSync.runReadSync({
         account: this.repository.latestAccountStatus() ?? signedOutAccount(),
         resources,

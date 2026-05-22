@@ -5,7 +5,7 @@ Result: Not release-ready.
 
 ## Summary
 
-Automated unit, typecheck, production build, Electron smoke, performance smoke, bundle review, macOS packaging, and checksum verification all completed. The RC is blocked by product and integration gaps rather than failing tests: Google OAuth/Keychain wiring, real Google sync/mutation replay, live MCP server lifecycle, performance budget misses, and native manual verification.
+Automated unit, typecheck, production build, Electron smoke, performance smoke, bundle review, macOS packaging, and checksum verification all completed. The RC is blocked by product and integration gaps rather than failing tests: Google OAuth/Keychain wiring, authenticated Google transport/scheduler wiring, live MCP server lifecycle, performance budget misses, and native manual verification. A main-process pending-mutation worker now exists, but production OAuth-backed write transports are not wired into the app container yet.
 
 ## Command Results
 
@@ -13,9 +13,10 @@ Automated unit, typecheck, production build, Electron smoke, performance smoke, 
 |---|---|---|
 | `pnpm test` | PASS | 24 Vitest files, 115 tests passed in 16.93s. |
 | `pnpm typecheck` | PASS | `tsc --noEmit` completed. |
-| `pnpm build` | PASS | Main 394.27 kB, preload 154.92 kB, renderer JS 425.90 kB, sidebar icon asset 4.55 kB. |
+| `pnpm build` | PASS | Main 441.92 kB, preload 157.75 kB, renderer JS 428.39 kB, sidebar icon asset 4.55 kB. |
 | `pnpm test:smoke` | PASS | 1 Playwright Electron smoke passed in 10.2s. |
 | `pnpm exec vitest run --config vitest.config.ts src/main/native/service.test.ts src/main/services/sqliteDomainServices.test.ts src/renderer/src/App.test.tsx` | PASS | 3 files, 37 tests passed; includes adaptive menu-bar snapshot coverage. |
+| `pnpm exec vitest run --config vitest.config.ts src/main/sync/mutationWorker.test.ts src/main/services/serviceContainer.test.ts src/main/services/sqliteDomainServices.test.ts src/main/sync/readSyncService.test.ts src/main/google/calendarClient.test.ts src/main/google/tasksClient.test.ts src/main/native/adapterContract.test.ts src/main/native/service.test.ts` | PASS | 8 files, 39 tests passed; covers mutation status transitions, retry backoff, auth pause diagnostics, renderer/preload exclusion, service-container `sync.runNow` draining, SQLite domain queue behavior, read-sync retry behavior, Google transport mapping, and native/noop adapter contracts. |
 | `pnpm test:perf` | PASS | Report-only perf smoke wrote `artifacts/perf/latest.json` and `.md`. |
 | `pnpm release:review-bundle` | PASS | No issues; no external main/preload requires; renderer 441.3 KiB. |
 | `pnpm release:mac:preview` | PASS | Tests, release build, bundle review, unsigned DMG/zip, and checksums completed. |
@@ -65,8 +66,8 @@ SQLite query plans were indexed for task, event, note, search, checkpoint, and p
 |---|---|---|
 | User can connect Google through desktop OAuth. | BLOCKED: OAuth service classes exist, but production IPC/UI/client config and Keychain-backed token storage are not wired. | Google Sync / Settings |
 | User can view selected task lists and calendars from local cache after sync. | PARTIAL: local SQLite cache renders in tests; selected resource setup and real account sync wiring are not complete. | Google Sync / Local Data |
-| User can create, edit, complete/reopen, move, and delete tasks. | PARTIAL: local optimistic SQLite flows work; Google mutation replay/reconciliation is deferred. | Core UI / Sync |
-| User can create, edit, and delete calendar events. | PARTIAL: local optimistic SQLite flows work; Google mutation replay/reconciliation is deferred. | Core UI / Sync |
+| User can create, edit, complete/reopen, move, and delete tasks. | PARTIAL: local optimistic SQLite flows work; the main-process mutation worker can replay queued task/task-list writes when authenticated write transports are supplied, but production OAuth transport wiring is incomplete. | Core UI / Sync |
+| User can create, edit, and delete calendar events. | PARTIAL: local optimistic SQLite flows work; the main-process mutation worker can replay queued event writes when authenticated write transports are supplied, but production OAuth transport wiring is incomplete. | Core UI / Sync |
 | User can create and search local notes. | IMPLEMENTED. | Core UI / Local Data |
 | User can open command palette and quick capture without leaving the keyboard. | IMPLEMENTED for in-app keyboard path; global hotkey path still needs manual verification. | Renderer / Native Shell |
 | Tray/menu bar and global hotkey flows work on macOS. | BLOCKED pending installed-app manual verification; code paths exist. | Native Shell |
@@ -79,7 +80,7 @@ SQLite query plans were indexed for task, event, note, search, checkpoint, and p
 | Owner | Blocker | Required resolution |
 |---|---|---|
 | Google Sync / Settings | No user-facing desktop OAuth flow or Keychain-backed Google credential adapter is wired into production IPC/UI. | Add OAuth IPC/UI, bring-your-own-client configuration, OS credential storage, and sanitized status persistence. |
-| Sync / Data | Real Google sync scheduling, account selection, and pending-mutation replay/reconciliation remain deferred; service container uses noop Google transports by default. | Wire authenticated transports, sync scheduler, mutation worker, retry/conflict handling, and diagnostics. |
+| Sync / Data | Authenticated Google transport construction, account selection, and real sync scheduling remain deferred; the mutation worker is implemented and tested but production app startup still uses noop Google transports unless explicit transports are injected. | Wire OAuth/Keychain-backed transport factories, account selection, scheduler triggers, conflict recovery UX, and manual diagnostics actions. |
 | MCP / Native Shell | MCP status/settings are stateful, but no live local listener starts from app settings, and MCP bearer token storage is not Keychain-backed. | Start/stop `LocalMcpServer` safely after app interactive, persist bearer token in OS credentials, and expose usable connection details. |
 | Performance / Main / Renderer | Startup shell-visible, cached render, search UI, and task-complete feedback miss `docs/performance/performance-strategy.md` budgets. | Profile startup staging and renderer/data IPC paths; record accepted baseline or fix before RC sign-off. |
 | Native Shell / Release QA | Tray/menu bar, global hotkey, notifications, and `hotcrossbuns://` protocol behavior were not manually verified on the packaged app. | Run `docs/testing/manual-macos-native-shell.md` against the packaged app and record results. |

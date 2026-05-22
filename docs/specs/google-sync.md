@@ -120,5 +120,6 @@ Required tests:
 
 - Read-sync service diagnostics and progress events store resource names, counts, durations, retry delays, and sanitized error codes only.
 - Task, task-list, and calendar-event UI writes now share SQLite-backed domain services with MCP tools. Those services apply optimistic local mirror changes and insert rows into `google_pending_mutations`.
-- Pending mutation behavior is consistent for task and event writes: successful local writes return queued acknowledgements or queued detail DTOs, pending counts come from SQLite, and Google reconciliation remains deferred to the mutation worker.
-- Core `sync.status` and `sync.runNow` IPC handlers remain startup-safe. They do not perform Google network work during app startup; real scheduling, account selection, and pending-mutation replay remain Phase 3 wiring.
+- Pending mutation behavior is consistent for task and event writes: successful local writes return queued acknowledgements or queued detail DTOs, pending counts come from SQLite, and Google reconciliation is owned by a main-process `GooglePendingMutationWorker`.
+- The mutation worker drains due task, task-list, and calendar-event mutations when write transports are supplied, transitions rows through `applying`, `applied`, and `failed`, records retry/auth diagnostics, and is not exposed through renderer or preload APIs.
+- Core `sync.status` and `sync.runNow` IPC handlers remain startup-safe. They do not perform Google network work during app startup; `sync.runNow` drains due mutations only when authenticated write transports are injected. Production OAuth transport construction, account selection, and recurring scheduling remain Phase 3 wiring.
