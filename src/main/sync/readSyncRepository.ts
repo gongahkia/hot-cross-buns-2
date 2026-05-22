@@ -53,12 +53,91 @@ export interface PendingMutationDiagnostics {
   pendingCount: number;
   applyingCount: number;
   failedCount: number;
+  retryableCount: number;
+  authPausedCount: number;
+  nextRetryAt?: string;
+  lastErrorCode?: HcbErrorCode;
   byResourceType: Array<{ resourceType: string; count: number }>;
 }
 
 export interface SelectedResourceDiagnostics {
   taskLists: Array<{ id: string; title: string; selected: boolean }>;
   calendars: Array<{ id: string; title: string; selected: boolean }>;
+}
+
+export type PendingGoogleMutationResourceType = "task" | "task_list" | "event";
+export type PendingGoogleMutationStatus = "pending" | "applying" | "failed" | "applied" | "cancelled";
+
+export interface PendingGoogleMutation {
+  id: string;
+  accountId: string | null;
+  resourceType: PendingGoogleMutationResourceType;
+  resourceId: string;
+  operation: string;
+  payload: JsonValue;
+  status: PendingGoogleMutationStatus;
+  attemptCount: number;
+  nextRetryAt: string | null;
+  lastErrorCode: HcbErrorCode | null;
+  lastErrorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  appliedAt: string | null;
+}
+
+export interface TaskListMutationTarget extends Record<string, unknown> {
+  id: string;
+  accountId: string;
+  googleId: string;
+  title: string;
+  etag: string | null;
+  deletedAt: string | null;
+}
+
+export interface TaskMutationTarget extends Record<string, unknown> {
+  id: string;
+  accountId: string;
+  googleId: string;
+  taskListId: string;
+  taskListGoogleId: string;
+  parentTaskId: string | null;
+  parentGoogleId: string | null;
+  title: string;
+  notes: string | null;
+  status: "needsAction" | "completed";
+  dueAt: string | null;
+  completedAt: string | null;
+  position: string | null;
+  etag: string | null;
+  deletedAt: string | null;
+}
+
+export interface CalendarMutationTarget extends Record<string, unknown> {
+  id: string;
+  accountId: string;
+  googleId: string;
+  summary: string;
+  timeZone: string | null;
+}
+
+export interface CalendarEventMutationTarget extends Record<string, unknown> {
+  id: string;
+  accountId: string;
+  googleId: string;
+  calendarId: string;
+  calendarGoogleId: string;
+  summary: string;
+  description: string | null;
+  location: string | null;
+  startAt: string;
+  startTimeZone: string | null;
+  endAt: string;
+  endTimeZone: string | null;
+  isAllDay: boolean;
+  attendeeEmails: string[];
+  reminderMinutes: number[];
+  etag: string | null;
+  deletedAt: string | null;
 }
 
 export class GoogleSyncRepository {
@@ -207,23 +286,43 @@ export class GoogleSyncRepository {
        LIMIT 1;`
     );
 
-    if (!row) {
-      return null;
-    }
+    return row === undefined ? null : accountStatusFromRow(row);
+  }
 
-    return sanitizeGoogleAccountConnectionStatus({
-      accountId: row.id,
-      ...(row.google_account_id === null ? {} : { googleAccountId: row.google_account_id }),
-      ...(row.email === null ? {} : { email: row.email }),
-      displayName: row.display_name,
-      avatarUrl: row.avatar_url,
-      locale: row.locale,
-      timeZone: row.time_zone,
-      connectionState: row.connection_state,
-      grantedScopes: parseJsonStringArray(row.granted_scopes_json),
-      ...(row.last_authenticated_at === null ? {} : { lastAuthenticatedAt: row.last_authenticated_at }),
-      updatedAt: row.updated_at
-    });
+  accountStatus(accountId: string): GoogleAccountConnectionStatusDto | null {
+    const row = this.connection.get<{
+      id: string;
+      google_account_id: string | null;
+      email: string | null;
+      display_name: string | null;
+      avatar_url: string | null;
+      locale: string | null;
+      time_zone: string | null;
+      connection_state: GoogleAccountConnectionStatusDto["connectionState"];
+      granted_scopes_json: string;
+      last_authenticated_at: string | null;
+      updated_at: string;
+    }>(
+      `SELECT
+         id,
+         google_account_id,
+         email,
+         display_name,
+         avatar_url,
+         locale,
+         time_zone,
+         connection_state,
+         granted_scopes_json,
+         last_authenticated_at,
+         updated_at
+       FROM google_accounts
+       WHERE deleted_at IS NULL
+         AND id = ?
+       LIMIT 1;`,
+      [accountId]
+    );
+
+    return row === undefined ? null : accountStatusFromRow(row);
   }
 
   readCheckpoint(request: {
@@ -577,6 +676,432 @@ export class GoogleSyncRepository {
     return { id, queued: true };
   }
 
+  listDuePendingMutations(options: {
+    now: string;
+    limit?: number;
+  }): PendingGoogleMutation[] {
+    const limit = Math.max(1, Math.min(100, options.limit ?? 25));
+
+    return this.connection
+      .query<PendingGoogleMutationRow>(
+        `SELECT
+           id,
+           account_id AS accountId,
+           resource_type AS resourceType,
+           resource_id AS resourceId,
+           operation,
+           payload_json AS payloadJson,
+           status,
+           attempt_count AS attemptCount,
+           next_retry_at AS nextRetryAt,
+           last_error_code AS lastErrorCode,
+           last_error_message AS lastErrorMessage,
+           created_at AS createdAt,
+           updated_at AS updatedAt,
+           applied_at AS appliedAt
+         FROM google_pending_mutations
+         WHERE resource_type IN ('task', 'task_list', 'event')
+           AND (
+             (status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= ?))
+             OR
+             (status = 'failed' AND next_retry_at IS NOT NULL AND next_retry_at <= ?)
+           )
+         ORDER BY created_at ASC, id ASC
+         LIMIT ?;`,
+        [options.now, options.now, limit]
+      )
+      .map(pendingMutationFromRow);
+  }
+
+  pendingMutationById(id: string): PendingGoogleMutation | null {
+    const row = this.connection.get<PendingGoogleMutationRow>(
+      `SELECT
+         id,
+         account_id AS accountId,
+         resource_type AS resourceType,
+         resource_id AS resourceId,
+         operation,
+         payload_json AS payloadJson,
+         status,
+         attempt_count AS attemptCount,
+         next_retry_at AS nextRetryAt,
+         last_error_code AS lastErrorCode,
+         last_error_message AS lastErrorMessage,
+         created_at AS createdAt,
+         updated_at AS updatedAt,
+         applied_at AS appliedAt
+       FROM google_pending_mutations
+       WHERE id = ?
+       LIMIT 1;`,
+      [id]
+    );
+
+    return row === undefined ? null : pendingMutationFromRow(row);
+  }
+
+  claimPendingMutation(id: string, now: string): PendingGoogleMutation | null {
+    const result = this.connection.run(
+      `UPDATE google_pending_mutations
+       SET status = 'applying',
+           updated_at = ?
+       WHERE id = ?
+         AND status IN ('pending', 'failed', 'applying');`,
+      [now, id]
+    );
+
+    return result.changes > 0 ? this.pendingMutationById(id) : null;
+  }
+
+  markMutationApplied(id: string, now: string): void {
+    this.connection.run(
+      `UPDATE google_pending_mutations
+       SET status = 'applied',
+           next_retry_at = NULL,
+           last_error_code = NULL,
+           last_error_message = NULL,
+           updated_at = ?,
+           applied_at = ?
+       WHERE id = ?;`,
+      [now, now, id]
+    );
+  }
+
+  markMutationFailed(input: {
+    id: string;
+    attemptCount: number;
+    errorCode: HcbErrorCode;
+    errorMessage: string;
+    nextRetryAt?: string | null;
+    now: string;
+  }): void {
+    this.connection.run(
+      `UPDATE google_pending_mutations
+       SET status = 'failed',
+           attempt_count = ?,
+           next_retry_at = ?,
+           last_error_code = ?,
+           last_error_message = ?,
+           updated_at = ?
+       WHERE id = ?;`,
+      [
+        input.attemptCount,
+        input.nextRetryAt ?? null,
+        input.errorCode,
+        input.errorMessage,
+        input.now,
+        input.id
+      ]
+    );
+  }
+
+  pauseAccountForMutationAuthFailure(input: {
+    accountId: string;
+    connectionState: "reauth_required" | "sync_paused";
+    now: string;
+  }): void {
+    this.connection.run(
+      `UPDATE google_accounts
+       SET connection_state = ?,
+           updated_at = ?
+       WHERE id = ?
+         AND deleted_at IS NULL;`,
+      [input.connectionState, input.now, input.accountId]
+    );
+  }
+
+  taskListMutationTarget(id: string): TaskListMutationTarget | null {
+    return this.connection.get<TaskListMutationTarget>(
+      `SELECT
+         id,
+         account_id AS accountId,
+         google_id AS googleId,
+         title,
+         etag,
+         deleted_at AS deletedAt
+       FROM google_task_lists
+       WHERE id = ?
+       LIMIT 1;`,
+      [id]
+    ) ?? null;
+  }
+
+  taskMutationTarget(id: string): TaskMutationTarget | null {
+    return this.connection.get<TaskMutationTarget>(
+      `SELECT
+         tasks.id AS id,
+         tasks.account_id AS accountId,
+         tasks.google_id AS googleId,
+         tasks.task_list_id AS taskListId,
+         lists.google_id AS taskListGoogleId,
+         tasks.parent_task_id AS parentTaskId,
+         parent.google_id AS parentGoogleId,
+         tasks.title AS title,
+         tasks.notes AS notes,
+         tasks.status AS status,
+         tasks.due_at AS dueAt,
+         tasks.completed_at AS completedAt,
+         tasks.position AS position,
+         tasks.etag AS etag,
+         tasks.deleted_at AS deletedAt
+       FROM google_tasks tasks
+       INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+       LEFT JOIN google_tasks parent ON parent.id = tasks.parent_task_id
+       WHERE tasks.id = ?
+       LIMIT 1;`,
+      [id]
+    ) ?? null;
+  }
+
+  calendarMutationTarget(id: string): CalendarMutationTarget | null {
+    return this.connection.get<CalendarMutationTarget>(
+      `SELECT
+         id,
+         account_id AS accountId,
+         google_id AS googleId,
+         summary,
+         time_zone AS timeZone
+       FROM google_calendar_lists
+       WHERE id = ?
+       LIMIT 1;`,
+      [id]
+    ) ?? null;
+  }
+
+  calendarEventMutationTarget(id: string): CalendarEventMutationTarget | null {
+    const row = this.connection.get<{
+      id: string;
+      accountId: string;
+      googleId: string;
+      calendarId: string;
+      calendarGoogleId: string;
+      summary: string;
+      description: string | null;
+      location: string | null;
+      startAt: string;
+      startTimeZone: string | null;
+      endAt: string;
+      endTimeZone: string | null;
+      isAllDay: number;
+      attendeeEmailsJson: string;
+      reminderMinutesJson: string;
+      etag: string | null;
+      deletedAt: string | null;
+    }>(
+      `SELECT
+         events.id AS id,
+         events.account_id AS accountId,
+         events.google_id AS googleId,
+         events.calendar_id AS calendarId,
+         calendars.google_id AS calendarGoogleId,
+         events.summary AS summary,
+         events.description AS description,
+         events.location AS location,
+         events.start_at AS startAt,
+         events.start_time_zone AS startTimeZone,
+         events.end_at AS endAt,
+         events.end_time_zone AS endTimeZone,
+         events.is_all_day AS isAllDay,
+         events.attendee_emails_json AS attendeeEmailsJson,
+         events.reminder_minutes_json AS reminderMinutesJson,
+         events.etag AS etag,
+         events.deleted_at AS deletedAt
+       FROM google_calendar_events events
+       INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
+       WHERE events.id = ?
+       LIMIT 1;`,
+      [id]
+    );
+
+    return row === undefined
+      ? null
+      : {
+          id: row.id,
+          accountId: row.accountId,
+          googleId: row.googleId,
+          calendarId: row.calendarId,
+          calendarGoogleId: row.calendarGoogleId,
+          summary: row.summary,
+          description: row.description,
+          location: row.location,
+          startAt: row.startAt,
+          startTimeZone: row.startTimeZone,
+          endAt: row.endAt,
+          endTimeZone: row.endTimeZone,
+          isAllDay: row.isAllDay === 1,
+          attendeeEmails: parseJsonStringArray(row.attendeeEmailsJson),
+          reminderMinutes: parseJsonNumberArray(row.reminderMinutesJson),
+          etag: row.etag,
+          deletedAt: row.deletedAt
+        };
+  }
+
+  updateTaskListFromRemote(input: {
+    localId: string;
+    remote: GoogleTaskListMirror;
+    now: string;
+  }): void {
+    this.connection.run(
+      `UPDATE google_task_lists
+       SET google_id = ?,
+           title = ?,
+           etag = ?,
+           sync_status = 'synced',
+           google_updated_at = ?,
+           updated_at = ?,
+           deleted_at = NULL
+       WHERE id = ?;`,
+      [
+        input.remote.id,
+        input.remote.title,
+        input.remote.etag ?? null,
+        input.remote.updatedAt ?? null,
+        input.now,
+        input.localId
+      ]
+    );
+  }
+
+  updateTaskFromRemote(input: {
+    localId: string;
+    accountId: string;
+    remote: GoogleTaskMirror;
+    now: string;
+  }): void {
+    const taskListId = taskListLocalId(input.accountId, input.remote.taskListId);
+    const parentTaskId = input.remote.parentId
+      ? this.localTaskIdForGoogleId(input.accountId, input.remote.taskListId, input.remote.parentId)
+      : null;
+
+    this.connection.run(
+      `UPDATE google_tasks
+       SET task_list_id = ?,
+           google_id = ?,
+           parent_task_id = ?,
+           title = ?,
+           notes = ?,
+           status = ?,
+           due_at = ?,
+           completed_at = ?,
+           position = ?,
+           is_hidden = ?,
+           etag = ?,
+           google_updated_at = ?,
+           updated_at = ?,
+           deleted_at = ?
+       WHERE id = ?;`,
+      [
+        taskListId,
+        input.remote.id,
+        parentTaskId,
+        input.remote.title,
+        input.remote.notes ?? null,
+        input.remote.status,
+        input.remote.dueAt ?? null,
+        input.remote.completedAt ?? null,
+        input.remote.position ?? null,
+        boolInt(input.remote.hidden),
+        input.remote.etag ?? null,
+        input.remote.updatedAt ?? null,
+        input.now,
+        input.remote.deleted ? input.now : null,
+        input.localId
+      ]
+    );
+  }
+
+  updateCalendarEventFromRemote(input: {
+    localId: string;
+    accountId: string;
+    remote: GoogleCalendarEventMirror;
+    now: string;
+  }): void {
+    const calendarId = calendarLocalId(input.accountId, input.remote.calendarId);
+
+    this.connection.executeTransaction([
+      {
+        kind: "run",
+        sql: `UPDATE google_calendar_events
+              SET calendar_id = ?,
+                  google_id = ?,
+                  recurring_event_id = ?,
+                  original_start_at = ?,
+                  status = ?,
+                  summary = ?,
+                  description = ?,
+                  location = ?,
+                  start_at = ?,
+                  start_time_zone = ?,
+                  end_at = ?,
+                  end_time_zone = ?,
+                  is_all_day = ?,
+                  recurrence_rule = ?,
+                  transparency = ?,
+                  visibility = ?,
+                  etag = ?,
+                  sequence = ?,
+                  attendee_emails_json = ?,
+                  reminder_minutes_json = ?,
+                  google_updated_at = ?,
+                  updated_at = ?,
+                  deleted_at = ?
+              WHERE id = ?;`,
+        params: [
+          calendarId,
+          input.remote.id,
+          input.remote.recurringEventId ?? null,
+          input.remote.originalStartAt ?? null,
+          input.remote.status,
+          input.remote.summary,
+          input.remote.description ?? null,
+          input.remote.location ?? null,
+          input.remote.startAt,
+          input.remote.startTimeZone ?? null,
+          input.remote.endAt,
+          input.remote.endTimeZone ?? null,
+          boolInt(input.remote.isAllDay),
+          input.remote.recurrenceRule ?? null,
+          input.remote.transparency ?? null,
+          input.remote.visibility ?? null,
+          input.remote.etag ?? null,
+          input.remote.sequence ?? null,
+          JSON.stringify(normalizeGuestEmails(input.remote.attendeeEmails)),
+          JSON.stringify(normalizeReminderMinutes(input.remote.reminderMinutes)),
+          input.remote.updatedAt ?? null,
+          input.now,
+          input.remote.status === "cancelled" ? input.now : null,
+          input.localId
+        ]
+      },
+      ...calendarEventInstanceOperations({
+        accountId: input.accountId,
+        calendarId,
+        calendarGoogleId: input.remote.calendarId,
+        event: input.remote,
+        eventId: input.localId,
+        now: input.now
+      })
+    ]);
+  }
+
+  private localTaskIdForGoogleId(
+    accountId: string,
+    taskListGoogleId: string,
+    taskGoogleId: string
+  ): string {
+    const taskListId = taskListLocalId(accountId, taskListGoogleId);
+    const row = this.connection.get<{ id: string }>(
+      `SELECT id
+       FROM google_tasks
+       WHERE account_id = ?
+         AND task_list_id = ?
+         AND google_id = ?
+       LIMIT 1;`,
+      [accountId, taskListId, taskGoogleId]
+    );
+
+    return row?.id ?? taskLocalId(accountId, taskListGoogleId, taskGoogleId);
+  }
+
   recordProgressEvent(event: SyncProgressEvent): void {
     this.connection.run(
       `INSERT INTO google_sync_progress_events (
@@ -732,12 +1257,20 @@ export class GoogleSyncRepository {
       pendingCount: number;
       applyingCount: number;
       failedCount: number;
+      retryableCount: number;
+      authPausedCount: number;
+      nextRetryAt: string | null;
+      lastErrorCode: HcbErrorCode | null;
     }>(
       `SELECT
          COUNT(*) AS totalCount,
          COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pendingCount,
          COALESCE(SUM(CASE WHEN status = 'applying' THEN 1 ELSE 0 END), 0) AS applyingCount,
-         COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failedCount
+         COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failedCount,
+         COALESCE(SUM(CASE WHEN status = 'failed' AND next_retry_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS retryableCount,
+         COALESCE(SUM(CASE WHEN status = 'failed' AND last_error_code IN ('UNAUTHORIZED', 'FORBIDDEN') THEN 1 ELSE 0 END), 0) AS authPausedCount,
+         MIN(CASE WHEN status IN ('pending', 'failed') THEN next_retry_at ELSE NULL END) AS nextRetryAt,
+         MAX(last_error_code) AS lastErrorCode
        FROM google_pending_mutations
        WHERE status IN ('pending', 'applying', 'failed');`
     );
@@ -755,6 +1288,10 @@ export class GoogleSyncRepository {
       pendingCount: totals?.pendingCount ?? 0,
       applyingCount: totals?.applyingCount ?? 0,
       failedCount: totals?.failedCount ?? 0,
+      retryableCount: totals?.retryableCount ?? 0,
+      authPausedCount: totals?.authPausedCount ?? 0,
+      ...(totals?.nextRetryAt ? { nextRetryAt: totals.nextRetryAt } : {}),
+      ...(totals?.lastErrorCode ? { lastErrorCode: totals.lastErrorCode } : {}),
       byResourceType
     };
   }
@@ -848,12 +1385,115 @@ export class GoogleSyncRepository {
   }
 }
 
+interface PendingGoogleMutationRow extends Record<string, unknown> {
+  id: string;
+  accountId: string | null;
+  resourceType: string;
+  resourceId: string;
+  operation: string;
+  payloadJson: string;
+  status: string;
+  attemptCount: number;
+  nextRetryAt: string | null;
+  lastErrorCode: HcbErrorCode | null;
+  lastErrorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  appliedAt: string | null;
+}
+
+interface GoogleAccountRow extends Record<string, unknown> {
+  id: string;
+  google_account_id: string | null;
+  email: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  locale: string | null;
+  time_zone: string | null;
+  connection_state: GoogleAccountConnectionStatusDto["connectionState"];
+  granted_scopes_json: string;
+  last_authenticated_at: string | null;
+  updated_at: string;
+}
+
+function accountStatusFromRow(row: GoogleAccountRow): GoogleAccountConnectionStatusDto {
+  return sanitizeGoogleAccountConnectionStatus({
+    accountId: row.id,
+    ...(row.google_account_id === null ? {} : { googleAccountId: row.google_account_id }),
+    ...(row.email === null ? {} : { email: row.email }),
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    locale: row.locale,
+    timeZone: row.time_zone,
+    connectionState: row.connection_state,
+    grantedScopes: parseJsonStringArray(row.granted_scopes_json),
+    ...(row.last_authenticated_at === null ? {} : { lastAuthenticatedAt: row.last_authenticated_at }),
+    updatedAt: row.updated_at
+  });
+}
+
+function pendingMutationFromRow(row: PendingGoogleMutationRow): PendingGoogleMutation {
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    resourceType: pendingMutationResourceType(row.resourceType),
+    resourceId: row.resourceId,
+    operation: row.operation,
+    payload: parseJsonValue(row.payloadJson),
+    status: pendingMutationStatus(row.status),
+    attemptCount: row.attemptCount,
+    nextRetryAt: row.nextRetryAt,
+    lastErrorCode: row.lastErrorCode,
+    lastErrorMessage: row.lastErrorMessage,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    appliedAt: row.appliedAt
+  };
+}
+
+function pendingMutationResourceType(value: string): PendingGoogleMutationResourceType {
+  return value === "task_list" || value === "event" ? value : "task";
+}
+
+function pendingMutationStatus(value: string): PendingGoogleMutationStatus {
+  if (
+    value === "applying" ||
+    value === "failed" ||
+    value === "applied" ||
+    value === "cancelled"
+  ) {
+    return value;
+  }
+
+  return "pending";
+}
+
+function parseJsonValue(value: string): JsonValue {
+  try {
+    return JSON.parse(value) as JsonValue;
+  } catch {
+    return {};
+  }
+}
+
 function parseJsonStringArray(value: string): string[] {
   try {
     const parsed = JSON.parse(value);
 
     return Array.isArray(parsed)
       ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonNumberArray(value: string): number[] {
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
       : [];
   } catch {
     return [];

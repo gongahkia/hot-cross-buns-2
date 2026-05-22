@@ -1179,6 +1179,10 @@ export const diagnosticsSummaryResponseSchema = z
         pendingCount: z.number().int().nonnegative(),
         applyingCount: z.number().int().nonnegative(),
         failedCount: z.number().int().nonnegative(),
+        retryableCount: z.number().int().nonnegative(),
+        authPausedCount: z.number().int().nonnegative(),
+        nextRetryAt: isoDateTimeSchema.optional(),
+        lastErrorCode: hcbErrorCodeSchema.optional(),
         byResourceType: z.array(diagnosticsPendingMutationBucketSchema).max(20)
       })
       .strict(),

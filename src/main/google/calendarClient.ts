@@ -56,6 +56,40 @@ export interface GoogleCalendarReadTransport {
   }): Promise<GoogleCalendarEventsPage>;
 }
 
+export interface GoogleCalendarEventWriteInput {
+  summary: string;
+  description?: string | null;
+  location?: string | null;
+  startAt: string;
+  startTimeZone?: string | null;
+  endAt: string;
+  endTimeZone?: string | null;
+  isAllDay: boolean;
+  attendeeEmails?: readonly string[];
+  reminderMinutes?: readonly number[];
+}
+
+export interface GoogleCalendarEventUpdateInput extends GoogleCalendarEventWriteInput {
+  calendarId: string;
+  eventId: string;
+  ifMatch?: string | null;
+}
+
+export interface GoogleCalendarWriteTransport {
+  insertEvent(
+    calendarId: string,
+    input: GoogleCalendarEventWriteInput
+  ): Promise<GoogleCalendarEventMirror>;
+  updateEvent(input: GoogleCalendarEventUpdateInput): Promise<GoogleCalendarEventMirror>;
+  deleteEvent(request: {
+    calendarId: string;
+    eventId: string;
+    ifMatch?: string | null;
+  }): Promise<void>;
+}
+
+export type GoogleCalendarTransport = GoogleCalendarReadTransport & GoogleCalendarWriteTransport;
+
 interface GoogleCalendarListResponse {
   items?: GoogleCalendarListItemDto[];
 }
@@ -115,12 +149,25 @@ interface GoogleEventRemindersDto {
   overrides?: Array<{ method?: string; minutes?: number }>;
 }
 
+interface GoogleEventMutationDto {
+  summary: string;
+  description?: string | null;
+  location?: string | null;
+  start: GoogleEventDateDto;
+  end: GoogleEventDateDto;
+  attendees?: Array<{ email: string }>;
+  reminders?: {
+    useDefault: boolean;
+    overrides: Array<{ method: "popup"; minutes: number }>;
+  };
+}
+
 const CALENDAR_LIST_FIELDS =
   "items(id,summary,description,timeZone,backgroundColor,foregroundColor,selected,hidden,primary,accessRole,etag,updated)";
 const EVENTS_FIELDS =
   "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)))";
 
-export class GoogleCalendarHttpAdapter implements GoogleCalendarReadTransport {
+export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
   private readonly transport: GoogleApiTransport;
 
   constructor(transport: GoogleApiTransport) {
@@ -191,6 +238,48 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarReadTransport {
       events,
       nextSyncToken
     };
+  }
+
+  async insertEvent(
+    calendarId: string,
+    input: GoogleCalendarEventWriteInput
+  ): Promise<GoogleCalendarEventMirror> {
+    const response = await this.transport.getJson<GoogleEventDto>({
+      method: "POST",
+      path: `/calendar/v3/calendars/${encodeGooglePathComponent(calendarId)}/events`,
+      query: {
+        fields: "id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
+      },
+      body: eventMutationBody(input)
+    });
+
+    return mapEvent(response, calendarId, input.startTimeZone ?? null);
+  }
+
+  async updateEvent(input: GoogleCalendarEventUpdateInput): Promise<GoogleCalendarEventMirror> {
+    const response = await this.transport.getJson<GoogleEventDto>({
+      method: "PATCH",
+      path: `/calendar/v3/calendars/${encodeGooglePathComponent(input.calendarId)}/events/${encodeGooglePathComponent(input.eventId)}`,
+      query: {
+        fields: "id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
+      },
+      body: eventMutationBody(input),
+      ifMatch: input.ifMatch ?? undefined
+    });
+
+    return mapEvent(response, input.calendarId, input.startTimeZone ?? null);
+  }
+
+  async deleteEvent(request: {
+    calendarId: string;
+    eventId: string;
+    ifMatch?: string | null;
+  }): Promise<void> {
+    await this.transport.send({
+      method: "DELETE",
+      path: `/calendar/v3/calendars/${encodeGooglePathComponent(request.calendarId)}/events/${encodeGooglePathComponent(request.eventId)}`,
+      ifMatch: request.ifMatch ?? undefined
+    });
   }
 }
 
@@ -275,6 +364,51 @@ function normalizeReminderMinutes(reminders: GoogleEventRemindersDto | undefined
   }
 
   return result.sort((left, right) => left - right);
+}
+
+function eventMutationBody(input: GoogleCalendarEventWriteInput): GoogleEventMutationDto {
+  const attendeeEmails = normalizeAttendeeEmails(
+    (input.attendeeEmails ?? []).map((email) => ({ email }))
+  );
+  const reminderMinutes = normalizeReminderMinutes({
+    overrides: (input.reminderMinutes ?? []).map((minutes) => ({ method: "popup", minutes }))
+  });
+
+  return {
+    summary: input.summary,
+    description: input.description ?? null,
+    location: input.location ?? null,
+    start: eventMutationDate(input.startAt, input.startTimeZone ?? null, input.isAllDay),
+    end: eventMutationDate(input.endAt, input.endTimeZone ?? null, input.isAllDay),
+    ...(attendeeEmails.length === 0
+      ? {}
+      : { attendees: attendeeEmails.map((email) => ({ email })) }),
+    ...(reminderMinutes.length === 0
+      ? {}
+      : {
+          reminders: {
+            useDefault: false,
+            overrides: reminderMinutes.map((minutes) => ({ method: "popup", minutes }))
+          }
+        })
+  };
+}
+
+function eventMutationDate(
+  isoDateTime: string,
+  timeZone: string | null,
+  allDay: boolean
+): GoogleEventDateDto {
+  if (allDay) {
+    return {
+      date: isoDateTime.slice(0, 10)
+    };
+  }
+
+  return {
+    dateTime: isoDateTime,
+    ...(timeZone === null ? {} : { timeZone })
+  };
 }
 
 function eventDateToIso(value: GoogleEventDateDto | undefined, fallback: string): string {
