@@ -6,7 +6,7 @@ dist-electron/
 .turbo/
 coverage/
 output/
-release/
+/release/
 test-results/
 playwright-report/
 

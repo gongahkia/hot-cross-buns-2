@@ -28,6 +28,16 @@ describe("Electron security policy", () => {
     expect(PRODUCTION_CONTENT_SECURITY_POLICY).not.toContain("http://127.0.0.1");
   });
 
+  it("allows Vite React Refresh only in the development CSP", () => {
+    const developmentPolicy = contentSecurityPolicy(false);
+
+    expect(developmentPolicy).toContain("script-src 'self' 'unsafe-inline'");
+    expect(developmentPolicy).toContain("http://localhost:*");
+    expect(developmentPolicy).toContain("ws://localhost:*");
+    expect(PRODUCTION_CONTENT_SECURITY_POLICY).not.toContain("script-src 'self' 'unsafe-inline'");
+    expect(PRODUCTION_CONTENT_SECURITY_POLICY).not.toContain("ws://localhost");
+  });
+
   it("injects CSP headers and denies renderer permission prompts", () => {
     let permissionHandler:
       | ((_contents: unknown, _permission: string, callback: (allowed: boolean) => void) => void)

@@ -72,6 +72,8 @@ artifacts/release/bundle-review.md
 
 `electron-builder` may also leave `.blockmap`, `builder-debug.yml`, and `latest-mac.yml` files in `release/`. Do not upload those files for unsigned preview releases. They are not supported updater artifacts for the current release flow.
 
+The packaged `.app` may contain electron-builder's generated `Contents/Resources/app-update.yml`. In the current app this is packaging metadata only; no in-app updater is wired, and release notes must not claim automatic updates.
+
 Verify checksums locally:
 
 ```sh

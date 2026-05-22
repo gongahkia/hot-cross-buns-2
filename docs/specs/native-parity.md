@@ -16,6 +16,8 @@ Mac core v1 includes:
 - custom protocol deep links
 - Keychain-backed tokens
 
+Current implementation note: the Electron macOS adapter contains app-menu, tray/menu-bar, global-shortcut, notification, and protocol-registration code paths. Keychain-backed Google OAuth/MCP credential storage and the startup-safe live MCP listener lifecycle are not wired yet and remain Mac v1 release blockers.
+
 ## Deferred Native Parity
 
 ### Spotlight Indexing
@@ -88,4 +90,3 @@ Native helpers are allowed only when:
 - Renderer still talks only through preload APIs.
 - Sensitive data stays out of helper logs and IPC payloads.
 - Feature has at least one automated test or documented manual smoke test.
-

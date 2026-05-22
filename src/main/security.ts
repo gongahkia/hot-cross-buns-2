@@ -21,7 +21,7 @@ export const DEVELOPMENT_CONTENT_SECURITY_POLICY = [
   "frame-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'none'",
-  "script-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
