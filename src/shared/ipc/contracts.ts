@@ -857,6 +857,20 @@ export type StartupTimingSnapshot = z.infer<typeof startupTimingSnapshotSchema>;
 
 export const diagnosticsHealthRequestSchema = emptyRequestSchema;
 
+const diagnosticsBuildMetadataSchema = z
+  .object({
+    appName: z.string().min(1).max(120),
+    version: z.string().min(1).max(80),
+    environment: z.enum(["development", "test", "production"]),
+    electronVersion: z.string().min(1).max(80).optional(),
+    nodeVersion: z.string().min(1).max(80),
+    packaged: z.boolean(),
+    commit: z.string().min(1).max(80).optional(),
+    buildDate: isoDateTimeSchema.optional(),
+    packageTool: z.string().min(1).max(80).optional()
+  })
+  .strict();
+
 export const diagnosticsHealthResponseSchema = z
   .object({
     status: z.literal("ok"),
@@ -864,7 +878,8 @@ export const diagnosticsHealthResponseSchema = z
     environment: z.enum(["development", "test", "production"]),
     timestamp: isoDateTimeSchema,
     uptimeMs: z.number().nonnegative(),
-    startup: startupTimingSnapshotSchema
+    startup: startupTimingSnapshotSchema,
+    build: diagnosticsBuildMetadataSchema
   })
   .strict();
 
@@ -1056,16 +1071,7 @@ export const diagnosticsSummaryResponseSchema = z
         requestCounts: diagnosticsMcpRequestCountsSchema
       })
       .strict(),
-    build: z
-      .object({
-        appName: z.string().min(1).max(120),
-        version: z.string().min(1).max(80),
-        environment: z.enum(["development", "test", "production"]),
-        electronVersion: z.string().min(1).max(80).optional(),
-        nodeVersion: z.string().min(1).max(80),
-        packaged: z.boolean()
-      })
-      .strict(),
+    build: diagnosticsBuildMetadataSchema,
     performance: z
       .object({
         startup: startupTimingSnapshotSchema,

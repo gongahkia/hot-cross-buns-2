@@ -9,6 +9,7 @@ import {
 } from "@shared/ipc/contracts";
 import { DIAGNOSTIC_OMITTED_VALUE } from "@shared/redaction";
 import { getStartupTimings, markStartupTiming } from "../startupTiming";
+import { appBuildMetadata } from "../buildMetadata";
 import type { ServiceContainer } from "../services/serviceContainer";
 import type { IpcHandlerDefinition, IpcMetricsRecorder } from "./registry";
 
@@ -37,16 +38,19 @@ export function createDiagnosticsIpcHandlers(
   },
   services?: ServiceContainer
 ): IpcHandlerDefinition[] {
+  const appEnvironment = environment();
+
   return [
     {
       contract: ipcContracts.diagnostics.health,
       handle: () => ({
         status: "ok" as const,
         version: app.getVersion(),
-        environment: environment(),
+        environment: appEnvironment,
         timestamp: new Date().toISOString(),
         uptimeMs: Math.round(performance.now()),
-        startup: getStartupTimings()
+        startup: getStartupTimings(),
+        build: appBuildMetadata(appEnvironment)
       })
     },
     {
@@ -111,14 +115,7 @@ async function diagnosticsSummary(
 ): Promise<DiagnosticsSummaryResponse> {
   const generatedAt = new Date().toISOString();
   const startup = getStartupTimings();
-  const build = {
-    appName: app.getName(),
-    version: app.getVersion(),
-    environment: environment(),
-    electronVersion: process.versions.electron,
-    nodeVersion: process.versions.node,
-    packaged: app.isPackaged
-  };
+  const build = appBuildMetadata(environment());
 
   if (!services) {
     const zeroMcpCounts = zeroMcpRequestCounts();

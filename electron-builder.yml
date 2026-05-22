@@ -1,0 +1,38 @@
+appId: dev.hotcrossbuns.hotcrossbuns2
+productName: Hot Cross Buns 2
+artifactName: Hot-Cross-Buns-2-${version}-${os}-${arch}.${ext}
+
+directories:
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+  - "!src/**"
+  - "!docs/**"
+  - "!scripts/**"
+  - "!tests/**"
+  - "!artifacts/**"
+  - "!output/**"
+
+asar: true
+compression: normal
+npmRebuild: false
+
+protocols:
+  - name: Hot Cross Buns Links
+    schemes:
+      - hotcrossbuns
+
+mac:
+  identity: null
+  category: public.app-category.productivity
+  gatekeeperAssess: false
+  hardenedRuntime: false
+  target:
+    - dmg
+    - zip
+
+dmg:
+  sign: false

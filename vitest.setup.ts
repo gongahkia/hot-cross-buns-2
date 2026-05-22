@@ -391,6 +391,13 @@ const hcbApi: HcbApi = {
         uptimeMs: 1,
         startup: {
           processStartedMs: 0
+        },
+        build: {
+          appName: "Hot Cross Buns 2",
+          version: "0.0.0-test",
+          environment: "test" as const,
+          nodeVersion: process.versions.node,
+          packaged: false
         }
       })
     ),

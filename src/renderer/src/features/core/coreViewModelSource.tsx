@@ -1172,6 +1172,7 @@ function groupChildTasks(tasks: TaskSummary[]): Map<string, TaskSummary[]> {
 function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[] {
   const sync = snapshot.syncStatus;
   const summary = snapshot.diagnosticsSummary;
+  const build = summary?.build ?? snapshot.health?.build;
   const account = summary?.account;
   const selectedTaskListCount =
     summary?.selectedResources.taskLists.filter((resource) => resource.selected).length ??
@@ -1301,8 +1302,11 @@ function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[
       status: "Ready",
       detail: "Sanitized local diagnostics",
       rows: [
-        { id: "version", label: "Version", value: snapshot.health?.version ?? "Unknown" },
-        { id: "environment", label: "Environment", value: snapshot.health?.environment ?? "Unknown" },
+        { id: "version", label: "Version", value: build?.version ?? snapshot.health?.version ?? "Unknown" },
+        { id: "environment", label: "Environment", value: build?.environment ?? snapshot.health?.environment ?? "Unknown" },
+        { id: "commit", label: "Build commit", value: build?.commit ?? "Not recorded" },
+        { id: "build-date", label: "Build date", value: build?.buildDate ?? "Not recorded" },
+        { id: "package-tool", label: "Package tool", value: build?.packageTool ?? "Not recorded" },
         {
           id: "database",
           label: "Database ready",

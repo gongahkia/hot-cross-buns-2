@@ -6,31 +6,188 @@ Hot Cross Buns 2 starts with preview desktop builds. macOS is first, Linux is th
 
 Preview releases may be unsigned initially, but the docs and build pipeline must leave a clear path to signing, notarization, and updater support.
 
+The current packaging tool is `electron-builder`, matching the cross-platform porting strategy.
+
 ## macOS Preview
 
 Initial macOS targets:
 
-- zip or DMG artifact
-- checksum file
+- DMG artifact
+- zip artifact
+- `SHA256` checksum file
 - GitHub Releases upload
 - release notes
 
-If unsigned:
+The current macOS preview build is intentionally unsigned:
 
-- release notes must state that macOS may warn on first launch
-- install docs must explain the preview trust flow
-- app UI must not claim seamless auto-update
+- `electron-builder.yml` sets `mac.identity: null`.
+- `electron-builder.yml` sets `dmg.sign: false`.
+- Release scripts run with `CSC_IDENTITY_AUTO_DISCOVERY=false`.
+- No signing certificates, Apple account credentials, or notarization secrets are stored in the repository.
+- Auto-update is not enabled.
+
+## Local Release Commands
+
+Run the full macOS preview release gate:
+
+```sh
+pnpm release:mac:preview
+```
+
+That command runs:
+
+```sh
+pnpm test
+pnpm build:release:mac
+pnpm release:review-bundle
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never
+pnpm release:checksums
+```
+
+For a packaging-only preview after local validation:
+
+```sh
+pnpm pack:mac:preview
+```
+
+To run the steps manually:
+
+```sh
+pnpm test
+pnpm build:release:mac
+pnpm release:review-bundle
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never
+pnpm release:checksums
+```
+
+Expected artifact paths:
+
+```text
+release/Hot-Cross-Buns-2-<version>-mac-<arch>.dmg
+release/Hot-Cross-Buns-2-<version>-mac-<arch>.zip
+release/SHASUMS256.txt
+artifacts/release/bundle-review.json
+artifacts/release/bundle-review.md
+```
+
+Verify checksums locally:
+
+```sh
+cd release
+shasum -a 256 -c SHASUMS256.txt
+cd -
+```
+
+## Version Metadata
+
+`pnpm build:release:mac` injects build metadata into the compiled main process:
+
+- `HCB_BUILD_COMMIT`: short Git commit, derived from `git rev-parse --short=12 HEAD`
+- `HCB_BUILD_DATE`: UTC ISO timestamp from the release build
+- `HCB_PACKAGE_TOOL`: `electron-builder`
+
+The app exposes this metadata through diagnostics health and diagnostics summary responses. Build metadata is informational only; semantic version comparisons should use `package.json` version.
+
+## Bundle And Dependency Review
+
+Run:
+
+```sh
+pnpm release:review-bundle
+```
+
+The review checks:
+
+- built main, preload, and renderer outputs exist
+- renderer source does not import Electron, Node built-ins, main modules, or preload modules
+- preload source does not import main-process modules
+- build/test tools are not listed as runtime dependencies
+- renderer/main/preload output sizes and largest renderer assets
+
+The command writes:
+
+```text
+artifacts/release/bundle-review.json
+artifacts/release/bundle-review.md
+```
+
+Generated review artifacts are local release evidence and should not be committed unless a release PR explicitly asks for them.
+
+## GitHub Release Draft
+
+Prepare release notes:
+
+```sh
+VERSION=$(node -p "require('./package.json').version")
+TAG="v${VERSION}"
+mkdir -p docs/release/notes
+$EDITOR "docs/release/notes/${TAG}.md"
+```
+
+Create a draft GitHub Release after `pnpm release:mac:preview` passes:
+
+```sh
+VERSION=$(node -p "require('./package.json').version")
+TAG="v${VERSION}"
+gh release create "$TAG" \
+  release/Hot-Cross-Buns-2-${VERSION}-mac-*.dmg \
+  release/Hot-Cross-Buns-2-${VERSION}-mac-*.zip \
+  release/SHASUMS256.txt \
+  --draft \
+  --title "Hot Cross Buns 2 ${VERSION}" \
+  --notes-file "docs/release/notes/${TAG}.md"
+```
+
+The GitHub Release notes must include:
+
+- unsigned preview warning
+- install steps
+- checksum verification command
+- known issues
+- manual macOS checks performed
+- signing/notarization status
+
+Do not publish the draft until the uploaded artifact names and checksums match `release/SHASUMS256.txt`.
+
+## Unsigned Preview Install Notes
+
+Unsigned preview builds are for internal or early technical preview use.
+
+DMG install:
+
+1. Download the `.dmg` and `SHASUMS256.txt` from the GitHub Release.
+2. Verify the checksum with `shasum -a 256 -c SHASUMS256.txt`.
+3. Open the DMG and drag `Hot Cross Buns 2.app` to `/Applications`.
+4. On first launch, macOS may warn that the app is from an unidentified developer.
+5. Use Finder to Control-click or right-click `Hot Cross Buns 2.app`, choose `Open`, then confirm `Open`.
+
+Zip install:
+
+1. Download the `.zip` and `SHASUMS256.txt` from the GitHub Release.
+2. Verify the checksum with `shasum -a 256 -c SHASUMS256.txt`.
+3. Unzip the archive and move `Hot Cross Buns 2.app` to `/Applications`.
+4. Use the same first-launch `Open` flow if macOS blocks the app.
+
+Do not tell users to disable Gatekeeper. If the `Open` option is unavailable, use `System Settings > Privacy & Security` and choose `Open Anyway` for `Hot Cross Buns 2`.
 
 ## macOS Signing And Notarization
 
 Before broad distribution:
 
-- sign the app with Developer ID Application certificate
+- sign the app with a Developer ID Application certificate
+- enable hardened runtime
+- add only the entitlements the app actually needs
 - notarize release artifacts
 - staple where applicable
 - verify Gatekeeper behavior on a clean machine
 
-Auto-update on macOS should not be enabled until signing/notarization and release metadata are reliable.
+Future signing placeholders:
+
+- CI keychain import for the Developer ID certificate must come from external secrets.
+- Apple notarization credentials must come from external secrets, for example App Store Connect API key material or app-specific password credentials.
+- `electron-builder` signing identity, hardened runtime, entitlements, and notarization hooks should be added only when those secrets and manual validation exist.
+
+None of these placeholders are currently enabled.
 
 ## Updater Strategy
 
@@ -41,7 +198,7 @@ V1 preview updater may be a check-for-new-version flow:
 - show release notes
 - open download page or artifact URL
 
-In-place auto-update can be added later through Electron updater tooling once signing is in place.
+In-place auto-update can be added later through Electron updater tooling once signing, notarization, release metadata, and rollback behavior are reliable. Do not claim seamless auto-update until a signed updater flow is configured and tested.
 
 ## Linux Future
 
@@ -92,6 +249,7 @@ Each release must include:
 - passing automated test suite
 - Playwright launch smoke test
 - migration test pass
+- bundle/dependency review pass
 - release notes
 - artifact checksum
 - install instructions

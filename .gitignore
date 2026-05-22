@@ -6,11 +6,13 @@ dist-electron/
 .turbo/
 coverage/
 output/
+release/
 test-results/
 playwright-report/
 
 artifacts/perf/*
 !artifacts/perf/.gitkeep
+artifacts/release/*
 
 .DS_Store
 *.log
