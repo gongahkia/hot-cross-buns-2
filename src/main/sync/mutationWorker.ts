@@ -630,6 +630,7 @@ function calendarEventWriteInput(
     endAt: textPayload(mutation, "endsAt") ?? target.endAt,
     endTimeZone: target.endTimeZone,
     isAllDay: booleanPayload(mutation, "allDay") ?? target.isAllDay,
+    recurrenceRule: textPayload(mutation, "recurrenceRule") ?? target.recurrenceRule,
     attendeeEmails: stringArrayPayload(mutation, "guestEmails") ?? target.attendeeEmails,
     reminderMinutes: numberArrayPayload(mutation, "reminderMinutes") ?? target.reminderMinutes
   };

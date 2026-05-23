@@ -31,6 +31,26 @@ describe("core IPC handlers", () => {
     expect(JSON.stringify(result)).not.toContain("NOT_IMPLEMENTED");
   });
 
+  it("routes schedule suggestions through planner services", async () => {
+    const dispatch = createIpcDispatcher(createCoreIpcHandlers(createPlaceholderDomainServices()));
+
+    const result = await dispatch(
+      {},
+      envelope("calendar", "scheduleSuggest", {
+        date: "2026-05-22"
+      })
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        slots: expect.any(Array),
+        unscheduled: expect.any(Array),
+        overloadMinutes: expect.any(Number)
+      }
+    });
+  });
+
   it("keeps sync and MCP controls sanitized and non-blocking", async () => {
     const dispatch = createIpcDispatcher(createCoreIpcHandlers(createPlaceholderDomainServices()));
 

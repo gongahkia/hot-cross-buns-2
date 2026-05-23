@@ -20,9 +20,13 @@ import type {
   McpStatusResponse,
   NativeCapabilitiesResponse,
   NativeNotificationPermissionResponse,
+  NoteBrokenLinksRequest,
+  NoteBrokenLinksResponse,
   NoteCreateRequest,
   NoteDeleteRequest,
   NoteDetail,
+  NoteLinkSuggestRequest,
+  NoteLinkSuggestResponse,
   NoteListRequest,
   NoteListResponse,
   NoteUpdateRequest,
@@ -172,6 +176,8 @@ export interface PlannerViewDomainService {
   createNote: (request: NoteCreateRequest) => MaybePromise<NoteDetail>;
   updateNote: (request: NoteUpdateRequest) => MaybePromise<NoteDetail>;
   deleteNote: (request: NoteDeleteRequest) => MaybePromise<{ id: string; queued: boolean; revision?: string }>;
+  suggestNoteLinks: (request: NoteLinkSuggestRequest) => MaybePromise<NoteLinkSuggestResponse>;
+  listBrokenNoteLinks: (request: NoteBrokenLinksRequest) => MaybePromise<NoteBrokenLinksResponse>;
   search: (request: SearchQueryRequest) => MaybePromise<SearchQueryResponse>;
 }
 

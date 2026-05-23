@@ -70,6 +70,34 @@ describe("preload bridge", () => {
     }
   });
 
+  it("exposes note link helper endpoints through the bridge", async () => {
+    const ipc: IpcBridge = {
+      invoke: vi.fn(async (_channel, envelope) =>
+        envelope.method === "linkSuggest"
+          ? ok({ items: [{ kind: "note", id: "note-1", label: "Project plan" }] })
+          : ok({ items: [{ linkText: "Missing note" }] })
+      )
+    };
+    const api = createHcbApi(ipc);
+
+    await expect(api.notes.linkSuggest({ query: "plan" })).resolves.toMatchObject({
+      ok: true,
+      data: { items: [{ kind: "note", id: "note-1", label: "Project plan" }] }
+    });
+    await expect(api.notes.listBrokenLinks({ noteId: "note-1" })).resolves.toMatchObject({
+      ok: true,
+      data: { items: [{ linkText: "Missing note" }] }
+    });
+    expect(ipc.invoke).toHaveBeenCalledWith(
+      IPC_CHANNELS.dispatch,
+      expect.objectContaining({
+        domain: "notes",
+        method: "linkSuggest",
+        request: expect.objectContaining({ query: "plan", limit: 8 })
+      })
+    );
+  });
+
   it("rejects malformed renderer payloads across request-bearing namespaces", async () => {
     const ipc: IpcBridge = {
       invoke: vi.fn()
@@ -98,6 +126,8 @@ describe("preload bridge", () => {
       ["notes", "create", { title: "" }],
       ["notes", "get", { id: "" }],
       ["notes", "update", { id: "note-1" }],
+      ["notes", "linkSuggest", { query: "" }],
+      ["notes", "listBrokenLinks", { noteId: "" }],
       ["search", "query", { query: "" }],
       ["sync", "runNow", { resources: [] }],
       ["settings", "update", {}],

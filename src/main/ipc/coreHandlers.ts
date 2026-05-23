@@ -11,8 +11,10 @@ import {
   type GoogleDisconnectRequest,
   type GoogleSaveOAuthClientRequest,
   type McpSetEnabledRequest,
+  type NoteBrokenLinksRequest,
   type NoteCreateRequest,
   type NoteDeleteRequest,
+  type NoteLinkSuggestRequest,
   type NoteListRequest,
   type NoteUpdateRequest,
   type SearchQueryRequest,
@@ -160,6 +162,14 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     {
       contract: ipcContracts.notes.delete,
       handle: (request) => services.planner.deleteNote(request as NoteDeleteRequest)
+    },
+    {
+      contract: ipcContracts.notes.linkSuggest,
+      handle: (request) => services.planner.suggestNoteLinks(request as NoteLinkSuggestRequest)
+    },
+    {
+      contract: ipcContracts.notes.listBrokenLinks,
+      handle: (request) => services.planner.listBrokenNoteLinks(request as NoteBrokenLinksRequest)
     },
     {
       contract: ipcContracts.search.query,

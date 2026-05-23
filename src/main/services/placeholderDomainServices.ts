@@ -5,6 +5,7 @@ import {
   MAX_LIST_LIMIT,
   MAX_RANGE_LIMIT,
   MAX_SEARCH_LIMIT,
+  type CalendarEventRecurrence,
   type CalendarEventSummary,
   type GoogleStatusResponse,
   type McpStatusResponse,
@@ -436,6 +437,7 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           location: request.location ?? "",
           notes: request.notes ?? "",
           timeZone: state.settings.defaultTimeZone,
+          recurrenceRule: recurrenceRuleFromRequest(request.recurrence ?? null),
           guestEmails: request.guestEmails ?? [],
           reminderMinutes: request.reminderMinutes ?? []
         };
@@ -461,6 +463,9 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           ...(request.notes === undefined ? {} : { notes: request.notes }),
           ...(request.guestEmails === undefined ? {} : { guestEmails: request.guestEmails }),
           ...(request.reminderMinutes === undefined ? {} : { reminderMinutes: request.reminderMinutes }),
+          ...(request.recurrence === undefined
+            ? {}
+            : { recurrenceRule: recurrenceRuleFromRequest(request.recurrence) }),
           updatedAt: new Date().toISOString()
         });
         state.sync.pendingMutationCount += 1;
@@ -622,9 +627,12 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         return buildDaySchedule({
           date: request.date,
           events,
-          tasks: state.tasks,
+          tasks: state.tasks.map(taskSummary),
           capacityMinutes: request.capacityMinutes ?? 480,
-          workingHours: request.workingHours ?? { start: 6, end: 22 }
+          workingHours: {
+            start: request.workingHours?.start ?? 6,
+            end: request.workingHours?.end ?? 22
+          }
         });
       },
       exportAvailability: (request) => {
@@ -734,6 +742,49 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           queued: false,
           revision: new Date().toISOString()
         };
+      },
+      suggestNoteLinks: (request) => {
+        const query = request.query.trim().toLowerCase();
+        const kinds = new Set(request.kinds ?? ["note", "task", "event"]);
+        const limit = request.limit ?? 8;
+        const items = [
+          ...(kinds.has("note")
+            ? state.notes
+                .filter((note) => note.title.toLowerCase().includes(query))
+                .map((note) => ({ kind: "note" as const, id: note.id, label: note.title }))
+            : []),
+          ...(kinds.has("task")
+            ? state.tasks
+                .filter((task) => task.title.toLowerCase().includes(query))
+                .map((task) => ({ kind: "task" as const, id: task.id, label: task.title }))
+            : []),
+          ...(kinds.has("event")
+            ? state.calendarEvents
+                .filter((event) => event.title.toLowerCase().includes(query))
+                .map((event) => ({ kind: "event" as const, id: event.id, label: event.title }))
+            : [])
+        ];
+
+        return { items: items.slice(0, limit) };
+      },
+      listBrokenNoteLinks: (request) => {
+        const note = state.notes.find((candidate) => candidate.id === request.noteId);
+
+        if (!note) {
+          throw new Error("Note was not found.");
+        }
+
+        const linkTexts = Array.from(note.body.matchAll(/\[\[([^\]]{1,160})\]\]/g))
+          .map((match) => match[1]?.trim() ?? "")
+          .filter((linkText) => {
+            if (!linkText || linkText.includes(":")) {
+              return false;
+            }
+
+            return !state.notes.some((candidate) => candidate.title.toLowerCase() === linkText.toLowerCase());
+          });
+
+        return { items: Array.from(new Set(linkTexts)).map((linkText) => ({ linkText })) };
       },
       search: (request) => {
         const domains = new Set<SearchDomain>(request.domains ?? ["tasks", "calendar", "notes"]);
@@ -1323,9 +1374,31 @@ function calendarSummary(event: CalendarRecord): CalendarEventSummary {
     guestEmails: event.guestEmails ?? [],
     reminderMinutes: event.reminderMinutes ?? [],
     timeZone: event.timeZone ?? null,
+    recurrenceRule: event.recurrenceRule ?? null,
     recurringEventId: event.recurringEventId ?? null,
     originalStartAt: event.originalStartAt ?? null
   };
+}
+
+function recurrenceRuleFromRequest(recurrence: CalendarEventRecurrence | null | undefined): string | null {
+  if (!recurrence) {
+    return null;
+  }
+
+  const parts = [
+    `FREQ=${recurrence.frequency.toUpperCase()}`,
+    `INTERVAL=${recurrence.interval}`
+  ];
+
+  if (recurrence.endsOn) {
+    parts.push(`UNTIL=${recurrence.endsOn.replace(/-/g, "")}`);
+  }
+
+  if (recurrence.count !== undefined && recurrence.count !== null) {
+    parts.push(`COUNT=${recurrence.count}`);
+  }
+
+  return `RRULE:${parts.join(";")}`;
 }
 
 function calendarDetail(event: CalendarRecord) {

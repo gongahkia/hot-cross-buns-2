@@ -401,6 +401,7 @@ export const calendarEventSummarySchema = z
     guestEmails: z.array(guestEmailSchema).max(50).optional(),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
     timeZone: z.string().min(1).max(120).nullable().optional(),
+    recurrenceRule: z.string().min(1).max(1_000).nullable().optional(),
     recurringEventId: z.string().min(1).max(256).nullable().optional(),
     originalStartAt: isoDateTimeSchema.nullable().optional()
   })
@@ -414,6 +415,17 @@ export const calendarRangeResponseSchema = pagedListResponseSchema(
 );
 
 export type CalendarRangeResponse = z.infer<typeof calendarRangeResponseSchema>;
+
+export const calendarEventRecurrenceSchema = z
+  .object({
+    frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
+    interval: z.number().int().min(1).max(366),
+    endsOn: dateOnlySchema.nullable().optional(),
+    count: z.number().int().min(1).max(366).nullable().optional()
+  })
+  .strict();
+
+export type CalendarEventRecurrence = z.infer<typeof calendarEventRecurrenceSchema>;
 
 export const calendarEventDetailSchema = calendarEventSummarySchema
   .extend({
@@ -434,7 +446,8 @@ const calendarEventWriteFieldsSchema = z
     location: z.string().trim().max(1_000).default(""),
     notes: z.string().max(20_000).default(""),
     guestEmails: z.array(guestEmailSchema).max(50).default([]),
-    reminderMinutes: z.array(reminderMinutesSchema).max(10).default([])
+    reminderMinutes: z.array(reminderMinutesSchema).max(10).default([]),
+    recurrence: calendarEventRecurrenceSchema.nullable().optional()
   })
   .strict()
   .superRefine((request, context) => {
@@ -472,7 +485,8 @@ export const calendarEventUpdateRequestSchema = z
     location: z.string().trim().max(1_000).optional(),
     notes: z.string().max(20_000).optional(),
     guestEmails: z.array(guestEmailSchema).max(50).optional(),
-    reminderMinutes: z.array(reminderMinutesSchema).max(10).optional()
+    reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
+    recurrence: calendarEventRecurrenceSchema.nullable().optional()
   })
   .strict()
   .refine(
@@ -485,7 +499,8 @@ export const calendarEventUpdateRequestSchema = z
       request.location !== undefined ||
       request.notes !== undefined ||
       request.guestEmails !== undefined ||
-      request.reminderMinutes !== undefined,
+      request.reminderMinutes !== undefined ||
+      request.recurrence !== undefined,
     {
       message: "At least one event field must be supplied"
     }
@@ -718,6 +733,54 @@ export type NoteUpdateRequest = z.input<typeof noteUpdateRequestSchema>;
 
 export const noteDeleteRequestSchema = entityByIdRequestSchema;
 export type NoteDeleteRequest = z.input<typeof noteDeleteRequestSchema>;
+
+export const noteLinkSuggestRequestSchema = z
+  .object({
+    query: z.string().min(1).max(120),
+    kinds: z.array(z.enum(["note", "task", "event"])).optional(),
+    limit: z.number().int().min(1).max(20).default(8)
+  })
+  .strict();
+
+export type NoteLinkSuggestRequest = z.input<typeof noteLinkSuggestRequestSchema>;
+
+export const noteLinkSuggestResponseSchema = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          kind: z.enum(["note", "task", "event"]),
+          id: idSchema,
+          label: z.string()
+        })
+        .strict()
+    )
+  })
+  .strict();
+
+export type NoteLinkSuggestResponse = z.infer<typeof noteLinkSuggestResponseSchema>;
+
+export const noteBrokenLinksRequestSchema = z
+  .object({
+    noteId: idSchema
+  })
+  .strict();
+
+export type NoteBrokenLinksRequest = z.input<typeof noteBrokenLinksRequestSchema>;
+
+export const noteBrokenLinksResponseSchema = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          linkText: z.string().min(1).max(160)
+        })
+        .strict()
+    )
+  })
+  .strict();
+
+export type NoteBrokenLinksResponse = z.infer<typeof noteBrokenLinksResponseSchema>;
 
 export const searchDomainSchema = z.enum(["tasks", "calendar", "notes"]);
 
@@ -1661,7 +1724,19 @@ export const ipcContracts = {
     get: defineIpcContract("notes", "get", entityByIdRequestSchema, noteDetailSchema),
     create: defineIpcContract("notes", "create", noteCreateRequestSchema, noteDetailSchema),
     update: defineIpcContract("notes", "update", noteUpdateRequestSchema, noteDetailSchema),
-    delete: defineIpcContract("notes", "delete", noteDeleteRequestSchema, mutationAckSchema)
+    delete: defineIpcContract("notes", "delete", noteDeleteRequestSchema, mutationAckSchema),
+    linkSuggest: defineIpcContract(
+      "notes",
+      "linkSuggest",
+      noteLinkSuggestRequestSchema,
+      noteLinkSuggestResponseSchema
+    ),
+    listBrokenLinks: defineIpcContract(
+      "notes",
+      "listBrokenLinks",
+      noteBrokenLinksRequestSchema,
+      noteBrokenLinksResponseSchema
+    )
   },
   search: {
     query: defineIpcContract(

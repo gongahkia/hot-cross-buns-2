@@ -65,6 +65,7 @@ export interface GoogleCalendarEventWriteInput {
   endAt: string;
   endTimeZone?: string | null;
   isAllDay: boolean;
+  recurrenceRule?: string | null;
   attendeeEmails?: readonly string[];
   reminderMinutes?: readonly number[];
 }
@@ -380,6 +381,9 @@ function eventMutationBody(input: GoogleCalendarEventWriteInput): GoogleEventMut
     location: input.location ?? null,
     start: eventMutationDate(input.startAt, input.startTimeZone ?? null, input.isAllDay),
     end: eventMutationDate(input.endAt, input.endTimeZone ?? null, input.isAllDay),
+    ...(input.recurrenceRule?.trim()
+      ? { recurrence: [input.recurrenceRule.trim()] }
+      : {}),
     ...(attendeeEmails.length === 0
       ? {}
       : { attendees: attendeeEmails.map((email) => ({ email })) }),

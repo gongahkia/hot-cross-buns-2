@@ -320,7 +320,8 @@ function mockCalendarEvent({
     location,
     notes,
     guestEmails: [],
-    reminderMinutes: []
+    reminderMinutes: [],
+    recurrenceRule: null
   };
 }
 

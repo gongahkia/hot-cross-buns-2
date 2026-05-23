@@ -73,6 +73,7 @@ export interface CoreViewModelSource {
   settings: SettingsSnapshot;
   diagnosticsSummary?: DiagnosticsSummaryResponse;
   googleStatus: GoogleStatusResponse;
+  native: NativeCapabilitiesResponse;
   settingsMutationError?: string;
   settingsMutationPending: boolean;
   updateSettings: (request: SettingsUpdateRequest) => Promise<boolean>;
@@ -1217,7 +1218,7 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
     window.hcb.diagnostics.health().then((result) => unwrap(result, "Diagnostics failed")),
     window.hcb.native.capabilities().then((result) => unwrap(result, "Native status failed"))
   ]);
-  const scheduleDate = dayKey(startOfUtcDay(new Date()));
+  const scheduleDate = dateOnlyFromLocalDate(new Date());
   const scheduleSuggestion = await window.hcb.calendar
     .scheduleSuggest({
       date: scheduleDate,
@@ -1406,6 +1407,7 @@ function buildCoreViewModelSource(
     settings: snapshot.settings,
     diagnosticsSummary: snapshot.diagnosticsSummary,
     googleStatus: snapshot.googleStatus,
+    native: snapshot.native,
     settingsMutationError: options.settingsMutation.error,
     settingsMutationPending: options.settingsMutation.pending,
     updateSettings: options.updateSettings,
@@ -1912,7 +1914,8 @@ function calendarEventViewModel(
     location: event.location?.trim() || (event.allDay ? "All day" : "Scheduled"),
     notes: event.notes?.trim() || "Calendar cache",
     guestEmails: event.guestEmails ?? [],
-    reminderMinutes: event.reminderMinutes ?? []
+    reminderMinutes: event.reminderMinutes ?? [],
+    recurrenceRule: event.recurrenceRule ?? null
   };
 }
 
@@ -2257,6 +2260,14 @@ function addUtcDays(value: Date, days: number): Date {
 
 function dayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+function dateOnlyFromLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function dueLabel(value: string | null | undefined): string {

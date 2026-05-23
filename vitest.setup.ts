@@ -292,7 +292,9 @@ const hcbApi: HcbApi = {
         queued: false,
         revision: now
       })
-    )
+    ),
+    linkSuggest: vi.fn(async () => ok({ items: [] })),
+    listBrokenLinks: vi.fn(async () => ok({ items: [] }))
   },
   search: {
     query: vi.fn(async (request) =>

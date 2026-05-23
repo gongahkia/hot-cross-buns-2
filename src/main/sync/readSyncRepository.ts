@@ -139,6 +139,7 @@ export interface CalendarEventMutationTarget extends Record<string, unknown> {
   endAt: string;
   endTimeZone: string | null;
   isAllDay: boolean;
+  recurrenceRule: string | null;
   attendeeEmails: string[];
   reminderMinutes: number[];
   etag: string | null;
@@ -205,6 +206,7 @@ export class GoogleSyncRepository {
 
     addColumn("attendee_emails_json", "attendee_emails_json TEXT NOT NULL DEFAULT '[]'");
     addColumn("reminder_minutes_json", "reminder_minutes_json TEXT NOT NULL DEFAULT '[]'");
+    addColumn("recurrence_rule", "recurrence_rule TEXT");
     addColumn("local_time_zone", "local_time_zone TEXT");
 
     this.connection.run(
@@ -915,6 +917,7 @@ export class GoogleSyncRepository {
       endAt: string;
       endTimeZone: string | null;
       isAllDay: number;
+      recurrenceRule: string | null;
       attendeeEmailsJson: string;
       reminderMinutesJson: string;
       etag: string | null;
@@ -934,6 +937,7 @@ export class GoogleSyncRepository {
          events.end_at AS endAt,
          events.end_time_zone AS endTimeZone,
          events.is_all_day AS isAllDay,
+         events.recurrence_rule AS recurrenceRule,
          events.attendee_emails_json AS attendeeEmailsJson,
          events.reminder_minutes_json AS reminderMinutesJson,
          events.etag AS etag,
@@ -961,6 +965,7 @@ export class GoogleSyncRepository {
           endAt: row.endAt,
           endTimeZone: row.endTimeZone,
           isAllDay: row.isAllDay === 1,
+          recurrenceRule: row.recurrenceRule,
           attendeeEmails: parseJsonStringArray(row.attendeeEmailsJson),
           reminderMinutes: parseJsonNumberArray(row.reminderMinutesJson),
           etag: row.etag,
@@ -1590,7 +1595,7 @@ interface CalendarEventInstanceInput {
 }
 
 interface ParsedRRule {
-  freq: "DAILY" | "WEEKLY" | "MONTHLY";
+  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   count?: number;
   until?: Date;
@@ -1737,7 +1742,7 @@ function parseRRule(value: string | null | undefined): ParsedRRule | null {
   );
   const freq = parts.FREQ;
 
-  if (freq !== "DAILY" && freq !== "WEEKLY" && freq !== "MONTHLY") {
+  if (freq !== "DAILY" && freq !== "WEEKLY" && freq !== "MONTHLY" && freq !== "YEARLY") {
     return null;
   }
 
@@ -1782,8 +1787,10 @@ function nextRecurrenceDate(date: Date, rrule: ParsedRRule): Date {
     next.setUTCDate(next.getUTCDate() + rrule.interval);
   } else if (rrule.freq === "WEEKLY") {
     next.setUTCDate(next.getUTCDate() + rrule.interval * 7);
-  } else {
+  } else if (rrule.freq === "MONTHLY") {
     next.setUTCMonth(next.getUTCMonth() + rrule.interval);
+  } else {
+    next.setUTCFullYear(next.getUTCFullYear() + rrule.interval);
   }
 
   return next;

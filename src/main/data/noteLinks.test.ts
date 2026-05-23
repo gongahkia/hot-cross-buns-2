@@ -78,4 +78,62 @@ describe("note links + properties", () => {
       cleanup();
     }
   });
+
+  it("suggests note, task, and event link targets in ranked order", () => {
+    const { connection, cleanup, repository } = setupRepository();
+    try {
+      const now = "2026-05-23T00:00:00.000Z";
+      const note = repository.createNote({ title: "Project plan", body: "" });
+      connection.run(
+        `INSERT INTO google_tasks
+          (id, account_id, task_list_id, google_id, title, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'needsAction', ?, ?);`,
+        ["task-plan", "acct-1", "list-1", "task-plan", "Project plan task", now, now]
+      );
+      connection.run(
+        `INSERT INTO google_calendar_events
+          (id, account_id, calendar_id, google_id, status, summary, start_at, end_at,
+           is_all_day, attendee_emails_json, reminder_minutes_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, 0, '[]', '[]', ?, ?);`,
+        [
+          "event-plan",
+          "acct-1",
+          "cal-1",
+          "event-plan",
+          "Project plan review",
+          "2026-05-23T10:00:00.000Z",
+          "2026-05-23T11:00:00.000Z",
+          now,
+          now
+        ]
+      );
+
+      expect(repository.suggestLinkTargets({ query: "plan", limit: 8 }).items).toEqual([
+        { kind: "note", id: note.id, label: "Project plan" },
+        { kind: "task", id: "task-plan", label: "Project plan task" },
+        { kind: "event", id: "event-plan", label: "Project plan review" }
+      ]);
+      expect(repository.suggestLinkTargets({ query: "plan", kinds: ["event"], limit: 8 }).items).toEqual([
+        { kind: "event", id: "event-plan", label: "Project plan review" }
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("lists broken note links", () => {
+    const { cleanup, repository } = setupRepository();
+    try {
+      const note = repository.createNote({
+        title: "Daily",
+        body: "See [[Missing note]] and [[task:missing-task]]."
+      });
+
+      expect(repository.listBrokenNoteLinks({ noteId: note.id })).toEqual({
+        items: [{ linkText: "Missing note" }, { linkText: "task:missing-task" }]
+      });
+    } finally {
+      cleanup();
+    }
+  });
 });

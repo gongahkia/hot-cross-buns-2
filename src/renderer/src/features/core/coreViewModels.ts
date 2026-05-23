@@ -76,6 +76,7 @@ export interface CalendarEventViewModel {
   notes: string;
   guestEmails: string[];
   reminderMinutes: number[];
+  recurrenceRule: string | null;
 }
 
 export interface ScheduledTaskBlockViewModel {

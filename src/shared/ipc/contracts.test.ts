@@ -10,6 +10,8 @@ import {
   hcbDomainSchema,
   ipcContracts,
   nativeCapabilitiesResponseSchema,
+  noteLinkSuggestRequestSchema,
+  noteLinkSuggestResponseSchema,
   scheduledTaskBlockCreateRequestSchema,
   scheduledTaskBlockMoveRequestSchema,
   settingsRecoveryActionRequestSchema,
@@ -184,6 +186,28 @@ describe("shared IPC contracts", () => {
         workingHours: { start: 18, end: 8 }
       }).success
     ).toBe(false);
+  });
+
+  it("validates note link suggestion contracts", () => {
+    expect(
+      noteLinkSuggestRequestSchema.parse({
+        query: "plan",
+        kinds: ["note", "task"],
+        limit: 4
+      })
+    ).toEqual({
+      query: "plan",
+      kinds: ["note", "task"],
+      limit: 4
+    });
+    expect(noteLinkSuggestRequestSchema.safeParse({ query: "" }).success).toBe(false);
+    expect(
+      noteLinkSuggestResponseSchema.parse({
+        items: [{ kind: "note", id: "note-1", label: "Project plan" }]
+      })
+    ).toEqual({
+      items: [{ kind: "note", id: "note-1", label: "Project plan" }]
+    });
   });
 
   it("validates task write payloads as date-only Google Tasks mutations", () => {

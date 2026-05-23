@@ -185,6 +185,30 @@ CREATE INDEX IF NOT EXISTS idx_local_note_properties_note
 
       return operations;
     }
+  },
+  {
+    version: 5,
+    name: "calendar event recurrence rule",
+    operations: (connection) => {
+      if (!tableExists(connection, "google_calendar_events")) {
+        return [];
+      }
+
+      const columns = new Set(
+        connection
+          .query<{ name: string }>("PRAGMA table_info(google_calendar_events);")
+          .map((row) => row.name)
+      );
+
+      return columns.has("recurrence_rule")
+        ? []
+        : [
+            {
+              kind: "run",
+              sql: "ALTER TABLE google_calendar_events ADD COLUMN recurrence_rule TEXT;"
+            }
+          ];
+    }
   }
 ];
 

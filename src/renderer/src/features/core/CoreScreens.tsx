@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, DragEvent, KeyboardEvent, ReactNode, SetStateAction } from "react";
 import type {
   CalendarEventCreateRequest,
+  CalendarEventRecurrence,
   CalendarEventUpdateRequest,
+  DiagnosticsSummaryResponse,
+  NativeCapabilityDescriptor,
+  NativeCapabilityDiagnostic,
   SavedSearchView,
   SavedTaskView,
   ScheduleSlot,
@@ -59,10 +63,16 @@ import type {
   TaskViewModel
 } from "./coreViewModels";
 import {
+  NoteInspectorBody,
+  type NoteDraftValue,
+  type NoteInspectorBodyHandle
+} from "./inspectors/NoteInspectorBody";
+import {
   TaskInspectorBody,
   taskDraftsEqual,
   type TaskDraft
 } from "./inspectors/TaskInspectorBody";
+import { buildNotePreview } from "./notesParsing";
 
 function priorityTone(priority: CorePriority): "neutral" | "accent" | "warning" | "danger" {
   if (priority === "high") {
@@ -743,110 +753,154 @@ function TodayTimelineHeader({
   );
 }
 
+interface TodayGridRow {
+  id: string;
+  startsAt: string;
+  label: string;
+}
+
+type QuickAddKind = "task" | "event";
+
+function timeLabel(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "UTC"
+  }).format(new Date(value));
+}
+
+function todayGridRows(date: string, startHour: number, endHour: number): TodayGridRow[] {
+  const rows: TodayGridRow[] = [];
+  const startMs = Date.parse(`${date}T00:00:00.000Z`) + startHour * 60 * 60 * 1000;
+  const count = Math.max(0, (endHour - startHour) * 2);
+
+  for (let index = 0; index < count; index += 1) {
+    const startsAt = new Date(startMs + index * 30 * 60 * 1000).toISOString();
+    rows.push({
+      id: startsAt,
+      startsAt,
+      label: timeLabel(startsAt)
+    });
+  }
+
+  return rows;
+}
+
+function scheduleSlotDurationMinutes(slot: ScheduleSlot): number {
+  return Math.max(5, Math.round((Date.parse(slot.endsAt) - Date.parse(slot.startsAt)) / 60_000));
+}
+
+function scheduleSlotMinutesFromStart(slot: ScheduleSlot, startHour: number): number {
+  const dateStart = Date.parse(`${slot.startsAt.slice(0, 10)}T00:00:00.000Z`);
+  return Math.max(0, Math.round((Date.parse(slot.startsAt) - dateStart) / 60_000) - startHour * 60);
+}
+
+function halfHourRowStart(value: string): string {
+  const date = new Date(value);
+  const minutes = date.getUTCMinutes();
+
+  date.setUTCMinutes(minutes < 30 ? 0 : 30, 0, 0);
+  return date.toISOString();
+}
+
+function addMinutesIso(startsAt: string, minutes: number): string {
+  return new Date(Date.parse(startsAt) + minutes * 60 * 1000).toISOString();
+}
+
+function slotTitle(slot: ScheduleSlot, source: ReturnType<typeof useCoreViewModelSource>): string {
+  if (slot.taskId) {
+    return source.getTaskById(slot.taskId).title;
+  }
+
+  if (slot.eventId) {
+    return source.calendarEventsById[slot.eventId]?.title ?? "Calendar event";
+  }
+
+  return "Scheduled";
+}
+
+function slotDetail(slot: ScheduleSlot, source: ReturnType<typeof useCoreViewModelSource>): string {
+  if (slot.taskId) {
+    const task = source.getTaskById(slot.taskId);
+    return `${task.list} - ${scheduleSlotDurationMinutes(slot)} min`;
+  }
+
+  if (slot.eventId) {
+    const event = source.calendarEventsById[slot.eventId];
+    return event ? `${event.calendar} - ${event.rangeLabel}` : "Calendar event";
+  }
+
+  return `${scheduleSlotDurationMinutes(slot)} min`;
+}
+
+function slotTone(slot: ScheduleSlot): { border: string; background: string; label: string } {
+  if (slot.conflict) {
+    return {
+      border: "border-danger",
+      background: "rgba(244, 63, 94, 0.16)",
+      label: "Conflict"
+    };
+  }
+
+  if (slot.eventId) {
+    return {
+      border: "border-accent",
+      background: "rgba(56, 189, 248, 0.14)",
+      label: "Event"
+    };
+  }
+
+  if (slot.locked) {
+    return {
+      border: "border-warning",
+      background: "rgba(245, 158, 11, 0.14)",
+      label: "Locked"
+    };
+  }
+
+  return {
+    border: "border-success",
+    background: "rgba(34, 197, 94, 0.14)",
+    label: "Task"
+  };
+}
+
 function TodayView(): JSX.Element {
   const source = useCoreViewModelSource();
-  const defaultTaskId = source.todayViewModel.focusTasks[0]?.id ?? "";
-  const defaultCalendar = defaultCalendarId(source);
-  const [scheduleTaskId, setScheduleTaskId] = useState(defaultTaskId);
-  const [scheduleCalendarId, setScheduleCalendarId] = useState(defaultCalendar);
-  const [scheduleStart, setScheduleStart] = useState(() =>
-    dateTimeLocalInputValue(defaultTimedStart(new Date().toISOString()))
-  );
-  const [scheduleDuration, setScheduleDuration] = useState("30");
-  const timelineRows = useMemo<TodayTimelineDataRow[]>(() => {
-    const rows: TodayTimelineDataRow[] = [];
+  const schedule = source.todayViewModel.schedule;
+  const todayDate = dateOnlyFromLocalDate(new Date());
+  const startHour = source.settings.todayWorkingHoursStart;
+  const endHour = Math.max(startHour + 1, source.settings.todayWorkingHoursEnd);
+  const [nowIso, setNowIso] = useState(() => new Date().toISOString());
+  const [quickAddSlot, setQuickAddSlot] = useState<string | null>(null);
+  const [quickAddTitle, setQuickAddTitle] = useState("");
+  const [quickAddKind, setQuickAddKind] = useState<QuickAddKind>("task");
+  const [todayActionError, setTodayActionError] = useState<string | null>(null);
+  const rows = useMemo(() => todayGridRows(todayDate, startHour, endHour), [endHour, startHour, todayDate]);
+  const slotsByRow = useMemo(() => {
+    const byRow = new Map<string, ScheduleSlot[]>();
 
-    for (const row of source.todayViewModel.timelineRows) {
-      if (row.kind === "event") {
-        const event = source.calendarEventsById[row.itemId];
-
-        if (event) {
-          rows.push({ kind: "event", event });
-        }
-      } else if (row.kind === "scheduledTaskBlock") {
-        const block = source.getScheduledTaskBlockById(row.itemId);
-
-        if (block) {
-          rows.push({ kind: "scheduledTaskBlock", block });
-        }
-      } else {
-        rows.push({ kind: "task", task: source.getTaskById(row.itemId) });
-      }
+    for (const slot of schedule.slots) {
+      const key = halfHourRowStart(slot.startsAt);
+      byRow.set(key, [...(byRow.get(key) ?? []), slot]);
     }
 
-    return rows;
-  }, [source]);
-  const timelineEntries = useMemo(() => buildTodayTimelineEntries(timelineRows), [timelineRows]);
-  const canScheduleTask =
-    scheduleTaskId.length > 0 &&
-    scheduleCalendarId.length > 0 &&
-    scheduleStart.length > 0 &&
-    Number(scheduleDuration) >= 5 &&
-    !source.taskMutationPending;
+    return byRow;
+  }, [schedule.slots]);
+  const unscheduledTasks = schedule.unscheduled.map((task) => source.getTaskById(task.id));
+  const usedCapacityMinutes = schedule.slots
+    .filter((slot) => slot.taskId)
+    .reduce((total, slot) => total + scheduleSlotDurationMinutes(slot), 0);
+  const capacityPercent = Math.min(100, Math.round((usedCapacityMinutes / source.settings.todayCapacityMinutes) * 100));
+  const conflictCount = schedule.slots.filter((slot) => slot.conflict).length;
+  const currentRowId = halfHourRowStart(nowIso);
 
   useEffect(() => {
-    setScheduleTaskId((current) => current || defaultTaskId);
-  }, [defaultTaskId]);
+    const interval = window.setInterval(() => setNowIso(new Date().toISOString()), 60_000);
 
-  useEffect(() => {
-    setScheduleCalendarId((current) => current || defaultCalendar);
-  }, [defaultCalendar]);
-
-  async function scheduleSelectedTask(): Promise<void> {
-    if (!canScheduleTask) {
-      return;
-    }
-
-    const scheduled = await source.scheduleTaskBlock({
-      taskId: scheduleTaskId,
-      calendarId: scheduleCalendarId,
-      startsAt: dateTimeLocalInputToIso(scheduleStart),
-      durationMinutes: Number(scheduleDuration)
-    });
-
-    if (scheduled) {
-      const nextTaskId = source.todayViewModel.focusTasks.find((task) => task.id !== scheduleTaskId)?.id ?? "";
-      setScheduleTaskId(nextTaskId);
-    }
-  }
-
-  function moveBlock(block: ScheduledTaskBlockViewModel, minutes: number): void {
-    const nextStart = new Date(Date.parse(block.startsAt) + minutes * 60 * 1000).toISOString();
-
-    void source.moveScheduledTaskBlock({
-      id: block.id,
-      startsAt: nextStart
-    });
-  }
-
-  function repairBlock(block: ScheduledTaskBlockViewModel): void {
-    void source.moveScheduledTaskBlock({
-      id: block.id,
-      calendarId: block.calendarId,
-      startsAt: block.startsAt,
-      durationMinutes: block.durationMinutes
-    });
-  }
-
-  function resizeBlock(block: ScheduledTaskBlockViewModel, minutes: number): void {
-    void source.moveScheduledTaskBlock({
-      id: block.id,
-      durationMinutes: Math.max(5, block.durationMinutes + minutes)
-    });
-  }
-
-  const conflictSummary =
-    source.todayViewModel.conflictCount === 0
-      ? "No timeline conflicts"
-      : `${source.todayViewModel.conflictCount} timeline ${
-          source.todayViewModel.conflictCount === 1 ? "conflict" : "conflicts"
-        }`;
-  const timelineStatusTitle = source.todayViewModel.nextUp
-    ? `Next up: ${source.todayViewModel.nextUp.title}`
-    : `Now ${source.todayViewModel.currentTimeLabel}`;
-  const timelineStatusDescription = source.todayViewModel.nextUp
-    ? `${source.todayViewModel.nextUp.detail} - ${conflictSummary}`
-    : `No upcoming timed rows - ${conflictSummary}`;
+    return () => window.clearInterval(interval);
+  }, []);
 
   if (
     (source.dataState === "loading" ||
@@ -858,107 +912,129 @@ function TodayView(): JSX.Element {
     return <CacheStatePanel title="Today" />;
   }
 
+  async function moveTaskSlot(taskId: string, startsAt: string, durationMinutes: number): Promise<void> {
+    const existingSlot = schedule.slots.find((slot) => slot.taskId === taskId);
+
+    if (existingSlot?.locked) {
+      return;
+    }
+
+    const saved = await source.updateTask({
+      id: taskId,
+      plannedStart: startsAt,
+      plannedEnd: addMinutesIso(startsAt, durationMinutes),
+      durationMinutes
+    });
+
+    if (saved) {
+      source.refresh();
+    }
+  }
+
+  async function moveTaskSlotBy(slot: ScheduleSlot, minutes: number): Promise<void> {
+    if (!slot.taskId || slot.locked) {
+      return;
+    }
+
+    await moveTaskSlot(
+      slot.taskId,
+      addMinutesIso(slot.startsAt, minutes),
+      scheduleSlotDurationMinutes(slot)
+    );
+  }
+
+  async function createQuickAdd(): Promise<void> {
+    const title = quickAddTitle.trim();
+
+    if (!quickAddSlot || !title) {
+      return;
+    }
+
+    setTodayActionError(null);
+
+    if (quickAddKind === "task") {
+      const created = await source.createTask({
+        title,
+        notes: "",
+        dueDate: null,
+        listId: defaultTaskListId(source),
+        parentId: null,
+        priority: "none",
+        plannedStart: quickAddSlot,
+        plannedEnd: addMinutesIso(quickAddSlot, 30),
+        durationMinutes: 30
+      });
+
+      if (created) {
+        setQuickAddTitle("");
+        setQuickAddSlot(null);
+        source.refresh();
+      }
+
+      return;
+    }
+
+    const result = await window.hcb?.calendar.create({
+      title,
+      calendarId: defaultCalendarId(source),
+      startsAt: quickAddSlot,
+      endsAt: addMinutesIso(quickAddSlot, 30),
+      allDay: false,
+      location: "",
+      notes: "",
+      guestEmails: [],
+      reminderMinutes: []
+    });
+
+    if (!result?.ok) {
+      setTodayActionError(result?.error.message ?? "Calendar event create failed.");
+      return;
+    }
+
+    setQuickAddTitle("");
+    setQuickAddSlot(null);
+    source.refresh();
+  }
+
+  function dropTaskAt(row: TodayGridRow, event: DragEvent<HTMLDivElement>): void {
+    const taskId = event.dataTransfer.getData("application/x-hcb-task");
+
+    if (!taskId) {
+      return;
+    }
+
+    event.preventDefault();
+    const slot = schedule.slots.find((candidate) => candidate.taskId === taskId);
+    const durationMinutes = slot ? scheduleSlotDurationMinutes(slot) : source.getTaskById(taskId).durationMinutes ?? 30;
+    void moveTaskSlot(taskId, row.startsAt, durationMinutes);
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="grid grid-cols-4 gap-3">
-        {source.todayViewModel.metrics.map((metric) => (
-          <MetricTile key={metric.id} label={metric.label} value={metric.value} />
-        ))}
+        <MetricTile label="Used" value={`${usedCapacityMinutes}/${source.settings.todayCapacityMinutes} min`} />
+        <MetricTile label="Scheduled" value={String(schedule.slots.length)} />
+        <MetricTile label="Conflicts" value={String(conflictCount)} />
+        <MetricTile label="Unscheduled" value={String(schedule.unscheduled.length)} />
       </div>
 
       <StatusBanner
-        description={timelineStatusDescription}
-        icon={source.todayViewModel.conflictCount > 0 ? AlertTriangle : Clock3}
-        title={timelineStatusTitle}
-        tone={source.todayViewModel.conflictCount > 0 ? "warning" : "info"}
+        description={`${startHour}:00-${endHour}:00 - ${schedule.overloadMinutes} overload minutes`}
+        icon={conflictCount > 0 || schedule.overloadMinutes > 0 ? AlertTriangle : Clock3}
+        title={`Today ${source.todayViewModel.currentTimeLabel}`}
+        tone={conflictCount > 0 || schedule.overloadMinutes > 0 ? "warning" : "info"}
       />
 
       <SectionChrome
         title="Today"
         sidebar={
           <div className="grid gap-3">
-            <Panel
-              action={
-                <Button
-                  disabled={!canScheduleTask}
-                  onClick={() => void scheduleSelectedTask()}
-                  size="sm"
-                  variant="primary"
-                >
-                  <CalendarPlus aria-hidden="true" size={14} />
-                  Schedule
-                </Button>
-              }
-              title="Schedule task"
-              description="Create a linked Google Calendar block"
-            >
-              <div className="grid gap-3 p-3">
-                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                  <span>Task</span>
-                  <select
-                    aria-label="Task to schedule"
-                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    disabled={source.todayViewModel.focusTasks.length === 0}
-                    onChange={(event) => setScheduleTaskId(event.target.value)}
-                    value={scheduleTaskId}
-                  >
-                    {source.todayViewModel.focusTasks.length === 0 ? (
-                      <option value="">No unscheduled tasks</option>
-                    ) : null}
-                    {source.todayViewModel.focusTasks.map((task) => (
-                      <option key={task.id} value={task.id}>
-                        {task.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                  <span>Calendar</span>
-                  <select
-                    aria-label="Schedule calendar"
-                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    disabled={source.calendarSources.length === 0}
-                    onChange={(event) => setScheduleCalendarId(event.target.value)}
-                    value={scheduleCalendarId}
-                  >
-                    {source.calendarSources.length === 0 ? <option value="">No calendars</option> : null}
-                    {source.calendarSources.map((calendar) => (
-                      <option key={calendar.id} value={calendar.id}>
-                        {calendar.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <Input
-                  aria-label="Schedule starts"
-                  onChange={(event) => setScheduleStart(event.target.value)}
-                  type="datetime-local"
-                  value={scheduleStart}
-                />
-                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                  <span>Duration</span>
-                  <select
-                    aria-label="Schedule duration"
-                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    onChange={(event) => setScheduleDuration(event.target.value)}
-                    value={scheduleDuration}
-                  >
-                    <option value="15">15 min</option>
-                    <option value="30">30 min</option>
-                    <option value="45">45 min</option>
-                    <option value="60">60 min</option>
-                    <option value="90">90 min</option>
-                    <option value="120">120 min</option>
-                  </select>
-                </label>
-              </div>
-            </Panel>
             <Panel title="Focus queue" description="Open unscheduled tasks">
               <VirtualizedList
                 ariaLabel="Today focus queue"
                 estimateRowHeight={58}
                 getKey={(task) => task.id}
-                items={source.todayViewModel.focusTasks}
+                items={unscheduledTasks}
                 performanceLabel="today.focus-tasks"
                 renderRow={(task) => (
                   <ListRow
@@ -975,38 +1051,173 @@ function TodayView(): JSX.Element {
           </div>
         }
       >
-        <Panel title="Timeline" description="Tasks and calendar agenda from the local cache">
+        <Panel
+          title="Timeline"
+          description="Schedule suggestion from the local cache"
+          action={
+            <Badge tone={schedule.overloadMinutes > 0 ? "warning" : "success"}>
+              {schedule.overloadMinutes > 0 ? `${schedule.overloadMinutes} min over` : "Within capacity"}
+            </Badge>
+          }
+        >
+          <div className="grid gap-3 p-3">
+            <div className="h-2 overflow-hidden rounded-hcbSm bg-bg-tertiary">
+              <div
+                className={cx(
+                  "h-full rounded-hcbSm",
+                  schedule.overloadMinutes > 0 ? "bg-warning" : "bg-success"
+                )}
+                style={{ width: `${capacityPercent}%` }}
+              />
+            </div>
+            {todayActionError ? (
+              <StatusBanner description={todayActionError} title="Today action failed" tone="warning" />
+            ) : null}
+            {quickAddSlot ? (
+              <div className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3" role="dialog" aria-label="Quick add">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[var(--text-sm)] font-medium text-text-primary">
+                    Quick add {timeLabel(quickAddSlot)}
+                  </span>
+                  <IconButton icon={X} label="Close quick add" onClick={() => setQuickAddSlot(null)} variant="ghost" />
+                </div>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+                  <Input
+                    aria-label="Quick add title"
+                    onChange={(event) => setQuickAddTitle(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void createQuickAdd();
+                      }
+                    }}
+                    placeholder="Title"
+                    value={quickAddTitle}
+                  />
+                  <Button
+                    aria-pressed={quickAddKind === "task"}
+                    onClick={() => setQuickAddKind("task")}
+                    size="sm"
+                    variant={quickAddKind === "task" ? "secondary" : "ghost"}
+                  >
+                    Task
+                  </Button>
+                  <Button
+                    aria-pressed={quickAddKind === "event"}
+                    onClick={() => setQuickAddKind("event")}
+                    size="sm"
+                    variant={quickAddKind === "event" ? "secondary" : "ghost"}
+                  >
+                    Event
+                  </Button>
+                </div>
+                <Button disabled={!quickAddTitle.trim()} onClick={() => void createQuickAdd()} size="sm" variant="primary">
+                  <CalendarPlus aria-hidden="true" size={14} />
+                  Add
+                </Button>
+              </div>
+            ) : null}
           <VirtualizedList
             ariaLabel="Today timeline"
-            estimateRowHeight={58}
+            estimateRowHeight={56}
             emptyState={
               <EmptyState
-                description="No cached agenda rows are available for Today."
+                description="No working-hour rows are available."
                 title="No timeline rows"
               />
             }
-            getKey={(entry) => entry.id}
-            items={timelineEntries}
+            getKey={(row) => row.id}
+            items={rows}
             performanceLabel="today.timeline"
-            renderRow={(entry) =>
-              entry.kind === "header" ? (
-                <TodayTimelineHeader
-                  count={entry.count}
-                  detail={entry.detail}
-                  title={entry.title}
-                />
-              ) : (
-                <TodayTimelineRow
-                  onMoveBlock={moveBlock}
-                  onRepairBlock={repairBlock}
-                  onResizeBlock={resizeBlock}
-                  onUnscheduleBlock={(blockId) => void source.unscheduleTaskBlock(blockId)}
-                  row={entry.row}
-                />
-              )
-            }
+            renderRow={(row) => {
+              const rowSlots = slotsByRow.get(row.id) ?? [];
+              const isCurrentRow = currentRowId === row.id && todayDate === dateOnlyFromLocalDate(new Date(nowIso));
+              const currentTop = ((new Date(nowIso).getUTCMinutes() % 30) / 30) * 56;
+
+              return (
+                <div className="grid min-h-14 grid-cols-[64px_minmax(0,1fr)] border-b border-border">
+                  <div className="border-r border-border px-2 py-2 font-mono text-[var(--text-xs)] text-text-muted">
+                    {row.label}
+                  </div>
+                  <div
+                    aria-label={`Quick add at ${row.label}`}
+                    className="relative min-h-14 bg-bg-tertiary/40 px-2 py-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    onClick={() => setQuickAddSlot(row.startsAt)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => dropTaskAt(row, event)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setQuickAddSlot(row.startsAt);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    {isCurrentRow ? (
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-x-0 z-20 h-0.5 bg-danger"
+                        style={{ top: currentTop }}
+                      />
+                    ) : null}
+                    {rowSlots.map((slot) => {
+                      const tone = slotTone(slot);
+                      const durationRows = scheduleSlotDurationMinutes(slot) / 30;
+                      const top = ((scheduleSlotMinutesFromStart(slot, startHour) % 30) / 30) * 56;
+                      const height = Math.max(34, durationRows * 56 - 4);
+                      const draggable = Boolean(slot.taskId && !slot.locked);
+
+                      return (
+                        <button
+                          className={cx(
+                            "absolute left-2 right-2 z-10 overflow-hidden rounded-hcbMd border px-2 py-1 text-left shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                            tone.border
+                          )}
+                          draggable={draggable}
+                          key={`${slot.taskId ?? slot.eventId}-${slot.startsAt}`}
+                          onClick={(event) => event.stopPropagation()}
+                          onDragStart={(event) => {
+                            if (!slot.taskId || slot.locked) {
+                              event.preventDefault();
+                              return;
+                            }
+
+                            event.dataTransfer.setData("application/x-hcb-task", slot.taskId);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "ArrowUp") {
+                              event.preventDefault();
+                              void moveTaskSlotBy(slot, -15);
+                            } else if (event.key === "ArrowDown") {
+                              event.preventDefault();
+                              void moveTaskSlotBy(slot, 15);
+                            }
+                          }}
+                          style={{ top, height, background: tone.background }}
+                          type="button"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-[var(--text-sm)] font-medium text-text-primary">
+                              {slotTitle(slot, source)}
+                            </span>
+                            <Badge tone={slot.conflict ? "danger" : slot.eventId ? "accent" : slot.locked ? "warning" : "success"}>
+                              {tone.label}
+                            </Badge>
+                          </span>
+                          <span className="block truncate text-[var(--text-xs)] text-text-muted">
+                            {slotDetail(slot, source)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }}
             viewportHeight={342}
           />
+          </div>
         </Panel>
       </SectionChrome>
     </div>
@@ -2508,6 +2719,8 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
   );
 }
 
+type CalendarRepeatFrequency = "none" | CalendarEventRecurrence["frequency"];
+
 interface CalendarEventDraft {
   mode: "create" | "edit";
   id?: string;
@@ -2520,6 +2733,10 @@ interface CalendarEventDraft {
   notes: string;
   guests: string;
   reminderMinutes: string;
+  repeatFrequency: CalendarRepeatFrequency;
+  repeatInterval: string;
+  repeatEndsOn: string;
+  repeatCount: string;
 }
 
 function defaultCalendarId(source: ReturnType<typeof useCoreViewModelSource>): string {
@@ -2596,6 +2813,33 @@ function calendarEventPayload(draft: CalendarEventDraft): CalendarEventCreateReq
   };
 }
 
+function calendarEventDraftsEqual(
+  left: CalendarEventDraft | null,
+  right: CalendarEventDraft | null
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.mode === right.mode &&
+    left.id === right.id &&
+    left.title === right.title &&
+    left.calendarId === right.calendarId &&
+    left.startsAt === right.startsAt &&
+    left.endsAt === right.endsAt &&
+    left.allDay === right.allDay &&
+    left.location === right.location &&
+    left.notes === right.notes &&
+    left.guests === right.guests &&
+    left.reminderMinutes === right.reminderMinutes
+  );
+}
+
 function allDayEndInputValue(endsAt: string): string {
   const end = new Date(endsAt);
   end.setUTCDate(end.getUTCDate() - 1);
@@ -2606,17 +2850,11 @@ function CalendarEventForm({
   calendars,
   draft,
   error,
-  onCancel,
-  onDelete,
-  onSave,
   setDraft
 }: {
   calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
   draft: CalendarEventDraft;
   error?: string;
-  onCancel: () => void;
-  onDelete: () => void;
-  onSave: () => void;
   setDraft: (draft: CalendarEventDraft) => void;
 }): JSX.Element {
   function setAllDay(allDay: boolean): void {
@@ -2659,117 +2897,99 @@ function CalendarEventForm({
   }
 
   return (
-    <Panel
-      action={
-        <div className="flex items-center gap-2">
-          {draft.mode === "edit" ? (
-            <IconButton icon={Trash2} label="Delete event" onClick={onDelete} variant="danger" />
-          ) : null}
-          <Button onClick={onSave} size="sm" variant="primary">
-            Save
-          </Button>
-        </div>
-      }
-      title={draft.mode === "edit" ? "Edit event" : "New event"}
-      description="Google Calendar event"
-    >
-      <div className="grid gap-3 p-3">
-        {error ? <ErrorState description={error} title="Event not saved" /> : null}
-        <Input
-          aria-label="Event title"
-          onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-          placeholder="Title"
-          value={draft.title}
+    <div className="grid gap-3">
+      {error ? <ErrorState description={error} title="Event not saved" /> : null}
+      <Input
+        aria-label="Event title"
+        onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+        placeholder="Title"
+        value={draft.title}
+      />
+      <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+        <span>Calendar</span>
+        <select
+          aria-label="Event calendar"
+          className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onChange={(event) => setDraft({ ...draft, calendarId: event.target.value })}
+          value={draft.calendarId}
+        >
+          {calendars.map((calendar) => (
+            <option key={calendar.id} value={calendar.id}>
+              {calendar.title}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-h-8 items-center gap-2 text-[var(--text-sm)] text-text-secondary">
+        <input
+          checked={draft.allDay}
+          className="accent-[var(--color-accent)]"
+          onChange={(event) => setAllDay(event.target.checked)}
+          type="checkbox"
         />
-        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-          <span>Calendar</span>
-          <select
-            aria-label="Event calendar"
-            className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onChange={(event) => setDraft({ ...draft, calendarId: event.target.value })}
-            value={draft.calendarId}
-          >
-            {calendars.map((calendar) => (
-              <option key={calendar.id} value={calendar.id}>
-                {calendar.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex min-h-8 items-center gap-2 text-[var(--text-sm)] text-text-secondary">
-          <input
-            checked={draft.allDay}
-            className="accent-[var(--color-accent)]"
-            onChange={(event) => setAllDay(event.target.checked)}
-            type="checkbox"
-          />
-          All day
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <Input
-            aria-label="Event starts"
-            onChange={(event) =>
-              draft.allDay
-                ? setAllDayStart(event.target.value)
-                : setDraft({ ...draft, startsAt: dateTimeLocalInputToIso(event.target.value) })
-            }
-            type={draft.allDay ? "date" : "datetime-local"}
-            value={draft.allDay ? dateInputValue(draft.startsAt) : dateTimeLocalInputValue(draft.startsAt)}
-          />
-          <Input
-            aria-label="Event ends"
-            min={draft.allDay ? dateInputValue(draft.startsAt) : undefined}
-            onChange={(event) =>
-              draft.allDay
-                ? setAllDayEnd(event.target.value)
-                : setDraft({ ...draft, endsAt: dateTimeLocalInputToIso(event.target.value) })
-            }
-            type={draft.allDay ? "date" : "datetime-local"}
-            value={draft.allDay ? allDayEndInputValue(draft.endsAt) : dateTimeLocalInputValue(draft.endsAt)}
-          />
-        </div>
+        All day
+      </label>
+      <div className="grid grid-cols-2 gap-2">
         <Input
-          aria-label="Event location"
-          onChange={(event) => setDraft({ ...draft, location: event.target.value })}
-          placeholder="Location"
-          value={draft.location}
+          aria-label="Event starts"
+          onChange={(event) =>
+            draft.allDay
+              ? setAllDayStart(event.target.value)
+              : setDraft({ ...draft, startsAt: dateTimeLocalInputToIso(event.target.value) })
+          }
+          type={draft.allDay ? "date" : "datetime-local"}
+          value={draft.allDay ? dateInputValue(draft.startsAt) : dateTimeLocalInputValue(draft.startsAt)}
         />
         <Input
-          aria-label="Event guests"
-          onChange={(event) => setDraft({ ...draft, guests: event.target.value })}
-          placeholder="guest@example.com, team@example.com"
-          value={draft.guests}
+          aria-label="Event ends"
+          min={draft.allDay ? dateInputValue(draft.startsAt) : undefined}
+          onChange={(event) =>
+            draft.allDay
+              ? setAllDayEnd(event.target.value)
+              : setDraft({ ...draft, endsAt: dateTimeLocalInputToIso(event.target.value) })
+          }
+          type={draft.allDay ? "date" : "datetime-local"}
+          value={draft.allDay ? allDayEndInputValue(draft.endsAt) : dateTimeLocalInputValue(draft.endsAt)}
         />
-        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-          <span>Reminder</span>
-          <select
-            aria-label="Event reminder"
-            className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onChange={(event) => setDraft({ ...draft, reminderMinutes: event.target.value })}
-            value={draft.reminderMinutes}
-          >
-            <option value="">None</option>
-            <option value="0">At start</option>
-            <option value="5">5 minutes before</option>
-            <option value="10">10 minutes before</option>
-            <option value="15">15 minutes before</option>
-            <option value="30">30 minutes before</option>
-            <option value="60">1 hour before</option>
-            <option value="1440">1 day before</option>
-          </select>
-        </label>
-        <textarea
-          aria-label="Event notes"
-          className="min-h-24 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
-          placeholder="Notes"
-          value={draft.notes}
-        />
-        <Button onClick={onCancel} size="sm" variant="ghost">
-          Cancel
-        </Button>
       </div>
-    </Panel>
+      <Input
+        aria-label="Event location"
+        onChange={(event) => setDraft({ ...draft, location: event.target.value })}
+        placeholder="Location"
+        value={draft.location}
+      />
+      <Input
+        aria-label="Event guests"
+        onChange={(event) => setDraft({ ...draft, guests: event.target.value })}
+        placeholder="guest@example.com, team@example.com"
+        value={draft.guests}
+      />
+      <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+        <span>Reminder</span>
+        <select
+          aria-label="Event reminder"
+          className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onChange={(event) => setDraft({ ...draft, reminderMinutes: event.target.value })}
+          value={draft.reminderMinutes}
+        >
+          <option value="">None</option>
+          <option value="0">At start</option>
+          <option value="5">5 minutes before</option>
+          <option value="10">10 minutes before</option>
+          <option value="15">15 minutes before</option>
+          <option value="30">30 minutes before</option>
+          <option value="60">1 hour before</option>
+          <option value="1440">1 day before</option>
+        </select>
+      </label>
+      <textarea
+        aria-label="Event notes"
+        className="min-h-24 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+        placeholder="Notes"
+        value={draft.notes}
+      />
+    </div>
   );
 }
 
@@ -3145,8 +3365,14 @@ function MonthView({
 
 function CalendarView(): JSX.Element {
   const source = useCoreViewModelSource();
+  const {
+    close: closeInspector,
+    current: currentInspector,
+    open: openInspector,
+    update: updateInspector
+  } = useInspector();
   const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
-  const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
+  const [draft, setDraftState] = useState<CalendarEventDraft | null>(null);
   const [formError, setFormError] = useState<string | undefined>();
   const [calendarActionError, setCalendarActionError] = useState<string | undefined>();
   const [availabilityStartDate, setAvailabilityStartDate] = useState(() =>
@@ -3163,6 +3389,26 @@ function CalendarView(): JSX.Element {
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
   const calendarNavigationStartedAt = useRef<number | null>(null);
   const calendarVisibilityInitialized = useRef(false);
+  const calendarDraftRef = useRef<CalendarEventDraft | null>(draft);
+  const calendarDraftBaselineRef = useRef<CalendarEventDraft | null>(draft);
+  const calendarInspectorDirtyRef = useRef(false);
+  const calendarInspectorInstanceRef = useRef(0);
+  const setDraft = useCallback<Dispatch<SetStateAction<CalendarEventDraft | null>>>((next) => {
+    setDraftState((current) => {
+      const resolved =
+        typeof next === "function"
+          ? (next as (value: CalendarEventDraft | null) => CalendarEventDraft | null)(current)
+          : next;
+
+      calendarDraftRef.current = resolved;
+      calendarInspectorDirtyRef.current = !calendarEventDraftsEqual(
+        resolved,
+        calendarDraftBaselineRef.current
+      );
+
+      return resolved;
+    });
+  }, []);
   const availableCalendarIds = useMemo(
     () => new Set(source.calendarSources.map((calendar) => calendar.id)),
     [source.calendarSources]
@@ -3199,8 +3445,7 @@ function CalendarView(): JSX.Element {
 
       if (detail?.action === "new-event") {
         setCalendarView("agenda");
-        setDraft(newCalendarDraft(source));
-        setFormError(undefined);
+        openCreate();
       }
 
       if (detail?.action === "set-view" && detail.viewId) {
@@ -3265,6 +3510,27 @@ function CalendarView(): JSX.Element {
     });
   }, [activeViewId, visibleCalendarEvents.length]);
 
+  useEffect(() => {
+    if (currentInspector?.kind !== "event" || !draft) {
+      return;
+    }
+
+    const dirty = !calendarEventDraftsEqual(draft, calendarDraftBaselineRef.current);
+    calendarInspectorDirtyRef.current = dirty;
+    updateInspector({
+      actions: eventInspectorActions(draft),
+      body: eventInspectorBody(draft),
+      dirty,
+      title: eventInspectorTitle(draft)
+    });
+  }, [
+    currentInspector?.kind,
+    draft,
+    formError,
+    source.calendarSources,
+    updateInspector
+  ]);
+
   if (
     (source.dataState === "loading" ||
       source.dataState === "offline" ||
@@ -3274,22 +3540,99 @@ function CalendarView(): JSX.Element {
     return <CacheStatePanel title="Calendar" />;
   }
 
+  function canReplaceEventInspector(): boolean {
+    return currentInspector?.kind !== "event" || !calendarInspectorDirtyRef.current;
+  }
+
+  function eventInspectorTitle(nextDraft: CalendarEventDraft): string {
+    return nextDraft.mode === "edit" ? nextDraft.title || "Event" : "New event";
+  }
+
+  function eventInspectorBody(nextDraft: CalendarEventDraft): ReactNode {
+    return (
+      <CalendarEventForm
+        calendars={source.calendarSources}
+        draft={nextDraft}
+        error={formError}
+        key={calendarInspectorInstanceRef.current}
+        setDraft={(next) => setDraft(next)}
+      />
+    );
+  }
+
+  function eventInspectorActions(nextDraft: CalendarEventDraft): ReactNode {
+    return (
+      <>
+        {nextDraft.mode === "edit" ? (
+          <Button onClick={() => void deleteDraft()} size="sm" variant="danger">
+            <Trash2 aria-hidden="true" size={14} />
+            Delete event
+          </Button>
+        ) : null}
+        <Button onClick={() => void cancelEventInspector()} size="sm" variant="ghost">
+          <X aria-hidden="true" size={14} />
+          Cancel
+        </Button>
+        <Button onClick={() => void saveDraft()} size="sm" variant="primary">
+          <Save aria-hidden="true" size={14} />
+          Save
+        </Button>
+      </>
+    );
+  }
+
+  function openEventInspector(nextDraft: CalendarEventDraft): void {
+    calendarInspectorInstanceRef.current += 1;
+    calendarDraftBaselineRef.current = nextDraft;
+    calendarDraftRef.current = nextDraft;
+    calendarInspectorDirtyRef.current = false;
+    setFormError(undefined);
+    setDraft(nextDraft);
+    openInspector({
+      actions: eventInspectorActions(nextDraft),
+      body: eventInspectorBody(nextDraft),
+      dirty: false,
+      id: nextDraft.id ?? "new",
+      kind: "event",
+      onConfirmClose: () => !calendarInspectorDirtyRef.current,
+      title: eventInspectorTitle(nextDraft)
+    });
+  }
+
   function openCreate(seed?: { startsAt?: string; allDay?: boolean }): void {
-    setDraft(newCalendarDraft(source, seed));
-    setFormError(undefined);
-  }
-
-  function openEdit(event: CalendarEventViewModel): void {
-    setDraft(editCalendarDraft(event));
-    setFormError(undefined);
-  }
-
-  async function saveDraft(): Promise<void> {
-    if (!draft) {
+    if (!canReplaceEventInspector()) {
       return;
     }
 
-    const payload = calendarEventPayload(draft);
+    openEventInspector(newCalendarDraft(source, seed));
+  }
+
+  function openEdit(event: CalendarEventViewModel): void {
+    if (!canReplaceEventInspector()) {
+      return;
+    }
+
+    openEventInspector(editCalendarDraft(event));
+  }
+
+  async function closeEventInspectorAfterMutation(): Promise<void> {
+    calendarDraftBaselineRef.current = null;
+    calendarDraftRef.current = null;
+    calendarInspectorDirtyRef.current = false;
+    setDraft(null);
+    setFormError(undefined);
+    await closeInspector();
+    source.refresh();
+  }
+
+  async function saveDraft(): Promise<void> {
+    const currentDraft = calendarDraftRef.current;
+
+    if (!currentDraft) {
+      return;
+    }
+
+    const payload = calendarEventPayload(currentDraft);
 
     if (!payload.title) {
       setFormError("Title is required.");
@@ -3302,10 +3645,10 @@ function CalendarView(): JSX.Element {
     }
 
     const result =
-      draft.mode === "create"
+      currentDraft.mode === "create"
         ? await window.hcb?.calendar.create(payload)
         : await window.hcb?.calendar.update({
-            id: draft.id ?? "",
+            id: currentDraft.id ?? "",
             ...payload
           } satisfies CalendarEventUpdateRequest);
 
@@ -3314,24 +3657,33 @@ function CalendarView(): JSX.Element {
       return;
     }
 
-    setDraft(null);
-    source.refresh();
+    await closeEventInspectorAfterMutation();
   }
 
   async function deleteDraft(): Promise<void> {
-    if (!draft?.id) {
+    const currentDraft = calendarDraftRef.current;
+
+    if (!currentDraft?.id) {
       return;
     }
 
-    const result = await window.hcb?.calendar.delete({ id: draft.id });
+    const result = await window.hcb?.calendar.delete({ id: currentDraft.id });
 
     if (!result?.ok) {
       setFormError(result?.error.message ?? "Calendar event delete failed.");
       return;
     }
 
+    await closeEventInspectorAfterMutation();
+  }
+
+  async function cancelEventInspector(): Promise<void> {
+    calendarDraftBaselineRef.current = null;
+    calendarDraftRef.current = null;
+    calendarInspectorDirtyRef.current = false;
     setDraft(null);
-    source.refresh();
+    setFormError(undefined);
+    await closeInspector();
   }
 
   async function updateCalendarEventTime(
@@ -3507,17 +3859,6 @@ function CalendarView(): JSX.Element {
         title="Calendar"
         sidebar={
           <div className="grid gap-3">
-            {draft ? (
-              <CalendarEventForm
-                calendars={source.calendarSources}
-                draft={draft}
-                error={formError}
-                onCancel={() => setDraft(null)}
-                onDelete={() => void deleteDraft()}
-                onSave={() => void saveDraft()}
-                setDraft={setDraft}
-              />
-            ) : null}
             {source.isOffline ? (
               <Panel title="Offline state" description="Google sync">
                 <OfflineState />
@@ -3682,250 +4023,23 @@ function CalendarView(): JSX.Element {
   );
 }
 
-function buildPreview(body: string): string {
-  const trimmed = body.trim();
-  if (!trimmed) {
-    return "Empty local note";
-  }
-
-  return trimmed.length > 92 ? `${trimmed.slice(0, 89)}...` : trimmed;
-}
-
-function normalizedNoteTitle(title: string): string {
-  return title.trim().toLowerCase();
-}
-
-function extractNoteLinks(body: string): string[] {
-  const links = new Set<string>();
-  const pattern = /\[\[([^\]]{1,160})\]\]/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(body)) !== null) {
-    const title = match[1]?.trim();
-
-    if (title) {
-      links.add(title);
-    }
-  }
-
-  return Array.from(links);
-}
-
-type PlannerLinkKind = "note" | "task" | "event";
-
-interface PlannerLinkReference {
-  kind: PlannerLinkKind;
-  label: string;
-  raw: string;
-}
-
-interface NoteProperty {
-  key: string;
-  value: string;
-}
-
-function parsePlannerLink(raw: string): PlannerLinkReference {
-  const [maybeKind, ...rest] = raw.split(":");
-  const kind = maybeKind.toLowerCase();
-
-  if ((kind === "note" || kind === "task" || kind === "event") && rest.length > 0) {
-    return {
-      kind,
-      label: rest.join(":").trim(),
-      raw
-    };
-  }
-
-  return {
-    kind: "note",
-    label: raw.trim(),
-    raw
-  };
-}
-
-function extractNoteProperties(body: string): NoteProperty[] {
-  const supportedKeys = new Set(["status", "tags", "project", "date", "source"]);
-  const properties: NoteProperty[] = [];
-
-  for (const line of body.split(/\r?\n/).slice(0, 12)) {
-    const match = /^([a-zA-Z][\w-]{1,24}):\s*(.+)$/.exec(line.trim());
-
-    if (!match) {
-      continue;
-    }
-
-    const key = match[1].toLowerCase();
-    const value = match[2].trim();
-
-    if (supportedKeys.has(key) && value) {
-      properties.push({ key, value });
-    }
-  }
-
-  return properties;
-}
-
-function renderInlineNoteLinks(
-  value: string,
-  onOpenNoteLink: (title: string) => void
-): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const pattern = /\[\[([^\]]{1,160})\]\]/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(value)) !== null) {
-    const title = match[1]?.trim() ?? "";
-    const link = parsePlannerLink(title);
-
-    if (match.index > cursor) {
-      nodes.push(value.slice(cursor, match.index));
-    }
-
-    nodes.push(link.kind === "note" ? (
-      <button
-        className="rounded-hcbSm px-1 text-accent underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        key={`${title}-${match.index}`}
-        onClick={() => onOpenNoteLink(link.label)}
-        type="button"
-      >
-        {link.label}
-      </button>
-    ) : (
-      <span
-        className="inline-flex rounded-hcbSm border border-border bg-bg-tertiary px-1 text-text-secondary"
-        key={`${title}-${match.index}`}
-      >
-        {link.kind}: {link.label}
-      </span>
-    ));
-    cursor = match.index + match[0].length;
-  }
-
-  if (cursor < value.length) {
-    nodes.push(value.slice(cursor));
-  }
-
-  return nodes.length > 0 ? nodes : [value];
-}
-
-function MarkdownPreview({
-  body,
-  onOpenNoteLink
-}: {
-  body: string;
-  onOpenNoteLink: (title: string) => void;
-}): JSX.Element {
-  const lines = body.split(/\r?\n/);
-
-  if (body.trim().length === 0) {
-    return <EmptyState description="This note has no body yet." title="Empty note" />;
-  }
-
-  return (
-    <div
-      aria-label="Note preview"
-      className="grid min-h-[260px] content-start gap-2 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary"
-      role="region"
-    >
-      {lines.map((line, index) => {
-        const trimmed = line.trim();
-
-        if (!trimmed) {
-          return <div aria-hidden="true" className="h-2" key={`blank-${index}`} />;
-        }
-
-        const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
-        if (heading) {
-          const level = heading[1].length;
-          const className =
-            level === 1
-              ? "text-[var(--text-xl)] font-semibold"
-              : level === 2
-                ? "text-[var(--text-lg)] font-semibold"
-                : "text-[var(--text-md)] font-semibold";
-
-          return (
-            <div className={className} key={`heading-${index}`}>
-              {renderInlineNoteLinks(heading[2], onOpenNoteLink)}
-            </div>
-          );
-        }
-
-        const taskItem = /^[-*]\s+\[( |x|X)\]\s+(.+)$/.exec(trimmed);
-        if (taskItem) {
-          const checked = taskItem[1].toLowerCase() === "x";
-
-          return (
-            <div className="flex items-start gap-2" key={`task-${index}`}>
-              <input
-                checked={checked}
-                className="mt-1 accent-[var(--color-accent)]"
-                readOnly
-                type="checkbox"
-              />
-              <span className={cx("min-w-0", checked && "text-text-muted line-through")}>
-                {renderInlineNoteLinks(taskItem[2], onOpenNoteLink)}
-              </span>
-            </div>
-          );
-        }
-
-        const listItem = /^[-*]\s+(.+)$/.exec(trimmed);
-        if (listItem) {
-          return (
-            <div className="flex items-start gap-2" key={`list-${index}`}>
-              <span className="text-text-muted">-</span>
-              <span className="min-w-0">{renderInlineNoteLinks(listItem[1], onOpenNoteLink)}</span>
-            </div>
-          );
-        }
-
-        const quote = /^>\s+(.+)$/.exec(trimmed);
-        if (quote) {
-          return (
-            <blockquote
-              className="border-l-2 border-accent pl-3 text-text-secondary"
-              key={`quote-${index}`}
-            >
-              {renderInlineNoteLinks(quote[1], onOpenNoteLink)}
-            </blockquote>
-          );
-        }
-
-        return <p key={`paragraph-${index}`}>{renderInlineNoteLinks(trimmed, onOpenNoteLink)}</p>;
-      })}
-    </div>
-  );
-}
-
 function NotesView(): JSX.Element {
   const source = useCoreViewModelSource();
+  const {
+    close: closeInspector,
+    current: currentInspector,
+    open: openInspector,
+    update: updateInspector
+  } = useInspector();
   const [notes, setNotes] = useState<NoteViewModel[]>(source.initialNotes);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(
     source.initialNotes[0]?.id ?? null
   );
-  const [noteViewMode, setNoteViewMode] = useState<"edit" | "preview">("edit");
-  const [plannerLinkTarget, setPlannerLinkTarget] = useState("");
   const [draftCounter, setDraftCounter] = useState(1);
   const requestedNoteDetails = useRef(new Set<string>());
   const lastNoteEditReportAt = useRef(0);
+  const noteInspectorBodyRef = useRef<NoteInspectorBodyHandle | null>(null);
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null;
-  const noteByNormalizedTitle = useMemo(
-    () => new Map(notes.map((note) => [normalizedNoteTitle(note.title), note])),
-    [notes]
-  );
-  const selectedNoteLinks = selectedNote ? extractNoteLinks(selectedNote.body) : [];
-  const selectedNoteProperties = selectedNote ? extractNoteProperties(selectedNote.body) : [];
-  const selectedNoteBacklinks = selectedNote
-    ? notes.filter(
-        (note) =>
-          note.id !== selectedNote.id &&
-          extractNoteLinks(note.body).some(
-            (title) => normalizedNoteTitle(title) === normalizedNoteTitle(selectedNote.title)
-          )
-      )
-    : [];
 
   useEffect(() => {
     requestedNoteDetails.current.clear();
@@ -4020,6 +4134,25 @@ function NotesView(): JSX.Element {
     return () => window.removeEventListener("hcb:note-command", handleNoteCommand);
   });
 
+  useEffect(() => {
+    if (currentInspector?.kind !== "note" || !selectedNote || currentInspector.id !== selectedNote.id) {
+      return;
+    }
+
+    updateInspector({
+      actions: noteInspectorActions(selectedNote),
+      body: noteInspectorBody(selectedNote),
+      subtitle: selectedNote.updatedLabel,
+      title: selectedNote.title || "Untitled note"
+    });
+  }, [
+    currentInspector?.id,
+    currentInspector?.kind,
+    notes,
+    selectedNote,
+    updateInspector
+  ]);
+
   if (
     (source.dataState === "loading" ||
       source.dataState === "offline" ||
@@ -4029,7 +4162,66 @@ function NotesView(): JSX.Element {
     return <CacheStatePanel title="Notes" />;
   }
 
+  function noteInspectorBody(note: NoteViewModel): ReactNode {
+    return (
+      <NoteInspectorBody
+        key={note.id}
+        note={note}
+        notes={notes}
+        onDraftChange={updateNoteDraft}
+        onOpenNote={selectNote}
+        onPersist={persistNoteDraft}
+        ref={noteInspectorBodyRef}
+      />
+    );
+  }
+
+  function noteInspectorActions(note: NoteViewModel): ReactNode {
+    return (
+      <>
+        <Button onClick={() => void deleteNote(note.id)} size="sm" variant="danger">
+          <Trash2 aria-hidden="true" size={14} />
+          Delete selected note
+        </Button>
+        <Button onClick={() => void closeInspector()} size="sm" variant="ghost">
+          <X aria-hidden="true" size={14} />
+          Close
+        </Button>
+      </>
+    );
+  }
+
+  function openNoteInspector(note: NoteViewModel): void {
+    openInspector({
+      actions: noteInspectorActions(note),
+      body: noteInspectorBody(note),
+      dirty: false,
+      id: note.id,
+      kind: "note",
+      onConfirmClose: async () => {
+        await noteInspectorBodyRef.current?.flush();
+        return true;
+      },
+      subtitle: note.updatedLabel,
+      title: note.title || "Untitled note"
+    });
+  }
+
+  async function selectNote(noteId: string): Promise<void> {
+    const note = notes.find((candidate) => candidate.id === noteId);
+
+    if (!note) {
+      return;
+    }
+
+    await noteInspectorBodyRef.current?.flush();
+    setSelectedNoteId(note.id);
+    openNoteInspector(note);
+  }
+
   async function createNote(): Promise<void> {
+    await noteInspectorBodyRef.current?.flush();
+
     const fallbackId = `note-draft-${draftCounter}`;
     const fallbackNote: NoteViewModel = {
       id: fallbackId,
@@ -4042,6 +4234,7 @@ function NotesView(): JSX.Element {
     setDraftCounter((current) => current + 1);
     setNotes((current) => [fallbackNote, ...current]);
     setSelectedNoteId(fallbackId);
+    openNoteInspector(fallbackNote);
 
     const result = await window.hcb?.notes.create({
       title: "Untitled note",
@@ -4062,23 +4255,26 @@ function NotesView(): JSX.Element {
         current.map((note) => (note.id === fallbackId ? persisted : note))
       );
       setSelectedNoteId(result.data.id);
+      openNoteInspector(persisted);
     }
   }
 
   async function createNoteWithTemplate(title: string, body: string): Promise<void> {
+    await noteInspectorBodyRef.current?.flush();
+
     const fallbackId = `note-draft-${draftCounter}`;
     const fallbackNote: NoteViewModel = {
       id: fallbackId,
       title,
       body,
-      preview: buildPreview(body),
+      preview: buildNotePreview(body),
       updatedLabel: "Just now"
     };
 
     setDraftCounter((current) => current + 1);
     setNotes((current) => [fallbackNote, ...current]);
     setSelectedNoteId(fallbackId);
-    setNoteViewMode("edit");
+    openNoteInspector(fallbackNote);
 
     const result = await window.hcb?.notes.create({ title, body });
 
@@ -4096,6 +4292,7 @@ function NotesView(): JSX.Element {
         current.map((note) => (note.id === fallbackId ? persisted : note))
       );
       setSelectedNoteId(result.data.id);
+      openNoteInspector(persisted);
     }
   }
 
@@ -4115,23 +4312,19 @@ function NotesView(): JSX.Element {
     );
   }
 
-  function updateSelectedNote(updates: Partial<Pick<NoteViewModel, "title" | "body">>): void {
-    if (!selectedNote) {
-      return;
-    }
-
+  function updateNoteDraft(noteId: string, draft: NoteDraftValue): void {
     const startedAt = rendererNow();
     setNotes((current) =>
       current.map((note) => {
-        if (note.id !== selectedNote.id) {
+        if (note.id !== noteId) {
           return note;
         }
 
-        const nextBody = updates.body ?? note.body;
         return {
           ...note,
-          ...updates,
-          preview: buildPreview(nextBody),
+          title: draft.title,
+          body: draft.body,
+          preview: buildNotePreview(draft.body),
           updatedLabel: "Edited locally"
         };
       })
@@ -4141,323 +4334,122 @@ function NotesView(): JSX.Element {
       lastNoteEditReportAt.current = startedAt;
       scheduleRendererFrame(() => {
         reportRendererTimingSince("notes.edit.local", startedAt, {
-          field: updates.body === undefined ? "title" : "body",
+          field: "body",
           noteCount: notes.length
         });
       });
     }
   }
 
-  async function persistSelectedNote(): Promise<void> {
-    if (!selectedNote || selectedNote.id.startsWith("note-draft-")) {
-      return;
+  async function persistNoteDraft(noteId: string, draft: NoteDraftValue): Promise<boolean> {
+    if (noteId.startsWith("note-draft-")) {
+      return true;
     }
 
-    await window.hcb?.notes.update({
-      id: selectedNote.id,
-      title: selectedNote.title,
-      body: selectedNote.body
+    const result = await window.hcb?.notes.update({
+      id: noteId,
+      title: draft.title,
+      body: draft.body
     });
+
+    return result?.ok ?? false;
   }
 
-  async function deleteSelectedNote(): Promise<void> {
-    if (!selectedNote) {
+  async function deleteNote(noteId: string): Promise<void> {
+    const note = notes.find((candidate) => candidate.id === noteId);
+
+    if (!note) {
       return;
     }
 
-    if (!selectedNote.id.startsWith("note-draft-")) {
-      await window.hcb?.notes.delete({ id: selectedNote.id });
+    if (!note.id.startsWith("note-draft-")) {
+      await window.hcb?.notes.delete({ id: note.id });
     }
 
-    const nextNotes = notes.filter((note) => note.id !== selectedNote.id);
+    const nextNotes = notes.filter((candidate) => candidate.id !== note.id);
+    const nextNote = nextNotes[0] ?? null;
+
     setNotes(nextNotes);
-    setSelectedNoteId(nextNotes[0]?.id ?? null);
-  }
+    setSelectedNoteId(nextNote?.id ?? null);
 
-  function openNoteLink(title: string): void {
-    const linkedNote = noteByNormalizedTitle.get(normalizedNoteTitle(title));
-
-    if (linkedNote) {
-      setSelectedNoteId(linkedNote.id);
-    }
-  }
-
-  function insertPlannerLink(): void {
-    if (!selectedNote || !plannerLinkTarget) {
+    if (nextNote) {
+      openNoteInspector(nextNote);
       return;
     }
 
-    const suffix = selectedNote.body.endsWith("\n") || selectedNote.body.length === 0 ? "" : "\n";
-    updateSelectedNote({ body: `${selectedNote.body}${suffix}[[${plannerLinkTarget}]]` });
+    await closeInspector();
   }
 
   return (
-    <SectionChrome
-      title="Notes"
-      sidebar={
-        <div className="grid gap-3">
-          <Panel
-            action={
-              <Button
-                data-action-id="note.create"
-                onClick={createNote}
-                size="sm"
-                title={actionDescription("note.create")}
-                variant="primary"
-              >
-                <Plus aria-hidden="true" size={14} />
-                {actionLabel("note.create")}
-              </Button>
-            }
-            title="Local notes"
-            description="Local SQLite notes"
-          >
-            <VirtualizedList
-              ariaLabel="Local notes"
-              emptyState={
-                <EmptyState
-                  description="Create a local note to populate SQLite."
-                  title="No local notes"
-                />
-              }
-              estimateRowHeight={66}
-              getKey={(note) => note.id}
-              items={notes}
-              performanceLabel="notes.list"
-              renderRow={(note) => (
-                <div className="border-b border-border last:border-b-0" role="listitem">
-                  <button
-                    aria-current={note.id === selectedNoteId ? "true" : undefined}
-                    className={cx(
-                      "flex min-h-[66px] w-full items-center gap-3 px-3 py-2 text-left transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                      note.id === selectedNoteId ? "bg-surface-0" : "bg-transparent hover:bg-surface-0"
-                    )}
-                    onClick={() => setSelectedNoteId(note.id)}
-                    type="button"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-[var(--text-md)] font-medium text-text-primary">
-                          {note.title}
-                        </span>
-                        <span className="shrink-0 text-[var(--text-xs)] text-text-muted">
-                          {note.updatedLabel}
-                        </span>
-                      </div>
-                      <p className="truncate text-[var(--text-sm)] text-text-muted">{note.preview}</p>
-                    </div>
-                    <Badge tone="info">Local</Badge>
-                  </button>
-                </div>
-              )}
-              viewportHeight={366}
-            />
-          </Panel>
-          <Panel title="Planner links" description="Insert local note, task, or event links">
-            <div className="grid gap-3 p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button onClick={createDailyNote} size="sm" variant="secondary">
-                  <CalendarPlus aria-hidden="true" size={14} />
-                  Daily note
-                </Button>
-                <Button onClick={createMeetingNote} size="sm" variant="ghost">
-                  <Pencil aria-hidden="true" size={14} />
-                  Meeting note
-                </Button>
-              </div>
-              <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                <span>Link target</span>
-                <select
-                  aria-label="Planner link target"
-                  className={settingsSelectClass}
-                  disabled={!selectedNote}
-                  onChange={(event) => setPlannerLinkTarget(event.target.value)}
-                  value={plannerLinkTarget}
-                >
-                  <option value="">Choose local target</option>
-                  {notes.map((note) => (
-                    <option key={`note-${note.id}`} value={note.title}>
-                      Note - {note.title}
-                    </option>
-                  ))}
-                  {source.largeTaskWindow.slice(0, 20).map((task) => (
-                    <option key={`task-${task.id}`} value={`task:${task.title}`}>
-                      Task - {task.title}
-                    </option>
-                  ))}
-                  {source.calendarAgendaEvents.slice(0, 20).map((event) => (
-                    <option key={`event-${event.id}`} value={`event:${event.title}`}>
-                      Event - {event.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <Button
-                disabled={!selectedNote || !plannerLinkTarget}
-                onClick={insertPlannerLink}
-                size="sm"
-                variant="primary"
-              >
-                <Plus aria-hidden="true" size={14} />
-                Insert link
-              </Button>
-            </div>
-          </Panel>
-          <Panel
-            title="Note links"
-            description={
-              selectedNote
-                ? `${selectedNoteLinks.length} outgoing, ${selectedNoteBacklinks.length} backlinks`
-                : "No note"
-            }
-          >
-            {selectedNote ? (
-              <div className="grid gap-3 p-3">
-                <div className="grid gap-2">
-                  <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">
-                    Links
-                  </div>
-                  {selectedNoteLinks.length > 0 ? (
-                    selectedNoteLinks.map((title) => {
-                      const link = parsePlannerLink(title);
-                      const linkedNote = link.kind === "note"
-                        ? noteByNormalizedTitle.get(normalizedNoteTitle(link.label))
-                        : undefined;
-
-                      return linkedNote ? (
-                        <Button
-                          aria-label={`Open linked note ${linkedNote.title}`}
-                          key={title}
-                          onClick={() => setSelectedNoteId(linkedNote.id)}
-                          size="sm"
-                          variant="ghost"
-                        >
-                          <Search aria-hidden="true" size={14} />
-                          {linkedNote.title}
-                        </Button>
-                      ) : (
-                        <Badge key={title} tone={link.kind === "note" ? "warning" : "accent"}>
-                          {link.kind === "note" ? "Broken" : link.kind}: {link.label}
-                        </Badge>
-                      );
-                    })
-                  ) : (
-                    <span className="text-[var(--text-sm)] text-text-muted">None</span>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">
-                    Backlinks
-                  </div>
-                  {selectedNoteBacklinks.length > 0 ? (
-                    selectedNoteBacklinks.map((note) => (
-                      <Button
-                        aria-label={`Open backlink ${note.title}`}
-                        key={note.id}
-                        onClick={() => setSelectedNoteId(note.id)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        <RotateCcw aria-hidden="true" size={14} />
-                        {note.title}
-                      </Button>
-                    ))
-                  ) : (
-                    <span className="text-[var(--text-sm)] text-text-muted">None</span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <EmptyState description="Select a note to inspect links." title="No note selected" />
-            )}
-          </Panel>
-          <Panel
-            title="Note properties"
-            description={selectedNote ? `${selectedNoteProperties.length} inferred` : "No note"}
-          >
-            {selectedNote ? (
-              selectedNoteProperties.length > 0 ? (
-                <div className="flex flex-wrap gap-2 p-3">
-                  {selectedNoteProperties.map((property) => (
-                    <Badge key={`${property.key}-${property.value}`} tone="info">
-                      {property.key}: {property.value}
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  description="Add lines like status:, tags:, project:, date:, or source: near the top of the note."
-                  title="No properties"
-                />
-              )
-            ) : (
-              <EmptyState description="Select a note to inspect properties." title="No note selected" />
-            )}
-          </Panel>
-        </div>
-      }
-    >
+    <div className="grid h-full min-h-0">
       <Panel
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
-              disabled={!selectedNote}
-              onClick={() => setNoteViewMode("edit")}
+              data-action-id="note.create"
+              onClick={() => void createNote()}
               size="sm"
-              variant={noteViewMode === "edit" ? "secondary" : "ghost"}
+              title={actionDescription("note.create")}
+              variant="primary"
             >
+              <Plus aria-hidden="true" size={14} />
+              {actionLabel("note.create")}
+            </Button>
+            <Button onClick={createDailyNote} size="sm" variant="secondary">
+              <CalendarPlus aria-hidden="true" size={14} />
+              Daily note
+            </Button>
+            <Button onClick={createMeetingNote} size="sm" variant="ghost">
               <Pencil aria-hidden="true" size={14} />
-              Edit
+              Meeting note
             </Button>
-            <Button
-              disabled={!selectedNote}
-              onClick={() => setNoteViewMode("preview")}
-              size="sm"
-              variant={noteViewMode === "preview" ? "secondary" : "ghost"}
-            >
-              <Search aria-hidden="true" size={14} />
-              Preview
-            </Button>
-            <IconButton
-              disabled={!selectedNote}
-              icon={Trash2}
-              label="Delete selected note"
-              onClick={deleteSelectedNote}
-              variant="danger"
-            />
           </div>
         }
-        title="Note editor"
-        description="Local-only note content"
+        title="Local notes"
+        description="Select a note to open details in the Inspector"
       >
-        {selectedNote ? (
-          <div className="grid gap-3 p-3">
-            <Input
-              aria-label="Note title"
-              onBlur={() => void persistSelectedNote()}
-              onChange={(event) => updateSelectedNote({ title: event.target.value })}
-              value={selectedNote.title}
+        <VirtualizedList
+          ariaLabel="Local notes"
+          emptyState={
+            <EmptyState
+              description="Create a local note to populate SQLite."
+              title="No local notes"
             />
-            {noteViewMode === "edit" ? (
-              <textarea
-                aria-label="Note body"
-                className="min-h-[260px] w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                onBlur={() => void persistSelectedNote()}
-                onChange={(event) => updateSelectedNote({ body: event.target.value })}
-                value={selectedNote.body}
-              />
-            ) : (
-              <MarkdownPreview body={selectedNote.body} onOpenNoteLink={openNoteLink} />
-            )}
-          </div>
-        ) : (
-          <EmptyState
-            description="Use New note to start a local-only note. Nothing is uploaded to Google."
-            title="No note selected"
-          />
-        )}
+          }
+          estimateRowHeight={66}
+          getKey={(note) => note.id}
+          items={notes}
+          performanceLabel="notes.list"
+          renderRow={(note) => (
+            <div className="border-b border-border last:border-b-0" role="listitem">
+              <button
+                aria-current={note.id === selectedNoteId ? "true" : undefined}
+                className={cx(
+                  "flex min-h-[66px] w-full items-center gap-3 px-3 py-2 text-left transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  note.id === selectedNoteId ? "bg-surface-0" : "bg-transparent hover:bg-surface-0"
+                )}
+                onClick={() => void selectNote(note.id)}
+                type="button"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[var(--text-md)] font-medium text-text-primary">
+                      {note.title}
+                    </span>
+                    <span className="shrink-0 text-[var(--text-xs)] text-text-muted">
+                      {note.updatedLabel}
+                    </span>
+                  </div>
+                  <p className="truncate text-[var(--text-sm)] text-text-muted">{note.preview}</p>
+                </div>
+                <Badge tone="info">Local</Badge>
+              </button>
+            </div>
+          )}
+          viewportHeight={520}
+        />
       </Panel>
-    </SectionChrome>
+    </div>
   );
 }
 
@@ -4484,6 +4476,43 @@ function nextSavedSearchViews(
   );
 
   return [view, ...withoutMatchingQuery].slice(0, 20);
+}
+
+function sanitizeInspectorDetails(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeInspectorDetails);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const result: Record<string, unknown> = {};
+
+  for (const [key, entry] of Object.entries(value)) {
+    const normalized = key.toLowerCase();
+
+    if (
+      normalized.includes("token") ||
+      normalized.includes("secret") ||
+      normalized.includes("credential") ||
+      normalized.includes("password") ||
+      normalized.includes("path") ||
+      normalized.includes("payload") ||
+      normalized.includes("body")
+    ) {
+      result[key] = "[redacted]";
+      continue;
+    }
+
+    result[key] = sanitizeInspectorDetails(entry);
+  }
+
+  return result;
+}
+
+function sanitizedJson(value: unknown): string {
+  return JSON.stringify(sanitizeInspectorDetails(value), null, 2);
 }
 
 function SearchView({
@@ -4691,6 +4720,7 @@ function SearchView({
 
 function SettingsView(): JSX.Element {
   const source = useCoreViewModelSource();
+  const { open: openInspector } = useInspector();
   const [selectedSectionId, setSelectedSectionId] = useState<SettingsSectionId>("google");
   const [confirmation, setConfirmation] = useState<{
     action: SettingsRecoveryActionRequest["action"];
@@ -4784,10 +4814,113 @@ function SettingsView(): JSX.Element {
     });
   }
 
-  function copyDiagnostics(): void {
-    const payload = JSON.stringify(diagnostics ?? selectedSection.rows, null, 2);
+  function copyDiagnosticsPayload(payload: string): void {
     void navigator.clipboard?.writeText(payload);
     setRecoveryMessage("Diagnostics summary copied without credentials, raw Google payloads, MCP bearer tokens, or sensitive bodies.");
+  }
+
+  async function openDiagnosticsDetails(): Promise<void> {
+    const summaryResult = diagnostics ? null : await window.hcb?.diagnostics.summary();
+    const freshDiagnostics = diagnostics ?? (summaryResult?.ok ? summaryResult.data : null);
+    const payload = sanitizedJson(freshDiagnostics ?? { rows: selectedSection.rows });
+
+    openInspector({
+      actions: (
+        <Button onClick={() => copyDiagnosticsPayload(payload)} size="sm" variant="primary">
+          <Copy aria-hidden="true" size={14} />
+          Copy
+        </Button>
+      ),
+      body: (
+        <pre
+          aria-label="Sanitized diagnostics JSON"
+          className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-hcbMd border border-border bg-surface-0 p-3 font-mono text-[var(--text-xs)] text-text-primary"
+        >
+          {payload}
+        </pre>
+      ),
+      id: "diagnostics-summary",
+      kind: "diagnostics",
+      subtitle: "Sanitized JSON",
+      title: "Diagnostics details"
+    });
+  }
+
+  function openCapabilityDetails(
+    capability: NativeCapabilityDescriptor,
+    report: DiagnosticsSummaryResponse["native"]
+  ): void {
+    const relatedDiagnostics = report.diagnostics.filter((diagnostic) => diagnostic.key === capability.key);
+    const primaryDiagnostic = relatedDiagnostics[0] ?? null;
+    const payload = sanitizedJson({
+      capability,
+      diagnostics: relatedDiagnostics,
+      metadata: {
+        platform: report.platform,
+        adapterId: report.adapterId,
+        packageFormat: report.packageFormat,
+        flags: report.flags
+      }
+    });
+
+    openInspector({
+      body: (
+        <div className="grid gap-3">
+          <div className="grid grid-cols-2 gap-2">
+            <MetricTile label="State" value={capability.state} />
+            <MetricTile label="Severity" value={primaryDiagnostic?.severity ?? (capability.supported ? "info" : "warning")} />
+          </div>
+          <StatusBanner
+            description={primaryDiagnostic?.message ?? capability.message ?? "No remediation required."}
+            title="Remediation"
+            tone={primaryDiagnostic?.severity === "blocker" ? "danger" : capability.supported ? "info" : "warning"}
+          />
+          <pre
+            aria-label="Capability metadata"
+            className="max-h-80 overflow-auto whitespace-pre-wrap rounded-hcbMd border border-border bg-surface-0 p-3 font-mono text-[var(--text-xs)] text-text-primary"
+          >
+            {payload}
+          </pre>
+        </div>
+      ),
+      id: `capability-${capability.key}`,
+      kind: "settings",
+      subtitle: capability.state,
+      title: capability.label
+    });
+  }
+
+  function openNativeDiagnosticDetails(
+    diagnostic: NativeCapabilityDiagnostic,
+    report: DiagnosticsSummaryResponse["native"]
+  ): void {
+    const payload = sanitizedJson({
+      diagnostic,
+      metadata: {
+        platform: report.platform,
+        adapterId: report.adapterId,
+        packageFormat: report.packageFormat
+      }
+    });
+
+    openInspector({
+      body: (
+        <div className="grid gap-3">
+          <MetricTile label="Severity" value={diagnostic.severity} />
+          <StatusBanner description={diagnostic.message} title="Diagnostic" tone={diagnostic.severity === "blocker" ? "danger" : "warning"} />
+          <pre
+            aria-label="Native diagnostic metadata"
+            className="max-h-80 overflow-auto whitespace-pre-wrap rounded-hcbMd border border-border bg-surface-0 p-3 font-mono text-[var(--text-xs)] text-text-primary"
+          >
+            {payload}
+          </pre>
+        </div>
+      ),
+      id: `diagnostic-${diagnostic.key}`,
+      kind: "diagnostics",
+      subtitle: diagnostic.severity,
+      title: diagnostic.key
+    });
   }
 
   function requestNotificationPermission(): void {
@@ -5293,7 +5426,7 @@ function SettingsView(): JSX.Element {
     }
 
     if (selectedSection.id === "platform") {
-      const nativeReport = diagnostics?.native;
+      const nativeReport = diagnostics?.native ?? source.native.capabilityReport;
 
       return (
         <div className="grid gap-3 p-3">
@@ -5301,16 +5434,27 @@ function SettingsView(): JSX.Element {
           {nativeReport?.capabilities.length ? (
             <div className="grid gap-2" role="list" aria-label="Native capabilities">
               {nativeReport.capabilities.map((capability) => (
-                <ListRow
+                <button
+                  aria-label={`Open capability ${capability.label}`}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-hcbMd border border-border bg-bg-tertiary px-3 py-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   key={capability.key}
-                  title={capability.label}
-                  description={capability.message ?? (capability.supported ? "Available" : "Unavailable")}
-                  trailing={
+                  onClick={() => openCapabilityDetails(capability, nativeReport)}
+                  type="button"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[var(--text-md)] font-medium text-text-primary">
+                      {capability.label}
+                    </span>
+                    <span className="block truncate text-[var(--text-sm)] text-text-muted">
+                      {capability.message ?? (capability.supported ? "Available" : "Unavailable")}
+                    </span>
+                  </span>
+                  <span className="shrink-0">
                     <Badge tone={capability.supported ? "success" : "warning"}>
                       {capability.state}
                     </Badge>
-                  }
-                />
+                  </span>
+                </button>
               ))}
             </div>
           ) : (
@@ -5322,12 +5466,23 @@ function SettingsView(): JSX.Element {
           {nativeReport?.diagnostics.length ? (
             <div className="grid gap-2" role="list" aria-label="Native diagnostics">
               {nativeReport.diagnostics.map((diagnostic) => (
-                <ListRow
+                <button
+                  aria-label={`Open native diagnostic ${diagnostic.key}`}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-hcbMd border border-border bg-bg-tertiary px-3 py-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   key={`${diagnostic.key}-${diagnostic.message}`}
-                  title={diagnostic.key}
-                  description={diagnostic.message}
-                  trailing={<Badge tone={diagnostic.severity === "blocker" ? "danger" : "warning"}>{diagnostic.severity}</Badge>}
-                />
+                  onClick={() => openNativeDiagnosticDetails(diagnostic, nativeReport)}
+                  type="button"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[var(--text-md)] font-medium text-text-primary">
+                      {diagnostic.key}
+                    </span>
+                    <span className="block truncate text-[var(--text-sm)] text-text-muted">
+                      {diagnostic.message}
+                    </span>
+                  </span>
+                  <Badge tone={diagnostic.severity === "blocker" ? "danger" : "warning"}>{diagnostic.severity}</Badge>
+                </button>
               ))}
             </div>
           ) : null}
@@ -5385,13 +5540,13 @@ function SettingsView(): JSX.Element {
           action={
             <Button
               data-action-id="diagnostics.copy"
-              onClick={copyDiagnostics}
+              onClick={() => void openDiagnosticsDetails()}
               size="sm"
               title={actionDescription("diagnostics.copy")}
               variant="ghost"
             >
               <Copy aria-hidden="true" size={14} />
-              Copy diagnostics
+              Copy details
             </Button>
           }
           title={selectedSection.title}

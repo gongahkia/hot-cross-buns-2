@@ -172,7 +172,10 @@ export function createSqliteDomainServices(
           events,
           tasks,
           capacityMinutes: request.capacityMinutes ?? 480,
-          workingHours: request.workingHours ?? { start: 6, end: 22 }
+          workingHours: {
+            start: request.workingHours?.start ?? 6,
+            end: request.workingHours?.end ?? 22
+          }
         });
       },
       exportAvailability: (request: AvailabilityExportRequest) =>
@@ -182,6 +185,8 @@ export function createSqliteDomainServices(
       createNote: (request: NoteCreateRequest) => options.plannerRepository.createNote(request),
       updateNote: (request: NoteUpdateRequest) => options.plannerRepository.updateNote(request),
       deleteNote: (request: NoteDeleteRequest) => options.plannerRepository.deleteNote(request),
+      suggestNoteLinks: (request) => options.plannerRepository.suggestLinkTargets(request),
+      listBrokenNoteLinks: (request) => options.plannerRepository.listBrokenNoteLinks(request),
       search: (request: SearchQueryRequest) => options.plannerRepository.search(request)
     },
     sync,

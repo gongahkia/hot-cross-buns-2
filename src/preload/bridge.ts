@@ -226,7 +226,11 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
       update: (request) =>
         invokeContract(ipc, ipcContracts.notes.update, request, "Note update request failed"),
       delete: (request) =>
-        invokeContract(ipc, ipcContracts.notes.delete, request, "Note delete request failed")
+        invokeContract(ipc, ipcContracts.notes.delete, request, "Note delete request failed"),
+      linkSuggest: (request) =>
+        invokeContract(ipc, ipcContracts.notes.linkSuggest, request, "Note link suggest request failed"),
+      listBrokenLinks: (request) =>
+        invokeContract(ipc, ipcContracts.notes.listBrokenLinks, request, "Broken note links request failed")
     },
     search: {
       query: (request) =>

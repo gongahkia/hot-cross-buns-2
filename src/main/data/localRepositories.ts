@@ -12,6 +12,7 @@ import type {
   CalendarEventCreateRequest,
   CalendarEventDeleteRequest,
   CalendarEventDetail,
+  CalendarEventRecurrence,
   CalendarEventSummary,
   CalendarEventUpdateRequest,
   CalendarListRequest,
@@ -23,6 +24,10 @@ import type {
   NoteCreateRequest,
   NoteDeleteRequest,
   NoteDetail,
+  NoteBrokenLinksRequest,
+  NoteBrokenLinksResponse,
+  NoteLinkSuggestRequest,
+  NoteLinkSuggestResponse,
   NoteListRequest,
   NoteListResponse,
   NoteSummary,
@@ -141,6 +146,7 @@ interface CalendarEventRow extends Record<string, unknown> {
   guestEmailsJson: string | null;
   reminderMinutesJson: string | null;
   timeZone: string | null;
+  recurrenceRule: string | null;
   recurringEventId: string | null;
   originalStartAt: string | null;
 }
@@ -877,6 +883,7 @@ export class LocalPlannerRepository {
            events.attendee_emails_json AS guestEmailsJson,
            events.reminder_minutes_json AS reminderMinutesJson,
            events.local_time_zone AS timeZone,
+           events.recurrence_rule AS recurrenceRule,
            instances.recurring_event_id AS recurringEventId,
            instances.original_start_at AS originalStartAt
          FROM google_calendar_event_instances instances
@@ -928,7 +935,8 @@ export class LocalPlannerRepository {
         location: request.location ?? "",
         notes: request.notes ?? "",
         guestEmails: request.guestEmails ?? [],
-        reminderMinutes: request.reminderMinutes ?? []
+        reminderMinutes: request.reminderMinutes ?? [],
+        recurrenceRule: recurrenceRuleFromRequest(request.recurrence ?? null)
       });
       const mutationId = `mutation:event:${randomUUID()}`;
 
@@ -943,7 +951,7 @@ export class LocalPlannerRepository {
           calendarId: calendar.id
         }),
         instanceDeleteOperation(id, now),
-        instanceInsertOperation({
+        ...eventInstanceInsertOperations({
           id,
           accountId: calendar.accountId,
           calendarId: calendar.id,
@@ -952,6 +960,7 @@ export class LocalPlannerRepository {
           startsAt: normalized.startsAt,
           endsAt: normalized.endsAt,
           allDay: normalized.allDay,
+          recurrenceRule: normalized.recurrenceRule,
           status: "confirmed",
           updatedAt: now
         }),
@@ -988,7 +997,11 @@ export class LocalPlannerRepository {
         location: request.location ?? existing.location ?? "",
         notes: request.notes ?? existing.notes ?? "",
         guestEmails: request.guestEmails ?? parseStringArray(existing.guestEmailsJson),
-        reminderMinutes: request.reminderMinutes ?? parseNumberArray(existing.reminderMinutesJson)
+        reminderMinutes: request.reminderMinutes ?? parseNumberArray(existing.reminderMinutesJson),
+        recurrenceRule:
+          request.recurrence === undefined
+            ? existing.recurrenceRule
+            : recurrenceRuleFromRequest(request.recurrence)
       });
       const mutationId = `mutation:event:${randomUUID()}`;
 
@@ -1001,7 +1014,7 @@ export class LocalPlannerRepository {
           calendarId: targetCalendar.id
         }),
         instanceDeleteOperation(existing.eventId, now),
-        instanceInsertOperation({
+        ...eventInstanceInsertOperations({
           id: existing.eventId,
           accountId: targetCalendar.accountId,
           calendarId: targetCalendar.id,
@@ -1010,6 +1023,7 @@ export class LocalPlannerRepository {
           startsAt: normalized.startsAt,
           endsAt: normalized.endsAt,
           allDay: normalized.allDay,
+          recurrenceRule: normalized.recurrenceRule,
           status: "confirmed",
           updatedAt: now
         }),
@@ -1180,7 +1194,8 @@ export class LocalPlannerRepository {
         location: "Scheduled task",
         notes: scheduledTaskNotes(task),
         guestEmails: [],
-        reminderMinutes: []
+        reminderMinutes: [],
+        recurrenceRule: null
       });
 
       this.connection.executeTransaction([
@@ -1253,7 +1268,8 @@ export class LocalPlannerRepository {
           location: "Scheduled task",
           notes: scheduledTaskNotes(task),
           guestEmails: [],
-          reminderMinutes: []
+          reminderMinutes: [],
+          recurrenceRule: null
         });
 
         this.connection.executeTransaction([
@@ -1323,7 +1339,8 @@ export class LocalPlannerRepository {
         location: event.location ?? "",
         notes: event.notes ?? "",
         guestEmails: parseStringArray(event.guestEmailsJson),
-        reminderMinutes: parseNumberArray(event.reminderMinutesJson)
+        reminderMinutes: parseNumberArray(event.reminderMinutesJson),
+        recurrenceRule: event.recurrenceRule
       });
 
       this.connection.executeTransaction([
@@ -1573,6 +1590,7 @@ export class LocalPlannerRepository {
            events.attendee_emails_json AS guestEmailsJson,
            events.reminder_minutes_json AS reminderMinutesJson,
            events.local_time_zone AS timeZone,
+           events.recurrence_rule AS recurrenceRule,
            COALESCE(instances.recurring_event_id, events.recurring_event_id) AS recurringEventId,
            instances.original_start_at AS originalStartAt
          FROM google_calendar_events events
@@ -1690,6 +1708,68 @@ export class LocalPlannerRepository {
       this.reindexNoteLinksAndProperties(request.id, nextBody, now);
 
       return this.getNote(request.id);
+    });
+  }
+
+  suggestLinkTargets(request: NoteLinkSuggestRequest): NoteLinkSuggestResponse {
+    return this.measureSqlite("notes.linkSuggest", () => {
+      const query = `%${request.query}%`;
+      const kinds = new Set(request.kinds ?? ["note", "task", "event"]);
+      const limit = request.limit ?? 8;
+      const items: NoteLinkSuggestResponse["items"] = [];
+
+      if (kinds.has("note")) {
+        const rows = this.connection.query<{ id: string; label: string }>(
+          `SELECT id, title AS label
+           FROM local_notes
+           WHERE deleted_at IS NULL AND title LIKE ? COLLATE NOCASE
+           ORDER BY updated_at DESC, id ASC
+           LIMIT ?;`,
+          [query, limit]
+        );
+        items.push(...rows.map((row) => ({ kind: "note" as const, id: row.id, label: row.label })));
+      }
+
+      if (kinds.has("task") && items.length < limit) {
+        const rows = this.connection.query<{ id: string; label: string }>(
+          `SELECT id, title AS label
+           FROM google_tasks
+           WHERE deleted_at IS NULL AND title LIKE ? COLLATE NOCASE
+           ORDER BY updated_at DESC, id ASC
+           LIMIT ?;`,
+          [query, limit]
+        );
+        items.push(...rows.map((row) => ({ kind: "task" as const, id: row.id, label: row.label })));
+      }
+
+      if (kinds.has("event") && items.length < limit) {
+        const rows = this.connection.query<{ id: string; label: string }>(
+          `SELECT id, summary AS label
+           FROM google_calendar_events
+           WHERE deleted_at IS NULL AND summary LIKE ? COLLATE NOCASE
+           ORDER BY updated_at DESC, id ASC
+           LIMIT ?;`,
+          [query, limit]
+        );
+        items.push(...rows.map((row) => ({ kind: "event" as const, id: row.id, label: row.label })));
+      }
+
+      return { items: items.slice(0, limit) };
+    });
+  }
+
+  listBrokenNoteLinks(request: NoteBrokenLinksRequest): NoteBrokenLinksResponse {
+    return this.measureSqlite("notes.listBrokenLinks", () => {
+      this.getNote(request.noteId);
+      const rows = this.connection.query<{ linkText: string }>(
+        `SELECT link_text AS linkText
+         FROM local_note_links
+         WHERE source_note_id = ? AND is_broken = 1
+         ORDER BY id ASC;`,
+        [request.noteId]
+      );
+
+      return { items: rows.map((row) => ({ linkText: row.linkText })) };
     });
   }
 
@@ -2744,6 +2824,7 @@ interface NormalizedCalendarWrite {
   notes: string;
   guestEmails: string[];
   reminderMinutes: number[];
+  recurrenceRule: string | null;
 }
 
 function normalizeCalendarWrite(input: NormalizedCalendarWrite): NormalizedCalendarWrite {
@@ -2767,8 +2848,195 @@ function normalizeCalendarWrite(input: NormalizedCalendarWrite): NormalizedCalen
     location: input.location.trim(),
     notes: input.notes,
     guestEmails: normalizeGuestEmails(input.guestEmails),
-    reminderMinutes: normalizeReminderMinutes(input.reminderMinutes)
+    reminderMinutes: normalizeReminderMinutes(input.reminderMinutes),
+    recurrenceRule: input.recurrenceRule
   };
+}
+
+interface ParsedLocalRRule {
+  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+  interval: number;
+  count?: number;
+  until?: Date;
+}
+
+interface LocalCalendarEventInstance {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  originalStartAt: string | null;
+}
+
+function recurrenceRuleFromRequest(recurrence: CalendarEventRecurrence | null | undefined): string | null {
+  if (!recurrence) {
+    return null;
+  }
+
+  const parts = [
+    `FREQ=${recurrence.frequency.toUpperCase()}`,
+    `INTERVAL=${recurrence.interval}`
+  ];
+
+  if (recurrence.endsOn) {
+    parts.push(`UNTIL=${recurrence.endsOn.replace(/-/g, "")}`);
+  }
+
+  if (recurrence.count !== undefined && recurrence.count !== null) {
+    parts.push(`COUNT=${recurrence.count}`);
+  }
+
+  return `RRULE:${parts.join(";")}`;
+}
+
+function recurrenceFromRule(rule: string | null): CalendarEventRecurrence | null {
+  const parsed = parseLocalRRule(rule);
+
+  if (!parsed) {
+    return null;
+  }
+
+  return {
+    frequency: parsed.freq.toLowerCase() as CalendarEventRecurrence["frequency"],
+    interval: parsed.interval,
+    endsOn: parsed.until ? parsed.until.toISOString().slice(0, 10) : null,
+    count: parsed.count ?? null
+  };
+}
+
+function materializedLocalEventInstances(input: {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  recurrenceRule: string | null;
+}): LocalCalendarEventInstance[] {
+  const singleInstance: LocalCalendarEventInstance = {
+    id: input.id,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    originalStartAt: null
+  };
+  const rrule = parseLocalRRule(input.recurrenceRule);
+
+  if (!rrule) {
+    return [singleInstance];
+  }
+
+  const start = new Date(input.startsAt);
+  const end = new Date(input.endsAt);
+  const durationMs = end.getTime() - start.getTime();
+
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || durationMs <= 0) {
+    return [singleInstance];
+  }
+
+  const hardLimit = Math.min(rrule.count ?? 366, 366);
+  const boundedUntil = rrule.until ?? addUtcDaysDate(start, 366);
+  const instances: LocalCalendarEventInstance[] = [];
+  let cursor = start;
+
+  for (let index = 0; index < hardLimit; index += 1) {
+    if (cursor.getTime() > boundedUntil.getTime()) {
+      break;
+    }
+
+    const instanceStart = new Date(cursor.getTime());
+    const instanceEnd = new Date(instanceStart.getTime() + durationMs);
+    instances.push({
+      id: index === 0 ? input.id : `${input.id}:instance:${instanceSuffix(instanceStart, input.allDay)}`,
+      startsAt: instanceStart.toISOString(),
+      endsAt: instanceEnd.toISOString(),
+      originalStartAt: instanceStart.toISOString()
+    });
+    cursor = nextLocalRecurrenceDate(cursor, rrule);
+  }
+
+  return instances.length > 0 ? instances : [singleInstance];
+}
+
+function parseLocalRRule(value: string | null | undefined): ParsedLocalRRule | null {
+  const line = value
+    ?.split("\n")
+    .map((candidate) => candidate.trim())
+    .find((candidate) => candidate.startsWith("RRULE:"));
+
+  if (!line) {
+    return null;
+  }
+
+  const parts = Object.fromEntries(
+    line
+      .slice("RRULE:".length)
+      .split(";")
+      .map((part) => part.split("=", 2))
+      .filter((part): part is [string, string] => part.length === 2)
+  );
+  const freq = parts.FREQ;
+
+  if (freq !== "DAILY" && freq !== "WEEKLY" && freq !== "MONTHLY" && freq !== "YEARLY") {
+    return null;
+  }
+
+  return {
+    freq,
+    interval: Math.min(366, Math.max(1, Number.parseInt(parts.INTERVAL ?? "1", 10) || 1)),
+    ...(parts.COUNT === undefined
+      ? {}
+      : { count: Math.min(366, Math.max(1, Number.parseInt(parts.COUNT, 10) || 1)) }),
+    ...(parts.UNTIL === undefined ? {} : { until: parseLocalRRuleUntil(parts.UNTIL) })
+  };
+}
+
+function parseLocalRRuleUntil(value: string): Date | undefined {
+  const parsed =
+    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(value) ??
+    /^(\d{4})(\d{2})(\d{2})$/.exec(value);
+
+  if (!parsed) {
+    return undefined;
+  }
+
+  const [, year, month, day, hour = "23", minute = "59", second = "59"] = parsed;
+  const date = new Date(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    )
+  );
+
+  return Number.isFinite(date.getTime()) ? date : undefined;
+}
+
+function nextLocalRecurrenceDate(date: Date, rrule: ParsedLocalRRule): Date {
+  const next = new Date(date.getTime());
+
+  if (rrule.freq === "DAILY") {
+    next.setUTCDate(next.getUTCDate() + rrule.interval);
+  } else if (rrule.freq === "WEEKLY") {
+    next.setUTCDate(next.getUTCDate() + rrule.interval * 7);
+  } else if (rrule.freq === "MONTHLY") {
+    next.setUTCMonth(next.getUTCMonth() + rrule.interval);
+  } else {
+    next.setUTCFullYear(next.getUTCFullYear() + rrule.interval);
+  }
+
+  return next;
+}
+
+function addUtcDaysDate(date: Date, days: number): Date {
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function instanceSuffix(startAt: Date, allDay: boolean): string {
+  const compact = startAt.toISOString().replace(/[-:]/g, "").replace(".000", "");
+
+  return allDay ? compact.slice(0, 8) : compact;
 }
 
 function eventInsertOperation(input: {
@@ -2783,10 +3051,10 @@ function eventInsertOperation(input: {
     kind: "run" as const,
     sql: `INSERT INTO google_calendar_events (
       id, account_id, calendar_id, google_id, status, summary, description, location,
-      start_at, start_time_zone, end_at, end_time_zone, is_all_day, local_time_zone,
+      start_at, start_time_zone, end_at, end_time_zone, is_all_day, recurrence_rule, local_time_zone,
       attendee_emails_json, reminder_minutes_json,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
     params: [
       input.id,
       input.accountId,
@@ -2800,6 +3068,7 @@ function eventInsertOperation(input: {
       input.endsAt,
       input.timeZone,
       boolInt(input.allDay),
+      input.recurrenceRule,
       input.timeZone,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),
@@ -2827,6 +3096,7 @@ function eventUpdateOperation(input: {
               end_at = ?,
               end_time_zone = ?,
               is_all_day = ?,
+              recurrence_rule = ?,
               local_time_zone = ?,
               attendee_emails_json = ?,
               reminder_minutes_json = ?,
@@ -2842,6 +3112,7 @@ function eventUpdateOperation(input: {
       input.endsAt,
       input.timeZone,
       boolInt(input.allDay),
+      input.recurrenceRule,
       input.timeZone,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),
@@ -2861,12 +3132,45 @@ function instanceDeleteOperation(eventId: string, now: string) {
   };
 }
 
+function eventInstanceInsertOperations(input: {
+  id: string;
+  accountId: string;
+  calendarId: string;
+  eventId: string;
+  googleEventId: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  recurrenceRule: string | null;
+  status: string;
+  updatedAt: string;
+}): SqliteWriteOperation[] {
+  return materializedLocalEventInstances(input).map((instance) =>
+    instanceInsertOperation({
+      id: instance.id,
+      accountId: input.accountId,
+      calendarId: input.calendarId,
+      eventId: input.eventId,
+      googleEventId: input.googleEventId,
+      recurringEventId: null,
+      originalStartAt: instance.originalStartAt,
+      startsAt: instance.startsAt,
+      endsAt: instance.endsAt,
+      allDay: input.allDay,
+      status: input.status,
+      updatedAt: input.updatedAt
+    })
+  );
+}
+
 function instanceInsertOperation(input: {
   id: string;
   accountId: string;
   calendarId: string;
   eventId: string;
   googleEventId: string;
+  recurringEventId?: string | null;
+  originalStartAt?: string | null;
   startsAt: string;
   endsAt: string;
   allDay: boolean;
@@ -2877,11 +3181,14 @@ function instanceInsertOperation(input: {
     kind: "run" as const,
     sql: `INSERT INTO google_calendar_event_instances (
       id, account_id, calendar_id, event_id, google_event_id, start_at, end_at,
-      is_all_day, status, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      recurring_event_id, original_start_at, is_all_day, status, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
     ON CONFLICT(id) DO UPDATE SET
       calendar_id = excluded.calendar_id,
       event_id = excluded.event_id,
+      google_event_id = excluded.google_event_id,
+      recurring_event_id = excluded.recurring_event_id,
+      original_start_at = excluded.original_start_at,
       start_at = excluded.start_at,
       end_at = excluded.end_at,
       is_all_day = excluded.is_all_day,
@@ -2896,6 +3203,8 @@ function instanceInsertOperation(input: {
       input.googleEventId,
       input.startsAt,
       input.endsAt,
+      input.recurringEventId ?? null,
+      input.originalStartAt ?? null,
       boolInt(input.allDay),
       input.status,
       input.updatedAt
@@ -2939,7 +3248,9 @@ function mutationPayload(input: NormalizedCalendarWrite): object {
     location: input.location,
     notes: input.notes,
     guestEmails: input.guestEmails,
-    reminderMinutes: input.reminderMinutes
+    reminderMinutes: input.reminderMinutes,
+    recurrence: recurrenceFromRule(input.recurrenceRule),
+    recurrenceRule: input.recurrenceRule
   };
 }
 
@@ -3192,6 +3503,7 @@ function calendarEventSummary(row: CalendarEventRow): CalendarEventSummary {
     guestEmails: parseStringArray(row.guestEmailsJson),
     reminderMinutes: parseNumberArray(row.reminderMinutesJson),
     timeZone: row.timeZone,
+    recurrenceRule: row.recurrenceRule,
     recurringEventId: row.recurringEventId,
     originalStartAt: row.originalStartAt
   };

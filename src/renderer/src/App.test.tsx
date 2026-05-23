@@ -536,7 +536,18 @@ function seededHcb(): HcbApi {
           queued: false,
           revision: now
         })
-      )
+      ),
+      linkSuggest: vi.fn(async (request) => {
+        const query = request.query.toLowerCase();
+        const items = [
+          { kind: "note" as const, id: "note-cache-first", label: "Cache-first startup" },
+          { kind: "task" as const, id: "task-inbox-rules", label: "Draft inbox triage rules" },
+          { kind: "event" as const, id: "event-standup", label: "Planner shell standup" }
+        ].filter((item) => item.label.toLowerCase().includes(query));
+
+        return ok({ items: items.slice(0, request.limit ?? 8) });
+      }),
+      listBrokenLinks: vi.fn(async () => ok({ items: [] }))
     },
     search: {
       query: vi.fn(async (request) => {
@@ -792,18 +803,19 @@ describe("App shell", () => {
     expect(api.search.query).toHaveBeenCalledWith({ query: "triage", limit: 30 });
   });
 
-  it("groups the Today timeline into local planner sections", async () => {
+  it("renders the schedule-backed Today timeline", async () => {
     installHcb(seededHcb());
     render(<App />);
 
     expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
     const timeline = screen.getByRole("list", { name: "Today timeline" });
 
-    expect(within(timeline).getByText("Unscheduled")).toBeInTheDocument();
-    expect(within(timeline).getByText("Tasks without a planned time")).toBeInTheDocument();
+    expect(screen.getByText("Within capacity")).toBeInTheDocument();
+    expect(within(timeline).getByText("Planner shell standup")).toBeInTheDocument();
+    expect(within(timeline).getByText("Review calendar fixture shape")).toBeInTheDocument();
   });
 
-  it("schedules an unscheduled task into the Today timeline", async () => {
+  it("quick-adds a planned task from an empty Today slot", async () => {
     const api = seededHcb();
     installHcb(api);
     const user = userEvent.setup();
@@ -811,109 +823,90 @@ describe("App shell", () => {
 
     expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Task to schedule"), "task-calendar-fixtures");
-    fireEvent.change(screen.getByLabelText("Schedule starts"), {
-      target: { value: `${todayDate}T10:00` }
-    });
-    await user.selectOptions(screen.getByLabelText("Schedule duration"), "45");
-    await user.click(screen.getByRole("button", { name: "Schedule" }));
+    await user.click(screen.getByLabelText("Quick add at 11:00"));
+    await user.type(screen.getByRole("textbox", { name: "Quick add title" }), "Write launch note");
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => {
-      expect(api.calendar.scheduleTaskBlock).toHaveBeenCalledWith({
-        taskId: "task-calendar-fixtures",
-        calendarId: "cal-product",
-        startsAt: `${todayDate}T10:00:00.000Z`,
-        durationMinutes: 45
-      });
+      expect(api.tasks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Write launch note",
+          plannedStart: expect.stringContaining("T11:00:00.000Z"),
+          plannedEnd: expect.stringContaining("T11:30:00.000Z"),
+          durationMinutes: 30
+        })
+      );
     });
-    expect(await screen.findByText("Review calendar fixture shape")).toBeInTheDocument();
-    expect(screen.getByText("Scheduled")).toBeInTheDocument();
   });
 
-  it("surfaces scheduled task conflicts and moves blocks earlier or later", async () => {
+  it("surfaces Today conflicts and moves task blocks with the keyboard", async () => {
     const api = seededHcb();
-    api.calendar.listScheduledTaskBlocks = vi.fn(async () =>
+    api.calendar.scheduleSuggest = vi.fn(async (request) =>
       ok({
-        items: [
+        slots: [
           {
-            id: "block-conflict",
+            startsAt: `${request.date}T10:00:00.000Z`,
+            endsAt: `${request.date}T10:45:00.000Z`,
             taskId: "task-inbox-rules",
-            calendarEventId: "event-task-block",
-            calendarId: "cal-product",
-            title: "Draft inbox triage rules",
-            startsAt: `${todayDate}T09:40:00.000Z`,
-            endsAt: `${todayDate}T10:10:00.000Z`,
-            durationMinutes: 30,
-            status: "scheduled" as const,
-            mutationState: "synced" as const,
-            updatedAt: now
+            locked: false,
+            conflict: true
+          },
+          {
+            startsAt: `${request.date}T10:15:00.000Z`,
+            endsAt: `${request.date}T11:00:00.000Z`,
+            taskId: "task-calendar-fixtures",
+            locked: false,
+            conflict: true
           }
         ],
-        page: { limit: 250, totalKnown: 1 }
+        unscheduled: [],
+        overloadMinutes: 0
       })
     );
+    installHcb(api);
+    render(<App />);
+
+    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
+    expect(screen.getAllByText("Conflict").length).toBeGreaterThan(0);
+    fireEvent.keyDown(screen.getByRole("button", { name: /Draft inbox triage rules/ }), {
+      key: "ArrowDown"
+    });
+
+    await waitFor(() => {
+      expect(api.tasks.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "task-inbox-rules",
+          plannedStart: expect.stringContaining("T10:15:00.000Z"),
+          plannedEnd: expect.stringContaining("T11:00:00.000Z"),
+          durationMinutes: 45
+        })
+      );
+    });
+  });
+
+  it("quick-adds an event from Today", async () => {
+    const api = seededHcb();
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);
 
     expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
-    expect(screen.getByText("Conflict")).toBeInTheDocument();
-    expect(screen.getByText(/Conflicts with Planner shell standup/)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Move Draft inbox triage rules earlier" }));
-
-    await waitFor(() => {
-      expect(api.calendar.moveScheduledTaskBlock).toHaveBeenCalledWith({
-        id: "block-conflict",
-        startsAt: `${todayDate}T09:10:00.000Z`
-      });
-    });
-
-    await user.click(screen.getByRole("button", { name: "Lengthen Draft inbox triage rules" }));
+    await user.click(screen.getByLabelText("Quick add at 12:00"));
+    await user.click(screen.getByRole("button", { name: "Event" }));
+    await user.type(screen.getByRole("textbox", { name: "Quick add title" }), "Design review");
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => {
-      expect(api.calendar.moveScheduledTaskBlock).toHaveBeenCalledWith({
-        id: "block-conflict",
-        durationMinutes: 45
-      });
-    });
-  });
-
-  it("repairs orphaned scheduled task blocks from Today", async () => {
-    const api = seededHcb();
-    api.calendar.listScheduledTaskBlocks = vi.fn(async () =>
-      ok({
-        items: [
-          {
-            id: "block-orphaned",
-            taskId: "task-inbox-rules",
-            calendarEventId: "event-task-block-missing",
-            calendarId: "cal-product",
-            title: "Draft inbox triage rules",
-            startsAt: `${todayDate}T13:00:00.000Z`,
-            endsAt: `${todayDate}T13:30:00.000Z`,
-            durationMinutes: 30,
-            status: "orphaned" as const,
-            mutationState: "synced" as const,
-            updatedAt: now
-          }
-        ],
-        page: { limit: 250, totalKnown: 1 }
-      })
-    );
-    installHcb(api);
-    const user = userEvent.setup();
-    render(<App />);
-
-    expect(await screen.findByText("Needs repair")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Repair Draft inbox triage rules" }));
-
-    await waitFor(() => {
-      expect(api.calendar.moveScheduledTaskBlock).toHaveBeenCalledWith({
-        id: "block-orphaned",
+      expect(api.calendar.create).toHaveBeenCalledWith({
+        title: "Design review",
         calendarId: "cal-product",
-        startsAt: `${todayDate}T13:00:00.000Z`,
-        durationMinutes: 30
+        startsAt: expect.stringContaining("T12:00:00.000Z"),
+        endsAt: expect.stringContaining("T12:30:00.000Z"),
+        allDay: false,
+        location: "",
+        notes: "",
+        guestEmails: [],
+        reminderMinutes: []
       });
     });
   });
@@ -1237,6 +1230,7 @@ describe("App shell", () => {
     fireEvent.keyDown(firstCell, { key: "Enter" });
 
     expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    expect(screen.getByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "event");
     expect(screen.getByRole("button", { name: "New event" })).toHaveAttribute(
       "data-action-id",
       "calendar.create"
@@ -1256,8 +1250,42 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "Create event at 11:00" }));
 
     expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    expect(screen.getByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "event");
     expect(screen.getByLabelText("Event starts")).toHaveValue(`${todayDate}T11:00`);
     expect(screen.getByLabelText("Event ends")).toHaveValue(`${todayDate}T12:00`);
+  });
+
+  it("opens calendar events in the inspector", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Planner shell standup"));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "event");
+    expect(inspector).toHaveAttribute("data-inspector-id", "event-standup");
+  });
+
+  it("keeps a dirty calendar event inspector open on Escape", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+    await user.click(screen.getByText("Planner shell standup"));
+
+    const titleInput = await screen.findByRole("textbox", { name: "Event title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Planner shell sync");
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "event");
+    expect(screen.getByText("Unsaved")).toBeInTheDocument();
   });
 
   it("filters calendar views by visible calendar source", async () => {
@@ -1358,6 +1386,7 @@ describe("App shell", () => {
         allDay: false
       });
     });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
 
     const resizeHandle = screen.getByRole("button", { name: "Resize Planner shell standup end" });
     const resizeTransfer = testDataTransfer();
@@ -1373,6 +1402,7 @@ describe("App shell", () => {
         endsAt: `${todayDate}T12:00:00.000Z`
       });
     });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
   });
 
   it("drags calendar events across week days while preserving time", async () => {
@@ -1515,7 +1545,7 @@ describe("App shell", () => {
     render(<App />);
 
     await goToSection("Notes");
-    expect(await screen.findByDisplayValue("Cache-first startup")).toBeInTheDocument();
+    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New note/ }));
     const titleInput = await screen.findByRole("textbox", { name: "Note title" });
@@ -1524,7 +1554,6 @@ describe("App shell", () => {
     await user.clear(titleInput);
     await user.type(titleInput, "Release note draft");
     await user.type(bodyInput, "Document local cache flow.");
-    await user.tab();
 
     await waitFor(() => {
       expect(api.notes.create).toHaveBeenCalled();
@@ -1540,7 +1569,33 @@ describe("App shell", () => {
 
     await user.click(screen.getByRole("button", { name: "Delete selected note" }));
     expect(api.notes.delete).toHaveBeenCalledWith({ id: "note-cache-first" });
-    expect(screen.getAllByText("No note selected").length).toBeGreaterThan(0);
+    expect(screen.getByText("No local notes")).toBeInTheDocument();
+  });
+
+  it("opens selected notes in the inspector and flushes pending edits on close", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    await user.click(await screen.findByText("Cache-first startup"));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "note");
+
+    const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
+    await user.type(bodyInput, " Pending close flush.");
+    await user.click(screen.getByTestId("inspector-close"));
+
+    await waitFor(() => {
+      expect(api.notes.update).toHaveBeenCalledWith({
+        id: "note-cache-first",
+        title: "Cache-first startup",
+        body: expect.stringContaining("Pending close flush.")
+      });
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
   });
 
   it("renders note markdown preview, outgoing links, and backlinks", async () => {
@@ -1588,15 +1643,18 @@ describe("App shell", () => {
     render(<App />);
 
     await goToSection("Notes");
+    await user.click(await screen.findByText("Project plan"));
     expect(await screen.findByDisplayValue("Project plan")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(screen.getByRole("tab", { name: "Preview" }));
 
     const preview = await screen.findByRole("region", { name: "Note preview" });
     expect(within(preview).getByText("Plan")).toBeInTheDocument();
     expect(within(preview).getByText("Kickoff")).toBeInTheDocument();
-    expect(within(preview).getByRole("button", { name: "Daily note" })).toBeInTheDocument();
+    const dailyLink = within(preview).getByRole("button", { name: "Daily note" });
+    expect(dailyLink).toBeInTheDocument();
 
-    await user.click(await screen.findByRole("button", { name: "Open linked note Daily note" }));
+    dailyLink.focus();
+    await user.keyboard("{Enter}");
     expect(await screen.findByDisplayValue("Daily note")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Open backlink Project plan" })).toBeInTheDocument();
   });
@@ -1608,16 +1666,14 @@ describe("App shell", () => {
     render(<App />);
 
     await goToSection("Notes");
+    await user.click(await screen.findByText("Cache-first startup"));
     const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Planner link target" }),
-      "task:Draft inbox triage rules"
-    );
-    await user.click(screen.getByRole("button", { name: "Insert link" }));
+    await user.type(screen.getByRole("combobox", { name: "Planner link target" }), "triage");
+    await user.click(await screen.findByRole("option", { name: /Draft inbox triage rules/ }));
     expect((bodyInput as HTMLTextAreaElement).value).toContain("[[task:Draft inbox triage rules]]");
 
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(screen.getByRole("tab", { name: "Preview" }));
     expect(screen.getAllByText("task: Draft inbox triage rules").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Daily note" }));
@@ -1630,6 +1686,43 @@ describe("App shell", () => {
       );
     });
     expect(await screen.findByText("tags: daily")).toBeInTheDocument();
+  });
+
+  it("repairs broken note links from the note inspector", async () => {
+    const api = seededHcb();
+    api.notes.get = vi.fn(async ({ id }) =>
+      ok({
+        id,
+        title: "Cache-first startup",
+        preview: "See [[Missing note]]",
+        body: "See [[Missing note]]",
+        updatedAt: now
+      })
+    );
+    api.notes.listBrokenLinks = vi.fn(async () => ok({ items: [{ linkText: "Missing note" }] }));
+    api.notes.linkSuggest = vi.fn(async (request) =>
+      ok({
+        items: request.query.toLowerCase().includes("replacement")
+          ? [{ kind: "note" as const, id: "note-replacement", label: "Replacement note" }]
+          : []
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    await user.click(await screen.findByText("Cache-first startup"));
+    const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
+
+    await user.click(await screen.findByRole("button", { name: "Fix link Missing note" }));
+    const linkInput = screen.getByRole("combobox", { name: "Planner link target" });
+    await user.clear(linkInput);
+    await user.type(linkInput, "replacement");
+    await user.click(await screen.findByRole("option", { name: /Replacement note/ }));
+
+    expect((bodyInput as HTMLTextAreaElement).value).toContain("[[note:Replacement note]]");
+    expect((bodyInput as HTMLTextAreaElement).value).not.toContain("[[Missing note]]");
   });
 
   it("renders search results for task, event, note, and empty local queries", async () => {
@@ -1791,8 +1884,83 @@ describe("App shell", () => {
     expect(screen.getByText("No capability rows")).toBeInTheDocument();
 
     await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
-    expect(screen.getByRole("button", { name: /Copy diagnostics/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copy details/ })).toBeInTheDocument();
     expect(screen.getByText("Credentials")).toBeInTheDocument();
+  });
+
+  it("opens sanitized diagnostics details in the inspector", async () => {
+    const api = seededHcb();
+    const base = await api.diagnostics.summary();
+    if (!base.ok) {
+      throw new Error("Missing diagnostics fixture");
+    }
+    api.diagnostics.summary = vi.fn(async () =>
+      ok({
+        ...base.data,
+        dangerousToken: "raw-google-token"
+      } as typeof base.data & { dangerousToken: string })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
+    await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
+    await user.click(screen.getByRole("button", { name: /Copy details/ }));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "diagnostics");
+    const json = screen.getByLabelText("Sanitized diagnostics JSON");
+    expect(json).toHaveTextContent("redaction");
+    expect(json).not.toHaveTextContent("raw-google-token");
+    expect(within(inspector).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  it("opens platform capability rows in the inspector", async () => {
+    const api = seededHcb();
+    const base = await api.native.capabilities();
+    if (!base.ok) {
+      throw new Error("Missing native capability fixture");
+    }
+    api.native.capabilities = vi.fn(async () =>
+      ok({
+        ...base.data,
+        capabilityReport: {
+          ...base.data.capabilityReport,
+          capabilities: [
+            {
+              key: "tray" as const,
+              label: "Tray icon",
+              supported: false,
+              state: "disabled" as const,
+              message: "Enable menu bar icon in Settings."
+            }
+          ],
+          diagnostics: [
+            {
+              key: "tray" as const,
+              severity: "warning" as const,
+              message: "Menu bar icon is disabled."
+            }
+          ]
+        }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
+    await user.click(within(settingsSupport).getByRole("button", { name: /Platform/ }));
+    await user.click(await screen.findByRole("button", { name: "Open capability Tray icon" }));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "settings");
+    expect(within(inspector).getByText("Remediation")).toBeInTheDocument();
+    expect(within(inspector).getByText("Menu bar icon is disabled.")).toBeInTheDocument();
+    expect(within(inspector).getByLabelText("Capability metadata")).toHaveTextContent("disabled");
   });
 
   it("shows onboarding for a fresh database and completes setup through settings IPC", async () => {
@@ -1856,7 +2024,7 @@ describe("App shell", () => {
     });
 
     await goToSection("Notes");
-    expect(await screen.findByDisplayValue("Cache-first startup")).toBeInTheDocument();
+    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
 
     await goToSection("Settings");
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
@@ -1869,7 +2037,7 @@ describe("App shell", () => {
     render(<App />);
 
     await goToSection("Notes");
-    expect(await screen.findByDisplayValue("Cache-first startup")).toBeInTheDocument();
+    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
 
     await goToSection("Settings");
     const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
