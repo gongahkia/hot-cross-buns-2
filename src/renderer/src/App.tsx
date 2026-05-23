@@ -10,7 +10,7 @@ import {
   ListChecks,
   RefreshCw,
   Server,
-  WifiOff
+  X
 } from "lucide-react";
 import appIconUrl from "../../../assets/brand/buns-app-icon-sidebar.png";
 import type { PlannerAction } from "./actions/plannerActions";
@@ -18,6 +18,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { InspectorProvider, InspectorShell } from "./components/Inspector";
 import { Badge, Button, IconButton, StatusBanner, cx } from "./components/primitives";
 import { getPlannerSection, plannerSections, type SectionId } from "./data/mockPlanner";
+import { getAppNotifications, type AppNotification } from "./features/core/appNotifications";
 import { SectionContent, type TaskSurfaceCommand } from "./features/core/CoreScreens";
 import {
   CoreDataProvider,
@@ -57,115 +58,15 @@ function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): strin
     return "local";
   }
 
+  if (sectionId === "notifications") {
+    return String(getAppNotifications(source).length);
+  }
+
   if (sectionId === "settings") {
     return source.syncStatus.state;
   }
 
   return source.todayViewModel.metrics[0]?.value ?? "0";
-}
-
-function statusLabel(source: CoreViewModelSource): string {
-  if (source.dataState === "loading") {
-    return "Loading";
-  }
-
-  if (source.dataState === "error") {
-    return "Error";
-  }
-
-  if (source.isOffline) {
-    return "Offline";
-  }
-
-  if (source.isStale) {
-    return "Stale";
-  }
-
-  if (source.dataState === "empty") {
-    return "Empty";
-  }
-
-  return "Ready";
-}
-
-function statusTitle(source: CoreViewModelSource): string {
-  if (source.dataState === "loading") {
-    return "Loading local cache";
-  }
-
-  if (source.dataState === "error") {
-    return "Local cache unavailable";
-  }
-
-  if (source.isOffline) {
-    return "Offline cache";
-  }
-
-  if (source.isStale || source.dataState === "stale") {
-    return "Refreshing local cache";
-  }
-
-  if (source.dataState === "empty") {
-    return "Fresh local cache";
-  }
-
-  return "Local cache ready";
-}
-
-function statusDescription(source: CoreViewModelSource): string {
-  if (source.errorMessage) {
-    return source.errorMessage;
-  }
-
-  if (source.dataState === "loading") {
-    return "Opening SQLite and reading cached planner data.";
-  }
-
-  if (source.dataState === "empty") {
-    return "No cached tasks, events, or notes are stored yet.";
-  }
-
-  if (source.isOffline) {
-    return "Google sync is not connected; cached local data remains available.";
-  }
-
-  if (source.isStale || source.dataState === "stale") {
-    return "Rendering cached rows while a newer read is pending.";
-  }
-
-  return "Tasks, events, notes, settings, and diagnostics are loaded from local services.";
-}
-
-function statusTone(source: CoreViewModelSource): "neutral" | "success" | "warning" | "danger" {
-  if (source.dataState === "error") {
-    return "danger";
-  }
-
-  if (source.dataState === "ready") {
-    return "success";
-  }
-
-  if (source.dataState === "loading") {
-    return "neutral";
-  }
-
-  return "warning";
-}
-
-function bannerTone(source: CoreViewModelSource): "info" | "success" | "warning" | "danger" | "offline" {
-  if (source.dataState === "error") {
-    return "danger";
-  }
-
-  if (source.isOffline) {
-    return "offline";
-  }
-
-  if (source.dataState === "ready") {
-    return "success";
-  }
-
-  return "info";
 }
 
 export default function App(): JSX.Element {
@@ -188,12 +89,17 @@ function AppShell(): JSX.Element {
   const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
   const [healthLabel, setHealthLabel] = useState("Starting");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
   const shellVisibleReported = useRef(false);
   const commandPaletteOpenStartedAt = useRef<number | null>(null);
   const sectionButtonRefs = useRef(new Map<SectionId, HTMLButtonElement>());
 
   const activeSection = getPlannerSection(activeSectionId);
   const ActiveIcon = activeSection.icon;
+  const appNotifications = getAppNotifications(source);
+  const visibleNotification = appNotifications.find(
+    (notification) => !dismissedNotificationIds.includes(notification.id)
+  );
   const onboardingVisible =
     source.settings.setupCompletedAt === null &&
     source.dataState !== "loading" &&
@@ -369,15 +275,35 @@ function AppShell(): JSX.Element {
 
   useEffect(() => {
     function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
         event.preventDefault();
         openCommandPalette();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        source.refresh();
       }
     }
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [openCommandPalette]);
+  }, [openCommandPalette, source.refresh]);
+
+  useEffect(() => {
+    if (!visibleNotification) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setDismissedNotificationIds((current) =>
+        current.includes(visibleNotification.id) ? current : [...current, visibleNotification.id]
+      );
+    }, 6_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [visibleNotification]);
 
   useEffect(() => {
     if (!commandPaletteOpen) {
@@ -464,23 +390,29 @@ function AppShell(): JSX.Element {
 
           <div className="flex shrink-0 items-center gap-2" role="toolbar" aria-label="Planner actions">
             <Button
-              aria-keyshortcuts="Control+K Meta+K"
+              aria-keyshortcuts="Meta+P Control+P"
               onClick={openCommandPalette}
               variant="secondary"
             >
               <Command aria-hidden="true" size={15} />
               Command palette
               <span className="rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted">
-                Ctrl K
+                Cmd P
               </span>
             </Button>
-            <IconButton
+            <Button
+              aria-keyshortcuts="Meta+R Control+R"
               data-action-id="sync.refresh"
-              icon={RefreshCw}
-              label="Refresh local cache"
               onClick={source.refresh}
+              title="Reload local cache"
               variant="ghost"
-            />
+            >
+              <RefreshCw aria-hidden="true" size={15} />
+              Reload
+              <span className="rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted">
+                Cmd R
+              </span>
+            </Button>
           </div>
         </header>
 
@@ -488,14 +420,6 @@ function AppShell(): JSX.Element {
           aria-labelledby="planner-title"
           className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4"
         >
-          <StatusBanner
-            action={<Badge tone={statusTone(source)}>{statusLabel(source)}</Badge>}
-            description={statusDescription(source)}
-            icon={source.isOffline ? WifiOff : RefreshCw}
-            title={statusTitle(source)}
-            tone={bannerTone(source)}
-          />
-
           <RenderTimingBoundary id={`section:${activeSectionId}`}>
             <SectionContent
               activeSectionId={activeSectionId}
@@ -524,7 +448,37 @@ function AppShell(): JSX.Element {
       </RenderTimingBoundary>
 
       {onboardingVisible ? <FirstRunOnboarding source={source} /> : null}
+      {visibleNotification ? (
+        <AppNotificationToast
+          notification={visibleNotification}
+          onDismiss={() =>
+            setDismissedNotificationIds((current) =>
+              current.includes(visibleNotification.id) ? current : [...current, visibleNotification.id]
+            )
+          }
+        />
+      ) : null}
     </div>
+  );
+}
+
+function AppNotificationToast({
+  notification,
+  onDismiss
+}: {
+  notification: AppNotification;
+  onDismiss: () => void;
+}): JSX.Element {
+  return (
+    <StatusBanner
+      action={<IconButton icon={X} label="Dismiss notification" onClick={onDismiss} variant="ghost" />}
+      className="fixed right-4 top-16 z-40 w-[min(420px,calc(100vw-32px))] shadow-2xl"
+      description={notification.description}
+      title={notification.title}
+      tone={notification.tone}
+      role="status"
+      aria-live="polite"
+    />
   );
 }
 

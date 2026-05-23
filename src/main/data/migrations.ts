@@ -95,6 +95,47 @@ END;
 
 INSERT INTO local_notes_fts(local_notes_fts) VALUES ('rebuild');
 `
+  },
+  {
+    version: 3,
+    name: "local note links and properties",
+    sql: `
+CREATE TABLE IF NOT EXISTS local_note_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_note_id TEXT NOT NULL,
+  target_kind TEXT NOT NULL,
+  target_id TEXT,
+  link_text TEXT NOT NULL,
+  is_broken INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (source_note_id) REFERENCES local_notes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_note_links_source
+  ON local_note_links(source_note_id);
+
+CREATE INDEX IF NOT EXISTS idx_local_note_links_target
+  ON local_note_links(target_kind, target_id);
+
+CREATE INDEX IF NOT EXISTS idx_local_note_links_broken
+  ON local_note_links(is_broken, source_note_id);
+
+CREATE TABLE IF NOT EXISTS local_note_properties (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  note_id TEXT NOT NULL,
+  property_key TEXT NOT NULL,
+  property_value TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (note_id) REFERENCES local_notes(id) ON DELETE CASCADE,
+  UNIQUE(note_id, property_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_note_properties_kv
+  ON local_note_properties(property_key, property_value);
+
+CREATE INDEX IF NOT EXISTS idx_local_note_properties_note
+  ON local_note_properties(note_id);
+`
   }
 ];
 

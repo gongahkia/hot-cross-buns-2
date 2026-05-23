@@ -247,7 +247,13 @@ export const taskUpdateRequestSchema = z
     listId: idSchema.optional(),
     parentId: idSchema.nullable().optional(),
     previousSiblingId: idSchema.nullable().optional(),
-    priority: taskPrioritySchema.optional()
+    priority: taskPrioritySchema.optional(),
+    plannedStart: isoDateTimeSchema.nullable().optional(),
+    plannedEnd: isoDateTimeSchema.nullable().optional(),
+    durationMinutes: z.number().int().nonnegative().nullable().optional(),
+    lockedSchedule: z.boolean().optional(),
+    snoozeUntil: isoDateTimeSchema.nullable().optional(),
+    tags: z.array(z.string().min(1).max(120)).max(64).optional()
   })
   .strict()
   .refine(
@@ -258,7 +264,13 @@ export const taskUpdateRequestSchema = z
       request.listId !== undefined ||
       request.parentId !== undefined ||
       request.previousSiblingId !== undefined ||
-      request.priority !== undefined,
+      request.priority !== undefined ||
+      request.plannedStart !== undefined ||
+      request.plannedEnd !== undefined ||
+      request.durationMinutes !== undefined ||
+      request.lockedSchedule !== undefined ||
+      request.snoozeUntil !== undefined ||
+      request.tags !== undefined,
     {
       message: "At least one task field must be supplied"
     }

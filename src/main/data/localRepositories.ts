@@ -108,6 +108,12 @@ interface TaskRow extends Record<string, unknown> {
   etag?: string | null;
   pendingMutationStatus?: "pending" | "applying" | "failed" | null;
   updatedAt: string;
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  durationMinutes?: number | null;
+  lockedSchedule?: number | null;
+  snoozeUntil?: string | null;
+  tagsJson?: string | null;
 }
 
 interface CalendarListRow extends Record<string, unknown> {
@@ -336,7 +342,13 @@ export class LocalPlannerRepository {
            tasks.sort_order AS sortOrder,
            tasks.etag AS etag,
            pending.status AS pendingMutationStatus,
-           tasks.updated_at AS updatedAt
+           tasks.updated_at AS updatedAt,
+           tasks.local_planned_start AS plannedStart,
+           tasks.local_planned_end AS plannedEnd,
+           tasks.local_duration_minutes AS durationMinutes,
+           tasks.local_locked_schedule AS lockedSchedule,
+           tasks.local_snooze_until AS snoozeUntil,
+           tasks.local_tags_json AS tagsJson
          FROM google_tasks tasks
          INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
          LEFT JOIN (
@@ -389,7 +401,13 @@ export class LocalPlannerRepository {
            tasks.sort_order AS sortOrder,
            tasks.etag AS etag,
            pending.status AS pendingMutationStatus,
-           tasks.updated_at AS updatedAt
+           tasks.updated_at AS updatedAt,
+           tasks.local_planned_start AS plannedStart,
+           tasks.local_planned_end AS plannedEnd,
+           tasks.local_duration_minutes AS durationMinutes,
+           tasks.local_locked_schedule AS lockedSchedule,
+           tasks.local_snooze_until AS snoozeUntil,
+           tasks.local_tags_json AS tagsJson
          FROM google_tasks tasks
          INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
          LEFT JOIN (
@@ -442,14 +460,17 @@ export class LocalPlannerRepository {
         previousSiblingId: request.previousSiblingId ?? null
       };
 
+      const tagsJson = JSON.stringify(request.tags ?? []);
       this.connection.executeTransaction([
         {
           kind: "run",
           sql: `INSERT INTO google_tasks (
             id, account_id, task_list_id, google_id, parent_task_id, title, notes,
             status, due_at, due_time_zone, completed_at, position, sort_order,
-            is_hidden, local_priority, etag, google_updated_at, created_at, updated_at, deleted_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'needsAction', ?, NULL, NULL, NULL, ?, 0, ?, NULL, NULL, ?, ?, NULL);`,
+            is_hidden, local_priority, local_planned_start, local_planned_end,
+            local_duration_minutes, local_locked_schedule, local_snooze_until,
+            local_tags_json, etag, google_updated_at, created_at, updated_at, deleted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'needsAction', ?, NULL, NULL, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL);`,
           params: [
             id,
             list.accountId,
@@ -461,6 +482,12 @@ export class LocalPlannerRepository {
             dateOnlyToIso(request.dueDate ?? null),
             sortOrder,
             request.priority ?? "none",
+            request.plannedStart ?? null,
+            request.plannedEnd ?? null,
+            request.durationMinutes ?? null,
+            request.lockedSchedule ? 1 : 0,
+            request.snoozeUntil ?? null,
+            tagsJson,
             now,
             now
           ]
@@ -517,6 +544,22 @@ export class LocalPlannerRepository {
         request.listId !== undefined
           ? this.nextTaskSortOrder(targetList.id, parentId)
           : existing.sortOrder ?? 0;
+      const plannedStart =
+        request.plannedStart === undefined ? existing.plannedStart ?? null : request.plannedStart;
+      const plannedEnd =
+        request.plannedEnd === undefined ? existing.plannedEnd ?? null : request.plannedEnd;
+      const durationMinutes =
+        request.durationMinutes === undefined
+          ? existing.durationMinutes ?? null
+          : request.durationMinutes;
+      const lockedSchedule =
+        request.lockedSchedule === undefined
+          ? existing.lockedSchedule === 1
+          : request.lockedSchedule;
+      const snoozeUntil =
+        request.snoozeUntil === undefined ? existing.snoozeUntil ?? null : request.snoozeUntil;
+      const tagsJson =
+        request.tags === undefined ? existing.tagsJson ?? "[]" : JSON.stringify(request.tags);
       const googleBackedPatch =
         request.title !== undefined ||
         request.notes !== undefined ||
@@ -535,6 +578,12 @@ export class LocalPlannerRepository {
                     due_at = ?,
                     local_priority = ?,
                     sort_order = ?,
+                    local_planned_start = ?,
+                    local_planned_end = ?,
+                    local_duration_minutes = ?,
+                    local_locked_schedule = ?,
+                    local_snooze_until = ?,
+                    local_tags_json = ?,
                     updated_at = ?
                 WHERE id = ? AND deleted_at IS NULL;`,
           params: [
@@ -545,6 +594,12 @@ export class LocalPlannerRepository {
             dueAt,
             priority,
             sortOrder,
+            plannedStart,
+            plannedEnd,
+            durationMinutes,
+            lockedSchedule ? 1 : 0,
+            snoozeUntil,
+            tagsJson,
             now,
             request.id
           ]
@@ -1595,6 +1650,8 @@ export class LocalPlannerRepository {
         [id, request.title.trim(), body, now, now]
       );
 
+      this.reindexNoteLinksAndProperties(id, body, now);
+
       return this.getNote(id);
     });
   }
@@ -1603,6 +1660,7 @@ export class LocalPlannerRepository {
     return this.measureSqlite("notes.update", () => {
       const existing = this.getNote(request.id);
       const now = new Date().toISOString();
+      const nextBody = request.body ?? existing.body;
 
       this.connection.run(
         `UPDATE local_notes
@@ -1610,14 +1668,92 @@ export class LocalPlannerRepository {
          WHERE id = ? AND deleted_at IS NULL;`,
         [
           request.title?.trim() ?? existing.title,
-          request.body ?? existing.body,
+          nextBody,
           now,
           request.id
         ]
       );
 
+      this.reindexNoteLinksAndProperties(request.id, nextBody, now);
+
       return this.getNote(request.id);
     });
+  }
+
+  private reindexNoteLinksAndProperties(noteId: string, body: string, now: string): void {
+    const links = extractPlannerLinks(body);
+    const properties = extractNoteProperties(body);
+    const operations: SqliteWriteOperation[] = [
+      { kind: "run", sql: `DELETE FROM local_note_links WHERE source_note_id = ?;`, params: [noteId] },
+      { kind: "run", sql: `DELETE FROM local_note_properties WHERE note_id = ?;`, params: [noteId] }
+    ];
+
+    for (const link of links) {
+      const resolvedTargetId = this.resolveLinkTargetId(link);
+      operations.push({
+        kind: "run",
+        sql: `INSERT INTO local_note_links
+              (source_note_id, target_kind, target_id, link_text, is_broken, created_at)
+              VALUES (?, ?, ?, ?, ?, ?);`,
+        params: [
+          noteId,
+          link.kind,
+          resolvedTargetId,
+          link.raw,
+          resolvedTargetId === null ? 1 : 0,
+          now
+        ]
+      });
+    }
+
+    for (const property of properties) {
+      operations.push({
+        kind: "run",
+        sql: `INSERT INTO local_note_properties
+              (note_id, property_key, property_value, updated_at)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(note_id, property_key) DO UPDATE SET
+                property_value = excluded.property_value,
+                updated_at = excluded.updated_at;`,
+        params: [noteId, property.key, property.value, now]
+      });
+    }
+
+    this.connection.executeTransaction(operations);
+  }
+
+  private resolveLinkTargetId(link: PlannerLinkReference): string | null {
+    if (link.kind === "note") {
+      const row = this.connection.get<{ id: string }>(
+        `SELECT id FROM local_notes
+         WHERE deleted_at IS NULL AND LOWER(title) = LOWER(?)
+         LIMIT 1;`,
+        [link.label]
+      );
+      return row?.id ?? null;
+    }
+
+    if (link.kind === "task") {
+      const row = this.connection.get<{ id: string }>(
+        `SELECT id FROM google_tasks
+         WHERE deleted_at IS NULL AND (id = ? OR LOWER(title) = LOWER(?))
+         LIMIT 1;`,
+        [link.label, link.label]
+      );
+      return row?.id ?? null;
+    }
+
+    if (link.kind === "event") {
+      const row = this.connection.get<{ id: string }>(
+        `SELECT id FROM google_calendar_events
+         WHERE deleted_at IS NULL AND (id = ? OR LOWER(title) = LOWER(?))
+         LIMIT 1;`,
+        [link.label, link.label]
+      );
+      return row?.id ?? null;
+    }
+
+    return null;
   }
 
   deleteNote(request: NoteDeleteRequest): { id: string; queued: boolean; revision: string } {
@@ -1796,7 +1932,13 @@ export class LocalPlannerRepository {
          COALESCE(tasks.local_priority, 'none') AS priority,
          tasks.sort_order AS sortOrder,
          tasks.etag AS etag,
-         tasks.updated_at AS updatedAt
+         tasks.updated_at AS updatedAt,
+         tasks.local_planned_start AS plannedStart,
+         tasks.local_planned_end AS plannedEnd,
+         tasks.local_duration_minutes AS durationMinutes,
+         tasks.local_locked_schedule AS lockedSchedule,
+         tasks.local_snooze_until AS snoozeUntil,
+         tasks.local_tags_json AS tagsJson
        FROM google_tasks tasks
        INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
        WHERE tasks.id = ?
@@ -2863,8 +3005,29 @@ function taskSummary(row: TaskRow): TaskSummary {
     parentId: row.parentId,
     priority: row.priority ?? "none",
     sortOrder: row.sortOrder,
-    mutationState: mutationState(row.pendingMutationStatus)
+    mutationState: mutationState(row.pendingMutationStatus),
+    plannedStart: row.plannedStart ?? null,
+    plannedEnd: row.plannedEnd ?? null,
+    durationMinutes: row.durationMinutes ?? null,
+    lockedSchedule: row.lockedSchedule === 1,
+    snoozeUntil: row.snoozeUntil ?? null,
+    tags: parseTagsJson(row.tagsJson)
   };
+}
+
+function parseTagsJson(value: string | null | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
 }
 
 function taskDetail(row: TaskRow): TaskDetail {

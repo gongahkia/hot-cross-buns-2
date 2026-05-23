@@ -1,4 +1,5 @@
 import {
+  Bell,
   CalendarDays,
   ListTodo,
   Search,
@@ -8,7 +9,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type SectionId = "today" | "tasks" | "calendar" | "notes" | "search" | "settings";
+export type SectionId = "today" | "tasks" | "calendar" | "notes" | "search" | "notifications" | "settings";
 export type Priority = "none" | "low" | "medium" | "high";
 
 export interface PlannerSection {
@@ -99,6 +100,14 @@ export const plannerSections: PlannerSection[] = [
     subtitle: "Local-first search",
     metric: "local",
     icon: Search
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    title: "Notifications",
+    subtitle: "App notices and local reminders",
+    metric: "0",
+    icon: Bell
   },
   {
     id: "settings",
