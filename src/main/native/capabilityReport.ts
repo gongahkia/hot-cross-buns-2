@@ -31,11 +31,11 @@ const capabilityMetadata: Array<{
 }> = [
   { key: "appPaths", label: "App paths", flag: "supportsAppPaths" },
   { key: "credentialStorage", label: "Credential storage", flag: "supportsCredentialStorage" },
-  { key: "tray", label: "Tray/status area", flag: "supportsTray" },
+  { key: "tray", label: "Tray icon", flag: "supportsTray" },
   { key: "appMenu", label: "App menu", flag: "supportsAppMenu" },
   { key: "globalShortcuts", label: "Global shortcuts", flag: "supportsGlobalShortcut" },
   { key: "notifications", label: "Notifications", flag: "supportsNotifications" },
-  { key: "customProtocol", label: "Custom protocol", flag: "supportsProtocolRegistration" },
+  { key: "customProtocol", label: "Protocol registration", flag: "supportsProtocolRegistration" },
   { key: "autostart", label: "Open at login", flag: "supportsAutostart" },
   { key: "updater", label: "Updater", flag: "supportsInPlaceAutoUpdate" },
   { key: "installerMetadata", label: "Installer metadata", flag: "supportsInstallerMetadata" },

@@ -580,6 +580,17 @@ describe("native shell service", () => {
         "packaging"
       ])
     );
+    expect(report.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "tray", label: "Tray icon" }),
+        expect.objectContaining({ key: "globalShortcuts", label: "Global shortcuts" }),
+        expect.objectContaining({ key: "oauthLoopback", label: "OAuth loopback" }),
+        expect.objectContaining({ key: "credentialStorage", label: "Credential storage" }),
+        expect.objectContaining({ key: "notifications", label: "Notifications" }),
+        expect.objectContaining({ key: "customProtocol", label: "Protocol registration" }),
+        expect.objectContaining({ key: "mcpLoopback", label: "MCP loopback" })
+      ])
+    );
     expect(report.paths.map((path) => path.role)).toEqual(
       expect.arrayContaining(["config", "data", "cache", "logs", "diagnostics", "temp"])
     );

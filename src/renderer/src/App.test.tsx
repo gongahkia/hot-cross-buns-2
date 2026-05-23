@@ -1404,6 +1404,34 @@ describe("App shell", () => {
     const eventButton = screen.getByRole("button", {
       name: "09:30-09:50 Planner shell standup"
     });
+    eventButton.focus();
+    await user.keyboard("{ArrowDown}");
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${todayDate}T09:45:00.000Z`,
+        endsAt: `${todayDate}T10:05:00.000Z`,
+        allDay: false
+      });
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+    vi.mocked(api.calendar.update).mockClear();
+
+    eventButton.focus();
+    await user.keyboard("{ArrowUp}");
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${todayDate}T09:15:00.000Z`,
+        endsAt: `${todayDate}T09:35:00.000Z`,
+        allDay: false
+      });
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+    vi.mocked(api.calendar.update).mockClear();
+
     const moveTransfer = testDataTransfer();
     const moveTarget = screen.getByRole("row", { name: "11:00 Open slot" });
 
@@ -1537,6 +1565,53 @@ describe("App shell", () => {
     expect(api.calendar.delete).toHaveBeenCalledWith({ id: "event-standup" });
   });
 
+  it("loads existing event recurrence into the inspector and persists recurrence changes", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-recurring-review",
+            calendarId: "cal-product",
+            title: "Recurring release review",
+            startsAt: `${todayDate}T13:00:00.000Z`,
+            endsAt: `${todayDate}T14:00:00.000Z`,
+            allDay: false,
+            updatedAt: now,
+            recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4"
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    await user.click(await screen.findByText("Recurring release review"));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "event");
+    expect(screen.getByLabelText("Event repeat frequency")).toHaveValue("monthly");
+    expect(screen.getByLabelText("Repeat interval")).toHaveValue(2);
+    expect(screen.getByLabelText("Repeat count")).toHaveValue(4);
+    expect(screen.getByText("Every 2 months, 4 times")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "none");
+    expect(screen.getByLabelText("Repeat interval")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "event-recurring-review",
+          recurrence: null
+        })
+      );
+    });
+  });
+
   it("generates static availability from selected calendar sources", async () => {
     const api = seededHcb();
     installHcb(api);
@@ -1641,6 +1716,66 @@ describe("App shell", () => {
     expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
   });
 
+  it("flushes pending note edits before switching the selected note row", async () => {
+    const api = seededHcb();
+    api.notes.list = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "note-cache-first",
+            title: "Cache-first startup",
+            preview: "Renderer paints from SQLite.",
+            updatedAt: now
+          },
+          {
+            id: "note-daily",
+            title: "Daily note",
+            preview: "Backlink review.",
+            updatedAt: now
+          }
+        ],
+        page: { limit: 50, totalKnown: 2 }
+      })
+    );
+    api.notes.get = vi.fn(async ({ id }) =>
+      ok(
+        id === "note-daily"
+          ? {
+              id,
+              title: "Daily note",
+              preview: "Backlink review.",
+              body: "Review backlinks.",
+              updatedAt: now
+            }
+          : {
+              id,
+              title: "Cache-first startup",
+              preview: "Renderer paints from SQLite.",
+              body: "Renderer paints from SQLite before fresh sync completes.",
+              updatedAt: now
+            }
+      )
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    await user.click(await screen.findByText("Cache-first startup"));
+    await user.type(await screen.findByRole("textbox", { name: "Note body" }), " Switch flush.");
+    const notesList = screen.getByRole("list", { name: "Local notes" });
+    await user.click(within(notesList).getByRole("button", { name: /Daily note/ }));
+
+    await waitFor(() => {
+      expect(api.notes.update).toHaveBeenCalledWith({
+        id: "note-cache-first",
+        title: "Cache-first startup",
+        body: expect.stringContaining("Switch flush.")
+      });
+    });
+    expect(await screen.findByDisplayValue("Daily note")).toBeInTheDocument();
+  });
+
   it("renders note markdown preview, outgoing links, and backlinks", async () => {
     const api = seededHcb();
     api.notes.list = vi.fn(async () =>
@@ -1729,6 +1864,35 @@ describe("App shell", () => {
       );
     });
     expect(await screen.findByText("tags: daily")).toBeInTheDocument();
+  });
+
+  it("supports keyboard selection in the note link autocomplete", async () => {
+    const api = seededHcb();
+    api.notes.linkSuggest = vi.fn(async () =>
+      ok({
+        items: [
+          { kind: "note" as const, id: "note-project", label: "Project plan" },
+          { kind: "task" as const, id: "task-plan", label: "Project plan task" },
+          { kind: "event" as const, id: "event-plan", label: "Project plan review" }
+        ]
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    await user.click(await screen.findByText("Cache-first startup"));
+    const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
+    const linkInput = screen.getByRole("combobox", { name: "Planner link target" });
+
+    await user.type(linkInput, "plan");
+    expect(await screen.findByRole("option", { name: /Project plan task/ })).toBeInTheDocument();
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(api.notes.linkSuggest).toHaveBeenCalledWith({ query: "plan", limit: 8 });
+    expect((bodyInput as HTMLTextAreaElement).value).toContain("[[task:Project plan task]]");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
   it("repairs broken note links from the note inspector", async () => {

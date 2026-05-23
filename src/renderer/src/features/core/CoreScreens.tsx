@@ -2647,6 +2647,7 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
                         role="listitem"
                       >
                         <button
+                          aria-current={selected ? "true" : undefined}
                           aria-pressed={selected}
                           className={cx(
                             "min-w-0 rounded-hcbMd border px-3 py-2 text-left transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
@@ -3353,6 +3354,20 @@ function DayView({
                         draggable
                         onClick={() => onOpen(event)}
                         onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, event.id)}
+                        onKeyDown={(keyEvent) => {
+                          if (keyEvent.key !== "ArrowDown" && keyEvent.key !== "ArrowUp") {
+                            return;
+                          }
+
+                          keyEvent.preventDefault();
+                          keyEvent.stopPropagation();
+                          const direction = keyEvent.key === "ArrowDown" ? 1 : -1;
+                          onMoveEvent(
+                            event.id,
+                            new Date(Date.parse(event.startsAt) + direction * 15 * 60 * 1000).toISOString(),
+                            event.allDay
+                          );
+                        }}
                         type="button"
                       >
                         {event.rangeLabel} {event.title}

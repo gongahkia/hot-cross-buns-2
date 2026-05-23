@@ -205,8 +205,8 @@ Acceptance checks:
 
 Status on 2026-05-23:
 
-- Today now groups the existing cached event/task timeline into all-day, morning, afternoon, evening, and unscheduled sections without introducing new scheduling fields.
-- The slice remains renderer-only and uses the existing virtualized list path. Task planned time, duration, locked scheduling, conflicts, current-time marker, and auto-scheduling are still backend/data-model backlog items.
+- Today now groups cached event/task timeline rows into all-day, morning, afternoon, evening, and unscheduled sections and uses the existing virtualized list path.
+- Task quick-add and detail flows now carry planned time, duration, locked schedule, and tags, while the local schedule suggestion service surfaces capacity/conflict evidence in Today.
 
 ### 3. Task Power Surface
 
@@ -250,7 +250,8 @@ Acceptance checks:
 
 Status on 2026-05-23:
 
-- Calendar now has agenda/day/week/month controls, quick-create from day/week/month cells, event edit forms with guests/reminders/location/notes, UTC labeling, per-screen calendar visibility controls, and drag/drop move/resize gestures backed by typed local update requests.
+- Calendar now has agenda/day/week/month controls, quick-create from day/week/month cells, event edit forms hosted in the global Inspector with guests/reminders/location/notes/recurrence, timezone labels, per-screen calendar visibility controls, event pending-mutation badges, and drag/drop move/resize gestures backed by typed local update requests.
+- Day view uses the shared virtualized list pattern for hour rows; week view uses a windowed column path; month view reads from derived day indexes rather than scanning all events per cell.
 
 ### 5. Search, Filters, And Perspectives
 
@@ -304,7 +305,7 @@ Acceptance checks:
 
 Status on 2026-05-23:
 
-- Notes now support markdown preview, note links/backlinks, visible broken note links, task/event link syntax, local link insertion across notes/tasks/events, inferred property chips from note-body metadata, and daily/meeting note templates.
+- Notes now edit through the global Inspector with markdown preview, note links/backlinks, visible broken note links, task/event link syntax, local autocomplete insertion across notes/tasks/events, keyboard-activatable link chips, inferred property chips from note-body metadata, and daily/meeting note templates.
 
 ### 7. Settings And Diagnostics UX
 
@@ -326,7 +327,7 @@ Acceptance checks:
 
 Status on 2026-05-23:
 
-- Settings now exposes required sections for Google, resources, sync, appearance, hotkeys, tray, notifications, local data, MCP, platform, and diagnostics; Sync shows pending/applying/failed/retryable/auth-paused queue buckets; Local data explains local cache and credential boundaries; Platform renders sanitized capability and diagnostic rows when available; copy diagnostics keeps redaction guarantees visible.
+- Settings now exposes required sections for Google, resources, sync, appearance, hotkeys, tray, notifications, local data, MCP, platform, and diagnostics; Sync shows pending/applying/failed/retryable/auth-paused queue buckets; Local data explains local cache and credential boundaries; Platform renders sanitized capability and diagnostic rows in the global Inspector; copy diagnostics opens sanitized JSON details and keeps redaction guarantees visible.
 
 ### 8. Visual System Refinement
 
@@ -406,6 +407,8 @@ Start with Slice 1 before deep calendar or scheduling work. The action registry,
 
 Current slice status on 2026-05-23:
 
-- Slice 1 is partially implemented for the shared action registry, palette availability, visible control IDs, and selected task toolbar state.
-- Slice 2 is partially implemented through grouped Today timeline sections over existing cached data.
-- The shared inspector shell, persisted display options, saved views, task duration/planned-time fields, note backlinks, bulk selection, and full selected-item palette context remain deferred.
+- Slice 1 is implemented for the shared action registry, palette availability, visible control IDs, global Inspector shell, and task/event/note/settings detail flows. Full selected-item palette execution remains deferred.
+- Slice 2 is implemented for grouped Today timeline sections, planned-time/duration/locked task fields, timezone display, and local scheduling suggestions.
+- Slice 3 is partially implemented through local search filters and saved search views.
+- Slice 4 is partially implemented through task perspectives, saved task views, and bulk task actions.
+- Slice 5 is implemented for note inspector editing, markdown preview, backlinks, link autocomplete, and broken-link repair. Graph/canvas remains deferred.

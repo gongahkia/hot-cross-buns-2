@@ -4,6 +4,7 @@ import {
   MAX_RANGE_LIMIT,
   availabilityExportRequestSchema,
   calendarScheduleSuggestRequestSchema,
+  calendarEventDetailSchema,
   calendarEventCreateRequestSchema,
   calendarEventUpdateRequestSchema,
   calendarRangeRequestSchema,
@@ -161,6 +162,46 @@ describe("shared IPC contracts", () => {
       id: "event-1",
       recurrence: null
     });
+  });
+
+  it("validates calendar event depth fields exposed to the renderer", () => {
+    expect(
+      calendarEventDetailSchema.parse({
+        id: "event-1",
+        eventId: "google-event-1",
+        calendarId: "cal-1",
+        title: "Recurring release review",
+        startsAt: "2026-05-22T09:00:00.000Z",
+        endsAt: "2026-05-22T10:00:00.000Z",
+        allDay: false,
+        updatedAt: "2026-05-22T08:00:00.000Z",
+        calendarTitle: "Product",
+        deepLink: "hotcrossbuns://calendar/event-1",
+        mutationState: "queued",
+        timeZone: "America/New_York",
+        recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4",
+        recurringEventId: "series-1",
+        originalStartAt: "2026-05-22T09:00:00.000Z"
+      })
+    ).toMatchObject({
+      mutationState: "queued",
+      recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4",
+      timeZone: "America/New_York"
+    });
+    expect(
+      calendarEventDetailSchema.safeParse({
+        id: "event-1",
+        calendarId: "cal-1",
+        title: "Bad mutation",
+        startsAt: "2026-05-22T09:00:00.000Z",
+        endsAt: "2026-05-22T10:00:00.000Z",
+        allDay: false,
+        updatedAt: "2026-05-22T08:00:00.000Z",
+        calendarTitle: "Product",
+        deepLink: "hotcrossbuns://calendar/event-1",
+        mutationState: "sending"
+      }).success
+    ).toBe(false);
   });
 
   it("validates scheduled task blocks and static availability export contracts", () => {

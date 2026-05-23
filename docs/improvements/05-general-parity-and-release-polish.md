@@ -161,6 +161,8 @@ Status on 2026-05-23:
 
 - Added Mac preview support guidance that explicitly avoids Gatekeeper-disable advice and avoids sharing OAuth credentials, MCP tokens, local databases, raw Google payloads, or signing material.
 - Updated release distribution docs with current macOS package metadata, icon/resource paths, unsigned preview checksum helper, and support-doc links.
+- Added `docs/release/smoke-2026-05-23.md` with pass/fail coverage for Inspector task/event/note/settings details, planned-time quick add, task perspectives, note link autocomplete, broken-link repair, recurrence edit, timezone display, Today conflicts, calendar direct-mutation drag/drop, keyboard calendar movement, and native capability rows.
+- Current release-readiness status includes the shipped global Inspector flows, grouped Today timeline, task perspectives, timezone summaries, recurrence editing, note link autocomplete, broken-link repair, settings diagnostics inspectors, and event pending-mutation badges.
 
 ## Recommended Starting Point
 
