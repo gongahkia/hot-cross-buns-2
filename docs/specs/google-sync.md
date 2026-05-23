@@ -45,6 +45,12 @@ Local-only fields may include:
 
 Time-specific task scheduling must be represented as a calendar event, not a Google Task due time. Hot Cross Buns 2 stores a local scheduled-task-block link row so the timed calendar block can remain associated with its source task.
 
+Scheduled-task-block reconciliation rules:
+
+- A task can have only one active scheduled block in local metadata. Repeated scheduling of the exact same block is idempotent; scheduling the same task into a different slot must use move or unschedule first.
+- If Google sync moves or resizes the linked Calendar event externally, the local block surfaces the Calendar event's current start/end and recalculates duration from that event.
+- If Google sync deletes/cancels the linked Calendar event, the local block becomes orphaned and the renderer can repair it by creating a replacement Calendar event linked to the same task.
+
 ## Calendar Mapping
 
 Google Calendar backs:

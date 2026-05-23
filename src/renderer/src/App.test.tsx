@@ -781,6 +781,15 @@ describe("App shell", () => {
         startsAt: `${todayDate}T09:10:00.000Z`
       });
     });
+
+    await user.click(screen.getByRole("button", { name: "Lengthen Draft inbox triage rules" }));
+
+    await waitFor(() => {
+      expect(api.calendar.moveScheduledTaskBlock).toHaveBeenCalledWith({
+        id: "block-conflict",
+        durationMinutes: 45
+      });
+    });
   });
 
   it("repairs orphaned scheduled task blocks from Today", async () => {
@@ -1070,6 +1079,23 @@ describe("App shell", () => {
       "data-action-id",
       "calendar.create"
     );
+  });
+
+  it("creates timed calendar drafts from day planning slots", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+    await user.click(screen.getByRole("button", { name: "Create event at 11:00" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Event starts")).toHaveValue(`${todayDate}T11:00`);
+    expect(screen.getByLabelText("Event ends")).toHaveValue(`${todayDate}T12:00`);
   });
 
   it("creates, edits, and deletes calendar events through preload", async () => {

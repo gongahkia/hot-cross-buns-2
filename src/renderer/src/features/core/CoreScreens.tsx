@@ -20,6 +20,7 @@ import {
   ListPlus,
   Pencil,
   Filter,
+  Minus,
   Plus,
   RotateCcw,
   Save,
@@ -519,11 +520,13 @@ function EventRow({
 function TodayTimelineRow({
   onMoveBlock,
   onRepairBlock,
+  onResizeBlock,
   onUnscheduleBlock,
   row
 }: {
   onMoveBlock: (block: ScheduledTaskBlockViewModel, minutes: number) => void;
   onRepairBlock: (block: ScheduledTaskBlockViewModel) => void;
+  onResizeBlock: (block: ScheduledTaskBlockViewModel, minutes: number) => void;
   onUnscheduleBlock: (blockId: string) => void;
   row:
     | { kind: "task"; task: TaskViewModel }
@@ -577,6 +580,19 @@ function TodayTimelineRow({
               icon={StepForward}
               label={`Move ${row.block.title} later`}
               onClick={() => onMoveBlock(row.block, 30)}
+              variant="ghost"
+            />
+            <IconButton
+              disabled={row.block.durationMinutes <= 15}
+              icon={Minus}
+              label={`Shorten ${row.block.title}`}
+              onClick={() => onResizeBlock(row.block, -15)}
+              variant="ghost"
+            />
+            <IconButton
+              icon={Plus}
+              label={`Lengthen ${row.block.title}`}
+              onClick={() => onResizeBlock(row.block, 15)}
               variant="ghost"
             />
             <IconButton
@@ -802,6 +818,13 @@ function TodayView(): JSX.Element {
     });
   }
 
+  function resizeBlock(block: ScheduledTaskBlockViewModel, minutes: number): void {
+    void source.moveScheduledTaskBlock({
+      id: block.id,
+      durationMinutes: Math.max(5, block.durationMinutes + minutes)
+    });
+  }
+
   const conflictSummary =
     source.todayViewModel.conflictCount === 0
       ? "No timeline conflicts"
@@ -966,6 +989,7 @@ function TodayView(): JSX.Element {
                 <TodayTimelineRow
                   onMoveBlock={moveBlock}
                   onRepairBlock={repairBlock}
+                  onResizeBlock={resizeBlock}
                   onUnscheduleBlock={(blockId) => void source.unscheduleTaskBlock(blockId)}
                   row={entry.row}
                 />
@@ -2169,6 +2193,23 @@ function calendarViewActionId(viewId: CalendarViewId): PlannerActionId {
   return `calendar.view.${viewId}` as PlannerActionId;
 }
 
+const dayPlanningHours = Array.from({ length: 12 }, (_, index) => index + 7);
+
+function hourSlotIso(day: string, hour: number): string {
+  return `${day}T${String(hour).padStart(2, "0")}:00:00.000Z`;
+}
+
+function hourSlotLabel(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+function eventOverlapsHour(event: CalendarEventViewModel, day: string, hour: number): boolean {
+  const startsAt = Date.parse(hourSlotIso(day, hour));
+  const endsAt = Date.parse(hourSlotIso(day, hour + 1));
+
+  return Date.parse(event.startsAt) < endsAt && Date.parse(event.endsAt) > startsAt;
+}
+
 function DayView({
   onCreate,
   onOpen
@@ -2177,6 +2218,7 @@ function DayView({
   onOpen: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   const source = useCoreViewModelSource();
+  const day = source.calendarDayView.id.slice("day-".length);
 
   return (
     <Panel
@@ -2196,33 +2238,53 @@ function DayView({
       description={`${source.calendarDayView.weekday}, ${source.calendarDayView.dateLabel}`}
     >
       <div className="grid gap-2 p-3" role="grid" aria-label="Calendar day view">
-        {source.calendarDayView.events.map((event) => (
-          <button
-            className="grid min-h-14 grid-cols-[74px_minmax(0,1fr)] gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            key={event.id}
-            onClick={() => onOpen(event)}
-            role="row"
-            type="button"
-          >
-            <div className="font-mono text-[var(--text-xs)] text-text-muted" role="gridcell">
-              {event.rangeLabel}
+        {dayPlanningHours.map((hour) => {
+          const slotEvents = source.calendarDayView.events.filter(
+            (event) => !event.allDay && eventOverlapsHour(event, day, hour)
+          );
+          const label = hourSlotLabel(hour);
+
+          return (
+            <div
+              className="grid min-h-[72px] grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-2"
+              key={hour}
+              role="row"
+            >
+              <button
+                aria-label={`Create event at ${label}`}
+                className="font-mono text-[var(--text-xs)] text-text-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                data-action-id="calendar.create"
+                onClick={() => onCreate({ startsAt: hourSlotIso(day, hour), allDay: false })}
+                type="button"
+              >
+                {label}
+              </button>
+              <div className="grid content-start gap-1" role="gridcell">
+                {slotEvents.length > 0 ? (
+                  slotEvents.map((event) => (
+                    <button
+                      className="truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary transition-colors duration-fast ease-hcb hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      key={event.id}
+                      onClick={() => onOpen(event)}
+                      type="button"
+                    >
+                      {event.rangeLabel} {event.title}
+                    </button>
+                  ))
+                ) : (
+                  <button
+                    className="min-h-9 rounded-hcbSm border border-dashed border-border text-left text-[var(--text-sm)] text-text-muted transition-colors duration-fast ease-hcb hover:bg-surface-0 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    data-action-id="calendar.create"
+                    onClick={() => onCreate({ startsAt: hourSlotIso(day, hour), allDay: false })}
+                    type="button"
+                  >
+                    Open slot
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="min-w-0" role="gridcell">
-              <div className="truncate text-[var(--text-md)] font-medium text-text-primary">{event.title}</div>
-              <div className="truncate text-[var(--text-xs)] text-text-muted">{event.location}</div>
-            </div>
-          </button>
-        ))}
-        {source.calendarDayView.events.length === 0 ? (
-          <button
-            className="min-h-24 rounded-hcbMd border border-dashed border-border bg-bg-tertiary text-[var(--text-sm)] text-text-muted hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            data-action-id="calendar.create"
-            onClick={() => onCreate({ allDay: true })}
-            type="button"
-          >
-            New all-day event
-          </button>
-        ) : null}
+          );
+        })}
       </div>
     </Panel>
   );

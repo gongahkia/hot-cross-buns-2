@@ -198,7 +198,9 @@ Remaining Mac v1 blockers:
 - MCP task, event, and note tools call the same main-side domain services as UI IPC handlers, including the same validation and mutation queue paths for synced task/event resources.
 - Local search is SQLite-backed and capped. It indexes current task title/details/list names, event title/location/description/calendar names, and note title/body; it applies the structured local DSL in main-process SQLite and never calls Google per keystroke.
 - Today's local timeline is grouped into all-day, morning, afternoon, evening, and unscheduled sections using cached events, scheduled task blocks, and existing task rows. Timed tasks are represented as linked Google Calendar blocks plus local metadata; task due dates remain date-only. Today also shows next-up context, linked-block conflict warnings, and earlier/later movement controls.
+- Scheduled task blocks prevent duplicate active blocks for the same task, can surface orphaned links when the backing calendar event disappears, and can repair an orphan by recreating its linked calendar event.
+- Today block controls support duration changes in addition to earlier/later movement.
 - Tasks support per-row multi-select plus bulk complete/reopen, move, and delete actions over the active filtered task set.
-- Calendar exposes static text availability export in the renderer by calling the same typed local calendar service used by MCP and tests.
+- Calendar exposes static text availability export in the renderer by calling the same typed local calendar service used by MCP and tests. Day view is an hourly planning grid where empty slots create timed event drafts directly.
 - Notes support local markdown-style preview, `[[note title]]` outgoing links, and backlinks over loaded local note bodies.
 - Calendar agenda, task, note, and search surfaces remain virtualized or range/pagination-shaped to preserve renderer and IPC budgets.
