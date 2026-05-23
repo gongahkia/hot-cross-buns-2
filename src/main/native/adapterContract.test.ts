@@ -24,6 +24,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     mcpEnabled: false,
     mcpPermissionMode: "confirm-writes",
     mcpPort: 0,
+    defaultTimeZone: "UTC",
     diagnosticsIncludePerformance: true,
     savedSearchViews: [],
     ...overrides

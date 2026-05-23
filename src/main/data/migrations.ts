@@ -9,7 +9,19 @@ export interface MigrationResult {
 interface Migration {
   version: number;
   name: string;
-  sql: string;
+  sql?: string;
+  operations?: (
+    connection: SqliteConnection,
+    context: LocalMigrationContext
+  ) => SqliteWriteOperation[];
+}
+
+interface LocalMigrationContext {
+  defaultTimeZone: string;
+}
+
+export interface LocalMigrationOptions {
+  defaultTimeZone?: string | null;
 }
 
 const MIGRATIONS: readonly Migration[] = [
@@ -136,11 +148,54 @@ CREATE INDEX IF NOT EXISTS idx_local_note_properties_kv
 CREATE INDEX IF NOT EXISTS idx_local_note_properties_note
   ON local_note_properties(note_id);
 `
+  },
+  {
+    version: 4,
+    name: "calendar event local time zone",
+    operations: (connection, context) => {
+      if (!tableExists(connection, "google_calendar_events")) {
+        return [];
+      }
+
+      const columns = new Set(
+        connection
+          .query<{ name: string }>("PRAGMA table_info(google_calendar_events);")
+          .map((row) => row.name)
+      );
+      const operations: SqliteWriteOperation[] = [];
+
+      if (!columns.has("local_time_zone")) {
+        operations.push({
+          kind: "run",
+          sql: "ALTER TABLE google_calendar_events ADD COLUMN local_time_zone TEXT;"
+        });
+      }
+
+      operations.push({
+        kind: "run",
+        sql: `UPDATE google_calendar_events
+              SET local_time_zone = COALESCE(
+                NULLIF(start_time_zone, ''),
+                NULLIF(end_time_zone, ''),
+                ?
+              )
+              WHERE local_time_zone IS NULL OR TRIM(local_time_zone) = '';`,
+        params: [context.defaultTimeZone]
+      });
+
+      return operations;
+    }
   }
 ];
 
-export function runLocalDataMigrations(connection: SqliteConnection): MigrationResult {
+export function runLocalDataMigrations(
+  connection: SqliteConnection,
+  options: LocalMigrationOptions = {}
+): MigrationResult {
   const startedAt = Date.now();
+  const context: LocalMigrationContext = {
+    defaultTimeZone: normalizeTimeZone(options.defaultTimeZone)
+  };
 
   connection.exec(`
 CREATE TABLE IF NOT EXISTS local_schema_migrations (
@@ -163,10 +218,15 @@ CREATE TABLE IF NOT EXISTS local_schema_migrations (
 
     const now = new Date().toISOString();
     const operations: SqliteWriteOperation[] = [
-      {
-        kind: "exec",
-        sql: migration.sql
-      },
+      ...(migration.sql === undefined
+        ? []
+        : [
+            {
+              kind: "exec" as const,
+              sql: migration.sql
+            }
+          ]),
+      ...(migration.operations?.(connection, context) ?? []),
       {
         kind: "run",
         sql: `INSERT INTO local_schema_migrations (version, name, applied_at)
@@ -184,4 +244,24 @@ CREATE TABLE IF NOT EXISTS local_schema_migrations (
     appliedVersions,
     durationMs: Math.max(0, Date.now() - startedAt)
   };
+}
+
+function tableExists(connection: SqliteConnection, tableName: string): boolean {
+  return connection.get<{ name: string }>(
+    `SELECT name
+     FROM sqlite_master
+     WHERE type = 'table' AND name = ?
+     LIMIT 1;`,
+    [tableName]
+  ) !== undefined;
+}
+
+function normalizeTimeZone(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+
+  if (trimmed) {
+    return trimmed;
+  }
+
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }

@@ -13,6 +13,11 @@ function columnsOf(connection: ReturnType<typeof createTemporarySqliteConnection
   return new Map(rows.map((row) => [row.name, row]));
 }
 
+function eventColumnsOf(connection: ReturnType<typeof createTemporarySqliteConnection>["connection"]): Map<string, ColumnInfo> {
+  const rows = connection.query<ColumnInfo>("PRAGMA table_info(google_calendar_events);");
+  return new Map(rows.map((row) => [row.name, row]));
+}
+
 describe("google_tasks planning columns", () => {
   it("creates planning columns on a fresh database", () => {
     const temporary = createTemporarySqliteConnection("hcb2-task-planning-fresh-");
@@ -122,6 +127,117 @@ describe("google_tasks planning columns", () => {
       expect(row?.local_locked_schedule).toBe(1);
       expect(row?.local_snooze_until).toBe("2026-05-24T09:00:00.000Z");
       expect(JSON.parse(row?.local_tags_json ?? "[]")).toEqual(["focus", "review"]);
+    } finally {
+      temporary.cleanup();
+    }
+  });
+});
+
+describe("google_calendar_events local timezone column", () => {
+  it("creates local timezone on a fresh database", () => {
+    const temporary = createTemporarySqliteConnection("hcb2-event-timezone-fresh-");
+    try {
+      new GoogleSyncRepository(temporary.connection, { defaultTimeZone: "Asia/Singapore" });
+      const columns = eventColumnsOf(temporary.connection);
+      expect(columns.has("local_time_zone")).toBe(true);
+    } finally {
+      temporary.cleanup();
+    }
+  });
+
+  it("adds local timezone on a pre-existing schema without it", () => {
+    const temporary = createTemporarySqliteConnection("hcb2-event-timezone-alter-");
+    try {
+      temporary.connection.exec(`
+        CREATE TABLE google_calendar_events (
+          id TEXT PRIMARY KEY,
+          account_id TEXT NOT NULL,
+          calendar_id TEXT NOT NULL,
+          google_id TEXT NOT NULL,
+          recurring_event_id TEXT,
+          original_start_at TEXT,
+          status TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          description TEXT,
+          location TEXT,
+          start_at TEXT NOT NULL,
+          start_time_zone TEXT,
+          end_at TEXT NOT NULL,
+          end_time_zone TEXT,
+          is_all_day INTEGER NOT NULL DEFAULT 0,
+          recurrence_rule TEXT,
+          transparency TEXT,
+          visibility TEXT,
+          attendee_emails_json TEXT NOT NULL DEFAULT '[]',
+          reminder_minutes_json TEXT NOT NULL DEFAULT '[]',
+          etag TEXT,
+          sequence INTEGER,
+          google_updated_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          deleted_at TEXT,
+          UNIQUE(account_id, calendar_id, google_id)
+        );
+      `);
+
+      new GoogleSyncRepository(temporary.connection, { defaultTimeZone: "Asia/Singapore" });
+      const columns = eventColumnsOf(temporary.connection);
+
+      expect(columns.has("local_time_zone")).toBe(true);
+    } finally {
+      temporary.cleanup();
+    }
+  });
+
+  it("round-trips local timezone through mirror writes", () => {
+    const temporary = createTemporarySqliteConnection("hcb2-event-timezone-roundtrip-");
+    try {
+      const repository = new GoogleSyncRepository(temporary.connection, { defaultTimeZone: "UTC" });
+      repository.writeCalendarLists(
+        "acct-1",
+        [
+          {
+            id: "product",
+            summary: "Product",
+            timeZone: "Asia/Singapore",
+            isSelected: true,
+            isHidden: false,
+            isPrimary: true,
+            updatedAt: "2026-05-23T00:00:00.000Z"
+          }
+        ],
+        "2026-05-23T00:00:00.000Z"
+      );
+      repository.writeCalendarEvents(
+        "acct-1",
+        "product",
+        [
+          {
+            id: "event-1",
+            calendarId: "product",
+            status: "confirmed",
+            summary: "Event",
+            startAt: "2026-05-23T01:00:00.000Z",
+            startTimeZone: "Asia/Singapore",
+            endAt: "2026-05-23T02:00:00.000Z",
+            endTimeZone: "Asia/Singapore",
+            isAllDay: false,
+            updatedAt: "2026-05-23T00:00:00.000Z"
+          }
+        ],
+        {
+          fullSync: true,
+          now: "2026-05-23T00:00:00.000Z",
+          defaultTimeZone: "UTC"
+        }
+      );
+
+      const row = temporary.connection.get<{ localTimeZone: string | null }>(
+        "SELECT local_time_zone AS localTimeZone FROM google_calendar_events WHERE google_id = ?;",
+        ["event-1"]
+      );
+
+      expect(row?.localTimeZone).toBe("Asia/Singapore");
     } finally {
       temporary.cleanup();
     }

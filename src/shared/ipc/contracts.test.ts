@@ -222,6 +222,7 @@ describe("shared IPC contracts", () => {
         mcpEnabled: false,
         mcpPermissionMode: "confirm-writes",
         mcpPort: 0,
+        defaultTimeZone: "UTC",
         diagnosticsIncludePerformance: true,
         savedSearchViews: []
       }).setupCompletedAt

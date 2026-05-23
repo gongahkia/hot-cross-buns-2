@@ -365,7 +365,8 @@ export class GoogleReadSyncService {
 
       this.repository.writeCalendarEvents(options.account.accountId, calendar.id, page.events, {
         fullSync: didFullSync,
-        now: writeNow
+        now: writeNow,
+        defaultTimeZone: calendar.timeZone ?? null
       });
 
       const nextSyncToken = page.nextSyncToken ?? checkpoint;

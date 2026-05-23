@@ -140,6 +140,7 @@ interface CalendarEventRow extends Record<string, unknown> {
   notes: string | null;
   guestEmailsJson: string | null;
   reminderMinutesJson: string | null;
+  timeZone: string | null;
   recurringEventId: string | null;
   originalStartAt: string | null;
 }
@@ -192,6 +193,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   mcpEnabled: false,
   mcpPermissionMode: "confirm-writes",
   mcpPort: 0,
+  defaultTimeZone: systemTimeZone(),
   diagnosticsIncludePerformance: true,
   savedSearchViews: []
 };
@@ -870,6 +872,7 @@ export class LocalPlannerRepository {
            events.description AS notes,
            events.attendee_emails_json AS guestEmailsJson,
            events.reminder_minutes_json AS reminderMinutesJson,
+           events.local_time_zone AS timeZone,
            instances.recurring_event_id AS recurringEventId,
            instances.original_start_at AS originalStartAt
          FROM google_calendar_event_instances instances
@@ -930,6 +933,7 @@ export class LocalPlannerRepository {
           id,
           accountId: calendar.accountId,
           googleId,
+          timeZone: calendar.timeZone ?? systemTimeZone(),
           now,
           ...normalized,
           calendarId: calendar.id
@@ -987,6 +991,7 @@ export class LocalPlannerRepository {
       this.connection.executeTransaction([
         eventUpdateOperation({
           id: existing.eventId,
+          timeZone: existing.timeZone ?? targetCalendar.timeZone ?? systemTimeZone(),
           now,
           ...normalized,
           calendarId: targetCalendar.id
@@ -1179,6 +1184,7 @@ export class LocalPlannerRepository {
           id: eventId,
           accountId: calendar.accountId,
           googleId,
+          timeZone: calendar.timeZone ?? systemTimeZone(),
           now,
           ...normalized,
           calendarId: calendar.id
@@ -1251,6 +1257,7 @@ export class LocalPlannerRepository {
             id: eventId,
             accountId: targetCalendar.accountId,
             googleId,
+            timeZone: targetCalendar.timeZone ?? systemTimeZone(),
             now,
             ...normalized,
             calendarId: targetCalendar.id
@@ -1318,6 +1325,7 @@ export class LocalPlannerRepository {
       this.connection.executeTransaction([
         eventUpdateOperation({
           id: event.eventId,
+          timeZone: event.timeZone ?? targetCalendar.timeZone ?? systemTimeZone(),
           now,
           ...normalized,
           calendarId: targetCalendar.id
@@ -1560,6 +1568,7 @@ export class LocalPlannerRepository {
            events.description AS notes,
            events.attendee_emails_json AS guestEmailsJson,
            events.reminder_minutes_json AS reminderMinutesJson,
+           events.local_time_zone AS timeZone,
            COALESCE(instances.recurring_event_id, events.recurring_event_id) AS recurringEventId,
            instances.original_start_at AS originalStartAt
          FROM google_calendar_events events
@@ -2493,6 +2502,11 @@ export class LocalSettingsRepository {
         DEFAULT_SETTINGS.mcpPermissionMode
       ),
       mcpPort: this.readSetting("mcp", "port", DEFAULT_SETTINGS.mcpPort),
+      defaultTimeZone: this.readSetting(
+        "calendar",
+        "defaultTimeZone",
+        DEFAULT_SETTINGS.defaultTimeZone
+      ),
       diagnosticsIncludePerformance: this.readSetting(
         "diagnostics",
         "includePerformance",
@@ -2571,6 +2585,10 @@ export class LocalSettingsRepository {
 
     if (request.mcpPort !== undefined) {
       this.writeSetting("mcp", "port", request.mcpPort, now);
+    }
+
+    if (request.defaultTimeZone !== undefined) {
+      this.writeSetting("calendar", "defaultTimeZone", request.defaultTimeZone, now);
     }
 
     if (request.diagnosticsIncludePerformance !== undefined) {
@@ -2718,15 +2736,17 @@ function eventInsertOperation(input: {
   accountId: string;
   calendarId: string;
   googleId: string;
+  timeZone: string;
   now: string;
 } & NormalizedCalendarWrite) {
   return {
     kind: "run" as const,
     sql: `INSERT INTO google_calendar_events (
       id, account_id, calendar_id, google_id, status, summary, description, location,
-      start_at, end_at, is_all_day, attendee_emails_json, reminder_minutes_json,
+      start_at, start_time_zone, end_at, end_time_zone, is_all_day, local_time_zone,
+      attendee_emails_json, reminder_minutes_json,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
     params: [
       input.id,
       input.accountId,
@@ -2736,8 +2756,11 @@ function eventInsertOperation(input: {
       nullIfEmpty(input.notes),
       nullIfEmpty(input.location),
       input.startsAt,
+      input.timeZone,
       input.endsAt,
+      input.timeZone,
       boolInt(input.allDay),
+      input.timeZone,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),
       input.now,
@@ -2749,6 +2772,7 @@ function eventInsertOperation(input: {
 function eventUpdateOperation(input: {
   id: string;
   calendarId: string;
+  timeZone: string;
   now: string;
 } & NormalizedCalendarWrite) {
   return {
@@ -2759,8 +2783,11 @@ function eventUpdateOperation(input: {
               description = ?,
               location = ?,
               start_at = ?,
+              start_time_zone = ?,
               end_at = ?,
+              end_time_zone = ?,
               is_all_day = ?,
+              local_time_zone = ?,
               attendee_emails_json = ?,
               reminder_minutes_json = ?,
               updated_at = ?
@@ -2771,8 +2798,11 @@ function eventUpdateOperation(input: {
       nullIfEmpty(input.notes),
       nullIfEmpty(input.location),
       input.startsAt,
+      input.timeZone,
       input.endsAt,
+      input.timeZone,
       boolInt(input.allDay),
+      input.timeZone,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),
       input.now,
@@ -3121,6 +3151,7 @@ function calendarEventSummary(row: CalendarEventRow): CalendarEventSummary {
     notes: row.notes ?? "",
     guestEmails: parseStringArray(row.guestEmailsJson),
     reminderMinutes: parseNumberArray(row.reminderMinutesJson),
+    timeZone: row.timeZone,
     recurringEventId: row.recurringEventId,
     originalStartAt: row.originalStartAt
   };
@@ -3368,6 +3399,10 @@ function dateOnlyToIso(value: string | null | undefined): string | null {
 
 function isoToDateOnly(value: string | null | undefined): string | null {
   return value ? value.slice(0, 10) : null;
+}
+
+function systemTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 function validationFailure(message: string): HcbPublicError {

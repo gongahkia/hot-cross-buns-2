@@ -30,6 +30,11 @@ export interface TaskWriteOptions {
 export interface CalendarEventWriteOptions {
   fullSync: boolean;
   now: string;
+  defaultTimeZone?: string | null;
+}
+
+export interface GoogleSyncRepositoryOptions {
+  defaultTimeZone?: string | null;
 }
 
 export interface GoogleCacheDiagnostics {
@@ -142,9 +147,11 @@ export interface CalendarEventMutationTarget extends Record<string, unknown> {
 
 export class GoogleSyncRepository {
   private readonly connection: SqliteConnection;
+  private readonly defaultTimeZone: string;
 
-  constructor(connection: SqliteConnection) {
+  constructor(connection: SqliteConnection, options: GoogleSyncRepositoryOptions = {}) {
     this.connection = connection;
+    this.defaultTimeZone = normalizeTimeZone(options.defaultTimeZone);
     this.ensureSchema();
   }
 
@@ -192,11 +199,20 @@ export class GoogleSyncRepository {
     const addColumn = (name: string, definition: string) => {
       if (!existingColumns.has(name)) {
         this.connection.exec(`ALTER TABLE google_calendar_events ADD COLUMN ${definition};`);
+        existingColumns.add(name);
       }
     };
 
     addColumn("attendee_emails_json", "attendee_emails_json TEXT NOT NULL DEFAULT '[]'");
     addColumn("reminder_minutes_json", "reminder_minutes_json TEXT NOT NULL DEFAULT '[]'");
+    addColumn("local_time_zone", "local_time_zone TEXT");
+
+    this.connection.run(
+      `UPDATE google_calendar_events
+       SET local_time_zone = COALESCE(NULLIF(start_time_zone, ''), NULLIF(end_time_zone, ''), ?)
+       WHERE local_time_zone IS NULL OR TRIM(local_time_zone) = '';`,
+      [this.defaultTimeZone]
+    );
   }
 
   private ensureSearchIndexes(): void {
@@ -585,6 +601,7 @@ export class GoogleSyncRepository {
 
     for (const event of events) {
       const localEventId = eventLocalId(accountId, calendarGoogleId, event.id);
+      const localTimeZone = eventTimeZone(event, options.defaultTimeZone ?? this.defaultTimeZone);
 
       operations.push({
         kind: "run",
@@ -592,9 +609,9 @@ export class GoogleSyncRepository {
           id, account_id, calendar_id, google_id, recurring_event_id, original_start_at,
           status, summary, description, location, start_at, start_time_zone, end_at,
           end_time_zone, is_all_day, recurrence_rule, transparency, visibility, etag,
-          sequence, attendee_emails_json, reminder_minutes_json, google_updated_at,
+          sequence, local_time_zone, attendee_emails_json, reminder_minutes_json, google_updated_at,
           created_at, updated_at, deleted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(account_id, calendar_id, google_id) DO UPDATE SET
           recurring_event_id = excluded.recurring_event_id,
           original_start_at = excluded.original_start_at,
@@ -612,6 +629,7 @@ export class GoogleSyncRepository {
           visibility = excluded.visibility,
           etag = excluded.etag,
           sequence = excluded.sequence,
+          local_time_zone = excluded.local_time_zone,
           attendee_emails_json = excluded.attendee_emails_json,
           reminder_minutes_json = excluded.reminder_minutes_json,
           google_updated_at = excluded.google_updated_at,
@@ -638,6 +656,7 @@ export class GoogleSyncRepository {
           event.visibility ?? null,
           event.etag ?? null,
           event.sequence ?? null,
+          localTimeZone,
           JSON.stringify(normalizeGuestEmails(event.attendeeEmails)),
           JSON.stringify(normalizeReminderMinutes(event.reminderMinutes)),
           event.updatedAt ?? null,
@@ -1053,6 +1072,7 @@ export class GoogleSyncRepository {
                   visibility = ?,
                   etag = ?,
                   sequence = ?,
+                  local_time_zone = ?,
                   attendee_emails_json = ?,
                   reminder_minutes_json = ?,
                   google_updated_at = ?,
@@ -1078,6 +1098,7 @@ export class GoogleSyncRepository {
           input.remote.visibility ?? null,
           input.remote.etag ?? null,
           input.remote.sequence ?? null,
+          eventTimeZone(input.remote, this.defaultTimeZone),
           JSON.stringify(normalizeGuestEmails(input.remote.attendeeEmails)),
           JSON.stringify(normalizeReminderMinutes(input.remote.reminderMinutes)),
           input.remote.updatedAt ?? null,
@@ -1480,6 +1501,20 @@ function pendingMutationStatus(value: string): PendingGoogleMutationStatus {
   }
 
   return "pending";
+}
+
+function eventTimeZone(event: GoogleCalendarEventMirror, fallback: string | null | undefined): string {
+  return normalizeTimeZone(event.startTimeZone ?? event.endTimeZone ?? fallback);
+}
+
+function normalizeTimeZone(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+
+  if (trimmed) {
+    return trimmed;
+  }
+
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 function parseJsonValue(value: string): JsonValue {
@@ -1969,6 +2004,7 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
   recurrence_rule TEXT,
   transparency TEXT,
   visibility TEXT,
+  local_time_zone TEXT,
   attendee_emails_json TEXT NOT NULL DEFAULT '[]',
   reminder_minutes_json TEXT NOT NULL DEFAULT '[]',
   etag TEXT,

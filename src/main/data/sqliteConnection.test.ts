@@ -119,8 +119,38 @@ describe("SQLite connection foundation", () => {
         ["native"]
       );
 
-      expect(result.appliedVersions).toEqual([1, 2, 3]);
+      expect(result.appliedVersions).toEqual([1, 2, 3, 4]);
       expect(rows).toEqual([{ title: "SQLite native adapter" }]);
+    } finally {
+      temporary.cleanup();
+    }
+  });
+
+  it("backfills calendar event local timezone during local migrations", () => {
+    const temporary = createTemporarySqliteConnection("hcb2-sqlite-event-timezone-migration-");
+
+    try {
+      temporary.connection.exec(`
+        CREATE TABLE google_calendar_events (
+          id TEXT PRIMARY KEY,
+          start_time_zone TEXT,
+          end_time_zone TEXT
+        );
+
+        INSERT INTO google_calendar_events (id, start_time_zone, end_time_zone)
+        VALUES ('event-1', NULL, NULL);
+      `);
+
+      const result = runLocalDataMigrations(temporary.connection, {
+        defaultTimeZone: "Asia/Singapore"
+      });
+      const row = temporary.connection.get<{ localTimeZone: string | null }>(
+        "SELECT local_time_zone AS localTimeZone FROM google_calendar_events WHERE id = ?;",
+        ["event-1"]
+      );
+
+      expect(result.appliedVersions).toEqual([1, 2, 3, 4]);
+      expect(row?.localTimeZone).toBe("Asia/Singapore");
     } finally {
       temporary.cleanup();
     }

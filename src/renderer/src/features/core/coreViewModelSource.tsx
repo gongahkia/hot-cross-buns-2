@@ -189,6 +189,7 @@ const emptySettings: SettingsSnapshot = {
   mcpEnabled: false,
   mcpPermissionMode: "confirm-writes",
   mcpPort: 0,
+  defaultTimeZone: "UTC",
   diagnosticsIncludePerformance: true,
   savedSearchViews: []
 };
@@ -1259,8 +1260,16 @@ function buildCoreViewModelSource(
   const calendarTitleById = Object.fromEntries(
     snapshot.calendars.map((calendar) => [calendar.id, calendar.title])
   );
+  const calendarTimeZoneById = Object.fromEntries(
+    snapshot.calendars.map((calendar) => [calendar.id, calendar.timeZone])
+  );
   const events = snapshot.events.map((event) =>
-    calendarEventViewModel(event, calendarTitleById[event.calendarId])
+    calendarEventViewModel(
+      event,
+      calendarTitleById[event.calendarId],
+      calendarTimeZoneById[event.calendarId] ?? null,
+      snapshot.settings.defaultTimeZone
+    )
   );
   const eventsById = Object.fromEntries(events.map((event) => [event.id, event]));
   const scheduledEventIds = new Set(snapshot.scheduledTaskBlocks.map((block) => block.calendarEventId));
@@ -1401,7 +1410,7 @@ function buildCoreViewModelSource(
         { id: "sync", label: "Sync", value: syncLabel(snapshot.syncStatus) }
       ],
       focusTasks: unscheduledOpenTasks.slice(0, 6),
-      currentTimeLabel: timeLabel(now.toISOString()),
+      currentTimeLabel: timeLabel(now.toISOString(), snapshot.settings.defaultTimeZone),
       conflictCount,
       nextUp,
       timelineRows: todayTimelineRows
@@ -1575,7 +1584,8 @@ function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionViewModel[
       detail: "Selected task lists and calendars",
       rows: [
         { id: "task-lists", label: "Selected task lists", value: String(selectedTaskListCount) },
-        { id: "calendars", label: "Selected calendars", value: String(selectedCalendarCount) }
+        { id: "calendars", label: "Selected calendars", value: String(selectedCalendarCount) },
+        { id: "default-time-zone", label: "Default timezone", value: snapshot.settings.defaultTimeZone }
       ]
     },
     {
@@ -1829,18 +1839,25 @@ function uniqueTasks(tasks: TaskSummary[]): TaskSummary[] {
 
 function calendarEventViewModel(
   event: CalendarEventSummary,
-  calendarTitle: string | undefined
+  calendarTitle: string | undefined,
+  calendarTimeZone: string | null | undefined,
+  defaultTimeZone: string
 ): CalendarEventViewModel {
+  const timeZone = event.timeZone?.trim() || calendarTimeZone?.trim() || defaultTimeZone || "UTC";
+
   return {
     id: event.id,
     eventId: event.eventId ?? event.id,
     calendarId: event.calendarId,
     title: event.title,
     calendar: calendarTitle ?? event.calendarId,
-    timeLabel: event.allDay ? "All day" : timeLabel(event.startsAt),
-    rangeLabel: event.allDay ? allDayRangeLabel(event.startsAt, event.endsAt) : `${timeLabel(event.startsAt)}-${timeLabel(event.endsAt)}`,
+    timeLabel: event.allDay ? "All day" : timeLabel(event.startsAt, timeZone),
+    rangeLabel: event.allDay
+      ? allDayRangeLabel(event.startsAt, event.endsAt)
+      : `${timeLabel(event.startsAt, timeZone)}-${timeLabel(event.endsAt, timeZone)}`,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
+    timeZone,
     allDay: event.allDay,
     location: event.location?.trim() || (event.allDay ? "All day" : "Scheduled"),
     notes: event.notes?.trim() || "Calendar cache",
@@ -2207,10 +2224,28 @@ function dueLabel(value: string | null | undefined): string {
   return due.toISOString().slice(0, 10);
 }
 
-function timeLabel(value: string): string {
+function timeLabel(value: string, timeZone = "UTC"): string {
   const date = new Date(value);
 
-  return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+  if (!Number.isFinite(date.getTime())) {
+    return "Unknown";
+  }
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      timeZone
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      timeZone: "UTC"
+    }).format(date);
+  }
 }
 
 function allDayRangeLabel(startsAt: string, endsAt: string): string {

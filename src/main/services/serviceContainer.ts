@@ -94,11 +94,12 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     appSupportDirectory,
     filename: options.databaseFilename
   });
-  const migrations = runLocalDataMigrations(connection);
+  const defaultTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const migrations = runLocalDataMigrations(connection, { defaultTimeZone });
   const performanceRepository = new LocalPerformanceRepository(connection);
   const plannerRepository = new LocalPlannerRepository(connection, performanceRepository);
   const settingsRepository = new LocalSettingsRepository(connection);
-  const syncRepository = new GoogleSyncRepository(connection);
+  const syncRepository = new GoogleSyncRepository(connection, { defaultTimeZone });
   const runtimeGoogleEnabled = options.enableRuntimeGoogle ?? options.nativeAdapter !== undefined;
   const secretStore = options.secretStore ?? defaultSecretStore();
   const googleCredentialAdapter = new KeychainGoogleCredentialAdapter(secretStore);

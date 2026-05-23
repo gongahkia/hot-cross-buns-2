@@ -2927,7 +2927,7 @@ function CalendarView(): JSX.Element {
               : `Visible calendars: ${visibleCalendarIdSet.size}`}
           </Badge>
           <Badge tone="neutral">
-            UTC
+            Default timezone: {source.settings.defaultTimeZone}
           </Badge>
         </div>
       </div>
@@ -2981,7 +2981,7 @@ function CalendarView(): JSX.Element {
                 </Button>
               }
               title="Calendar visibility"
-              description={`${visibleCalendarIdSet.size}/${source.calendarSources.length} shown, times shown in UTC`}
+              description={`${visibleCalendarIdSet.size}/${source.calendarSources.length} shown, empty event zones use ${source.settings.defaultTimeZone}`}
             >
               <div className="grid gap-2 p-3" role="group" aria-label="Calendar visibility">
                 {source.calendarSources.map((calendar) => (
@@ -2997,7 +2997,7 @@ function CalendarView(): JSX.Element {
                     />
                     <CalendarDays aria-hidden="true" className="text-accent" size={16} />
                     <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
-                    <Badge tone="neutral">{calendar.timeZone ?? "UTC"}</Badge>
+                    <Badge tone="neutral">{calendar.timeZone ?? source.settings.defaultTimeZone}</Badge>
                   </label>
                 ))}
                 {source.calendarSources.length === 0 ? (
@@ -4150,6 +4150,12 @@ function SettingsView(): JSX.Element {
   const diagnostics = source.diagnosticsSummary;
   const settings = source.settings;
   const googleStatus = source.googleStatus;
+  const defaultTimeZoneOptions = timeZoneOptions([
+    settings.defaultTimeZone,
+    googleStatus.account?.timeZone,
+    ...source.calendarSources.map((calendar) => calendar.timeZone),
+    ...source.calendarAgendaEvents.map((event) => event.timeZone)
+  ]);
   const [googleClientId, setGoogleClientId] = useState(googleStatus.clientId ?? "");
   const [googleClientSecret, setGoogleClientSecret] = useState("");
 
@@ -4352,6 +4358,21 @@ function SettingsView(): JSX.Element {
 
       return (
         <div className="grid grid-cols-2 gap-3 p-3">
+          <label className="col-span-2 grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Default timezone</span>
+            <select
+              aria-label="Default timezone"
+              className={settingsSelectClass}
+              onChange={(event) => updateSettings({ defaultTimeZone: event.target.value })}
+              value={settings.defaultTimeZone}
+            >
+              {defaultTimeZoneOptions.map((timeZone) => (
+                <option key={timeZone} value={timeZone}>
+                  {timeZone}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="min-w-0 rounded-hcbMd border border-border bg-bg-tertiary">
             <div className="border-b border-border px-3 py-2">
               <h3 className="truncate text-[var(--text-md)] font-semibold text-text-primary">Task lists</h3>
@@ -4937,6 +4958,25 @@ function NotificationsView(): JSX.Element {
 
 const settingsSelectClass =
   "h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+function timeZoneOptions(values: Array<string | null | undefined>): string[] {
+  const system = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const seen = new Set<string>();
+  const options: string[] = [];
+
+  for (const value of [...values, system, "UTC"]) {
+    const trimmed = value?.trim();
+
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    options.push(trimmed);
+  }
+
+  return options;
+}
 
 function recoveryPhrase(action: SettingsRecoveryActionRequest["action"]): string {
   if (action === "forceFullResync") {

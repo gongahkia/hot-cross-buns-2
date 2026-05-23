@@ -110,6 +110,7 @@ function testSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapsh
     mcpEnabled: false,
     mcpPermissionMode: "confirm-writes",
     mcpPort: 0,
+    defaultTimeZone: "UTC",
     diagnosticsIncludePerformance: true,
     savedSearchViews: [],
     ...overrides

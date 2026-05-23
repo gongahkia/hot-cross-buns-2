@@ -216,6 +216,7 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       mcpEnabled: false,
       mcpPermissionMode: "confirm-writes",
       mcpPort: 0,
+      defaultTimeZone: "UTC",
       diagnosticsIncludePerformance: true,
       savedSearchViews: []
     },
@@ -429,6 +430,7 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           updatedAt: new Date().toISOString(),
           location: request.location ?? "",
           notes: request.notes ?? "",
+          timeZone: state.settings.defaultTimeZone,
           guestEmails: request.guestEmails ?? [],
           reminderMinutes: request.reminderMinutes ?? []
         };
@@ -1300,6 +1302,7 @@ function calendarSummary(event: CalendarRecord): CalendarEventSummary {
     notes: event.notes ?? "",
     guestEmails: event.guestEmails ?? [],
     reminderMinutes: event.reminderMinutes ?? [],
+    timeZone: event.timeZone ?? null,
     recurringEventId: event.recurringEventId ?? null,
     originalStartAt: event.originalStartAt ?? null
   };
@@ -1528,6 +1531,10 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
 
   if (request.mcpPort !== undefined) {
     patch.mcpPort = request.mcpPort;
+  }
+
+  if (request.defaultTimeZone !== undefined) {
+    patch.defaultTimeZone = request.defaultTimeZone;
   }
 
   if (request.diagnosticsIncludePerformance !== undefined) {

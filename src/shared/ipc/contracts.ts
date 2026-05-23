@@ -400,6 +400,7 @@ export const calendarEventSummarySchema = z
     notes: z.string().max(20_000).optional(),
     guestEmails: z.array(guestEmailSchema).max(50).optional(),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
+    timeZone: z.string().min(1).max(120).nullable().optional(),
     recurringEventId: z.string().min(1).max(256).nullable().optional(),
     originalStartAt: isoDateTimeSchema.nullable().optional()
   })
@@ -854,6 +855,7 @@ export const settingsSnapshotSchema = z
     mcpEnabled: z.boolean(),
     mcpPermissionMode: mcpPermissionModeSchema,
     mcpPort: z.number().int().min(0).max(65535),
+    defaultTimeZone: z.string().min(1).max(120),
     diagnosticsIncludePerformance: z.boolean(),
     savedSearchViews: z.array(savedSearchViewSchema).max(20)
   })
@@ -879,6 +881,7 @@ export const settingsUpdateRequestSchema = z
     mcpEnabled: z.boolean().optional(),
     mcpPermissionMode: mcpPermissionModeSchema.optional(),
     mcpPort: z.number().int().min(0).max(65535).optional(),
+    defaultTimeZone: z.string().min(1).max(120).optional(),
     diagnosticsIncludePerformance: z.boolean().optional(),
     savedSearchViews: z.array(savedSearchViewSchema).max(20).optional()
   })

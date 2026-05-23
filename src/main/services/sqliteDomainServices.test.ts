@@ -121,7 +121,8 @@ function seedGoogleMirrors(syncRepository: GoogleSyncRepository): void {
     ],
     {
       fullSync: true,
-      now
+      now,
+      defaultTimeZone: "UTC"
     }
   );
 }
@@ -192,7 +193,8 @@ describe("SQLite-backed domain services", () => {
     expect(events.items).toEqual([
       expect.objectContaining({
         id: "acct-1:event:product:event-1",
-        title: "Planner shell standup"
+        title: "Planner shell standup",
+        timeZone: "UTC"
       })
     ]);
     expect(search.items).toEqual(
@@ -246,6 +248,7 @@ describe("SQLite-backed domain services", () => {
       mcpEnabled: true,
       mcpPermissionMode: "allow-writes",
       mcpPort: 4777,
+      defaultTimeZone: "Asia/Singapore",
       diagnosticsIncludePerformance: false
     });
     const reread = await domain.settings.get();
@@ -266,6 +269,7 @@ describe("SQLite-backed domain services", () => {
       mcpEnabled: true,
       mcpPermissionMode: "allow-writes",
       mcpPort: 4777,
+      defaultTimeZone: "Asia/Singapore",
       diagnosticsIncludePerformance: false
     });
     expect(reread).toEqual(updated);

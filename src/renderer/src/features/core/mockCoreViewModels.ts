@@ -286,10 +286,11 @@ function mockCalendarEvent({
   id,
   location,
   notes,
-  rangeLabel,
-  startsAt,
-  timeLabel,
-  title
+    rangeLabel,
+    startsAt,
+    timeZone = "UTC",
+    timeLabel,
+    title
 }: {
   allDay?: boolean;
   calendar: string;
@@ -300,6 +301,7 @@ function mockCalendarEvent({
   notes: string;
   rangeLabel: string;
   startsAt: string;
+  timeZone?: string;
   timeLabel: string;
   title: string;
 }): CalendarEventViewModel {
@@ -313,6 +315,7 @@ function mockCalendarEvent({
     rangeLabel,
     startsAt,
     endsAt,
+    timeZone,
     allDay,
     location,
     notes,

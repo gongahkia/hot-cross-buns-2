@@ -369,6 +369,7 @@ const hcbApi: HcbApi = {
         mcpEnabled: false,
         mcpPermissionMode: "confirm-writes" as const,
         mcpPort: 0,
+        defaultTimeZone: "UTC",
         diagnosticsIncludePerformance: true,
         savedSearchViews: []
       })
@@ -391,6 +392,7 @@ const hcbApi: HcbApi = {
         mcpEnabled: request.mcpEnabled ?? false,
         mcpPermissionMode: request.mcpPermissionMode ?? "confirm-writes",
         mcpPort: request.mcpPort ?? 0,
+        defaultTimeZone: request.defaultTimeZone ?? "UTC",
         diagnosticsIncludePerformance: request.diagnosticsIncludePerformance ?? true,
         savedSearchViews: request.savedSearchViews ?? []
       })
