@@ -909,6 +909,7 @@ describe("App shell", () => {
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "New task" }));
     await user.type(screen.getByRole("textbox", { name: "Task title" }), "Send status recap");
     fireEvent.change(screen.getByLabelText("Task due date"), { target: { value: "2026-05-23" } });
     await user.selectOptions(screen.getByLabelText("Task priority"), "medium");
@@ -944,7 +945,7 @@ describe("App shell", () => {
     });
 
     await user.click(screen.getByRole("button", { name: /^Review calendar fixture shape / }));
-    await user.click(screen.getByRole("button", { name: "Delete selected task" }));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Delete" }));
     expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-calendar-fixtures" });
 
     await runPaletteCommand(user, "quick capture", /Quick capture/);
@@ -960,6 +961,28 @@ describe("App shell", () => {
         })
       );
     });
+  });
+
+  it("opens the task inspector from a row and blocks Escape while dirty", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Tasks");
+    await user.click(await screen.findByRole("button", { name: /^Draft inbox triage rules / }));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "task");
+    expect(inspector).toHaveAttribute("data-inspector-id", "task-inbox-rules");
+
+    const titleInput = within(inspector).getByRole("textbox", { name: "Task title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Draft inbox triage rules v2");
+    await waitFor(() => expect(within(inspector).getByText("Unsaved")).toBeInTheDocument());
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByTestId("inspector-shell")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Task title" })).toHaveValue("Draft inbox triage rules v2");
   });
 
   it("bulk selects, moves, completes, and deletes tasks through preload", async () => {
@@ -1036,6 +1059,7 @@ describe("App shell", () => {
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "New task" }));
     await user.type(screen.getByRole("textbox", { name: "Task title" }), "Retry optimistic write");
     await user.click(screen.getByRole("button", { name: "Save" }));
 

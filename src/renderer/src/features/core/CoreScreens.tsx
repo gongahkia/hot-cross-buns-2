@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, KeyboardEvent, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, DragEvent, KeyboardEvent, ReactNode, SetStateAction } from "react";
 import type {
   CalendarEventCreateRequest,
   CalendarEventUpdateRequest,
@@ -33,6 +33,7 @@ import {
   X
 } from "lucide-react";
 import { getPlannerAction, type PlannerActionId } from "../../actions/plannerActions";
+import { useInspector } from "../../components/Inspector";
 import { Badge, Button, IconButton, Input, ListRow, Panel, StatusBanner, cx } from "../../components/primitives";
 import { EmptyState, ErrorState, LoadingState, OfflineState } from "../../components/states";
 import { VirtualizedList } from "../../components/VirtualizedList";
@@ -55,6 +56,11 @@ import type {
   TaskGroupViewModel,
   TaskViewModel
 } from "./coreViewModels";
+import {
+  TaskInspectorBody,
+  taskDraftsEqual,
+  type TaskDraft
+} from "./inspectors/TaskInspectorBody";
 
 function priorityTone(priority: CorePriority): "neutral" | "accent" | "warning" | "danger" {
   if (priority === "high") {
@@ -1010,17 +1016,6 @@ export interface TaskSurfaceCommand {
   nonce: number;
 }
 
-interface TaskDraft {
-  mode: "create" | "edit";
-  id?: string;
-  title: string;
-  notes: string;
-  dueDate: string;
-  listId: string;
-  parentId: string;
-  priority: CorePriority;
-}
-
 interface QuickTaskParseResult {
   title: string;
   dueDate: string;
@@ -1080,6 +1075,20 @@ function taskUpdatePayload(draft: TaskDraft): TaskUpdateRequest {
     parentId: draft.parentId || null,
     priority: draft.priority
   };
+}
+
+function taskParentOptions(tasks: TaskViewModel[], draft: TaskDraft): TaskViewModel[] {
+  return tasks.filter(
+    (task) => task.id !== draft.id && task.parentId === null && task.status !== "deleted"
+  );
+}
+
+function canSaveTaskDraft(draft: TaskDraft, mutationPending: boolean): boolean {
+  return draft.title.trim().length > 0 && draft.listId.length > 0 && !mutationPending;
+}
+
+function taskInspectorTitle(draft: TaskDraft): string {
+  return draft.mode === "edit" ? draft.title || "Task" : "New task";
 }
 
 function dateOnlyFromLocalDate(date: Date): string {
@@ -1177,17 +1186,36 @@ function parseQuickTaskInput(
 
 function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.Element {
   const source = useCoreViewModelSource();
+  const {
+    close: closeInspector,
+    current: currentInspector,
+    open: openInspector,
+    update: updateInspector
+  } = useInspector();
   const [activeFilterId, setActiveFilterId] = useState<TaskFilterId>("open");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<TaskDraft>(() => newTaskDraft(source));
+  const [draft, setDraftState] = useState<TaskDraft>(() => newTaskDraft(source));
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [quickCaptureInput, setQuickCaptureInput] = useState("");
   const [newListTitle, setNewListTitle] = useState("");
   const [listTitleDrafts, setListTitleDrafts] = useState<Record<string, string>>({});
   const [bulkSelectedTaskIds, setBulkSelectedTaskIds] = useState<string[]>([]);
   const [bulkMoveListId, setBulkMoveListId] = useState("");
+  const taskDraftRef = useRef<TaskDraft>(draft);
+  const taskDraftBaselineRef = useRef<TaskDraft>(draft);
+  const taskInspectorDirtyRef = useRef(false);
+  const taskInspectorInstanceRef = useRef(0);
   const handledCommandNonce = useRef<number | null>(null);
   const quickCaptureOpenStartedAt = useRef<number | null>(null);
+  const setDraft = useCallback<Dispatch<SetStateAction<TaskDraft>>>((next) => {
+    setDraftState((current) => {
+      const resolved =
+        typeof next === "function" ? (next as (value: TaskDraft) => TaskDraft)(current) : next;
+      taskDraftRef.current = resolved;
+      taskInspectorDirtyRef.current = !taskDraftsEqual(resolved, taskDraftBaselineRef.current);
+      return resolved;
+    });
+  }, []);
   const activeFilter = source.getTaskFilterViewModel(activeFilterId);
   const selectedTask = selectedTaskId ? source.getTaskById(selectedTaskId) : null;
   const taskIdsInWindow = new Set(source.largeTaskWindow.map((task) => task.id));
@@ -1201,11 +1229,12 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
       ? "Reopen selected"
       : "Complete selected";
   const bulkMoveTargetListId = bulkMoveListId || defaultTaskListId(source);
-  const parentOptions = source.largeTaskWindow.filter(
-    (task) => task.id !== draft.id && task.parentId === null && task.status !== "deleted"
+  const parentOptions = useMemo(
+    () => taskParentOptions(source.largeTaskWindow, draft),
+    [draft.id, source.largeTaskWindow]
   );
   const parsedQuickTask = parseQuickTaskInput(quickCaptureInput, source.taskLists);
-  const canSaveTask = draft.title.trim().length > 0 && draft.listId.length > 0 && !source.taskMutationPending;
+  const canSaveTask = canSaveTaskDraft(draft, source.taskMutationPending);
   const canCaptureTask =
     parsedQuickTask.title.length > 0 && parsedQuickTask.listId.length > 0 && !source.taskMutationPending;
 
@@ -1251,9 +1280,7 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
       return;
     }
 
-    setSelectedTaskId(null);
-    setDraft(newTaskDraft(source));
-    setQuickCaptureOpen(false);
+    openNewTask();
   }, [command, source]);
 
   useEffect(() => {
@@ -1267,6 +1294,30 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     });
   }, [quickCaptureOpen]);
 
+  useEffect(() => {
+    if (currentInspector?.kind !== "task") {
+      return;
+    }
+
+    const dirty = !taskDraftsEqual(draft, taskDraftBaselineRef.current);
+    taskInspectorDirtyRef.current = dirty;
+    updateInspector({
+      actions: taskInspectorActions(draft),
+      body: taskInspectorBody(draft),
+      dirty,
+      title: taskInspectorTitle(draft)
+    });
+  }, [
+    canSaveTask,
+    currentInspector?.kind,
+    draft,
+    parentOptions,
+    selectedTask?.id,
+    source.taskLists,
+    source.taskMutationPending,
+    updateInspector
+  ]);
+
   if (
     (source.dataState === "loading" ||
       source.dataState === "offline" ||
@@ -1276,30 +1327,114 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     return <CacheStatePanel title="Tasks" />;
   }
 
+  function canReplaceTaskInspector(): boolean {
+    return currentInspector?.kind !== "task" || !taskInspectorDirtyRef.current;
+  }
+
+  function taskInspectorBody(nextDraft: TaskDraft): ReactNode {
+    return (
+      <TaskInspectorBody
+        canSaveTask={canSaveTaskDraft(nextDraft, source.taskMutationPending)}
+        draft={nextDraft}
+        key={taskInspectorInstanceRef.current}
+        onAddSubtask={addSubtaskDraft}
+        onDelete={() => nextDraft.id ? void deleteTask(nextDraft.id) : undefined}
+        onSave={saveTask}
+        parentOptions={taskParentOptions(source.largeTaskWindow, nextDraft)}
+        setDraft={setDraft}
+        source={source}
+      />
+    );
+  }
+
+  function taskInspectorActions(nextDraft: TaskDraft): ReactNode {
+    return (
+      <>
+        {nextDraft.mode === "edit" ? (
+          <Button
+            data-action-id="task.deleteSelected"
+            onClick={() => nextDraft.id ? void deleteTask(nextDraft.id) : undefined}
+            size="sm"
+            variant="danger"
+          >
+            <Trash2 aria-hidden="true" size={14} />
+            Delete
+          </Button>
+        ) : null}
+        <Button onClick={() => void cancelTaskInspector()} size="sm" variant="ghost">
+          <X aria-hidden="true" size={14} />
+          Cancel
+        </Button>
+        <Button
+          disabled={!canSaveTaskDraft(nextDraft, source.taskMutationPending)}
+          onClick={() => void saveTask()}
+          size="sm"
+          variant="primary"
+        >
+          <Save aria-hidden="true" size={14} />
+          Save
+        </Button>
+      </>
+    );
+  }
+
+  function openTaskInspector(nextDraft: TaskDraft): void {
+    taskInspectorInstanceRef.current += 1;
+    taskDraftBaselineRef.current = nextDraft;
+    taskDraftRef.current = nextDraft;
+    taskInspectorDirtyRef.current = false;
+    setDraft(nextDraft);
+    openInspector({
+      actions: taskInspectorActions(nextDraft),
+      body: taskInspectorBody(nextDraft),
+      dirty: false,
+      id: nextDraft.id ?? "new",
+      kind: "task",
+      onConfirmClose: () => !taskInspectorDirtyRef.current,
+      title: taskInspectorTitle(nextDraft)
+    });
+  }
+
   function openNewTask(): void {
-    setSelectedTaskId(null);
-    setDraft(newTaskDraft(source));
-    setActiveFilterId("open");
-  }
-
-  function selectTask(taskId: string): void {
-    const task = source.getTaskById(taskId);
-    setSelectedTaskId(taskId);
-    setDraft(editTaskDraft(task));
-  }
-
-  async function saveTask(): Promise<void> {
-    if (!canSaveTask) {
+    if (!canReplaceTaskInspector()) {
       return;
     }
 
-    const saved = draft.mode === "edit"
-      ? await source.updateTask(taskUpdatePayload(draft))
-      : await source.createTask(taskCreatePayload(draft));
+    setSelectedTaskId(null);
+    openTaskInspector(newTaskDraft(source));
+    setActiveFilterId("open");
+    setQuickCaptureOpen(false);
+  }
+
+  function selectTask(taskId: string): void {
+    if (!canReplaceTaskInspector()) {
+      return;
+    }
+
+    const task = source.getTaskById(taskId);
+    setSelectedTaskId(taskId);
+    openTaskInspector(editTaskDraft(task));
+  }
+
+  async function saveTask(): Promise<void> {
+    const currentDraft = taskDraftRef.current;
+
+    if (!canSaveTaskDraft(currentDraft, source.taskMutationPending)) {
+      return;
+    }
+
+    const saved = currentDraft.mode === "edit"
+      ? await source.updateTask(taskUpdatePayload(currentDraft))
+      : await source.createTask(taskCreatePayload(currentDraft));
 
     if (saved) {
+      const nextDraft = newTaskDraft(source, { listId: currentDraft.listId });
+      taskDraftBaselineRef.current = nextDraft;
+      taskDraftRef.current = nextDraft;
+      taskInspectorDirtyRef.current = false;
       setSelectedTaskId(null);
-      setDraft(newTaskDraft(source, { listId: draft.listId }));
+      setDraft(nextDraft);
+      await closeInspector();
     }
   }
 
@@ -1339,9 +1474,24 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     const deleted = await source.deleteTask(taskId);
 
     if (deleted && selectedTaskId === taskId) {
+      const nextDraft = newTaskDraft(source);
+      taskDraftBaselineRef.current = nextDraft;
+      taskDraftRef.current = nextDraft;
+      taskInspectorDirtyRef.current = false;
       setSelectedTaskId(null);
-      setDraft(newTaskDraft(source));
+      setDraft(nextDraft);
+      await closeInspector();
     }
+  }
+
+  async function cancelTaskInspector(): Promise<void> {
+    const nextDraft = newTaskDraft(source, { listId: taskDraftRef.current.listId });
+    taskDraftBaselineRef.current = nextDraft;
+    taskDraftRef.current = nextDraft;
+    taskInspectorDirtyRef.current = false;
+    setSelectedTaskId(null);
+    setDraft(nextDraft);
+    await closeInspector();
   }
 
   function setTaskBulkSelected(taskId: string, selected: boolean): void {
@@ -1426,8 +1576,13 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     setBulkSelectedTaskIds((current) => current.filter((taskId) => !deletedTaskIds.includes(taskId)));
 
     if (selectedTaskId && deletedTaskIds.includes(selectedTaskId)) {
+      const nextDraft = newTaskDraft(source);
+      taskDraftBaselineRef.current = nextDraft;
+      taskDraftRef.current = nextDraft;
+      taskInspectorDirtyRef.current = false;
       setSelectedTaskId(null);
-      setDraft(newTaskDraft(source));
+      setDraft(nextDraft);
+      await closeInspector();
     }
   }
 
@@ -1488,7 +1643,8 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
       return;
     }
 
-    setDraft(
+    setSelectedTaskId(null);
+    openTaskInspector(
       newTaskDraft(source, {
         listId: selectedTask.listId,
         parentId: selectedTask.id
@@ -1669,233 +1825,130 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
       <SectionChrome
         title="Tasks"
         sidebar={
-          <div className="grid gap-3">
-            <Panel
-              action={
-                <div className="flex items-center gap-2">
-                  {draft.mode === "edit" ? (
+          <Panel
+            title="Task lists"
+            description={source.taskLists.length === 0 ? "Task lists unavailable" : "Lists"}
+          >
+            <div className="grid gap-2 p-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  aria-label="New task list title"
+                  onChange={(event) => setNewListTitle(event.target.value)}
+                  placeholder="New list"
+                  value={newListTitle}
+                />
+                <IconButton
+                  disabled={!newListTitle.trim() || source.taskMutationPending}
+                  icon={Plus}
+                  label="Create task list"
+                  onClick={() => void createTaskList()}
+                  variant="primary"
+                />
+              </div>
+              {source.taskLists.map((taskList) => {
+                const draftTitle = listTitleDrafts[taskList.id] ?? taskList.title;
+
+                return (
+                  <div className="grid grid-cols-[minmax(0,1fr)_32px_32px] gap-2" key={taskList.id}>
+                    <Input
+                      aria-label={`Rename ${taskList.title}`}
+                      onChange={(event) =>
+                        setListTitleDrafts((current) => ({
+                          ...current,
+                          [taskList.id]: event.target.value
+                        }))
+                      }
+                      value={draftTitle}
+                    />
                     <IconButton
-                      data-action-id="task.deleteSelected"
+                      disabled={
+                        !draftTitle.trim() ||
+                        draftTitle.trim() === taskList.title ||
+                        source.taskMutationPending
+                      }
+                      icon={Save}
+                      label={`Save ${taskList.title}`}
+                      onClick={() => void renameTaskList(taskList.id, taskList.title)}
+                      variant="ghost"
+                    />
+                    <IconButton
+                      disabled={source.taskMutationPending}
                       icon={Trash2}
-                      label="Delete selected task"
-                      onClick={() => draft.id ? void deleteTask(draft.id) : undefined}
+                      label={`Delete ${taskList.title}`}
+                      onClick={() => deleteTaskList(taskList.id)}
                       variant="danger"
                     />
-                  ) : null}
-                  <Button disabled={!canSaveTask} onClick={() => void saveTask()} size="sm" variant="primary">
-                    <Save aria-hidden="true" size={14} />
-                    Save
-                  </Button>
-                </div>
-              }
-              title={draft.mode === "edit" ? "Edit task" : "New task"}
-              description="Task details"
-            >
-              <div className="grid gap-3 p-3">
-                <Input
-                  aria-label="Task title"
-                  onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                  placeholder="Task title"
-                  value={draft.title}
-                />
-                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                  <span>List</span>
-                  <select
-                    aria-label="Task list"
-                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    disabled={source.taskLists.length === 0}
-                    onChange={(event) => setDraft({ ...draft, listId: event.target.value })}
-                    value={draft.listId}
-                  >
-                    {source.taskLists.length === 0 ? <option value="">No lists available</option> : null}
-                    {source.taskLists.map((taskList) => (
-                      <option key={taskList.id} value={taskList.id}>
-                        {taskList.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    aria-label="Task due date"
-                    onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })}
-                    type="date"
-                    value={draft.dueDate}
-                  />
-                  <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                    <span>Priority</span>
-                    <select
-                      aria-label="Task priority"
-                      className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      onChange={(event) =>
-                        setDraft({ ...draft, priority: event.target.value as CorePriority })
-                      }
-                      value={draft.priority}
-                    >
-                      <option value="none">None</option>
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </select>
-                  </label>
-                </div>
-                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-                  <span>Parent</span>
-                  <select
-                    aria-label="Parent task"
-                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    onChange={(event) => setDraft({ ...draft, parentId: event.target.value })}
-                    value={draft.parentId}
-                  >
-                    <option value="">No parent</option>
-                    {parentOptions.map((task) => (
-                      <option key={task.id} value={task.id}>
-                        {task.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <textarea
-                  aria-label="Task notes"
-                  className="min-h-20 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
-                  placeholder="Notes"
-                  value={draft.notes}
-                />
-                <div className="flex items-center gap-2">
-                  <Button disabled={!selectedTask} onClick={addSubtaskDraft} size="sm" variant="secondary">
-                    <ListPlus aria-hidden="true" size={14} />
-                    Add subtask
-                  </Button>
-                  <Button onClick={openNewTask} size="sm" variant="ghost">
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </Panel>
-            {quickCaptureOpen ? (
-              <Panel
-                action={
-                  <Button disabled={!canCaptureTask} onClick={() => void captureQuickTask()} size="sm" variant="primary">
-                    Capture
-                  </Button>
-                }
-                title="Quick capture"
-                description={
-                  parsedQuickTask.dueDate
-                    ? `${parsedQuickTask.dueDate} - ${source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "Inbox"}`
-                    : source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "No list"
-                }
-              >
-                <div className="grid gap-2 p-3">
-                  <Input
-                    aria-label="Quick capture task"
-                    onChange={(event) => setQuickCaptureInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void captureQuickTask();
-                      }
-                    }}
-                    placeholder="Follow up tomorrow #Inbox"
-                    value={quickCaptureInput}
-                  />
-                </div>
-              </Panel>
-            ) : null}
-            <Panel
-              title="Task lists"
-              description={source.taskLists.length === 0 ? "Task lists unavailable" : "Lists"}
-            >
-              <div className="grid gap-2 p-3">
-                <div className="flex items-center gap-2">
-                  <Input
-                    aria-label="New task list title"
-                    onChange={(event) => setNewListTitle(event.target.value)}
-                    placeholder="New list"
-                    value={newListTitle}
-                  />
-                  <IconButton
-                    disabled={!newListTitle.trim() || source.taskMutationPending}
-                    icon={Plus}
-                    label="Create task list"
-                    onClick={() => void createTaskList()}
-                    variant="primary"
-                  />
-                </div>
-                {source.taskLists.map((taskList) => {
-                  const draftTitle = listTitleDrafts[taskList.id] ?? taskList.title;
-
-                  return (
-                    <div className="grid grid-cols-[minmax(0,1fr)_32px_32px] gap-2" key={taskList.id}>
-                      <Input
-                        aria-label={`Rename ${taskList.title}`}
-                        onChange={(event) =>
-                          setListTitleDrafts((current) => ({
-                            ...current,
-                            [taskList.id]: event.target.value
-                          }))
-                        }
-                        value={draftTitle}
-                      />
-                      <IconButton
-                        disabled={
-                          !draftTitle.trim() ||
-                          draftTitle.trim() === taskList.title ||
-                          source.taskMutationPending
-                        }
-                        icon={Save}
-                        label={`Save ${taskList.title}`}
-                        onClick={() => void renameTaskList(taskList.id, taskList.title)}
-                        variant="ghost"
-                      />
-                      <IconButton
-                        disabled={source.taskMutationPending}
-                        icon={Trash2}
-                        label={`Delete ${taskList.title}`}
-                        onClick={() => deleteTaskList(taskList.id)}
-                        variant="danger"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </Panel>
-            {source.dataState === "stale" ? (
-              <Panel title="Refresh state" description="Cached rows remain visible">
-                <LoadingState description="Refreshing local cache." title="Refreshing" />
-              </Panel>
-            ) : null}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
         }
       >
-        {activeFilter.state === "empty" ? (
-          <Panel title="Task list" description="Empty filtered state">
-            <EmptyState
-              description="No cached tasks match this filter."
-              title="No tasks in this filter"
-            />
-          </Panel>
-        ) : activeFilter.state === "error" ? (
-          <Panel title="Task list" description="Recoverable renderer error state">
-            <ErrorState />
-          </Panel>
-        ) : (
-          <div className="grid gap-3">
-            {activeFilter.groups.map((group) => (
-              <TaskGroupPanel
-                bulkSelectedTaskIds={bulkSelectedTaskIdsInWindow}
-                group={group}
-                onBulkSelectTask={setTaskBulkSelected}
-                key={group.id}
-                onDeleteTask={(taskId) => void deleteTask(taskId)}
-                onSelectTask={selectTask}
-                onToggleTask={(taskId) => void toggleTask(taskId)}
-                selectedTaskId={selectedTaskId}
+        <div className="grid gap-3">
+          {quickCaptureOpen ? (
+            <Panel
+              action={
+                <Button disabled={!canCaptureTask} onClick={() => void captureQuickTask()} size="sm" variant="primary">
+                  Capture
+                </Button>
+              }
+              title="Quick capture"
+              description={
+                parsedQuickTask.dueDate
+                  ? `${parsedQuickTask.dueDate} - ${source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "Inbox"}`
+                  : source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "No list"
+              }
+            >
+              <div className="grid gap-2 p-3">
+                <Input
+                  aria-label="Quick capture task"
+                  onChange={(event) => setQuickCaptureInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void captureQuickTask();
+                    }
+                  }}
+                  placeholder="Follow up tomorrow #Inbox"
+                  value={quickCaptureInput}
+                />
+              </div>
+            </Panel>
+          ) : null}
+          {source.dataState === "stale" ? (
+            <Panel title="Refresh state" description="Cached rows remain visible">
+              <LoadingState description="Refreshing local cache." title="Refreshing" />
+            </Panel>
+          ) : null}
+          {activeFilter.state === "empty" ? (
+            <Panel title="Task list" description="Empty filtered state">
+              <EmptyState
+                description="No cached tasks match this filter."
+                title="No tasks in this filter"
               />
-            ))}
-          </div>
-        )}
+            </Panel>
+          ) : activeFilter.state === "error" ? (
+            <Panel title="Task list" description="Recoverable renderer error state">
+              <ErrorState />
+            </Panel>
+          ) : (
+            <>
+              {activeFilter.groups.map((group) => (
+                <TaskGroupPanel
+                  bulkSelectedTaskIds={bulkSelectedTaskIdsInWindow}
+                  group={group}
+                  onBulkSelectTask={setTaskBulkSelected}
+                  key={group.id}
+                  onDeleteTask={(taskId) => void deleteTask(taskId)}
+                  onSelectTask={selectTask}
+                  onToggleTask={(taskId) => void toggleTask(taskId)}
+                  selectedTaskId={selectedTaskId}
+                />
+              ))}
+            </>
+          )}
+        </div>
       </SectionChrome>
     </div>
   );
