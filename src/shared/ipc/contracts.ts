@@ -800,6 +800,18 @@ export const trayClickActionSchema = z.enum(["open-menu", "toggle-window", "quic
 export const menuBarPanelStyleSchema = z.enum(["adaptive", "agenda", "compact"]);
 export const mcpPermissionModeSchema = z.enum(["read-only", "confirm-writes", "allow-writes"]);
 
+export const savedSearchViewSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().min(1).max(80),
+    query: z.string().min(1).max(500),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type SavedSearchView = z.infer<typeof savedSearchViewSchema>;
+
 export const settingsSnapshotSchema = z
   .object({
     theme: appThemeSchema,
@@ -818,7 +830,8 @@ export const settingsSnapshotSchema = z
     mcpEnabled: z.boolean(),
     mcpPermissionMode: mcpPermissionModeSchema,
     mcpPort: z.number().int().min(0).max(65535),
-    diagnosticsIncludePerformance: z.boolean()
+    diagnosticsIncludePerformance: z.boolean(),
+    savedSearchViews: z.array(savedSearchViewSchema).max(20)
   })
   .strict();
 
@@ -842,7 +855,8 @@ export const settingsUpdateRequestSchema = z
     mcpEnabled: z.boolean().optional(),
     mcpPermissionMode: mcpPermissionModeSchema.optional(),
     mcpPort: z.number().int().min(0).max(65535).optional(),
-    diagnosticsIncludePerformance: z.boolean().optional()
+    diagnosticsIncludePerformance: z.boolean().optional(),
+    savedSearchViews: z.array(savedSearchViewSchema).max(20).optional()
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, {

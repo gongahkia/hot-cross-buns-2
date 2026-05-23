@@ -216,7 +216,8 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       mcpEnabled: false,
       mcpPermissionMode: "confirm-writes",
       mcpPort: 0,
-      diagnosticsIncludePerformance: true
+      diagnosticsIncludePerformance: true,
+      savedSearchViews: []
     },
     sync: {
       state: "idle",
@@ -1531,6 +1532,10 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
 
   if (request.diagnosticsIncludePerformance !== undefined) {
     patch.diagnosticsIncludePerformance = request.diagnosticsIncludePerformance;
+  }
+
+  if (request.savedSearchViews !== undefined) {
+    patch.savedSearchViews = request.savedSearchViews;
   }
 
   return patch;

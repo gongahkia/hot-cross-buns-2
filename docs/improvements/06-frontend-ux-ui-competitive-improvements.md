@@ -275,7 +275,7 @@ Status on 2026-05-23:
 
 - Implemented visible chips and inline invalid-query feedback for the initial local Search DSL: source/domain, task status, due/start windows, priority, list/calendar title, and notes/body presence.
 - Added command palette discovery for local search filter syntax.
-- Saved search views remain deferred because stable saved-view storage has not been introduced.
+- Saved search views are now stored as typed local settings with stable IDs, names, queries, and timestamps, and can be saved, replayed, or deleted from the Search screen.
 
 Additional frontend polish status on 2026-05-23:
 

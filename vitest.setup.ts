@@ -369,7 +369,8 @@ const hcbApi: HcbApi = {
         mcpEnabled: false,
         mcpPermissionMode: "confirm-writes" as const,
         mcpPort: 0,
-        diagnosticsIncludePerformance: true
+        diagnosticsIncludePerformance: true,
+        savedSearchViews: []
       })
     ),
     update: vi.fn(async (request) =>
@@ -390,7 +391,8 @@ const hcbApi: HcbApi = {
         mcpEnabled: request.mcpEnabled ?? false,
         mcpPermissionMode: request.mcpPermissionMode ?? "confirm-writes",
         mcpPort: request.mcpPort ?? 0,
-        diagnosticsIncludePerformance: request.diagnosticsIncludePerformance ?? true
+        diagnosticsIncludePerformance: request.diagnosticsIncludePerformance ?? true,
+        savedSearchViews: request.savedSearchViews ?? []
       })
     ),
     recoveryAction: vi.fn(async (request) =>

@@ -189,7 +189,8 @@ const emptySettings: SettingsSnapshot = {
   mcpEnabled: false,
   mcpPermissionMode: "confirm-writes",
   mcpPort: 0,
-  diagnosticsIncludePerformance: true
+  diagnosticsIncludePerformance: true,
+  savedSearchViews: []
 };
 
 const emptyCapabilityReport: NativeCapabilitiesResponse["capabilityReport"] = {

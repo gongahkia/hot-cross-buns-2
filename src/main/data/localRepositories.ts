@@ -186,7 +186,8 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   mcpEnabled: false,
   mcpPermissionMode: "confirm-writes",
   mcpPort: 0,
-  diagnosticsIncludePerformance: true
+  diagnosticsIncludePerformance: true,
+  savedSearchViews: []
 };
 
 export class LocalPerformanceRepository {
@@ -2354,6 +2355,11 @@ export class LocalSettingsRepository {
         "diagnostics",
         "includePerformance",
         DEFAULT_SETTINGS.diagnosticsIncludePerformance
+      ),
+      savedSearchViews: this.readSetting(
+        "search",
+        "savedViews",
+        DEFAULT_SETTINGS.savedSearchViews
       )
     };
   }
@@ -2432,6 +2438,10 @@ export class LocalSettingsRepository {
         request.diagnosticsIncludePerformance,
         now
       );
+    }
+
+    if (request.savedSearchViews !== undefined) {
+      this.writeSetting("search", "savedViews", request.savedSearchViews, now);
     }
 
     return this.get();

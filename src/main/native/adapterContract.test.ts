@@ -25,6 +25,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     mcpPermissionMode: "confirm-writes",
     mcpPort: 0,
     diagnosticsIncludePerformance: true,
+    savedSearchViews: [],
     ...overrides
   };
 }

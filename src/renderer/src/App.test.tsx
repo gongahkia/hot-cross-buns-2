@@ -111,6 +111,7 @@ function testSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapsh
     mcpPermissionMode: "confirm-writes",
     mcpPort: 0,
     diagnosticsIncludePerformance: true,
+    savedSearchViews: [],
     ...overrides
   };
 }
@@ -1535,6 +1536,39 @@ describe("App shell", () => {
     expect(api.tasks.list).not.toHaveBeenCalled();
     expect(api.calendar.listEvents).not.toHaveBeenCalled();
     expect(api.notes.list).not.toHaveBeenCalled();
+  });
+
+  it("saves structured local search views through settings", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Search");
+    const input = screen.getByRole("textbox", { name: "Search local cache" });
+    const query = "source:tasks status:open triage";
+
+    await user.type(input, query);
+    await user.type(screen.getByRole("textbox", { name: "Saved search name" }), "Open triage");
+    await user.click(screen.getByRole("button", { name: "Save search" }));
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({
+        savedSearchViews: [
+          expect.objectContaining({
+            name: "Open triage",
+            query
+          })
+        ]
+      });
+    });
+    const savedViews = screen.getByRole("list", { name: "Saved search views" });
+    const savedViewButton = within(savedViews).getAllByRole("button", { name: /Open triage/ })[0];
+    expect(savedViewButton).toBeInTheDocument();
+
+    await user.clear(input);
+    await user.click(savedViewButton);
+    expect(input).toHaveValue(query);
   });
 
   it("shows invalid search syntax inline without executing a search", async () => {

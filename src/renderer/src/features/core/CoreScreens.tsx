@@ -3,6 +3,7 @@ import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import type {
   CalendarEventCreateRequest,
   CalendarEventUpdateRequest,
+  SavedSearchView,
   SettingsRecoveryActionRequest,
   SettingsSnapshot,
   SettingsUpdateRequest,
@@ -3651,6 +3652,31 @@ function NotesView(): JSX.Element {
   );
 }
 
+function defaultSavedSearchName(query: string, existingCount: number): string {
+  const textTerms = query
+    .split(/\s+/)
+    .filter((token) => token.length > 0 && !token.includes(":"))
+    .slice(0, 4)
+    .join(" ");
+
+  if (textTerms) {
+    return textTerms.length > 42 ? `${textTerms.slice(0, 39)}...` : textTerms;
+  }
+
+  return `Saved search ${existingCount + 1}`;
+}
+
+function nextSavedSearchViews(
+  current: readonly SavedSearchView[],
+  view: SavedSearchView
+): SavedSearchView[] {
+  const withoutMatchingQuery = current.filter(
+    (savedView) => savedView.query.trim() !== view.query.trim()
+  );
+
+  return [view, ...withoutMatchingQuery].slice(0, 20);
+}
+
 function SearchView({
   query,
   setQuery
@@ -3658,8 +3684,47 @@ function SearchView({
   query: string;
   setQuery: (query: string) => void;
 }): JSX.Element {
+  const source = useCoreViewModelSource();
   const search = useLocalSearch(query);
   const searchViewModel = search.viewModel;
+  const [savedSearchName, setSavedSearchName] = useState("");
+  const trimmedQuery = query.trim();
+  const matchingSavedSearch = source.settings.savedSearchViews.find(
+    (view) => view.query.trim() === trimmedQuery
+  );
+  const canSaveSearch =
+    trimmedQuery.length > 0 &&
+    search.parsed.errors.length === 0 &&
+    !matchingSavedSearch &&
+    !source.settingsMutationPending;
+
+  async function saveSearchView(): Promise<void> {
+    if (!canSaveSearch) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const view: SavedSearchView = {
+      id: `search-${Date.now()}`,
+      name: savedSearchName.trim() || defaultSavedSearchName(trimmedQuery, source.settings.savedSearchViews.length),
+      query: trimmedQuery,
+      createdAt: now,
+      updatedAt: now
+    };
+    const saved = await source.updateSettings({
+      savedSearchViews: nextSavedSearchViews(source.settings.savedSearchViews, view)
+    });
+
+    if (saved) {
+      setSavedSearchName("");
+    }
+  }
+
+  function deleteSearchView(viewId: string): void {
+    void source.updateSettings({
+      savedSearchViews: source.settings.savedSearchViews.filter((view) => view.id !== viewId)
+    });
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -3697,6 +3762,74 @@ function SearchView({
           {search.parsed.errors[0]?.message ?? "Invalid search query."}
         </div>
       ) : null}
+
+      <Panel
+        action={
+          <Button
+            disabled={!canSaveSearch}
+            onClick={() => void saveSearchView()}
+            size="sm"
+            variant="primary"
+          >
+            <Save aria-hidden="true" size={14} />
+            Save search
+          </Button>
+        }
+        title="Saved searches"
+        description={`${source.settings.savedSearchViews.length} local views`}
+      >
+        <div className="grid gap-3 p-3">
+          <Input
+            aria-label="Saved search name"
+            disabled={trimmedQuery.length === 0}
+            onChange={(event) => setSavedSearchName(event.target.value)}
+            placeholder={trimmedQuery ? defaultSavedSearchName(trimmedQuery, source.settings.savedSearchViews.length) : "Name current query"}
+            value={savedSearchName}
+          />
+          {matchingSavedSearch ? (
+            <StatusBanner
+              description={matchingSavedSearch.query}
+              title={`${matchingSavedSearch.name} is saved`}
+              tone="success"
+            />
+          ) : null}
+          {source.settings.savedSearchViews.length > 0 ? (
+            <div className="grid gap-2" role="list" aria-label="Saved search views">
+              {source.settings.savedSearchViews.map((view) => (
+                <div
+                  className="grid grid-cols-[minmax(0,1fr)_32px] gap-2"
+                  key={view.id}
+                  role="listitem"
+                >
+                  <button
+                    className="min-w-0 rounded-hcbMd border border-border bg-bg-tertiary px-3 py-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    onClick={() => setQuery(view.query)}
+                    type="button"
+                  >
+                    <span className="block truncate text-[var(--text-sm)] font-medium text-text-primary">
+                      {view.name}
+                    </span>
+                    <span className="block truncate font-mono text-[var(--text-xs)] text-text-muted">
+                      {view.query}
+                    </span>
+                  </button>
+                  <IconButton
+                    icon={Trash2}
+                    label={`Delete saved search ${view.name}`}
+                    onClick={() => deleteSearchView(view.id)}
+                    variant="danger"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              description="Save structured local searches once their filters are useful."
+              title="No saved searches"
+            />
+          )}
+        </div>
+      </Panel>
 
       <Panel
         action={<Badge tone={searchViewModel.state === "results" ? "success" : "neutral"}>{searchViewModel.summary}</Badge>}

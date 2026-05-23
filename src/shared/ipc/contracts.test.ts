@@ -222,7 +222,8 @@ describe("shared IPC contracts", () => {
         mcpEnabled: false,
         mcpPermissionMode: "confirm-writes",
         mcpPort: 0,
-        diagnosticsIncludePerformance: true
+        diagnosticsIncludePerformance: true,
+        savedSearchViews: []
       }).setupCompletedAt
     ).toBeNull();
     expect(
