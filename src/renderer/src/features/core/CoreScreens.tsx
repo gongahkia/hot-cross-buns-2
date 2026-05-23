@@ -3103,6 +3103,60 @@ function extractNoteLinks(body: string): string[] {
   return Array.from(links);
 }
 
+type PlannerLinkKind = "note" | "task" | "event";
+
+interface PlannerLinkReference {
+  kind: PlannerLinkKind;
+  label: string;
+  raw: string;
+}
+
+interface NoteProperty {
+  key: string;
+  value: string;
+}
+
+function parsePlannerLink(raw: string): PlannerLinkReference {
+  const [maybeKind, ...rest] = raw.split(":");
+  const kind = maybeKind.toLowerCase();
+
+  if ((kind === "note" || kind === "task" || kind === "event") && rest.length > 0) {
+    return {
+      kind,
+      label: rest.join(":").trim(),
+      raw
+    };
+  }
+
+  return {
+    kind: "note",
+    label: raw.trim(),
+    raw
+  };
+}
+
+function extractNoteProperties(body: string): NoteProperty[] {
+  const supportedKeys = new Set(["status", "tags", "project", "date", "source"]);
+  const properties: NoteProperty[] = [];
+
+  for (const line of body.split(/\r?\n/).slice(0, 12)) {
+    const match = /^([a-zA-Z][\w-]{1,24}):\s*(.+)$/.exec(line.trim());
+
+    if (!match) {
+      continue;
+    }
+
+    const key = match[1].toLowerCase();
+    const value = match[2].trim();
+
+    if (supportedKeys.has(key) && value) {
+      properties.push({ key, value });
+    }
+  }
+
+  return properties;
+}
+
 function renderInlineNoteLinks(
   value: string,
   onOpenNoteLink: (title: string) => void
@@ -3114,21 +3168,29 @@ function renderInlineNoteLinks(
 
   while ((match = pattern.exec(value)) !== null) {
     const title = match[1]?.trim() ?? "";
+    const link = parsePlannerLink(title);
 
     if (match.index > cursor) {
       nodes.push(value.slice(cursor, match.index));
     }
 
-    nodes.push(
+    nodes.push(link.kind === "note" ? (
       <button
         className="rounded-hcbSm px-1 text-accent underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         key={`${title}-${match.index}`}
-        onClick={() => onOpenNoteLink(title)}
+        onClick={() => onOpenNoteLink(link.label)}
         type="button"
       >
-        {title}
+        {link.label}
       </button>
-    );
+    ) : (
+      <span
+        className="inline-flex rounded-hcbSm border border-border bg-bg-tertiary px-1 text-text-secondary"
+        key={`${title}-${match.index}`}
+      >
+        {link.kind}: {link.label}
+      </span>
+    ));
     cursor = match.index + match[0].length;
   }
 
@@ -3236,6 +3298,7 @@ function NotesView(): JSX.Element {
     source.initialNotes[0]?.id ?? null
   );
   const [noteViewMode, setNoteViewMode] = useState<"edit" | "preview">("edit");
+  const [plannerLinkTarget, setPlannerLinkTarget] = useState("");
   const [draftCounter, setDraftCounter] = useState(1);
   const requestedNoteDetails = useRef(new Set<string>());
   const lastNoteEditReportAt = useRef(0);
@@ -3245,6 +3308,7 @@ function NotesView(): JSX.Element {
     [notes]
   );
   const selectedNoteLinks = selectedNote ? extractNoteLinks(selectedNote.body) : [];
+  const selectedNoteProperties = selectedNote ? extractNoteProperties(selectedNote.body) : [];
   const selectedNoteBacklinks = selectedNote
     ? notes.filter(
         (note) =>
@@ -3393,6 +3457,56 @@ function NotesView(): JSX.Element {
     }
   }
 
+  async function createNoteWithTemplate(title: string, body: string): Promise<void> {
+    const fallbackId = `note-draft-${draftCounter}`;
+    const fallbackNote: NoteViewModel = {
+      id: fallbackId,
+      title,
+      body,
+      preview: buildPreview(body),
+      updatedLabel: "Just now"
+    };
+
+    setDraftCounter((current) => current + 1);
+    setNotes((current) => [fallbackNote, ...current]);
+    setSelectedNoteId(fallbackId);
+    setNoteViewMode("edit");
+
+    const result = await window.hcb?.notes.create({ title, body });
+
+    if (result?.ok) {
+      requestedNoteDetails.current.add(result.data.id);
+      const persisted = {
+        id: result.data.id,
+        title: result.data.title,
+        body: result.data.body,
+        preview: result.data.preview,
+        updatedLabel: "Just now"
+      };
+
+      setNotes((current) =>
+        current.map((note) => (note.id === fallbackId ? persisted : note))
+      );
+      setSelectedNoteId(result.data.id);
+    }
+  }
+
+  function createDailyNote(): void {
+    const today = dateInputValue(new Date().toISOString());
+    void createNoteWithTemplate(
+      `Daily ${today}`,
+      `status: open\ntags: daily\ndate: ${today}\n\n# Daily ${today}\n- [ ] Review calendar\n- [ ] Triage inbox\n`
+    );
+  }
+
+  function createMeetingNote(): void {
+    const today = dateInputValue(new Date().toISOString());
+    void createNoteWithTemplate(
+      `Meeting ${today}`,
+      `status: draft\ntags: meeting\ndate: ${today}\n\n# Meeting ${today}\nAttendees:\n\nNotes:\n\nDecisions:\n- \n`
+    );
+  }
+
   function updateSelectedNote(updates: Partial<Pick<NoteViewModel, "title" | "body">>): void {
     if (!selectedNote) {
       return;
@@ -3460,6 +3574,15 @@ function NotesView(): JSX.Element {
     }
   }
 
+  function insertPlannerLink(): void {
+    if (!selectedNote || !plannerLinkTarget) {
+      return;
+    }
+
+    const suffix = selectedNote.body.endsWith("\n") || selectedNote.body.length === 0 ? "" : "\n";
+    updateSelectedNote({ body: `${selectedNote.body}${suffix}[[${plannerLinkTarget}]]` });
+  }
+
   return (
     <SectionChrome
       title="Notes"
@@ -3522,6 +3645,56 @@ function NotesView(): JSX.Element {
               viewportHeight={366}
             />
           </Panel>
+          <Panel title="Planner links" description="Insert local note, task, or event links">
+            <div className="grid gap-3 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={createDailyNote} size="sm" variant="secondary">
+                  <CalendarPlus aria-hidden="true" size={14} />
+                  Daily note
+                </Button>
+                <Button onClick={createMeetingNote} size="sm" variant="ghost">
+                  <Pencil aria-hidden="true" size={14} />
+                  Meeting note
+                </Button>
+              </div>
+              <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+                <span>Link target</span>
+                <select
+                  aria-label="Planner link target"
+                  className={settingsSelectClass}
+                  disabled={!selectedNote}
+                  onChange={(event) => setPlannerLinkTarget(event.target.value)}
+                  value={plannerLinkTarget}
+                >
+                  <option value="">Choose local target</option>
+                  {notes.map((note) => (
+                    <option key={`note-${note.id}`} value={note.title}>
+                      Note - {note.title}
+                    </option>
+                  ))}
+                  {source.largeTaskWindow.slice(0, 20).map((task) => (
+                    <option key={`task-${task.id}`} value={`task:${task.title}`}>
+                      Task - {task.title}
+                    </option>
+                  ))}
+                  {source.calendarAgendaEvents.slice(0, 20).map((event) => (
+                    <option key={`event-${event.id}`} value={`event:${event.title}`}>
+                      Event - {event.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                disabled={!selectedNote || !plannerLinkTarget}
+                onClick={insertPlannerLink}
+                size="sm"
+                variant="primary"
+              >
+                <Plus aria-hidden="true" size={14} />
+                Insert link
+              </Button>
+            </div>
+          </Panel>
           <Panel
             title="Note links"
             description={
@@ -3538,7 +3711,10 @@ function NotesView(): JSX.Element {
                   </div>
                   {selectedNoteLinks.length > 0 ? (
                     selectedNoteLinks.map((title) => {
-                      const linkedNote = noteByNormalizedTitle.get(normalizedNoteTitle(title));
+                      const link = parsePlannerLink(title);
+                      const linkedNote = link.kind === "note"
+                        ? noteByNormalizedTitle.get(normalizedNoteTitle(link.label))
+                        : undefined;
 
                       return linkedNote ? (
                         <Button
@@ -3552,7 +3728,9 @@ function NotesView(): JSX.Element {
                           {linkedNote.title}
                         </Button>
                       ) : (
-                        <Badge key={title} tone="neutral">{title}</Badge>
+                        <Badge key={title} tone={link.kind === "note" ? "warning" : "accent"}>
+                          {link.kind === "note" ? "Broken" : link.kind}: {link.label}
+                        </Badge>
                       );
                     })
                   ) : (
@@ -3583,6 +3761,29 @@ function NotesView(): JSX.Element {
               </div>
             ) : (
               <EmptyState description="Select a note to inspect links." title="No note selected" />
+            )}
+          </Panel>
+          <Panel
+            title="Note properties"
+            description={selectedNote ? `${selectedNoteProperties.length} inferred` : "No note"}
+          >
+            {selectedNote ? (
+              selectedNoteProperties.length > 0 ? (
+                <div className="flex flex-wrap gap-2 p-3">
+                  {selectedNoteProperties.map((property) => (
+                    <Badge key={`${property.key}-${property.value}`} tone="info">
+                      {property.key}: {property.value}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  description="Add lines like status:, tags:, project:, date:, or source: near the top of the note."
+                  title="No properties"
+                />
+              )
+            ) : (
+              <EmptyState description="Select a note to inspect properties." title="No note selected" />
             )}
           </Panel>
         </div>

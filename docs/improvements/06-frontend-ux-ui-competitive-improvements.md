@@ -302,6 +302,10 @@ Acceptance checks:
 - Broken links are visible and repairable.
 - Markdown rendering is sanitized.
 
+Status on 2026-05-23:
+
+- Notes now support markdown preview, note links/backlinks, visible broken note links, task/event link syntax, local link insertion across notes/tasks/events, inferred property chips from note-body metadata, and daily/meeting note templates.
+
 ### 7. Settings And Diagnostics UX
 
 Settings and diagnostics should communicate system state as clearly as productivity apps communicate task state.

@@ -1480,6 +1480,37 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: "Open backlink Project plan" })).toBeInTheDocument();
   });
 
+  it("inserts planner links and creates templated notes", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Planner link target" }),
+      "task:Draft inbox triage rules"
+    );
+    await user.click(screen.getByRole("button", { name: "Insert link" }));
+    expect((bodyInput as HTMLTextAreaElement).value).toContain("[[task:Draft inbox triage rules]]");
+
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getAllByText("task: Draft inbox triage rules").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Daily note" }));
+    await waitFor(() => {
+      expect(api.notes.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringMatching(/^Daily \d{4}-\d{2}-\d{2}$/),
+          body: expect.stringContaining("tags: daily")
+        })
+      );
+    });
+    expect(await screen.findByText("tags: daily")).toBeInTheDocument();
+  });
+
   it("renders search results for task, event, note, and empty local queries", async () => {
     const api = seededHcb();
     installHcb(api);
