@@ -249,6 +249,9 @@ describe("SQLite-backed domain services", () => {
       mcpPermissionMode: "allow-writes",
       mcpPort: 4777,
       defaultTimeZone: "Asia/Singapore",
+      todayCapacityMinutes: 360,
+      todayWorkingHoursStart: 7,
+      todayWorkingHoursEnd: 18,
       diagnosticsIncludePerformance: false
     });
     const reread = await domain.settings.get();
@@ -270,6 +273,9 @@ describe("SQLite-backed domain services", () => {
       mcpPermissionMode: "allow-writes",
       mcpPort: 4777,
       defaultTimeZone: "Asia/Singapore",
+      todayCapacityMinutes: 360,
+      todayWorkingHoursStart: 7,
+      todayWorkingHoursEnd: 18,
       diagnosticsIncludePerformance: false
     });
     expect(reread).toEqual(updated);

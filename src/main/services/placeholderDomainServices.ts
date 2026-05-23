@@ -32,6 +32,7 @@ import {
   defaultNativeAppPaths,
   nativePlatform as detectNativePlatform
 } from "../native/capabilityReport";
+import { buildDaySchedule } from "./schedulingSuggestionService";
 
 type TaskRecord = TaskDetail & {
   listTitle: string;
@@ -217,6 +218,9 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       mcpPermissionMode: "confirm-writes",
       mcpPort: 0,
       defaultTimeZone: "UTC",
+      todayCapacityMinutes: 480,
+      todayWorkingHoursStart: 6,
+      todayWorkingHoursEnd: 22,
       diagnosticsIncludePerformance: true,
       savedSearchViews: [],
       savedTaskViews: []
@@ -607,6 +611,21 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         }
 
         return { id: request.id, queued: request.deleteCalendarEvent ?? true, revision: new Date().toISOString() };
+      },
+      scheduleSuggest: (request) => {
+        const start = `${request.date}T00:00:00.000Z`;
+        const end = new Date(Date.parse(start) + 24 * 60 * 60 * 1000).toISOString();
+        const events = state.calendarEvents.filter(
+          (event) => event.startsAt < end && event.endsAt > start
+        );
+
+        return buildDaySchedule({
+          date: request.date,
+          events,
+          tasks: state.tasks,
+          capacityMinutes: request.capacityMinutes ?? 480,
+          workingHours: request.workingHours ?? { start: 6, end: 22 }
+        });
       },
       exportAvailability: (request) => {
         const events = state.calendarEvents.filter((event) => {
@@ -1536,6 +1555,18 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
 
   if (request.defaultTimeZone !== undefined) {
     patch.defaultTimeZone = request.defaultTimeZone;
+  }
+
+  if (request.todayCapacityMinutes !== undefined) {
+    patch.todayCapacityMinutes = request.todayCapacityMinutes;
+  }
+
+  if (request.todayWorkingHoursStart !== undefined) {
+    patch.todayWorkingHoursStart = request.todayWorkingHoursStart;
+  }
+
+  if (request.todayWorkingHoursEnd !== undefined) {
+    patch.todayWorkingHoursEnd = request.todayWorkingHoursEnd;
   }
 
   if (request.diagnosticsIncludePerformance !== undefined) {

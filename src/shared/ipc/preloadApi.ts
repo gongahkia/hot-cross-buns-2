@@ -3,6 +3,8 @@ import type {
   AvailabilityExportResponse,
   CalendarRangeRequest,
   CalendarRangeResponse,
+  CalendarScheduleSuggestRequest,
+  CalendarScheduleSuggestResponse,
   CalendarEventCreateRequest,
   CalendarEventDeleteRequest,
   CalendarEventDetail,
@@ -100,6 +102,9 @@ export interface HcbApi {
     unscheduleTaskBlock: (
       request: ScheduledTaskBlockUnscheduleRequest
     ) => Promise<HcbResult<MutationAck>>;
+    scheduleSuggest: (
+      request: CalendarScheduleSuggestRequest
+    ) => Promise<HcbResult<CalendarScheduleSuggestResponse>>;
     exportAvailability: (
       request: AvailabilityExportRequest
     ) => Promise<HcbResult<AvailabilityExportResponse>>;

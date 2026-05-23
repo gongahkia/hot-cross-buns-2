@@ -233,6 +233,13 @@ const hcbApi: HcbApi = {
         revision: now
       })
     ),
+    scheduleSuggest: vi.fn(async () =>
+      ok({
+        slots: [],
+        unscheduled: [],
+        overloadMinutes: 0
+      })
+    ),
     exportAvailability: vi.fn(async (request) =>
       ok({
         format: "text" as const,
@@ -370,6 +377,9 @@ const hcbApi: HcbApi = {
         mcpPermissionMode: "confirm-writes" as const,
         mcpPort: 0,
         defaultTimeZone: "UTC",
+        todayCapacityMinutes: 480,
+        todayWorkingHoursStart: 6,
+        todayWorkingHoursEnd: 22,
         diagnosticsIncludePerformance: true,
         savedSearchViews: [],
         savedTaskViews: []
@@ -394,6 +404,9 @@ const hcbApi: HcbApi = {
         mcpPermissionMode: request.mcpPermissionMode ?? "confirm-writes",
         mcpPort: request.mcpPort ?? 0,
         defaultTimeZone: request.defaultTimeZone ?? "UTC",
+        todayCapacityMinutes: request.todayCapacityMinutes ?? 480,
+        todayWorkingHoursStart: request.todayWorkingHoursStart ?? 6,
+        todayWorkingHoursEnd: request.todayWorkingHoursEnd ?? 22,
         diagnosticsIncludePerformance: request.diagnosticsIncludePerformance ?? true,
         savedSearchViews: request.savedSearchViews ?? [],
         savedTaskViews: request.savedTaskViews ?? []

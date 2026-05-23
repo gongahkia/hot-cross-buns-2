@@ -6,6 +6,7 @@ import {
   type CalendarEventDeleteRequest,
   type CalendarEventUpdateRequest,
   type CalendarRangeRequest,
+  type CalendarScheduleSuggestRequest,
   type EntityByIdRequest,
   type GoogleDisconnectRequest,
   type GoogleSaveOAuthClientRequest,
@@ -129,6 +130,11 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
       contract: ipcContracts.calendar.unscheduleTaskBlock,
       handle: (request) =>
         services.planner.unscheduleTaskBlock(request as ScheduledTaskBlockUnscheduleRequest)
+    },
+    {
+      contract: ipcContracts.calendar.scheduleSuggest,
+      handle: (request) =>
+        services.planner.scheduleSuggest(request as CalendarScheduleSuggestRequest)
     },
     {
       contract: ipcContracts.calendar.exportAvailability,

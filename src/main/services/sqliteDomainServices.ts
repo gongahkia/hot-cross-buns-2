@@ -2,6 +2,7 @@ import type {
   AvailabilityExportRequest,
   CalendarListRequest,
   CalendarRangeRequest,
+  CalendarScheduleSuggestRequest,
   EntityByIdRequest,
   GoogleBeginOAuthResponse,
   GoogleDisconnectRequest,
@@ -63,6 +64,7 @@ import type {
   McpDomainServices,
   SyncControlDomainService
 } from "./domainInterfaces";
+import { buildDaySchedule } from "./schedulingSuggestionService";
 
 export interface SqliteDomainServiceOptions {
   plannerRepository: LocalPlannerRepository;
@@ -152,6 +154,27 @@ export function createSqliteDomainServices(
         options.plannerRepository.moveScheduledTaskBlock(request),
       unscheduleTaskBlock: (request: ScheduledTaskBlockUnscheduleRequest) =>
         options.plannerRepository.unscheduleTaskBlock(request),
+      scheduleSuggest: (request: CalendarScheduleSuggestRequest) => {
+        const start = `${request.date}T00:00:00.000Z`;
+        const end = new Date(Date.parse(start) + 24 * 60 * 60 * 1000).toISOString();
+        const events = options.plannerRepository.listCalendarEvents({
+          start,
+          end,
+          limit: 500
+        }).items;
+        const tasks = options.plannerRepository.listTasks({
+          status: "active",
+          limit: 100
+        }).items;
+
+        return buildDaySchedule({
+          date: request.date,
+          events,
+          tasks,
+          capacityMinutes: request.capacityMinutes ?? 480,
+          workingHours: request.workingHours ?? { start: 6, end: 22 }
+        });
+      },
       exportAvailability: (request: AvailabilityExportRequest) =>
         options.plannerRepository.exportAvailability(request),
       listNotes: (request) => options.plannerRepository.listNotes(request),

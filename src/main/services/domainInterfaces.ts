@@ -3,6 +3,8 @@ import type {
   AvailabilityExportResponse,
   CalendarRangeRequest,
   CalendarRangeResponse,
+  CalendarScheduleSuggestRequest,
+  CalendarScheduleSuggestResponse,
   CalendarEventCreateRequest,
   CalendarEventDeleteRequest,
   CalendarEventDetail,
@@ -159,6 +161,9 @@ export interface PlannerViewDomainService {
   unscheduleTaskBlock: (
     request: ScheduledTaskBlockUnscheduleRequest
   ) => MaybePromise<{ id: string; queued: boolean; revision?: string }>;
+  scheduleSuggest: (
+    request: CalendarScheduleSuggestRequest
+  ) => MaybePromise<CalendarScheduleSuggestResponse>;
   exportAvailability: (
     request: AvailabilityExportRequest
   ) => MaybePromise<AvailabilityExportResponse>;

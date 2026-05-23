@@ -94,6 +94,7 @@ describe("preload bridge", () => {
       ["calendar", "create", { title: "", calendarId: "cal-1", startsAt: "2026-01-01T00:00:00.000Z", endsAt: "2026-01-01T01:00:00.000Z" }],
       ["calendar", "update", { id: "event-1" }],
       ["calendar", "delete", { id: "" }],
+      ["calendar", "scheduleSuggest", { date: "2026-05-23", workingHours: { start: 22, end: 6 } }],
       ["notes", "create", { title: "" }],
       ["notes", "get", { id: "" }],
       ["notes", "update", { id: "note-1" }],

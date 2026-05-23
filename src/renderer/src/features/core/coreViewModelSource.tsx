@@ -190,6 +190,9 @@ const emptySettings: SettingsSnapshot = {
   mcpPermissionMode: "confirm-writes",
   mcpPort: 0,
   defaultTimeZone: "UTC",
+  todayCapacityMinutes: 480,
+  todayWorkingHoursStart: 6,
+  todayWorkingHoursEnd: 22,
   diagnosticsIncludePerformance: true,
   savedSearchViews: [],
   savedTaskViews: []

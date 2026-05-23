@@ -201,6 +201,13 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           request,
           "Scheduled task unschedule request failed"
         ),
+      scheduleSuggest: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.calendar.scheduleSuggest,
+          request,
+          "Schedule suggestion request failed"
+        ),
       exportAvailability: (request) =>
         invokeContract(
           ipc,

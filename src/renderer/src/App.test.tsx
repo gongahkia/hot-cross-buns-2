@@ -111,6 +111,9 @@ function testSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapsh
     mcpPermissionMode: "confirm-writes",
     mcpPort: 0,
     defaultTimeZone: "UTC",
+    todayCapacityMinutes: 480,
+    todayWorkingHoursStart: 6,
+    todayWorkingHoursEnd: 22,
     diagnosticsIncludePerformance: true,
     savedSearchViews: [],
     savedTaskViews: [],
@@ -448,6 +451,32 @@ function seededHcb(): HcbApi {
           id: request.id,
           queued: request.deleteCalendarEvent ?? true,
           revision: now
+        })
+      ),
+      scheduleSuggest: vi.fn(async (request) =>
+        ok({
+          slots: [
+            {
+              startsAt: `${request.date}T09:30:00.000Z`,
+              endsAt: `${request.date}T09:50:00.000Z`,
+              eventId: "event-standup",
+              locked: true,
+              conflict: false
+            },
+            {
+              startsAt: `${request.date}T10:00:00.000Z`,
+              endsAt: `${request.date}T10:45:00.000Z`,
+              taskId: "task-calendar-fixtures",
+              locked: false,
+              conflict: false
+            }
+          ],
+          unscheduled: [
+            seededTaskDetail("task-inbox-rules", {
+              durationMinutes: 30
+            })
+          ],
+          overloadMinutes: 0
         })
       ),
       exportAvailability: vi.fn(async (request) =>

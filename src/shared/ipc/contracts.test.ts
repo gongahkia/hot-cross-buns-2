@@ -3,6 +3,7 @@ import {
   MAX_LIST_LIMIT,
   MAX_RANGE_LIMIT,
   availabilityExportRequestSchema,
+  calendarScheduleSuggestRequestSchema,
   calendarEventCreateRequestSchema,
   calendarEventUpdateRequestSchema,
   calendarRangeRequestSchema,
@@ -161,7 +162,28 @@ describe("shared IPC contracts", () => {
       format: "text"
     });
     expect(ipcContracts.calendar.scheduleTaskBlock.method).toBe("scheduleTaskBlock");
+    expect(ipcContracts.calendar.scheduleSuggest.method).toBe("scheduleSuggest");
     expect(ipcContracts.calendar.exportAvailability.method).toBe("exportAvailability");
+  });
+
+  it("validates day schedule suggestion requests", () => {
+    expect(
+      calendarScheduleSuggestRequestSchema.parse({
+        date: "2026-05-23"
+      })
+    ).toMatchObject({
+      capacityMinutes: 480,
+      workingHours: {
+        start: 6,
+        end: 22
+      }
+    });
+    expect(
+      calendarScheduleSuggestRequestSchema.safeParse({
+        date: "2026-05-23",
+        workingHours: { start: 18, end: 8 }
+      }).success
+    ).toBe(false);
   });
 
   it("validates task write payloads as date-only Google Tasks mutations", () => {
@@ -223,6 +245,9 @@ describe("shared IPC contracts", () => {
         mcpPermissionMode: "confirm-writes",
         mcpPort: 0,
         defaultTimeZone: "UTC",
+        todayCapacityMinutes: 480,
+        todayWorkingHoursStart: 6,
+        todayWorkingHoursEnd: 22,
         diagnosticsIncludePerformance: true,
         savedSearchViews: [],
         savedTaskViews: []
