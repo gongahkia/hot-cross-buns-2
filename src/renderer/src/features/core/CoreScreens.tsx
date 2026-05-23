@@ -194,6 +194,27 @@ function dateInputToIso(value: string): string {
   return `${value}T00:00:00.000Z`;
 }
 
+function dateRangeInputToInclusiveIsoRange(
+  startDate: string,
+  endDate: string
+): { start: string; end: string } | null {
+  if (!startDate || !endDate) {
+    return null;
+  }
+
+  const start = dateInputToIso(startDate);
+  const endDay = dateInputToIso(endDate);
+
+  if (!Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(endDay))) {
+    return null;
+  }
+
+  return {
+    start,
+    end: addUtcDaysIso(endDay, 1)
+  };
+}
+
 function dateTimeLocalInputValue(value: string): string {
   const parsed = new Date(value);
 
@@ -2102,7 +2123,31 @@ function CalendarView(): JSX.Element {
   const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
   const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
   const [formError, setFormError] = useState<string | undefined>();
+  const [availabilityStartDate, setAvailabilityStartDate] = useState(() =>
+    dateInputValue(startOfUtcDayIso(new Date()))
+  );
+  const [availabilityEndDate, setAvailabilityEndDate] = useState(() =>
+    dateInputValue(addUtcDaysIso(startOfUtcDayIso(new Date()), 6))
+  );
+  const [availabilityCalendarIds, setAvailabilityCalendarIds] = useState<string[]>([]);
+  const [availabilityText, setAvailabilityText] = useState("");
+  const [availabilityError, setAvailabilityError] = useState<string | undefined>();
+  const [availabilityBusyBlockCount, setAvailabilityBusyBlockCount] = useState<number | null>(null);
+  const [availabilityPending, setAvailabilityPending] = useState(false);
   const calendarNavigationStartedAt = useRef<number | null>(null);
+  const availableCalendarIds = useMemo(
+    () => new Set(source.calendarSources.map((calendar) => calendar.id)),
+    [source.calendarSources]
+  );
+  const selectedAvailabilityCalendarIds = availabilityCalendarIds.filter((calendarId) =>
+    availableCalendarIds.has(calendarId)
+  );
+  const availabilityRange = dateRangeInputToInclusiveIsoRange(availabilityStartDate, availabilityEndDate);
+  const canExportAvailability =
+    selectedAvailabilityCalendarIds.length > 0 &&
+    availabilityRange !== null &&
+    Date.parse(availabilityRange.end) > Date.parse(availabilityRange.start) &&
+    !availabilityPending;
 
   function setCalendarView(viewId: CalendarViewId): void {
     calendarNavigationStartedAt.current = rendererNow();
@@ -2127,6 +2172,22 @@ function CalendarView(): JSX.Element {
     window.addEventListener("hcb:calendar-command", handleCalendarCommand);
     return () => window.removeEventListener("hcb:calendar-command", handleCalendarCommand);
   }, [source]);
+
+  useEffect(() => {
+    if (availabilityCalendarIds.length > 0 || source.calendarSources.length === 0) {
+      return;
+    }
+
+    const selectedCalendarIds = source.calendarSources
+      .filter((calendar) => calendar.selected)
+      .map((calendar) => calendar.id);
+
+    setAvailabilityCalendarIds(
+      selectedCalendarIds.length > 0
+        ? selectedCalendarIds
+        : source.calendarSources.map((calendar) => calendar.id)
+    );
+  }, [availabilityCalendarIds.length, source.calendarSources]);
 
   useEffect(() => {
     scheduleRendererFrame(() => {
@@ -2207,6 +2268,55 @@ function CalendarView(): JSX.Element {
     source.refresh();
   }
 
+  function toggleAvailabilityCalendar(calendarId: string, selected: boolean): void {
+    setAvailabilityCalendarIds((current) => {
+      const next = new Set(current);
+
+      if (selected) {
+        next.add(calendarId);
+      } else {
+        next.delete(calendarId);
+      }
+
+      return Array.from(next);
+    });
+  }
+
+  async function exportAvailability(): Promise<void> {
+    if (!canExportAvailability || availabilityRange === null) {
+      setAvailabilityError("Choose at least one calendar and a valid date range.");
+      return;
+    }
+
+    setAvailabilityPending(true);
+    setAvailabilityError(undefined);
+
+    const result = await window.hcb?.calendar.exportAvailability({
+      calendarIds: selectedAvailabilityCalendarIds,
+      start: availabilityRange.start,
+      end: availabilityRange.end,
+      format: "text"
+    });
+
+    setAvailabilityPending(false);
+
+    if (!result?.ok) {
+      setAvailabilityError(result?.error.message ?? "Availability export failed.");
+      return;
+    }
+
+    setAvailabilityText(result.data.text);
+    setAvailabilityBusyBlockCount(result.data.busyBlockCount);
+  }
+
+  function copyAvailability(): void {
+    if (!availabilityText) {
+      return;
+    }
+
+    void navigator.clipboard?.writeText(availabilityText);
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
@@ -2277,6 +2387,81 @@ function CalendarView(): JSX.Element {
                     description="No calendars have been cached yet."
                     title="No calendars"
                   />
+                ) : null}
+              </div>
+            </Panel>
+            <Panel
+              action={
+                <Button
+                  disabled={!canExportAvailability}
+                  onClick={() => void exportAvailability()}
+                  size="sm"
+                  variant="primary"
+                >
+                  <Copy aria-hidden="true" size={14} />
+                  Generate
+                </Button>
+              }
+              title="Share availability"
+              description={`${selectedAvailabilityCalendarIds.length} calendars`}
+            >
+              <div className="grid gap-3 p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    aria-label="Availability start"
+                    onChange={(event) => setAvailabilityStartDate(event.target.value)}
+                    type="date"
+                    value={availabilityStartDate}
+                  />
+                  <Input
+                    aria-label="Availability end"
+                    min={availabilityStartDate || undefined}
+                    onChange={(event) => setAvailabilityEndDate(event.target.value)}
+                    type="date"
+                    value={availabilityEndDate}
+                  />
+                </div>
+                <div className="grid gap-2" role="group" aria-label="Availability calendars">
+                  {source.calendarSources.map((calendar) => (
+                    <label
+                      className="flex min-h-8 items-center gap-2 text-[var(--text-sm)] text-text-secondary"
+                      key={calendar.id}
+                    >
+                      <input
+                        checked={selectedAvailabilityCalendarIds.includes(calendar.id)}
+                        className="accent-[var(--color-accent)]"
+                        onChange={(event) =>
+                          toggleAvailabilityCalendar(calendar.id, event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
+                    </label>
+                  ))}
+                </div>
+                {availabilityError ? (
+                  <ErrorState description={availabilityError} title="Availability not generated" />
+                ) : null}
+                {availabilityText ? (
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge tone="accent">
+                        {availabilityBusyBlockCount ?? 0} busy blocks
+                      </Badge>
+                      <IconButton
+                        icon={Copy}
+                        label="Copy availability"
+                        onClick={copyAvailability}
+                        variant="ghost"
+                      />
+                    </div>
+                    <textarea
+                      aria-label="Availability export"
+                      className="min-h-32 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 font-mono text-[var(--text-sm)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      readOnly
+                      value={availabilityText}
+                    />
+                  </div>
                 ) : null}
               </div>
             </Panel>

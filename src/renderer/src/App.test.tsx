@@ -14,6 +14,9 @@ import App from "./App";
 const originalHcb = window.hcb;
 const todayDate = new Date().toISOString().slice(0, 10);
 const now = `${todayDate}T00:00:00.000Z`;
+const tomorrow = new Date(now);
+tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+const tomorrowIso = tomorrow.toISOString();
 
 afterEach(() => {
   cleanup();
@@ -694,7 +697,7 @@ describe("App shell", () => {
 
     await goToSection("Calendar");
     expect(screen.getByText("Agenda view")).toBeInTheDocument();
-    expect(screen.getByText("Product")).toBeInTheDocument();
+    expect(screen.getAllByText("Product").length).toBeGreaterThan(0);
 
     await goToSection("Search");
     await userEvent.setup().type(screen.getByRole("textbox", { name: "Search local cache" }), "triage");
@@ -1039,6 +1042,37 @@ describe("App shell", () => {
     await user.click(screen.getByText("Planner shell standup"));
     await user.click(screen.getByRole("button", { name: "Delete event" }));
     expect(api.calendar.delete).toHaveBeenCalledWith({ id: "event-standup" });
+  });
+
+  it("generates static availability from selected calendar sources", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Share availability")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Availability start"), {
+      target: { value: todayDate }
+    });
+    fireEvent.change(screen.getByLabelText("Availability end"), {
+      target: { value: todayDate }
+    });
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => {
+      expect(api.calendar.exportAvailability).toHaveBeenCalledWith({
+        calendarIds: ["cal-product"],
+        start: now,
+        end: tomorrowIso,
+        format: "text"
+      });
+    });
+    expect(await screen.findByRole("textbox", { name: "Availability export" })).toHaveValue(
+      `Availability from ${now} to ${tomorrowIso}`
+    );
+    expect(screen.getByText("2 busy blocks")).toBeInTheDocument();
   });
 
   it("runs calendar-focused command palette actions", async () => {
