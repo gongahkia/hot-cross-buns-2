@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { appColorThemeIds } from "../themeCatalog";
+import { appColorThemeIds } from "./themeCatalog";
 import { hcbErrorCodeSchema, hcbResultSchema } from "./result";
 
 export const HCB_IPC_VERSION = 1;

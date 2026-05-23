@@ -23,7 +23,7 @@ import {
   resolveAppThemeMode,
   type AppColorThemeDefinition,
   type AppColorThemeId
-} from "@shared/themeCatalog";
+} from "@shared/ipc/themeCatalog";
 import {
   AlertTriangle,
   CalendarDays,

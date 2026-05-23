@@ -5,7 +5,7 @@ import {
   resolveAppColorTheme,
   resolveAppThemeMode,
   semanticThemeVariables
-} from "@shared/themeCatalog";
+} from "@shared/ipc/themeCatalog";
 import {
   Bell,
   CalendarDays,
