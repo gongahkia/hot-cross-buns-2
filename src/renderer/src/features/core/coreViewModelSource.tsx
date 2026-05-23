@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type {
   CalendarEventSummary,
   CalendarListSummary,
+  CalendarScheduleSuggestResponse,
   DiagnosticsHealthResponse,
   DiagnosticsSummaryResponse,
   GoogleStatusResponse,
@@ -104,6 +105,7 @@ export interface CoreViewModelSource {
     focusTasks: TaskViewModel[];
     currentTimeLabel: string;
     conflictCount: number;
+    schedule: CalendarScheduleSuggestResponse;
     nextUp: {
       kind: "event" | "scheduledTaskBlock";
       itemId: string;
