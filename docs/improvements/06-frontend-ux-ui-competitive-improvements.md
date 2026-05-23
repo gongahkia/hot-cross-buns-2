@@ -248,6 +248,10 @@ Acceptance checks:
 - Time-zone labels are unambiguous.
 - Calendar edits preserve local/offline status visibility.
 
+Status on 2026-05-23:
+
+- Calendar now has agenda/day/week/month controls, quick-create from day/week/month cells, event edit forms with guests/reminders/location/notes, UTC labeling, per-screen calendar visibility controls, and drag/drop move/resize gestures backed by typed local update requests.
+
 ### 5. Search, Filters, And Perspectives
 
 Use Linear filters, Notion view settings, OmniFocus perspectives, and Obsidian search as the combined target.

@@ -2242,16 +2242,25 @@ function sameTimeOnDate(value: string, day: string): string {
   return `${day}T${value.slice(11)}`;
 }
 
+function visibleCalendarEvent(
+  event: CalendarEventViewModel,
+  visibleCalendarIds: ReadonlySet<string>
+): boolean {
+  return visibleCalendarIds.has(event.calendarId);
+}
+
 function DayView({
   onCreate,
   onMoveEvent,
   onOpen,
-  onResizeEvent
+  onResizeEvent,
+  visibleCalendarIds
 }: {
   onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
   onResizeEvent: (eventId: string, endsAt: string) => void;
+  visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   const source = useCoreViewModelSource();
   const day = source.calendarDayView.id.slice("day-".length);
@@ -2276,7 +2285,10 @@ function DayView({
       <div className="grid gap-2 p-3" role="grid" aria-label="Calendar day view">
         {dayPlanningHours.map((hour) => {
           const slotEvents = source.calendarDayView.events.filter(
-            (event) => !event.allDay && eventOverlapsHour(event, day, hour)
+            (event) =>
+              visibleCalendarEvent(event, visibleCalendarIds) &&
+              !event.allDay &&
+              eventOverlapsHour(event, day, hour)
           );
           const label = hourSlotLabel(hour);
           const slotStart = hourSlotIso(day, hour);
@@ -2371,11 +2383,13 @@ function DayView({
 function WeekView({
   onCreate,
   onMoveEvent,
-  onOpen
+  onOpen,
+  visibleCalendarIds
 }: {
   onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   const source = useCoreViewModelSource();
 
@@ -2423,7 +2437,7 @@ function WeekView({
               <span className="text-[var(--text-md)] font-semibold text-text-primary">{day.dateLabel}</span>
             </div>
             <div className="mt-2 grid gap-1">
-              {day.events.slice(0, 3).map((calendarEvent) => (
+              {day.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds)).slice(0, 3).map((calendarEvent) => (
                 <span
                   className="cursor-grab truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary active:cursor-grabbing"
                   draggable
@@ -2453,10 +2467,12 @@ function WeekView({
 
 function MonthView({
   onCreate,
-  onOpen
+  onOpen,
+  visibleCalendarIds
 }: {
   onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   const source = useCoreViewModelSource();
 
@@ -2465,46 +2481,52 @@ function MonthView({
       <div className="grid gap-1 p-3" role="grid" aria-label="Calendar month view">
         {source.calendarMonthWeeks.map((week) => (
           <div className="grid grid-cols-7 gap-1" key={week.id} role="row">
-            {week.days.map((day) => (
-              <div
-                className={cx(
-                  "min-h-20 rounded-hcbSm border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                  day.isToday && "border-accent",
-                  day.isOutsideMonth && "opacity-55"
-                )}
-                key={day.id}
-                onClick={() => onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })}
-                onKeyDown={(event) =>
-                  handleActivationKeyDown(event, () =>
-                    onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })
-                  )
-                }
-                role="gridcell"
-                tabIndex={0}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[var(--text-xs)] text-text-muted">{day.weekday}</span>
-                  <span className="text-[var(--text-sm)] font-semibold text-text-primary">{day.dateLabel}</span>
+            {week.days.map((day) => {
+              const firstVisibleEvent = day.events.find((event) =>
+                visibleCalendarEvent(event, visibleCalendarIds)
+              );
+
+              return (
+                <div
+                  className={cx(
+                    "min-h-20 rounded-hcbSm border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    day.isToday && "border-accent",
+                    day.isOutsideMonth && "opacity-55"
+                  )}
+                  key={day.id}
+                  onClick={() => onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })}
+                  onKeyDown={(event) =>
+                    handleActivationKeyDown(event, () =>
+                      onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })
+                    )
+                  }
+                  role="gridcell"
+                  tabIndex={0}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[var(--text-xs)] text-text-muted">{day.weekday}</span>
+                    <span className="text-[var(--text-sm)] font-semibold text-text-primary">{day.dateLabel}</span>
+                  </div>
+                  {firstVisibleEvent ? (
+                    <span
+                      className="mt-2 block truncate rounded-hcbSm bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary"
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        onOpen(firstVisibleEvent);
+                      }}
+                      onKeyDown={(keyEvent) => {
+                        keyEvent.stopPropagation();
+                        handleActivationKeyDown(keyEvent, () => onOpen(firstVisibleEvent));
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      {firstVisibleEvent.title}
+                    </span>
+                  ) : null}
                 </div>
-                {day.events[0] ? (
-                  <span
-                    className="mt-2 block truncate rounded-hcbSm bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary"
-                    onClick={(clickEvent) => {
-                      clickEvent.stopPropagation();
-                      onOpen(day.events[0]);
-                    }}
-                    onKeyDown={(keyEvent) => {
-                      keyEvent.stopPropagation();
-                      handleActivationKeyDown(keyEvent, () => onOpen(day.events[0]));
-                    }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    {day.events[0].title}
-                  </span>
-                ) : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
         ))}
       </div>
@@ -2529,10 +2551,23 @@ function CalendarView(): JSX.Element {
   const [availabilityError, setAvailabilityError] = useState<string | undefined>();
   const [availabilityBusyBlockCount, setAvailabilityBusyBlockCount] = useState<number | null>(null);
   const [availabilityPending, setAvailabilityPending] = useState(false);
+  const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
   const calendarNavigationStartedAt = useRef<number | null>(null);
+  const calendarVisibilityInitialized = useRef(false);
   const availableCalendarIds = useMemo(
     () => new Set(source.calendarSources.map((calendar) => calendar.id)),
     [source.calendarSources]
+  );
+  const visibleCalendarIdSet = useMemo(
+    () => new Set(visibleCalendarIds.filter((calendarId) => availableCalendarIds.has(calendarId))),
+    [availableCalendarIds, visibleCalendarIds]
+  );
+  const visibleCalendarEvents = useMemo(
+    () =>
+      source.calendarAgendaEvents.filter((event) =>
+        visibleCalendarEvent(event, visibleCalendarIdSet)
+      ),
+    [source.calendarAgendaEvents, visibleCalendarIdSet]
   );
   const selectedAvailabilityCalendarIds = availabilityCalendarIds.filter((calendarId) =>
     availableCalendarIds.has(calendarId)
@@ -2585,14 +2620,41 @@ function CalendarView(): JSX.Element {
   }, [availabilityCalendarIds.length, source.calendarSources]);
 
   useEffect(() => {
+    if (source.calendarSources.length === 0) {
+      setVisibleCalendarIds([]);
+      calendarVisibilityInitialized.current = false;
+      return;
+    }
+
+    if (!calendarVisibilityInitialized.current) {
+      const selectedCalendarIds = source.calendarSources
+        .filter((calendar) => calendar.selected)
+        .map((calendar) => calendar.id);
+
+      setVisibleCalendarIds(
+        selectedCalendarIds.length > 0
+          ? selectedCalendarIds
+          : source.calendarSources.map((calendar) => calendar.id)
+      );
+      calendarVisibilityInitialized.current = true;
+      return;
+    }
+
+    setVisibleCalendarIds((current) => {
+      const next = current.filter((calendarId) => availableCalendarIds.has(calendarId));
+      return next.length === current.length ? current : next;
+    });
+  }, [availableCalendarIds, source.calendarSources]);
+
+  useEffect(() => {
     scheduleRendererFrame(() => {
       reportRendererTimingSince("calendar.navigate", calendarNavigationStartedAt.current, {
         view: activeViewId,
-        eventCount: source.calendarAgendaEvents.length
+        eventCount: visibleCalendarEvents.length
       });
       calendarNavigationStartedAt.current = null;
     });
-  }, [activeViewId, source.calendarAgendaEvents.length]);
+  }, [activeViewId, visibleCalendarEvents.length]);
 
   if (
     (source.dataState === "loading" ||
@@ -2759,6 +2821,24 @@ function CalendarView(): JSX.Element {
     void navigator.clipboard?.writeText(availabilityText);
   }
 
+  function toggleVisibleCalendar(calendarId: string, selected: boolean): void {
+    setVisibleCalendarIds((current) => {
+      const next = new Set(current);
+
+      if (selected) {
+        next.add(calendarId);
+      } else {
+        next.delete(calendarId);
+      }
+
+      return Array.from(next);
+    });
+  }
+
+  function showAllCalendars(): void {
+    setVisibleCalendarIds(source.calendarSources.map((calendar) => calendar.id));
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
@@ -2789,7 +2869,10 @@ function CalendarView(): JSX.Element {
           <Badge tone={source.syncStatus.pendingMutationCount > 0 ? "warning" : "accent"}>
             {source.syncStatus.pendingMutationCount > 0
               ? `${source.syncStatus.pendingMutationCount} pending`
-              : `Selected calendars: ${source.calendarSources.filter((calendar) => calendar.selected).length}`}
+              : `Visible calendars: ${visibleCalendarIdSet.size}`}
+          </Badge>
+          <Badge tone="neutral">
+            UTC
           </Badge>
         </div>
       </div>
@@ -2831,15 +2914,36 @@ function CalendarView(): JSX.Element {
                 <OfflineState />
               </Panel>
             ) : null}
-            <Panel title="Calendar sources" description="Selected local mirrors">
-              <div role="list">
+            <Panel
+              action={
+                <Button
+                  disabled={visibleCalendarIdSet.size === source.calendarSources.length}
+                  onClick={showAllCalendars}
+                  size="sm"
+                  variant="ghost"
+                >
+                  Show all
+                </Button>
+              }
+              title="Calendar visibility"
+              description={`${visibleCalendarIdSet.size}/${source.calendarSources.length} shown, times shown in UTC`}
+            >
+              <div className="grid gap-2 p-3" role="group" aria-label="Calendar visibility">
                 {source.calendarSources.map((calendar) => (
-                  <ListRow
+                  <label
+                    className="flex min-h-9 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary"
                     key={calendar.id}
-                    leading={<CalendarDays aria-hidden="true" className="text-accent" size={16} />}
-                    title={calendar.title}
-                    trailing={<Badge tone={calendar.selected ? "success" : "neutral"}>{calendar.selected ? "On" : "Off"}</Badge>}
-                  />
+                  >
+                    <input
+                      checked={visibleCalendarIdSet.has(calendar.id)}
+                      className="accent-[var(--color-accent)]"
+                      onChange={(event) => toggleVisibleCalendar(calendar.id, event.target.checked)}
+                      type="checkbox"
+                    />
+                    <CalendarDays aria-hidden="true" className="text-accent" size={16} />
+                    <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
+                    <Badge tone="neutral">{calendar.timeZone ?? "UTC"}</Badge>
+                  </label>
                 ))}
                 {source.calendarSources.length === 0 ? (
                   <EmptyState
@@ -2933,7 +3037,7 @@ function CalendarView(): JSX.Element {
               ariaLabel="Calendar agenda"
               estimateRowHeight={58}
               getKey={(event) => event.id}
-              items={source.calendarAgendaEvents}
+              items={visibleCalendarEvents}
               performanceLabel="calendar.agenda"
               renderRow={(event) => <EventRow event={event} onOpen={openEdit} />}
               viewportHeight={352}
@@ -2946,6 +3050,7 @@ function CalendarView(): JSX.Element {
             onMoveEvent={moveCalendarEvent}
             onOpen={openEdit}
             onResizeEvent={resizeCalendarEvent}
+            visibleCalendarIds={visibleCalendarIdSet}
           />
         ) : null}
         {activeViewId === "week" ? (
@@ -2953,9 +3058,16 @@ function CalendarView(): JSX.Element {
             onCreate={openCreate}
             onMoveEvent={moveCalendarEvent}
             onOpen={openEdit}
+            visibleCalendarIds={visibleCalendarIdSet}
           />
         ) : null}
-        {activeViewId === "month" ? <MonthView onCreate={openCreate} onOpen={openEdit} /> : null}
+        {activeViewId === "month" ? (
+          <MonthView
+            onCreate={openCreate}
+            onOpen={openEdit}
+            visibleCalendarIds={visibleCalendarIdSet}
+          />
+        ) : null}
       </SectionChrome>
     </div>
   );

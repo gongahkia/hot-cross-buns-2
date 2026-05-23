@@ -1138,6 +1138,74 @@ describe("App shell", () => {
     expect(screen.getByLabelText("Event ends")).toHaveValue(`${todayDate}T12:00`);
   });
 
+  it("filters calendar views by visible calendar source", async () => {
+    const api = seededHcb();
+    api.calendar.listCalendars = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "cal-product",
+            title: "Product",
+            selected: true,
+            timeZone: "UTC",
+            updatedAt: now,
+            eventCount: 1
+          },
+          {
+            id: "cal-engineering",
+            title: "Engineering",
+            selected: true,
+            timeZone: "UTC",
+            updatedAt: now,
+            eventCount: 1
+          }
+        ],
+        page: { limit: 100, totalKnown: 2 }
+      })
+    );
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-standup",
+            calendarId: "cal-product",
+            title: "Planner shell standup",
+            startsAt: `${todayDate}T09:30:00.000Z`,
+            endsAt: `${todayDate}T09:50:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-engineering-sync",
+            calendarId: "cal-engineering",
+            title: "Engineering sync",
+            startsAt: `${todayDate}T10:30:00.000Z`,
+            endsAt: `${todayDate}T11:00:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 2 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Planner shell standup")).toBeInTheDocument();
+    expect(screen.getByText("Engineering sync")).toBeInTheDocument();
+    expect(screen.getAllByText("UTC").length).toBeGreaterThan(0);
+
+    const visibility = screen.getByRole("group", { name: "Calendar visibility" });
+    await user.click(within(visibility).getByLabelText(/Product/));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Planner shell standup")).not.toBeInTheDocument();
+      expect(screen.getByText("Engineering sync")).toBeInTheDocument();
+    });
+  });
+
   it("drags and resizes calendar events in the day planning grid", async () => {
     const api = seededHcb();
     installHcb(api);
