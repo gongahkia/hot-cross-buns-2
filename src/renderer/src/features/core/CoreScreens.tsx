@@ -125,6 +125,19 @@ function colorThemeSwatch(theme: AppColorThemeDefinition): ReactNode {
   );
 }
 
+const uiFontSuggestions = [
+  "SF Pro Text",
+  "Inter",
+  "Roboto",
+  "Segoe UI",
+  "Helvetica Neue",
+  "Arial",
+  "Georgia",
+  "Times New Roman",
+  "JetBrains Mono",
+  "Menlo"
+];
+
 function priorityLabel(priority: CorePriority): string {
   if (priority === "none") {
     return "No priority";
@@ -5033,10 +5046,15 @@ function SettingsView(): JSX.Element {
   ]);
   const [googleClientId, setGoogleClientId] = useState(googleStatus.clientId ?? "");
   const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [fontNameDraft, setFontNameDraft] = useState(settings.uiFontName ?? "");
 
   useEffect(() => {
     setGoogleClientId(googleStatus.clientId ?? "");
   }, [googleStatus.clientId]);
+
+  useEffect(() => {
+    setFontNameDraft(settings.uiFontName ?? "");
+  }, [settings.uiFontName]);
 
   function updateSettings(request: SettingsUpdateRequest): void {
     setRecoveryMessage(null);
@@ -5054,6 +5072,12 @@ function SettingsView(): JSX.Element {
       theme,
       colorTheme: nextColorTheme.id
     });
+  }
+
+  function saveFontName(value: string): void {
+    const trimmed = value.trim();
+
+    updateSettings({ uiFontName: trimmed ? trimmed : null });
   }
 
   function updateSelectedTaskList(taskListId: string, selected: boolean): void {
@@ -5560,6 +5584,83 @@ function SettingsView(): JSX.Element {
                 ))}
               </select>
             </label>
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+            <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+              <span>Font family</span>
+              <Input
+                aria-label="Font family"
+                list="ui-font-family-options"
+                onBlur={(event) => saveFontName(event.currentTarget.value)}
+                onChange={(event) => setFontNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                }}
+                placeholder="System"
+                value={fontNameDraft}
+              />
+              <datalist id="ui-font-family-options">
+                {uiFontSuggestions.map((fontName) => (
+                  <option key={fontName} value={fontName} />
+                ))}
+              </datalist>
+            </label>
+            <Button
+              onClick={() => {
+                setFontNameDraft("");
+                updateSettings({ uiFontName: null });
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              Reset font
+            </Button>
+          </div>
+          <div className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-[var(--text-sm)] font-medium text-text-primary" htmlFor="ui-text-size">
+                Text size
+              </label>
+              <span className="font-mono text-[var(--text-xs)] text-text-muted">
+                {settings.uiTextSizePoints} pt
+              </span>
+            </div>
+            <input
+              aria-label="Text size"
+              className="w-full accent-[var(--color-accent)]"
+              id="ui-text-size"
+              max={24}
+              min={9}
+              onChange={(event) => updateSettings({ uiTextSizePoints: Number(event.target.value) })}
+              step={1}
+              type="range"
+              value={settings.uiTextSizePoints}
+            />
+            <div className="grid grid-cols-[96px_auto] items-center gap-2">
+              <Input
+                aria-label="Text size points"
+                max={24}
+                min={9}
+                onBlur={(event) =>
+                  updateSettings({
+                    uiTextSizePoints: Math.min(24, Math.max(9, Number(event.currentTarget.value) || 13))
+                  })
+                }
+                onChange={(event) =>
+                  updateSettings({
+                    uiTextSizePoints: Math.min(24, Math.max(9, Number(event.target.value) || 13))
+                  })
+                }
+                step={1}
+                type="number"
+                value={settings.uiTextSizePoints}
+              />
+              <Button onClick={() => updateSettings({ uiTextSizePoints: 13 })} size="sm" variant="ghost">
+                Reset size
+              </Button>
+            </div>
           </div>
           <div className="grid gap-2">
             <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">

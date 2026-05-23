@@ -364,6 +364,8 @@ const hcbApi: HcbApi = {
       ok({
         theme: "system" as const,
         colorTheme: "notion" as const,
+        uiFontName: null,
+        uiTextSizePoints: 13,
         startOnLogin: false,
         selectedTaskListIds: [],
         selectedCalendarIds: [],
@@ -392,6 +394,8 @@ const hcbApi: HcbApi = {
       ok({
         theme: request.theme ?? "system",
         colorTheme: request.colorTheme ?? "notion",
+        uiFontName: request.uiFontName === undefined ? null : request.uiFontName,
+        uiTextSizePoints: request.uiTextSizePoints ?? 13,
         startOnLogin: request.startOnLogin ?? false,
         selectedTaskListIds: request.selectedTaskListIds ?? [],
         selectedCalendarIds: request.selectedCalendarIds ?? [],

@@ -165,6 +165,8 @@ describe("SQLite-backed domain services", () => {
     const updatedSettings = await domain.settings.update({
       theme: "dark",
       colorTheme: "dracula",
+      uiFontName: "Inter",
+      uiTextSizePoints: 15,
       mcpEnabled: true
     });
     const tasks = await domain.planner.listTasks({ status: "all", limit: 10 });
@@ -182,6 +184,8 @@ describe("SQLite-backed domain services", () => {
     expect(updatedSettings).toMatchObject({
       theme: "dark",
       colorTheme: "dracula",
+      uiFontName: "Inter",
+      uiTextSizePoints: 15,
       mcpEnabled: true
     });
     expect(tasks.items).toEqual(
@@ -238,6 +242,8 @@ describe("SQLite-backed domain services", () => {
       setupCompletedAt: "2026-05-22T00:00:00.000Z",
       theme: "dark",
       colorTheme: "githubDark",
+      uiFontName: "JetBrains Mono",
+      uiTextSizePoints: 16,
       selectedTaskListIds: ["list-a", "list-b", "list-a"],
       selectedCalendarIds: ["cal-a"],
       syncMode: "near-real-time",
@@ -263,6 +269,8 @@ describe("SQLite-backed domain services", () => {
       setupCompletedAt: "2026-05-22T00:00:00.000Z",
       theme: "dark",
       colorTheme: "githubDark",
+      uiFontName: "JetBrains Mono",
+      uiTextSizePoints: 16,
       selectedTaskListIds: ["list-a", "list-b"],
       selectedCalendarIds: ["cal-a"],
       syncMode: "near-real-time",

@@ -10,6 +10,8 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
   return {
     theme: "system",
     colorTheme: "notion",
+    uiFontName: null,
+    uiTextSizePoints: 13,
     startOnLogin: false,
     selectedTaskListIds: [],
     selectedCalendarIds: [],

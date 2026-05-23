@@ -314,6 +314,8 @@ describe("shared IPC contracts", () => {
       settingsUpdateRequestSchema.parse({
         setupCompletedAt: completedAt,
         colorTheme: "dracula",
+        uiFontName: "Inter",
+        uiTextSizePoints: 15,
         selectedTaskListIds: ["list-inbox"],
         selectedCalendarIds: ["cal-product"],
         syncMode: "manual",
@@ -323,12 +325,16 @@ describe("shared IPC contracts", () => {
     ).toMatchObject({
       setupCompletedAt: completedAt,
       colorTheme: "dracula",
+      uiFontName: "Inter",
+      uiTextSizePoints: 15,
       syncMode: "manual"
     });
     expect(
       settingsSnapshotSchema.parse({
         theme: "system",
         colorTheme: "notion",
+        uiFontName: null,
+        uiTextSizePoints: 13,
         startOnLogin: false,
         quickCaptureShortcut: null,
         selectedTaskListIds: [],
@@ -365,6 +371,9 @@ describe("shared IPC contracts", () => {
       }).success
     ).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ colorTheme: "missing-theme" }).success).toBe(false);
+    expect(settingsUpdateRequestSchema.safeParse({ uiFontName: "" }).success).toBe(false);
+    expect(settingsUpdateRequestSchema.safeParse({ uiTextSizePoints: 8 }).success).toBe(false);
+    expect(settingsUpdateRequestSchema.safeParse({ uiTextSizePoints: 25 }).success).toBe(false);
     expect(settingsRecoveryActionRequestSchema.parse({ action: "resetOnboarding" })).toEqual({
       action: "resetOnboarding"
     });

@@ -99,6 +99,8 @@ function testSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapsh
   return {
     theme: "system",
     colorTheme: "notion",
+    uiFontName: null,
+    uiTextSizePoints: 13,
     startOnLogin: false,
     selectedTaskListIds: [],
     selectedCalendarIds: [],
@@ -2101,7 +2103,12 @@ describe("App shell", () => {
 
   it("applies base theme and color theme settings", async () => {
     const api = seededHcb();
-    let settings = testSettings({ theme: "dark", colorTheme: "dracula" });
+    let settings = testSettings({
+      theme: "dark",
+      colorTheme: "dracula",
+      uiFontName: "Inter",
+      uiTextSizePoints: 15
+    });
     api.settings.get = vi.fn(async () => ok(settings));
     api.settings.update = vi.fn(async (request) => {
       settings = testSettings({
@@ -2119,6 +2126,8 @@ describe("App shell", () => {
       expect(document.documentElement).toHaveAttribute("data-theme", "dark");
       expect(document.documentElement).toHaveAttribute("data-color-theme", "dracula");
       expect(document.documentElement.style.getPropertyValue("--color-accent")).toBe("#FF79C6");
+      expect(document.documentElement.style.getPropertyValue("--font-family")).toContain("\"Inter\"");
+      expect(document.documentElement.style.getPropertyValue("--text-base")).toBe("15px");
     });
 
     await goToSection("Settings");
@@ -2141,6 +2150,23 @@ describe("App shell", () => {
       expect(api.settings.update).toHaveBeenCalledWith({ colorTheme: "githubLight" });
       expect(document.documentElement).toHaveAttribute("data-color-theme", "githubLight");
       expect(screen.getByRole("button", { name: /GitHub Light/ })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    const fontInput = screen.getByRole("textbox", { name: "Font family" });
+    await user.clear(fontInput);
+    await user.type(fontInput, "JetBrains Mono");
+    fireEvent.blur(fontInput);
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ uiFontName: "JetBrains Mono" });
+      expect(document.documentElement.style.getPropertyValue("--font-family")).toContain("\"JetBrains Mono\"");
+    });
+
+    fireEvent.change(screen.getByLabelText("Text size"), { target: { value: "16" } });
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ uiTextSizePoints: 16 });
+      expect(document.documentElement.style.getPropertyValue("--text-base")).toBe("16px");
     });
   });
 
