@@ -10,6 +10,9 @@ import type {
   NoteDetail,
   NoteSummary,
   SearchResultItem,
+  ScheduledTaskBlockCreateRequest,
+  ScheduledTaskBlockMoveRequest,
+  ScheduledTaskBlockSummary,
   SettingsRecoveryActionRequest,
   SettingsRecoveryActionResponse,
   SettingsSnapshot,
@@ -36,6 +39,7 @@ import type {
   CalendarMonthWeekViewModel,
   NoteViewModel,
   SearchViewModel,
+  ScheduledTaskBlockViewModel,
   SettingsSectionViewModel,
   TaskFilterId,
   TaskFilterViewModel,
@@ -55,6 +59,7 @@ export interface CoreViewModelSource {
   errorMessage?: string;
   getSearchViewModel: (query: string) => SearchViewModel;
   getTaskById: (taskId: string) => TaskViewModel;
+  getScheduledTaskBlockById: (blockId: string) => ScheduledTaskBlockViewModel | null;
   getTaskFilterViewModel: (filterId: TaskFilterId) => TaskFilterViewModel;
   hasCachedData: boolean;
   initialNotes: NoteViewModel[];
@@ -86,6 +91,10 @@ export interface CoreViewModelSource {
   createTaskList: (request: TaskListCreateRequest) => Promise<boolean>;
   renameTaskList: (request: TaskListRenameRequest) => Promise<boolean>;
   deleteTaskList: (taskListId: string) => Promise<boolean>;
+  scheduleTaskBlock: (request: ScheduledTaskBlockCreateRequest) => Promise<boolean>;
+  moveScheduledTaskBlock: (request: ScheduledTaskBlockMoveRequest) => Promise<boolean>;
+  unscheduleTaskBlock: (blockId: string) => Promise<boolean>;
+  scheduledTaskBlocks: ScheduledTaskBlockViewModel[];
   settingsSections: SettingsSectionViewModel[];
   syncStatus: SyncStatusResponse;
   taskFilterViewModels: TaskFilterViewModel[];
@@ -93,7 +102,7 @@ export interface CoreViewModelSource {
   todayViewModel: {
     metrics: Array<{ id: string; label: string; value: string }>;
     focusTasks: TaskViewModel[];
-    timelineRows: Array<{ kind: "task" | "event"; itemId: string }>;
+    timelineRows: Array<{ kind: "task" | "event" | "scheduledTaskBlock"; itemId: string }>;
   };
 }
 
@@ -104,6 +113,7 @@ interface CoreDataSnapshot {
   tasks: TaskSummary[];
   calendars: CalendarListSummary[];
   events: CalendarEventSummary[];
+  scheduledTaskBlocks: ScheduledTaskBlockSummary[];
   notes: NoteSummary[];
   settings: SettingsSnapshot;
   syncStatus: SyncStatusResponse;
@@ -249,6 +259,7 @@ const emptySnapshot: CoreDataSnapshot = {
   tasks: [],
   calendars: [],
   events: [],
+  scheduledTaskBlocks: [],
   notes: [],
   settings: emptySettings,
   syncStatus: emptySyncStatus,
@@ -395,6 +406,19 @@ function usePreloadCoreSource(): CoreViewModelSource {
       }
     }));
   }, []);
+
+  const setScheduledBlocksSnapshot = useCallback(
+    (updater: (blocks: ScheduledTaskBlockSummary[]) => ScheduledTaskBlockSummary[]) => {
+      setLoadState((current) => ({
+        ...current,
+        snapshot: {
+          ...current.snapshot,
+          scheduledTaskBlocks: updater(current.snapshot.scheduledTaskBlocks)
+        }
+      }));
+    },
+    []
+  );
 
   const setTaskListsSnapshot = useCallback(
     (updater: (taskLists: TaskListSummary[]) => TaskListSummary[]) => {
@@ -825,6 +849,118 @@ function usePreloadCoreSource(): CoreViewModelSource {
     [beginTaskMutation, failTaskMutation, finishTaskMutation, setTaskListsSnapshot, setTasksSnapshot]
   );
 
+  const scheduleTaskBlock = useCallback(
+    async (request: ScheduledTaskBlockCreateRequest): Promise<boolean> => {
+      if (!window.hcb) {
+        failTaskMutation("Task scheduling requires the preload bridge.", () => void scheduleTaskBlock(request));
+        return false;
+      }
+
+      beginTaskMutation();
+      const result = await window.hcb.calendar.scheduleTaskBlock(request);
+
+      if (result.ok) {
+        setScheduledBlocksSnapshot((blocks) => [result.data, ...blocks]);
+        finishTaskMutation();
+        return true;
+      }
+
+      failTaskMutation(result.error.message, () => void scheduleTaskBlock(request));
+      return false;
+    },
+    [beginTaskMutation, failTaskMutation, finishTaskMutation, setScheduledBlocksSnapshot]
+  );
+
+  const moveScheduledTaskBlock = useCallback(
+    async (request: ScheduledTaskBlockMoveRequest): Promise<boolean> => {
+      if (!window.hcb) {
+        failTaskMutation("Scheduled task moves require the preload bridge.", () => void moveScheduledTaskBlock(request));
+        return false;
+      }
+
+      let previousBlocks: ScheduledTaskBlockSummary[] = [];
+      beginTaskMutation();
+      setScheduledBlocksSnapshot((blocks) => {
+        previousBlocks = blocks;
+        return blocks.map((block) =>
+          block.id === request.id ? optimisticScheduledBlockPatch(block, request) : block
+        );
+      });
+
+      const result = await window.hcb.calendar.moveScheduledTaskBlock(request);
+
+      if (result.ok) {
+        setScheduledBlocksSnapshot((blocks) =>
+          blocks.map((block) => (block.id === request.id ? result.data : block))
+        );
+        finishTaskMutation();
+        return true;
+      }
+
+      setScheduledBlocksSnapshot(() => previousBlocks);
+      failTaskMutation(result.error.message, () => void moveScheduledTaskBlock(request));
+      return false;
+    },
+    [beginTaskMutation, failTaskMutation, finishTaskMutation, setScheduledBlocksSnapshot]
+  );
+
+  const unscheduleTaskBlock = useCallback(
+    async (blockId: string): Promise<boolean> => {
+      if (!window.hcb) {
+        failTaskMutation("Unscheduling requires the preload bridge.", () => void unscheduleTaskBlock(blockId));
+        return false;
+      }
+
+      let previousBlocks: ScheduledTaskBlockSummary[] = [];
+      let previousEvents: CalendarEventSummary[] = [];
+      let removedEventId: string | null = null;
+      beginTaskMutation();
+      setScheduledBlocksSnapshot((blocks) => {
+        previousBlocks = blocks;
+        removedEventId = blocks.find((block) => block.id === blockId)?.calendarEventId ?? null;
+        return blocks.filter((block) => block.id !== blockId);
+      });
+      if (removedEventId) {
+        setLoadState((current) => ({
+          ...current,
+          snapshot: {
+            ...current.snapshot,
+            events: (() => {
+              previousEvents = current.snapshot.events;
+              return current.snapshot.events.filter(
+                (event) => (event.eventId ?? event.id) !== removedEventId
+              );
+            })()
+          }
+        }));
+      }
+
+      const result = await window.hcb.calendar.unscheduleTaskBlock({
+        id: blockId,
+        deleteCalendarEvent: true
+      });
+
+      if (result.ok) {
+        finishTaskMutation();
+        return true;
+      }
+
+      setScheduledBlocksSnapshot(() => previousBlocks);
+      if (previousEvents.length > 0) {
+        setLoadState((current) => ({
+          ...current,
+          snapshot: {
+            ...current.snapshot,
+            events: previousEvents
+          }
+        }));
+      }
+      failTaskMutation(result.error.message, () => void unscheduleTaskBlock(blockId));
+      return false;
+    },
+    [beginTaskMutation, failTaskMutation, finishTaskMutation, setScheduledBlocksSnapshot]
+  );
+
   const load = useCallback(() => {
     if (!window.hcb) {
       setLoadState({
@@ -980,7 +1116,10 @@ function usePreloadCoreSource(): CoreViewModelSource {
       deleteTask,
       createTaskList,
       renameTaskList,
-      deleteTaskList
+      deleteTaskList,
+      scheduleTaskBlock,
+      moveScheduledTaskBlock,
+      unscheduleTaskBlock
     }),
     [
       completeTask,
@@ -991,13 +1130,16 @@ function usePreloadCoreSource(): CoreViewModelSource {
       load,
       loadState,
       moveTask,
+      moveScheduledTaskBlock,
       renameTaskList,
       refreshGoogleStatus,
       runRecoveryAction,
       reopenTask,
       setGoogleStatus,
       settingsMutation,
+      scheduleTaskBlock,
       taskMutation,
+      unscheduleTaskBlock,
       updateSettings,
       updateTask
     ]
@@ -1017,6 +1159,7 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
     deletedTasks,
     calendars,
     events,
+    scheduledTaskBlocks,
     notes,
     settings,
     syncStatus,
@@ -1037,6 +1180,9 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
     window.hcb.calendar
       .listEvents({ start: range.start, end: range.end, limit: 250 })
       .then((result) => unwrap(result, "Calendar events failed")),
+    window.hcb.calendar
+      .listScheduledTaskBlocks({ start: range.start, end: range.end, limit: 250 })
+      .then((result) => unwrap(result, "Scheduled task blocks failed")),
     window.hcb.notes.list({ limit: 50 }).then((result) => unwrap(result, "Notes failed")),
     window.hcb.settings.get().then((result) => unwrap(result, "Settings failed")),
     window.hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
@@ -1049,6 +1195,7 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
     tasks: uniqueTasks([...tasks.items, ...hiddenTasks.items, ...deletedTasks.items]),
     calendars: calendars.items,
     events: events.items,
+    scheduledTaskBlocks: scheduledTaskBlocks.items,
     notes: notes.items,
     settings,
     syncStatus,
@@ -1084,6 +1231,9 @@ function buildCoreViewModelSource(
     createTaskList: (request: TaskListCreateRequest) => Promise<boolean>;
     renameTaskList: (request: TaskListRenameRequest) => Promise<boolean>;
     deleteTaskList: (taskListId: string) => Promise<boolean>;
+    scheduleTaskBlock: (request: ScheduledTaskBlockCreateRequest) => Promise<boolean>;
+    moveScheduledTaskBlock: (request: ScheduledTaskBlockMoveRequest) => Promise<boolean>;
+    unscheduleTaskBlock: (blockId: string) => Promise<boolean>;
   }
 ): CoreViewModelSource {
   const taskListsById = Object.fromEntries(snapshot.taskLists.map((list) => [list.id, list]));
@@ -1104,14 +1254,34 @@ function buildCoreViewModelSource(
     calendarEventViewModel(event, calendarTitleById[event.calendarId])
   );
   const eventsById = Object.fromEntries(events.map((event) => [event.id, event]));
+  const scheduledTaskBlocks = snapshot.scheduledTaskBlocks.map((block) =>
+    scheduledTaskBlockViewModel(block, calendarTitleById[block.calendarId])
+  );
+  const scheduledTaskBlocksById = Object.fromEntries(
+    scheduledTaskBlocks.map((block) => [block.id, block])
+  );
+  const scheduledEventIds = new Set(scheduledTaskBlocks.map((block) => block.calendarEventId));
+  const scheduledTaskIds = new Set(scheduledTaskBlocks.map((block) => block.taskId));
   const eventDayIndex = buildCalendarEventDayIndex(events, snapshot.events);
   const notes = snapshot.notes.map(noteViewModel);
   const rootTasks = tasks.filter((task) => task.parentId === null);
   const openTasks = rootTasks.filter((task) => task.status === "open");
+  const unscheduledOpenTasks = openTasks.filter((task) => !scheduledTaskIds.has(task.id));
   const completedTasks = rootTasks.filter((task) => task.status === "completed");
   const hiddenTasks = rootTasks.filter((task) => task.status === "hidden");
   const deletedTasks = rootTasks.filter((task) => task.status === "deleted");
-  const todayEvents = eventsForDate(eventDayIndex, startOfUtcDay(new Date()));
+  const todayKey = dayKey(startOfUtcDay(new Date()));
+  const todayEvents = eventsForDate(eventDayIndex, startOfUtcDay(new Date())).filter(
+    (event) => !scheduledEventIds.has(event.eventId)
+  );
+  const todayScheduledBlocks = scheduledTaskBlocks
+    .filter((block) => block.startsAt.slice(0, 10) === todayKey)
+    .sort(
+      (left, right) =>
+        left.startsAt.localeCompare(right.startsAt) ||
+        left.endsAt.localeCompare(right.endsAt) ||
+        left.id.localeCompare(right.id)
+    );
   const taskFilterViewModels = taskFilters(
     openTasks,
     completedTasks,
@@ -1121,8 +1291,11 @@ function buildCoreViewModelSource(
   );
   const todayTimelineRows = [
     ...todayEvents.slice(0, 5).map((event) => ({ kind: "event" as const, itemId: event.id })),
-    ...openTasks.slice(0, 5).map((task) => ({ kind: "task" as const, itemId: task.id }))
-  ].slice(0, 8);
+    ...todayScheduledBlocks
+      .slice(0, 8)
+      .map((block) => ({ kind: "scheduledTaskBlock" as const, itemId: block.id })),
+    ...unscheduledOpenTasks.slice(0, 5).map((task) => ({ kind: "task" as const, itemId: task.id }))
+  ].slice(0, 12);
 
   return {
     calendarAgendaEvents: events,
@@ -1134,6 +1307,7 @@ function buildCoreViewModelSource(
     dataState: options.state,
     errorMessage: options.errorMessage,
     getSearchViewModel: () => idleSearchViewModel(),
+    getScheduledTaskBlockById: (blockId) => scheduledTaskBlocksById[blockId] ?? null,
     getTaskById: (taskId) => taskById[taskId] ?? missingTask(taskId),
     getTaskFilterViewModel: (filterId) =>
       taskFilterViewModels.find((filter) => filter.id === filterId) ?? taskFilterViewModels[0],
@@ -1165,6 +1339,10 @@ function buildCoreViewModelSource(
     createTaskList: options.createTaskList,
     renameTaskList: options.renameTaskList,
     deleteTaskList: options.deleteTaskList,
+    scheduleTaskBlock: options.scheduleTaskBlock,
+    moveScheduledTaskBlock: options.moveScheduledTaskBlock,
+    unscheduleTaskBlock: options.unscheduleTaskBlock,
+    scheduledTaskBlocks,
     settingsSections: settingsSections(snapshot),
     syncStatus: snapshot.syncStatus,
     taskFilterViewModels,
@@ -1172,11 +1350,12 @@ function buildCoreViewModelSource(
     todayViewModel: {
       metrics: [
         { id: "open", label: "Open tasks", value: String(openTasks.length) },
+        { id: "scheduled", label: "Scheduled", value: String(scheduledTaskBlocks.length) },
         { id: "events", label: "Events", value: String(events.length) },
         { id: "notes", label: "Local notes", value: String(notes.length) },
         { id: "sync", label: "Sync", value: syncLabel(snapshot.syncStatus) }
       ],
-      focusTasks: openTasks.slice(0, 6),
+      focusTasks: unscheduledOpenTasks.slice(0, 6),
       timelineRows: todayTimelineRows
     }
   };
@@ -1578,6 +1757,24 @@ function optimisticTaskPatch(task: TaskSummary, request: TaskUpdateRequest): Tas
   };
 }
 
+function optimisticScheduledBlockPatch(
+  block: ScheduledTaskBlockSummary,
+  request: ScheduledTaskBlockMoveRequest
+): ScheduledTaskBlockSummary {
+  const startsAt = request.startsAt ?? block.startsAt;
+  const durationMinutes = request.durationMinutes ?? block.durationMinutes;
+
+  return {
+    ...block,
+    ...(request.calendarId === undefined ? {} : { calendarId: request.calendarId }),
+    startsAt,
+    endsAt: new Date(Date.parse(startsAt) + durationMinutes * 60 * 1000).toISOString(),
+    durationMinutes,
+    mutationState: "queued" as const,
+    updatedAt: new Date().toISOString()
+  };
+}
+
 function uniqueTasks(tasks: TaskSummary[]): TaskSummary[] {
   return Array.from(new Map(tasks.map((task) => [task.id, task])).values());
 }
@@ -1601,6 +1798,27 @@ function calendarEventViewModel(
     notes: event.notes?.trim() || "Calendar cache",
     guestEmails: event.guestEmails ?? [],
     reminderMinutes: event.reminderMinutes ?? []
+  };
+}
+
+function scheduledTaskBlockViewModel(
+  block: ScheduledTaskBlockSummary,
+  calendarTitle: string | undefined
+): ScheduledTaskBlockViewModel {
+  return {
+    id: block.id,
+    taskId: block.taskId,
+    calendarEventId: block.calendarEventId,
+    calendarId: block.calendarId,
+    title: block.title,
+    calendar: calendarTitle ?? block.calendarId,
+    timeLabel: timeLabel(block.startsAt),
+    rangeLabel: `${timeLabel(block.startsAt)}-${timeLabel(block.endsAt)}`,
+    startsAt: block.startsAt,
+    endsAt: block.endsAt,
+    durationMinutes: block.durationMinutes,
+    status: block.status,
+    mutationState: block.mutationState
   };
 }
 
@@ -1778,6 +1996,7 @@ function hasSnapshotData(snapshot: CoreDataSnapshot): boolean {
     snapshot.tasks.length > 0 ||
     snapshot.calendars.length > 0 ||
     snapshot.events.length > 0 ||
+    snapshot.scheduledTaskBlocks.length > 0 ||
     snapshot.notes.length > 0
   );
 }

@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_LIST_LIMIT,
   MAX_RANGE_LIMIT,
+  availabilityExportRequestSchema,
   calendarEventCreateRequestSchema,
   calendarEventUpdateRequestSchema,
   calendarRangeRequestSchema,
   hcbDomainSchema,
   ipcContracts,
   nativeCapabilitiesResponseSchema,
+  scheduledTaskBlockCreateRequestSchema,
+  scheduledTaskBlockMoveRequestSchema,
   settingsRecoveryActionRequestSchema,
   settingsSnapshotSchema,
   settingsUpdateRequestSchema,
@@ -123,6 +126,42 @@ describe("shared IPC contracts", () => {
       }).success
     ).toBe(false);
     expect(calendarEventUpdateRequestSchema.safeParse({ id: "event-1" }).success).toBe(false);
+  });
+
+  it("validates scheduled task blocks and static availability export contracts", () => {
+    expect(
+      scheduledTaskBlockCreateRequestSchema.parse({
+        taskId: "task-1",
+        calendarId: "cal-1",
+        startsAt: "2026-05-22T09:00:00.000Z"
+      })
+    ).toMatchObject({
+      taskId: "task-1",
+      durationMinutes: 30
+    });
+    expect(
+      scheduledTaskBlockCreateRequestSchema.safeParse({
+        taskId: "task-1",
+        calendarId: "cal-1",
+        startsAt: "2026-05-22T09:00:00.000Z",
+        durationMinutes: 2
+      }).success
+    ).toBe(false);
+    expect(
+      scheduledTaskBlockMoveRequestSchema.safeParse({
+        id: "block-1"
+      }).success
+    ).toBe(false);
+    expect(
+      availabilityExportRequestSchema.parse({
+        start: "2026-05-22T00:00:00.000Z",
+        end: "2026-05-23T00:00:00.000Z"
+      })
+    ).toMatchObject({
+      format: "text"
+    });
+    expect(ipcContracts.calendar.scheduleTaskBlock.method).toBe("scheduleTaskBlock");
+    expect(ipcContracts.calendar.exportAvailability.method).toBe("exportAvailability");
   });
 
   it("validates task write payloads as date-only Google Tasks mutations", () => {

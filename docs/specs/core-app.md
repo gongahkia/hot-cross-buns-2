@@ -192,5 +192,5 @@ Remaining Mac v1 blockers:
 - UI task, task-list, calendar-event, and note commands call typed preload APIs. Task and event writes optimistically update local mirrors and enqueue Google mutations; note writes update local SQLite only.
 - MCP task, event, and note tools call the same main-side domain services as UI IPC handlers, including the same validation and mutation queue paths for synced task/event resources.
 - Local search is SQLite-backed and capped. It indexes current task title/details/list names, event title/location/description/calendar names, and note title/body; it applies the structured local DSL in main-process SQLite and never calls Google per keystroke.
-- Today's local timeline is grouped into all-day, morning, afternoon, evening, and unscheduled sections using cached event starts and existing task rows. It does not yet include task planned-time, duration, conflicts, or scheduling suggestions.
+- Today's local timeline is grouped into all-day, morning, afternoon, evening, and unscheduled sections using cached events, scheduled task blocks, and existing task rows. Timed tasks are represented as linked Google Calendar blocks plus local metadata; task due dates remain date-only.
 - Calendar agenda, task, note, and search surfaces remain virtualized or range/pagination-shaped to preserve renderer and IPC budgets.

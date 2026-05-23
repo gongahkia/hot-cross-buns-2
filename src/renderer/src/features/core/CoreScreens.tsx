@@ -11,8 +11,10 @@ import type {
 } from "@shared/ipc/contracts";
 import {
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   Circle,
+  Clock3,
   Copy,
   ListPlus,
   Pencil,
@@ -20,6 +22,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  StepForward,
   Search,
   Settings2,
   Trash2,
@@ -41,6 +44,7 @@ import type {
   CorePriority,
   NoteViewModel,
   SearchSource,
+  ScheduledTaskBlockViewModel,
   SettingsSectionId,
   TaskFilterId,
   TaskGroupViewModel,
@@ -473,14 +477,55 @@ function EventRow({
 }
 
 function TodayTimelineRow({
+  onMoveBlock,
+  onUnscheduleBlock,
   row
 }: {
+  onMoveBlock: (block: ScheduledTaskBlockViewModel, minutes: number) => void;
+  onUnscheduleBlock: (blockId: string) => void;
   row:
     | { kind: "task"; task: TaskViewModel }
-    | { kind: "event"; event: CalendarEventViewModel };
+    | { kind: "event"; event: CalendarEventViewModel }
+    | { kind: "scheduledTaskBlock"; block: ScheduledTaskBlockViewModel };
 }): JSX.Element {
   if (row.kind === "event") {
     return <EventRow event={row.event} />;
+  }
+
+  if (row.kind === "scheduledTaskBlock") {
+    return (
+      <ListRow
+        description={`${row.block.rangeLabel} - ${row.block.calendar}`}
+        leading={<Clock3 aria-hidden="true" className="text-accent" size={17} />}
+        meta={`${row.block.durationMinutes} min`}
+        title={row.block.title}
+        trailing={
+          <div className="flex items-center gap-1">
+            {row.block.mutationState && row.block.mutationState !== "synced" ? (
+              <Badge tone={row.block.mutationState === "failed" ? "danger" : "warning"}>
+                {row.block.mutationState === "failed" ? "Failed" : "Queued"}
+              </Badge>
+            ) : (
+              <Badge tone={row.block.status === "orphaned" ? "warning" : "accent"}>
+                {row.block.status === "orphaned" ? "Needs repair" : "Scheduled"}
+              </Badge>
+            )}
+            <IconButton
+              icon={StepForward}
+              label={`Move ${row.block.title} later`}
+              onClick={() => onMoveBlock(row.block, 30)}
+              variant="ghost"
+            />
+            <IconButton
+              icon={X}
+              label={`Unschedule ${row.block.title}`}
+              onClick={() => onUnscheduleBlock(row.block.id)}
+              variant="ghost"
+            />
+          </div>
+        }
+      />
+    );
   }
 
   return (
@@ -496,7 +541,8 @@ function TodayTimelineRow({
 
 type TodayTimelineDataRow =
   | { kind: "task"; task: TaskViewModel }
-  | { kind: "event"; event: CalendarEventViewModel };
+  | { kind: "event"; event: CalendarEventViewModel }
+  | { kind: "scheduledTaskBlock"; block: ScheduledTaskBlockViewModel };
 
 type TodayTimelineEntry =
   | { kind: "header"; id: string; title: string; detail: string; count: number }
@@ -537,11 +583,13 @@ function todayTimelineSection(row: TodayTimelineDataRow): TodayTimelineSectionId
     return "unscheduled";
   }
 
-  if (row.event.allDay) {
+  const startsAt = row.kind === "scheduledTaskBlock" ? row.block.startsAt : row.event.startsAt;
+
+  if (row.kind === "event" && row.event.allDay) {
     return "all-day";
   }
 
-  const hour = new Date(row.event.startsAt).getHours();
+  const hour = new Date(startsAt).getHours();
 
   if (hour < 12) {
     return "morning";
@@ -608,16 +656,79 @@ function TodayTimelineHeader({
 
 function TodayView(): JSX.Element {
   const source = useCoreViewModelSource();
-  const timelineRows = useMemo(
-    () =>
-      source.todayViewModel.timelineRows.map((row) =>
-        row.kind === "event"
-          ? { kind: "event" as const, event: source.calendarEventsById[row.itemId] }
-          : { kind: "task" as const, task: source.getTaskById(row.itemId) }
-      ),
-    [source]
+  const defaultTaskId = source.todayViewModel.focusTasks[0]?.id ?? "";
+  const defaultCalendar = defaultCalendarId(source);
+  const [scheduleTaskId, setScheduleTaskId] = useState(defaultTaskId);
+  const [scheduleCalendarId, setScheduleCalendarId] = useState(defaultCalendar);
+  const [scheduleStart, setScheduleStart] = useState(() =>
+    dateTimeLocalInputValue(defaultTimedStart(new Date().toISOString()))
   );
+  const [scheduleDuration, setScheduleDuration] = useState("30");
+  const timelineRows = useMemo<TodayTimelineDataRow[]>(() => {
+    const rows: TodayTimelineDataRow[] = [];
+
+    for (const row of source.todayViewModel.timelineRows) {
+      if (row.kind === "event") {
+        const event = source.calendarEventsById[row.itemId];
+
+        if (event) {
+          rows.push({ kind: "event", event });
+        }
+      } else if (row.kind === "scheduledTaskBlock") {
+        const block = source.getScheduledTaskBlockById(row.itemId);
+
+        if (block) {
+          rows.push({ kind: "scheduledTaskBlock", block });
+        }
+      } else {
+        rows.push({ kind: "task", task: source.getTaskById(row.itemId) });
+      }
+    }
+
+    return rows;
+  }, [source]);
   const timelineEntries = useMemo(() => buildTodayTimelineEntries(timelineRows), [timelineRows]);
+  const canScheduleTask =
+    scheduleTaskId.length > 0 &&
+    scheduleCalendarId.length > 0 &&
+    scheduleStart.length > 0 &&
+    Number(scheduleDuration) >= 5 &&
+    !source.taskMutationPending;
+
+  useEffect(() => {
+    setScheduleTaskId((current) => current || defaultTaskId);
+  }, [defaultTaskId]);
+
+  useEffect(() => {
+    setScheduleCalendarId((current) => current || defaultCalendar);
+  }, [defaultCalendar]);
+
+  async function scheduleSelectedTask(): Promise<void> {
+    if (!canScheduleTask) {
+      return;
+    }
+
+    const scheduled = await source.scheduleTaskBlock({
+      taskId: scheduleTaskId,
+      calendarId: scheduleCalendarId,
+      startsAt: dateTimeLocalInputToIso(scheduleStart),
+      durationMinutes: Number(scheduleDuration)
+    });
+
+    if (scheduled) {
+      const nextTaskId = source.todayViewModel.focusTasks.find((task) => task.id !== scheduleTaskId)?.id ?? "";
+      setScheduleTaskId(nextTaskId);
+    }
+  }
+
+  function moveBlock(block: ScheduledTaskBlockViewModel, minutes: number): void {
+    const nextStart = new Date(Date.parse(block.startsAt) + minutes * 60 * 1000).toISOString();
+
+    void source.moveScheduledTaskBlock({
+      id: block.id,
+      startsAt: nextStart
+    });
+  }
 
   if (
     (source.dataState === "loading" ||
@@ -640,25 +751,103 @@ function TodayView(): JSX.Element {
       <SectionChrome
         title="Today"
         sidebar={
-          <Panel title="Focus queue" description="Open tasks from the precomputed Today model">
-            <VirtualizedList
-              ariaLabel="Today focus queue"
-              estimateRowHeight={58}
-              getKey={(task) => task.id}
-              items={source.todayViewModel.focusTasks}
-              performanceLabel="today.focus-tasks"
-              renderRow={(task) => (
-                <ListRow
-                  description={task.detail}
-                  leading={<Circle aria-hidden="true" className="text-text-muted" size={17} />}
-                  meta={task.dueLabel}
-                  title={task.title}
-                  trailing={<Badge tone={priorityTone(task.priority)}>{priorityLabel(task.priority)}</Badge>}
+          <div className="grid gap-3">
+            <Panel
+              action={
+                <Button
+                  disabled={!canScheduleTask}
+                  onClick={() => void scheduleSelectedTask()}
+                  size="sm"
+                  variant="primary"
+                >
+                  <CalendarPlus aria-hidden="true" size={14} />
+                  Schedule
+                </Button>
+              }
+              title="Schedule task"
+              description="Create a linked Google Calendar block"
+            >
+              <div className="grid gap-3 p-3">
+                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+                  <span>Task</span>
+                  <select
+                    aria-label="Task to schedule"
+                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    disabled={source.todayViewModel.focusTasks.length === 0}
+                    onChange={(event) => setScheduleTaskId(event.target.value)}
+                    value={scheduleTaskId}
+                  >
+                    {source.todayViewModel.focusTasks.length === 0 ? (
+                      <option value="">No unscheduled tasks</option>
+                    ) : null}
+                    {source.todayViewModel.focusTasks.map((task) => (
+                      <option key={task.id} value={task.id}>
+                        {task.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+                  <span>Calendar</span>
+                  <select
+                    aria-label="Schedule calendar"
+                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    disabled={source.calendarSources.length === 0}
+                    onChange={(event) => setScheduleCalendarId(event.target.value)}
+                    value={scheduleCalendarId}
+                  >
+                    {source.calendarSources.length === 0 ? <option value="">No calendars</option> : null}
+                    {source.calendarSources.map((calendar) => (
+                      <option key={calendar.id} value={calendar.id}>
+                        {calendar.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Input
+                  aria-label="Schedule starts"
+                  onChange={(event) => setScheduleStart(event.target.value)}
+                  type="datetime-local"
+                  value={scheduleStart}
                 />
-              )}
-              viewportHeight={306}
-            />
-          </Panel>
+                <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+                  <span>Duration</span>
+                  <select
+                    aria-label="Schedule duration"
+                    className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    onChange={(event) => setScheduleDuration(event.target.value)}
+                    value={scheduleDuration}
+                  >
+                    <option value="15">15 min</option>
+                    <option value="30">30 min</option>
+                    <option value="45">45 min</option>
+                    <option value="60">60 min</option>
+                    <option value="90">90 min</option>
+                    <option value="120">120 min</option>
+                  </select>
+                </label>
+              </div>
+            </Panel>
+            <Panel title="Focus queue" description="Open unscheduled tasks">
+              <VirtualizedList
+                ariaLabel="Today focus queue"
+                estimateRowHeight={58}
+                getKey={(task) => task.id}
+                items={source.todayViewModel.focusTasks}
+                performanceLabel="today.focus-tasks"
+                renderRow={(task) => (
+                  <ListRow
+                    description={task.detail}
+                    leading={<Circle aria-hidden="true" className="text-text-muted" size={17} />}
+                    meta={task.dueLabel}
+                    title={task.title}
+                    trailing={<Badge tone={priorityTone(task.priority)}>{priorityLabel(task.priority)}</Badge>}
+                  />
+                )}
+                viewportHeight={220}
+              />
+            </Panel>
+          </div>
         }
       >
         <Panel title="Timeline" description="Tasks and calendar agenda from the local cache">
@@ -682,7 +871,11 @@ function TodayView(): JSX.Element {
                   title={entry.title}
                 />
               ) : (
-                <TodayTimelineRow row={entry.row} />
+                <TodayTimelineRow
+                  onMoveBlock={moveBlock}
+                  onUnscheduleBlock={(blockId) => void source.unscheduleTaskBlock(blockId)}
+                  row={entry.row}
+                />
               )
             }
             viewportHeight={342}

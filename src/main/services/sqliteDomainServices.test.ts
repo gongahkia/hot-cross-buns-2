@@ -661,6 +661,84 @@ describe("SQLite-backed domain services", () => {
     expect((await domain.sync.status()).pendingMutationCount).toBe(3);
   });
 
+  it("schedules task blocks as linked calendar events and supports static availability export", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+
+    const block = await domain.planner.scheduleTaskBlock({
+      taskId: "acct-1:task:inbox:task-1",
+      calendarId: "acct-1:calendar:product",
+      startsAt: "2026-05-22T10:00:00.000Z",
+      durationMinutes: 45
+    });
+
+    expect(block).toMatchObject({
+      taskId: "acct-1:task:inbox:task-1",
+      calendarId: "acct-1:calendar:product",
+      title: "Draft inbox triage rules",
+      startsAt: "2026-05-22T10:00:00.000Z",
+      endsAt: "2026-05-22T10:45:00.000Z",
+      durationMinutes: 45,
+      mutationState: "queued"
+    });
+
+    const blocks = await domain.planner.listScheduledTaskBlocks({
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-23T00:00:00.000Z",
+      limit: 20
+    });
+
+    expect(blocks.items).toEqual([
+      expect.objectContaining({
+        id: block.id,
+        calendarEventId: block.calendarEventId,
+        status: "scheduled"
+      })
+    ]);
+    expect(
+      (await domain.planner.getCalendarEvent({ id: block.calendarEventId })).title
+    ).toBe("Draft inbox triage rules");
+
+    const moved = await domain.planner.moveScheduledTaskBlock({
+      id: block.id,
+      startsAt: "2026-05-22T11:00:00.000Z",
+      durationMinutes: 30
+    });
+
+    expect(moved).toMatchObject({
+      startsAt: "2026-05-22T11:00:00.000Z",
+      endsAt: "2026-05-22T11:30:00.000Z",
+      durationMinutes: 30,
+      mutationState: "queued"
+    });
+
+    const availability = await domain.planner.exportAvailability({
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-23T00:00:00.000Z"
+    });
+
+    expect(availability).toMatchObject({
+      format: "text",
+      busyBlockCount: 2
+    });
+    expect(availability.text).toContain("Planner shell standup");
+    expect(availability.text).toContain("Draft inbox triage rules");
+
+    const unscheduled = await domain.planner.unscheduleTaskBlock({
+      id: block.id,
+      deleteCalendarEvent: true
+    });
+    const afterUnschedule = await domain.planner.listScheduledTaskBlocks({
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-23T00:00:00.000Z",
+      limit: 20
+    });
+
+    expect(unscheduled).toMatchObject({ id: block.id, queued: true });
+    expect(afterUnschedule.items).toEqual([]);
+    expect((await domain.sync.status()).pendingMutationCount).toBe(3);
+  });
+
   it("returns materialized recurring instances from visible range queries", async () => {
     const { domain, syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);

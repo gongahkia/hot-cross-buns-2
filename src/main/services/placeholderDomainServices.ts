@@ -490,7 +490,8 @@ export function createPlaceholderDomainServices(): AppDomainServices {
         const calendar = state.calendars.find((candidate) => candidate.id === request.calendarId);
         const now = new Date().toISOString();
         const eventId = `event-task-block-${state.scheduledTaskBlocks.length + 1}`;
-        const endsAt = new Date(Date.parse(request.startsAt) + request.durationMinutes * 60 * 1000).toISOString();
+        const durationMinutes = request.durationMinutes ?? 30;
+        const endsAt = new Date(Date.parse(request.startsAt) + durationMinutes * 60 * 1000).toISOString();
         const event: CalendarRecord = {
           id: eventId,
           calendarId: request.calendarId,
@@ -513,7 +514,7 @@ export function createPlaceholderDomainServices(): AppDomainServices {
           title: task.title,
           startsAt: request.startsAt,
           endsAt,
-          durationMinutes: request.durationMinutes,
+          durationMinutes,
           status: "scheduled",
           mutationState: "queued",
           updatedAt: now

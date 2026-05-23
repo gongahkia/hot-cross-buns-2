@@ -29,6 +29,7 @@ Required table groups:
 - Account metadata: signed-in account profile without tokens.
 - Task mirrors: task lists, tasks, subtasks, tags/headings if retained.
 - Calendar mirrors: calendar lists, events, recurring metadata, event instances if materialized.
+- Scheduled task blocks: local links between Google Tasks and the Google Calendar events that time-block them.
 - Notes: local notes and search fields.
 - Settings: app, sync, selected lists/calendars, appearance, hotkeys, tray, MCP.
 - Sync checkpoints: Tasks watermarks and Calendar `nextSyncToken` values.
@@ -100,5 +101,6 @@ Required tests:
 
 - SQLite repositories now back the core task, task-list, calendar-event, note, settings, search, sync-status, and performance-timing paths exposed through typed IPC.
 - UI IPC handlers and MCP tools share the same main-side domain services. Synced task and event writes update local mirrors and enqueue `google_pending_mutations`; note writes remain local-only and are not queued for Google.
+- Scheduled task blocks are local metadata rows that link a task to a real queued Google Calendar event, preserving Google Tasks as date-only while making the Today timeline movable.
 - Local search reads current task, event, and note rows from SQLite with capped results and indexed recent/search paths. Renderer search requests stay bounded and do not call Google.
 - The renderer receives DTOs only. It does not import SQLite modules, raw Google payloads, tokens, filesystem internals, or unbounded result sets.

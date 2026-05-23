@@ -713,6 +713,33 @@ describe("App shell", () => {
     expect(within(timeline).getByText("Tasks without a planned time")).toBeInTheDocument();
   });
 
+  it("schedules an unscheduled task into the Today timeline", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Task to schedule"), "task-calendar-fixtures");
+    fireEvent.change(screen.getByLabelText("Schedule starts"), {
+      target: { value: `${todayDate}T10:00` }
+    });
+    await user.selectOptions(screen.getByLabelText("Schedule duration"), "45");
+    await user.click(screen.getByRole("button", { name: "Schedule" }));
+
+    await waitFor(() => {
+      expect(api.calendar.scheduleTaskBlock).toHaveBeenCalledWith({
+        taskId: "task-calendar-fixtures",
+        calendarId: "cal-product",
+        startsAt: `${todayDate}T10:00:00.000Z`,
+        durationMinutes: 45
+      });
+    });
+    expect(await screen.findByText("Review calendar fixture shape")).toBeInTheDocument();
+    expect(screen.getByText("Scheduled")).toBeInTheDocument();
+  });
+
   it("renders task groups, subtasks, completion, empty state, and error state", async () => {
     const api = seededHcb();
     installHcb(api);

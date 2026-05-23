@@ -43,7 +43,7 @@ Local-only fields may include:
 - local mutation metadata
 - local diagnostics metadata
 
-Time-specific task scheduling must be represented as a calendar event, not a Google Task due time.
+Time-specific task scheduling must be represented as a calendar event, not a Google Task due time. Hot Cross Buns 2 stores a local scheduled-task-block link row so the timed calendar block can remain associated with its source task.
 
 ## Calendar Mapping
 
