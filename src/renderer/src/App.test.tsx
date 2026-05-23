@@ -2152,7 +2152,7 @@ describe("App shell", () => {
       expect(screen.getByRole("button", { name: /GitHub Light/ })).toHaveAttribute("aria-pressed", "true");
     });
 
-    const fontInput = screen.getByRole("textbox", { name: "Font family" });
+    const fontInput = screen.getByRole("combobox", { name: "Font family" });
     await user.clear(fontInput);
     await user.type(fontInput, "JetBrains Mono");
     fireEvent.blur(fontInput);
