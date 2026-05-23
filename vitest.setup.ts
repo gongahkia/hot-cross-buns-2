@@ -371,7 +371,8 @@ const hcbApi: HcbApi = {
         mcpPort: 0,
         defaultTimeZone: "UTC",
         diagnosticsIncludePerformance: true,
-        savedSearchViews: []
+        savedSearchViews: [],
+        savedTaskViews: []
       })
     ),
     update: vi.fn(async (request) =>

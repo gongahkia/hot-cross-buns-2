@@ -113,6 +113,7 @@ function testSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapsh
     defaultTimeZone: "UTC",
     diagnosticsIncludePerformance: true,
     savedSearchViews: [],
+    savedTaskViews: [],
     ...overrides
   };
 }

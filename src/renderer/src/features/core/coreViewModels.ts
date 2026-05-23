@@ -31,6 +31,13 @@ export interface TaskViewModel {
   list: string;
   dueDate: string | null;
   dueLabel: string;
+  updatedAt?: string;
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  durationMinutes?: number | null;
+  lockedSchedule?: boolean;
+  snoozeUntil?: string | null;
+  tags?: string[];
   priority: CorePriority;
   status: TaskStatus;
   mutationState?: "synced" | "queued" | "failed";

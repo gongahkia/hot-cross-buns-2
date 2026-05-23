@@ -224,7 +224,8 @@ describe("shared IPC contracts", () => {
         mcpPort: 0,
         defaultTimeZone: "UTC",
         diagnosticsIncludePerformance: true,
-        savedSearchViews: []
+        savedSearchViews: [],
+        savedTaskViews: []
       }).setupCompletedAt
     ).toBeNull();
     expect(

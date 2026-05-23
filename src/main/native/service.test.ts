@@ -49,6 +49,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     defaultTimeZone: "UTC",
     diagnosticsIncludePerformance: true,
     savedSearchViews: [],
+    savedTaskViews: [],
     ...overrides
   };
 }

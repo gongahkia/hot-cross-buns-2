@@ -191,7 +191,8 @@ const emptySettings: SettingsSnapshot = {
   mcpPort: 0,
   defaultTimeZone: "UTC",
   diagnosticsIncludePerformance: true,
-  savedSearchViews: []
+  savedSearchViews: [],
+  savedTaskViews: []
 };
 
 const emptyCapabilityReport: NativeCapabilitiesResponse["capabilityReport"] = {
@@ -576,6 +577,12 @@ function usePreloadCoreSource(): CoreViewModelSource {
         notes: request.notes ?? "",
         parentId: request.parentId ?? null,
         priority: request.priority ?? "none",
+        plannedStart: request.plannedStart ?? null,
+        plannedEnd: request.plannedEnd ?? null,
+        durationMinutes: request.durationMinutes ?? null,
+        lockedSchedule: request.lockedSchedule ?? false,
+        snoozeUntil: request.snoozeUntil ?? null,
+        tags: request.tags ?? [],
         mutationState: "queued"
       };
 
@@ -1775,6 +1782,13 @@ function stableTaskViewModel(
     list: listTitle ?? task.listId,
     dueDate: task.dueAt ? task.dueAt.slice(0, 10) : null,
     dueLabel: task.status === "completed" ? "Done" : dueLabel(task.dueAt),
+    updatedAt: task.updatedAt,
+    plannedStart: task.plannedStart ?? null,
+    plannedEnd: task.plannedEnd ?? null,
+    durationMinutes: task.durationMinutes ?? null,
+    lockedSchedule: task.lockedSchedule ?? false,
+    snoozeUntil: task.snoozeUntil ?? null,
+    tags: task.tags ?? [],
     priority: task.priority ?? (hasFixtureTask ? fixtureTask.priority : "none"),
     status: taskStatusViewModel(task.status),
     mutationState: task.mutationState,
@@ -1810,6 +1824,12 @@ function optimisticTaskPatch(task: TaskSummary, request: TaskUpdateRequest): Tas
     ...(request.listId === undefined ? {} : { listId: request.listId }),
     ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
     ...(request.priority === undefined ? {} : { priority: request.priority }),
+    ...(request.plannedStart === undefined ? {} : { plannedStart: request.plannedStart }),
+    ...(request.plannedEnd === undefined ? {} : { plannedEnd: request.plannedEnd }),
+    ...(request.durationMinutes === undefined ? {} : { durationMinutes: request.durationMinutes }),
+    ...(request.lockedSchedule === undefined ? {} : { lockedSchedule: request.lockedSchedule }),
+    ...(request.snoozeUntil === undefined ? {} : { snoozeUntil: request.snoozeUntil }),
+    ...(request.tags === undefined ? {} : { tags: request.tags }),
     updatedAt: new Date().toISOString(),
     mutationState: "queued"
   };

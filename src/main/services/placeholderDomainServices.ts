@@ -218,7 +218,8 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       mcpPort: 0,
       defaultTimeZone: "UTC",
       diagnosticsIncludePerformance: true,
-      savedSearchViews: []
+      savedSearchViews: [],
+      savedTaskViews: []
     },
     sync: {
       state: "idle",
@@ -1543,6 +1544,10 @@ function definedSettingsPatch(request: SettingsUpdateRequest): Partial<SettingsS
 
   if (request.savedSearchViews !== undefined) {
     patch.savedSearchViews = request.savedSearchViews;
+  }
+
+  if (request.savedTaskViews !== undefined) {
+    patch.savedTaskViews = request.savedTaskViews;
   }
 
   return patch;

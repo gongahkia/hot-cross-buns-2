@@ -195,7 +195,8 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   mcpPort: 0,
   defaultTimeZone: systemTimeZone(),
   diagnosticsIncludePerformance: true,
-  savedSearchViews: []
+  savedSearchViews: [],
+  savedTaskViews: []
 };
 
 export class LocalPerformanceRepository {
@@ -2516,6 +2517,11 @@ export class LocalSettingsRepository {
         "search",
         "savedViews",
         DEFAULT_SETTINGS.savedSearchViews
+      ),
+      savedTaskViews: this.readSetting(
+        "tasks",
+        "savedViews",
+        DEFAULT_SETTINGS.savedTaskViews
       )
     };
   }
@@ -2602,6 +2608,10 @@ export class LocalSettingsRepository {
 
     if (request.savedSearchViews !== undefined) {
       this.writeSetting("search", "savedViews", request.savedSearchViews, now);
+    }
+
+    if (request.savedTaskViews !== undefined) {
+      this.writeSetting("tasks", "savedViews", request.savedTaskViews, now);
     }
 
     return this.get();

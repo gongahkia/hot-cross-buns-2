@@ -4,6 +4,7 @@ import type {
   CalendarEventCreateRequest,
   CalendarEventUpdateRequest,
   SavedSearchView,
+  SavedTaskView,
   SettingsRecoveryActionRequest,
   SettingsSnapshot,
   SettingsUpdateRequest,
@@ -1020,6 +1021,11 @@ interface QuickTaskParseResult {
   title: string;
   dueDate: string;
   listId: string;
+  plannedStart: string | null;
+  plannedEnd: string | null;
+  durationMinutes: number | null;
+  lockedSchedule: boolean;
+  tags: string[];
 }
 
 function defaultTaskListId(source: ReturnType<typeof useCoreViewModelSource>): string {
@@ -1121,6 +1127,52 @@ function normalizedListToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normalizedTagToken(value: string): string {
+  return value.trim().replace(/^\+/, "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 120);
+}
+
+function parseDurationToken(token: string): number | null {
+  const match = /^~(\d{1,3})(m|h)?$/i.exec(token);
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2]?.toLowerCase() ?? "m";
+  const minutes = unit === "h" ? amount * 60 : amount;
+
+  return minutes > 0 ? minutes : null;
+}
+
+function parsePlannedStartToken(token: string, dueDate: string, now: Date): string | null {
+  const match = /^@(\d{1,2})(?::(\d{2}))?(am|pm)?$/i.exec(token);
+
+  if (!match) {
+    return null;
+  }
+
+  const hourValue = Number(match[1]);
+  const minuteValue = match[2] ? Number(match[2]) : 0;
+  const meridiem = match[3]?.toLowerCase();
+
+  if (hourValue > 23 || minuteValue > 59 || (meridiem && (hourValue < 1 || hourValue > 12))) {
+    return null;
+  }
+
+  const planned = dueDate ? new Date(`${dueDate}T00:00:00`) : new Date(now.getTime());
+  let hour = hourValue;
+
+  if (meridiem === "pm" && hour < 12) {
+    hour += 12;
+  } else if (meridiem === "am" && hour === 12) {
+    hour = 0;
+  }
+
+  planned.setHours(hour, minuteValue, 0, 0);
+  return planned.toISOString();
+}
+
 function parseQuickTaskInput(
   input: string,
   taskLists: readonly { id: string; title: string }[],
@@ -1129,6 +1181,10 @@ function parseQuickTaskInput(
   const tokens = input.trim().split(/\s+/).filter(Boolean);
   let dueDate = "";
   let listId = taskLists[0]?.id ?? "";
+  let plannedToken = "";
+  let durationMinutes: number | null = null;
+  let lockedSchedule = false;
+  const tags: string[] = [];
   const titleTokens: string[] = [];
 
   for (const token of tokens) {
@@ -1142,6 +1198,33 @@ function parseQuickTaskInput(
         listId = matchedList.id;
         continue;
       }
+    }
+
+    if (lower.startsWith("+") && lower.length > 1) {
+      const tag = normalizedTagToken(token.slice(1));
+
+      if (tag && !tags.includes(tag)) {
+        tags.push(tag);
+      }
+
+      continue;
+    }
+
+    if (lower === "!locked") {
+      lockedSchedule = true;
+      continue;
+    }
+
+    const parsedDuration = parseDurationToken(lower);
+
+    if (parsedDuration !== null) {
+      durationMinutes = parsedDuration;
+      continue;
+    }
+
+    if (/^@\d{1,2}(?::\d{2})?(am|pm)?$/i.test(token)) {
+      plannedToken = token;
+      continue;
     }
 
     if (lower === "today" || lower === "tdy") {
@@ -1177,10 +1260,347 @@ function parseQuickTaskInput(
     titleTokens.push(token);
   }
 
+  const plannedStart = plannedToken ? parsePlannedStartToken(plannedToken, dueDate, now) : null;
+  const plannedEnd = plannedStart && durationMinutes
+    ? new Date(Date.parse(plannedStart) + durationMinutes * 60 * 1000).toISOString()
+    : null;
+
   return {
     title: titleTokens.join(" ").trim(),
     dueDate,
-    listId
+    listId,
+    plannedStart,
+    plannedEnd,
+    durationMinutes,
+    lockedSchedule,
+    tags
+  };
+}
+
+type TaskPerspectiveId = "inbox" | "forecast" | "review" | "tags" | "projects" | "saved";
+
+interface TaskPerspectiveTab {
+  id: TaskPerspectiveId;
+  label: string;
+}
+
+interface TaskPerspectiveViewModel {
+  description: string;
+  groups: TaskGroupViewModel[];
+  state: "ready" | "empty" | "error";
+}
+
+const taskPerspectiveTabs: TaskPerspectiveTab[] = [
+  { id: "inbox", label: "Inbox" },
+  { id: "forecast", label: "Forecast" },
+  { id: "review", label: "Review" },
+  { id: "tags", label: "Tags" },
+  { id: "projects", label: "Projects" },
+  { id: "saved", label: "Saved" }
+];
+
+function taskCountLabel(count: number): string {
+  return `${count} ${count === 1 ? "task" : "tasks"}`;
+}
+
+function taskMatchesFilter(task: TaskViewModel, filterId: TaskFilterId): boolean {
+  if (filterId === "open") {
+    return task.status === "open";
+  }
+
+  if (filterId === "completed" || filterId === "hidden" || filterId === "deleted") {
+    return task.status === filterId;
+  }
+
+  return false;
+}
+
+function taskListTitle(taskLists: readonly { id: string; title: string }[], listId: string): string {
+  return taskLists.find((list) => list.id === listId)?.title ?? listId;
+}
+
+function taskPriorityRank(priority: CorePriority): number {
+  if (priority === "high") {
+    return 0;
+  }
+
+  if (priority === "medium") {
+    return 1;
+  }
+
+  if (priority === "low") {
+    return 2;
+  }
+
+  return 3;
+}
+
+function sortPerspectiveTasks(tasks: TaskViewModel[], sortBy: SavedTaskView["sortBy"] = "dueDate"): TaskViewModel[] {
+  return [...tasks].sort((left, right) => {
+    if (sortBy === "title") {
+      return left.title.localeCompare(right.title);
+    }
+
+    if (sortBy === "updatedAt") {
+      return Date.parse(right.updatedAt ?? "") - Date.parse(left.updatedAt ?? "");
+    }
+
+    if (sortBy === "priority") {
+      return taskPriorityRank(left.priority) - taskPriorityRank(right.priority);
+    }
+
+    return (left.dueDate ?? "9999-12-31").localeCompare(right.dueDate ?? "9999-12-31");
+  });
+}
+
+function createTaskGroup(id: string, title: string, description: string, tasks: TaskViewModel[]): TaskGroupViewModel {
+  return {
+    id,
+    title,
+    description,
+    countLabel: taskCountLabel(tasks.length),
+    tasks
+  };
+}
+
+function dateRangeLabel(date: string): string {
+  if (!date) {
+    return "No due date";
+  }
+
+  return date;
+}
+
+function buildGroupedTaskPerspective(
+  groupBy: SavedTaskView["groupBy"],
+  tasks: TaskViewModel[],
+  taskLists: readonly { id: string; title: string }[],
+  sortBy: SavedTaskView["sortBy"] = "dueDate"
+): TaskGroupViewModel[] {
+  if (groupBy === "none") {
+    return [createTaskGroup("all", "All matching tasks", "Saved perspective matches", sortPerspectiveTasks(tasks, sortBy))];
+  }
+
+  const groups = new Map<string, { title: string; tasks: TaskViewModel[] }>();
+
+  for (const task of tasks) {
+    if (groupBy === "tag") {
+      const tags = task.tags?.length ? task.tags : ["Untagged"];
+
+      for (const tag of tags) {
+        const key = tag.toLowerCase();
+        const group = groups.get(key) ?? { title: tag, tasks: [] };
+        group.tasks.push(task);
+        groups.set(key, group);
+      }
+
+      continue;
+    }
+
+    const key =
+      groupBy === "dueDate"
+        ? task.dueDate ?? "none"
+        : groupBy === "list"
+          ? task.listId
+          : task.status;
+    const title =
+      groupBy === "dueDate"
+        ? dateRangeLabel(task.dueDate ?? "")
+        : groupBy === "list"
+          ? taskListTitle(taskLists, task.listId)
+          : task.status === "open"
+            ? "Active"
+            : `${task.status[0]?.toUpperCase() ?? ""}${task.status.slice(1)}`;
+    const group = groups.get(key) ?? { title, tasks: [] };
+    group.tasks.push(task);
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, group]) =>
+      createTaskGroup(
+        `saved-${groupBy}-${key}`,
+        group.title,
+        groupBy === "list" ? "Project list" : `Grouped by ${groupBy}`,
+        sortPerspectiveTasks(group.tasks, sortBy)
+      )
+    );
+}
+
+function taskDueBucket(task: TaskViewModel, today: string, inFourteenDays: string): SavedTaskView["filters"]["due"] | null {
+  if (!task.dueDate) {
+    return "none";
+  }
+
+  if (task.dueDate < today) {
+    return "overdue";
+  }
+
+  if (task.dueDate === today) {
+    return "today";
+  }
+
+  if (task.dueDate <= inFourteenDays) {
+    return "next14";
+  }
+
+  return null;
+}
+
+function taskStatusForSavedView(task: TaskViewModel): "active" | "completed" | "hidden" | "deleted" {
+  return task.status === "open" ? "active" : task.status;
+}
+
+function taskMatchesSavedView(
+  task: TaskViewModel,
+  view: SavedTaskView,
+  today: string,
+  inFourteenDays: string
+): boolean {
+  const filters = view.filters;
+
+  if (filters.statuses?.length && !filters.statuses.includes(taskStatusForSavedView(task))) {
+    return false;
+  }
+
+  if (filters.listIds?.length && !filters.listIds.includes(task.listId)) {
+    return false;
+  }
+
+  if (filters.tags?.length) {
+    const taskTags = new Set((task.tags ?? []).map((tag) => tag.toLowerCase()));
+
+    if (!filters.tags.every((tag) => taskTags.has(tag.toLowerCase()))) {
+      return false;
+    }
+  }
+
+  if (filters.due && taskDueBucket(task, today, inFourteenDays) !== filters.due) {
+    return false;
+  }
+
+  if (filters.planned === "planned" && !task.plannedStart) {
+    return false;
+  }
+
+  if (filters.planned === "unplanned" && task.plannedStart) {
+    return false;
+  }
+
+  return true;
+}
+
+function savedTaskViewFilterChips(
+  view: SavedTaskView,
+  taskLists: readonly { id: string; title: string }[]
+): string[] {
+  const chips: string[] = [];
+  const filters = view.filters;
+
+  if (filters.statuses?.length) {
+    chips.push(`Status: ${filters.statuses.join(", ")}`);
+  }
+
+  if (filters.listIds?.length) {
+    chips.push(`Lists: ${filters.listIds.map((id) => taskListTitle(taskLists, id)).join(", ")}`);
+  }
+
+  if (filters.tags?.length) {
+    chips.push(`Tags: ${filters.tags.join(", ")}`);
+  }
+
+  if (filters.due) {
+    chips.push(`Due: ${filters.due}`);
+  }
+
+  if (filters.planned) {
+    chips.push(`Plan: ${filters.planned}`);
+  }
+
+  chips.push(`Group: ${view.groupBy}`);
+  chips.push(`Sort: ${view.sortBy}`);
+  return chips;
+}
+
+function buildSavedTaskPerspective(
+  view: SavedTaskView,
+  tasks: TaskViewModel[],
+  taskLists: readonly { id: string; title: string }[],
+  now: Date
+): TaskPerspectiveViewModel {
+  const today = dateOnlyFromLocalDate(now);
+  const inFourteenDays = dateOnlyFromLocalDate(addLocalDays(now, 14));
+  const matchingTasks = tasks.filter((task) => taskMatchesSavedView(task, view, today, inFourteenDays));
+  const groups = buildGroupedTaskPerspective(view.groupBy, matchingTasks, taskLists, view.sortBy);
+
+  return {
+    description: `${taskCountLabel(matchingTasks.length)} in ${view.name}`,
+    groups,
+    state: matchingTasks.length > 0 ? "ready" : "empty"
+  };
+}
+
+function buildTaskPerspective(
+  perspectiveId: TaskPerspectiveId,
+  tasks: TaskViewModel[],
+  taskLists: readonly { id: string; title: string }[],
+  filterId: TaskFilterId,
+  savedView: SavedTaskView | null,
+  now: Date
+): TaskPerspectiveViewModel {
+  if (filterId === "error") {
+    return { description: "Recoverable renderer error state", groups: [], state: "error" };
+  }
+
+  if (filterId === "empty") {
+    return { description: "Empty filtered state", groups: [], state: "empty" };
+  }
+
+  if (perspectiveId === "saved") {
+    return savedView
+      ? buildSavedTaskPerspective(savedView, tasks, taskLists, now)
+      : { description: "Select a saved perspective", groups: [], state: "empty" };
+  }
+
+  const statusFilteredTasks = tasks.filter((task) => taskMatchesFilter(task, filterId));
+  const today = dateOnlyFromLocalDate(now);
+  const inFourteenDays = dateOnlyFromLocalDate(addLocalDays(now, 14));
+  const inboxListId =
+    taskLists.find((list) => list.title.trim().toLowerCase() === "inbox")?.id ?? taskLists[0]?.id ?? "";
+  let groups: TaskGroupViewModel[] = [];
+
+  if (perspectiveId === "inbox") {
+    const inboxTasks = statusFilteredTasks.filter(
+      (task) =>
+        task.status === "open" &&
+        (task.listId === inboxListId || (task.parentId === null && !task.plannedStart))
+    );
+    groups = [createTaskGroup("perspective-inbox", "Inbox", "Active root tasks without a planned slot", sortPerspectiveTasks(inboxTasks))];
+  } else if (perspectiveId === "forecast") {
+    const byDate = statusFilteredTasks.filter(
+      (task) => task.dueDate !== null && task.dueDate >= today && task.dueDate <= inFourteenDays
+    );
+    groups = buildGroupedTaskPerspective("dueDate", byDate, taskLists);
+  } else if (perspectiveId === "review") {
+    const reviewBefore = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const reviewTasks = statusFilteredTasks.filter(
+      (task) => task.status === "open" && Date.parse(task.updatedAt ?? "") < reviewBefore
+    );
+    groups = [createTaskGroup("perspective-review", "Needs review", "Active tasks untouched for 14 days", sortPerspectiveTasks(reviewTasks, "updatedAt"))];
+  } else if (perspectiveId === "tags") {
+    const taggedTasks = statusFilteredTasks.filter((task) => (task.tags ?? []).length > 0);
+    groups = buildGroupedTaskPerspective("tag", taggedTasks, taskLists, "priority");
+  } else {
+    groups = buildGroupedTaskPerspective("list", statusFilteredTasks, taskLists, "priority");
+  }
+
+  const count = groups.reduce((total, group) => total + group.tasks.length, 0);
+
+  return {
+    description: `${taskCountLabel(count)} in ${taskPerspectiveTabs.find((tab) => tab.id === perspectiveId)?.label ?? "Perspective"}`,
+    groups: groups.filter((group) => group.tasks.length > 0),
+    state: count > 0 ? "ready" : "empty"
   };
 }
 
@@ -1193,6 +1613,8 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     update: updateInspector
   } = useInspector();
   const [activeFilterId, setActiveFilterId] = useState<TaskFilterId>("open");
+  const [activePerspectiveId, setActivePerspectiveId] = useState<TaskPerspectiveId>("inbox");
+  const [activeSavedTaskViewId, setActiveSavedTaskViewId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draft, setDraftState] = useState<TaskDraft>(() => newTaskDraft(source));
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
@@ -1217,9 +1639,31 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     });
   }, []);
   const activeFilter = source.getTaskFilterViewModel(activeFilterId);
+  const activeSavedTaskView =
+    source.settings.savedTaskViews.find((view) => view.id === activeSavedTaskViewId) ??
+    source.settings.savedTaskViews[0] ??
+    null;
+  const activeTaskPerspective = useMemo(
+    () =>
+      buildTaskPerspective(
+        activePerspectiveId,
+        source.largeTaskWindow,
+        source.taskLists,
+        activeFilterId,
+        activeSavedTaskView,
+        new Date()
+      ),
+    [
+      activeFilterId,
+      activePerspectiveId,
+      activeSavedTaskView,
+      source.largeTaskWindow,
+      source.taskLists
+    ]
+  );
   const selectedTask = selectedTaskId ? source.getTaskById(selectedTaskId) : null;
   const taskIdsInWindow = new Set(source.largeTaskWindow.map((task) => task.id));
-  const visibleTaskIds = activeFilter.groups.flatMap((group) => group.tasks.map((task) => task.id));
+  const visibleTaskIds = activeTaskPerspective.groups.flatMap((group) => group.tasks.map((task) => task.id));
   const bulkSelectedTaskIdsInWindow = bulkSelectedTaskIds.filter((taskId) => taskIdsInWindow.has(taskId));
   const bulkSelectedTasks = bulkSelectedTaskIdsInWindow.map((taskId) => source.getTaskById(taskId));
   const allVisibleTasksSelected =
@@ -1597,7 +2041,12 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
       dueDate: parsedQuickTask.dueDate || null,
       listId: parsedQuickTask.listId,
       parentId: null,
-      priority: "none"
+      priority: "none",
+      plannedStart: parsedQuickTask.plannedStart,
+      plannedEnd: parsedQuickTask.plannedEnd,
+      durationMinutes: parsedQuickTask.durationMinutes,
+      lockedSchedule: parsedQuickTask.lockedSchedule,
+      tags: parsedQuickTask.tags
     });
 
     if (created) {
@@ -1656,6 +2105,16 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
     void source.deleteTaskList(taskListId);
   }
 
+  function deleteSavedTaskView(viewId: string): void {
+    void source.updateSettings({
+      savedTaskViews: source.settings.savedTaskViews.filter((view) => view.id !== viewId)
+    });
+
+    if (activeSavedTaskViewId === viewId) {
+      setActiveSavedTaskViewId(null);
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
@@ -1707,6 +2166,37 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
           {source.syncStatus.pendingMutationCount > 0
             ? `${source.syncStatus.pendingMutationCount} pending`
             : "Mutation queue idle"}
+        </Badge>
+      </div>
+
+      <div className="flex items-center gap-2 overflow-x-auto" role="tablist" aria-label="Task perspectives">
+        {taskPerspectiveTabs.map((perspective) => {
+          const selected = perspective.id === activePerspectiveId;
+
+          return (
+            <Button
+              aria-selected={selected}
+              key={perspective.id}
+              onClick={() => {
+                setActivePerspectiveId(perspective.id);
+
+                if (perspective.id === "saved" && !activeSavedTaskViewId) {
+                  setActiveSavedTaskViewId(source.settings.savedTaskViews[0]?.id ?? null);
+                }
+              }}
+              role="tab"
+              size="sm"
+              variant={selected ? "secondary" : "ghost"}
+            >
+              {perspective.label}
+              {perspective.id === "saved" ? (
+                <Badge tone="neutral">{source.settings.savedTaskViews.length}</Badge>
+              ) : null}
+            </Button>
+          );
+        })}
+        <Badge tone={activeTaskPerspective.state === "error" ? "warning" : "neutral"}>
+          {activeTaskPerspective.description}
         </Badge>
       </div>
 

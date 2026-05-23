@@ -837,6 +837,28 @@ export const savedSearchViewSchema = z
 
 export type SavedSearchView = z.infer<typeof savedSearchViewSchema>;
 
+export const savedTaskViewSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().min(1).max(80),
+    filters: z
+      .object({
+        statuses: z.array(taskStatusSchema).max(4).optional(),
+        listIds: z.array(idSchema).max(100).optional(),
+        tags: z.array(z.string().min(1).max(120)).max(64).optional(),
+        due: z.enum(["overdue", "today", "next14", "none"]).optional(),
+        planned: z.enum(["planned", "unplanned"]).optional()
+      })
+      .strict(),
+    groupBy: z.enum(["none", "dueDate", "list", "tag", "status"]),
+    sortBy: z.enum(["dueDate", "updatedAt", "priority", "title"]),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type SavedTaskView = z.infer<typeof savedTaskViewSchema>;
+
 export const settingsSnapshotSchema = z
   .object({
     theme: appThemeSchema,
@@ -857,7 +879,8 @@ export const settingsSnapshotSchema = z
     mcpPort: z.number().int().min(0).max(65535),
     defaultTimeZone: z.string().min(1).max(120),
     diagnosticsIncludePerformance: z.boolean(),
-    savedSearchViews: z.array(savedSearchViewSchema).max(20)
+    savedSearchViews: z.array(savedSearchViewSchema).max(20),
+    savedTaskViews: z.array(savedTaskViewSchema).max(20)
   })
   .strict();
 
@@ -883,7 +906,8 @@ export const settingsUpdateRequestSchema = z
     mcpPort: z.number().int().min(0).max(65535).optional(),
     defaultTimeZone: z.string().min(1).max(120).optional(),
     diagnosticsIncludePerformance: z.boolean().optional(),
-    savedSearchViews: z.array(savedSearchViewSchema).max(20).optional()
+    savedSearchViews: z.array(savedSearchViewSchema).max(20).optional(),
+    savedTaskViews: z.array(savedTaskViewSchema).max(20).optional()
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, {
