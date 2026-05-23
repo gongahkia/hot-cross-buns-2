@@ -201,6 +201,6 @@ Remaining Mac v1 blockers:
 - Scheduled task blocks prevent duplicate active blocks for the same task, can surface orphaned links when the backing calendar event disappears, and can repair an orphan by recreating its linked calendar event.
 - Today block controls support duration changes in addition to earlier/later movement.
 - Tasks support per-row multi-select plus bulk complete/reopen, move, and delete actions over the active filtered task set.
-- Calendar exposes static text availability export in the renderer by calling the same typed local calendar service used by MCP and tests. Day view is an hourly planning grid where empty slots create timed event drafts directly.
+- Calendar exposes static text availability export in the renderer by calling the same typed local calendar service used by MCP and tests. Day view is an hourly planning grid where empty slots create timed event drafts directly; day/week grids accept dragged events for time/day moves, and day events expose resize handles for end-time changes.
 - Notes support local markdown-style preview, `[[note title]]` outgoing links, and backlinks over loaded local note bodies.
 - Calendar agenda, task, note, and search surfaces remain virtualized or range/pagination-shaped to preserve renderer and IPC budgets.

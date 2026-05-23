@@ -45,6 +45,46 @@ async function runPaletteCommand(user: ReturnType<typeof userEvent.setup>, query
   await user.click(within(dialog).getByRole("option", { name: label }));
 }
 
+function testDataTransfer(): DataTransfer {
+  const data = new Map<string, string>();
+  const transfer = {
+    dropEffect: "none",
+    effectAllowed: "all",
+    files: [],
+    items: [],
+    types: [] as string[],
+    clearData: vi.fn((format?: string) => {
+      if (format) {
+        data.delete(format);
+        transfer.types = transfer.types.filter((type) => type !== format);
+        return;
+      }
+
+      data.clear();
+      transfer.types = [];
+    }),
+    getData: vi.fn((format: string) => data.get(format) ?? ""),
+    setData: vi.fn((format: string, value: string) => {
+      data.set(format, value);
+
+      if (!transfer.types.includes(format)) {
+        transfer.types.push(format);
+      }
+    }),
+    setDragImage: vi.fn()
+  };
+
+  return transfer as unknown as DataTransfer;
+}
+
+function utcWeekStartDate(value: string): string {
+  const date = new Date(value);
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+  return start.toISOString().slice(0, 10);
+}
+
 function installHcb(api: HcbApi | undefined): void {
   Object.defineProperty(window, "hcb", {
     configurable: true,
@@ -1096,6 +1136,87 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
     expect(screen.getByLabelText("Event starts")).toHaveValue(`${todayDate}T11:00`);
     expect(screen.getByLabelText("Event ends")).toHaveValue(`${todayDate}T12:00`);
+  });
+
+  it("drags and resizes calendar events in the day planning grid", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+
+    const eventButton = screen.getByRole("button", {
+      name: "09:30-09:50 Planner shell standup"
+    });
+    const moveTransfer = testDataTransfer();
+    const moveTarget = screen.getByRole("row", { name: "11:00 Open slot" });
+
+    fireEvent.dragStart(eventButton, { dataTransfer: moveTransfer });
+    fireEvent.dragOver(moveTarget, { dataTransfer: moveTransfer });
+    fireEvent.drop(moveTarget, { dataTransfer: moveTransfer });
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${todayDate}T11:00:00.000Z`,
+        endsAt: `${todayDate}T11:20:00.000Z`,
+        allDay: false
+      });
+    });
+
+    const resizeHandle = screen.getByRole("button", { name: "Resize Planner shell standup end" });
+    const resizeTransfer = testDataTransfer();
+    const resizeTarget = screen.getByRole("row", { name: "12:00 Open slot" });
+
+    fireEvent.dragStart(resizeHandle, { dataTransfer: resizeTransfer });
+    fireEvent.dragOver(resizeTarget, { dataTransfer: resizeTransfer });
+    fireEvent.drop(resizeTarget, { dataTransfer: resizeTransfer });
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        endsAt: `${todayDate}T12:00:00.000Z`
+      });
+    });
+  });
+
+  it("drags calendar events across week days while preserving time", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Week" }));
+
+    const eventButton = screen.getByRole("button", {
+      name: "09:30 Planner shell standup"
+    });
+    const weekGrid = screen.getByRole("grid", { name: "Calendar week view" });
+    const targetDay = within(weekGrid).getAllByRole("gridcell")[0];
+    const transfer = testDataTransfer();
+    const targetDate = utcWeekStartDate(now);
+
+    fireEvent.dragStart(eventButton, { dataTransfer: transfer });
+    fireEvent.dragOver(targetDay, { dataTransfer: transfer });
+    fireEvent.drop(targetDay, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${targetDate}T09:30:00.000Z`,
+        endsAt: `${targetDate}T09:50:00.000Z`,
+        allDay: false
+      });
+    });
   });
 
   it("creates, edits, and deletes calendar events through preload", async () => {

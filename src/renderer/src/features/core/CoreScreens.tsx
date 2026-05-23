@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import type {
   CalendarEventCreateRequest,
   CalendarEventUpdateRequest,
@@ -2194,6 +2194,8 @@ function calendarViewActionId(viewId: CalendarViewId): PlannerActionId {
 }
 
 const dayPlanningHours = Array.from({ length: 12 }, (_, index) => index + 7);
+const calendarEventDragType = "application/x-hcb-calendar-event";
+const calendarEventResizeDragType = "application/x-hcb-calendar-event-resize";
 
 function hourSlotIso(day: string, hour: number): string {
   return `${day}T${String(hour).padStart(2, "0")}:00:00.000Z`;
@@ -2210,12 +2212,46 @@ function eventOverlapsHour(event: CalendarEventViewModel, day: string, hour: num
   return Date.parse(event.startsAt) < endsAt && Date.parse(event.endsAt) > startsAt;
 }
 
+function startCalendarEventDrag(dragEvent: DragEvent<HTMLElement>, eventId: string): void {
+  dragEvent.dataTransfer.effectAllowed = "move";
+  dragEvent.dataTransfer.setData(calendarEventDragType, eventId);
+  dragEvent.dataTransfer.setData("text/plain", eventId);
+}
+
+function startCalendarEventResizeDrag(dragEvent: DragEvent<HTMLElement>, eventId: string): void {
+  dragEvent.stopPropagation();
+  dragEvent.dataTransfer.effectAllowed = "move";
+  dragEvent.dataTransfer.setData(calendarEventResizeDragType, eventId);
+  dragEvent.dataTransfer.setData("text/plain", eventId);
+}
+
+function allowCalendarDrop(dragEvent: DragEvent<HTMLElement>): void {
+  dragEvent.preventDefault();
+  dragEvent.dataTransfer.dropEffect = "move";
+}
+
+function calendarEventDragId(dragEvent: DragEvent<HTMLElement>): string {
+  return dragEvent.dataTransfer.getData(calendarEventDragType);
+}
+
+function calendarEventResizeDragId(dragEvent: DragEvent<HTMLElement>): string {
+  return dragEvent.dataTransfer.getData(calendarEventResizeDragType);
+}
+
+function sameTimeOnDate(value: string, day: string): string {
+  return `${day}T${value.slice(11)}`;
+}
+
 function DayView({
   onCreate,
-  onOpen
+  onMoveEvent,
+  onOpen,
+  onResizeEvent
 }: {
   onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
+  onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onResizeEvent: (eventId: string, endsAt: string) => void;
 }): JSX.Element {
   const source = useCoreViewModelSource();
   const day = source.calendarDayView.id.slice("day-".length);
@@ -2243,11 +2279,28 @@ function DayView({
             (event) => !event.allDay && eventOverlapsHour(event, day, hour)
           );
           const label = hourSlotLabel(hour);
+          const slotStart = hourSlotIso(day, hour);
 
           return (
             <div
               className="grid min-h-[72px] grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-2"
               key={hour}
+              onDragOver={allowCalendarDrop}
+              onDrop={(dragEvent) => {
+                dragEvent.preventDefault();
+                const resizeEventId = calendarEventResizeDragId(dragEvent);
+
+                if (resizeEventId) {
+                  onResizeEvent(resizeEventId, slotStart);
+                  return;
+                }
+
+                const eventId = calendarEventDragId(dragEvent);
+
+                if (eventId) {
+                  onMoveEvent(eventId, slotStart, false);
+                }
+              }}
               role="row"
             >
               <button
@@ -2262,14 +2315,39 @@ function DayView({
               <div className="grid content-start gap-1" role="gridcell">
                 {slotEvents.length > 0 ? (
                   slotEvents.map((event) => (
-                    <button
-                      className="truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary transition-colors duration-fast ease-hcb hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    <div
+                      className="grid grid-cols-[minmax(0,1fr)_24px] gap-1"
                       key={event.id}
-                      onClick={() => onOpen(event)}
-                      type="button"
                     >
-                      {event.rangeLabel} {event.title}
-                    </button>
+                      <button
+                        className="truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary transition-colors duration-fast ease-hcb hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        draggable
+                        onClick={() => onOpen(event)}
+                        onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, event.id)}
+                        type="button"
+                      >
+                        {event.rangeLabel} {event.title}
+                      </button>
+                      <span
+                        aria-label={`Resize ${event.title} end`}
+                        className="flex h-7 cursor-ns-resize items-center justify-center rounded-hcbSm border border-border bg-surface-0 text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        draggable
+                        onDragStart={(dragEvent) => startCalendarEventResizeDrag(dragEvent, event.id)}
+                        onKeyDown={(keyEvent) => {
+                          keyEvent.stopPropagation();
+                          handleActivationKeyDown(keyEvent, () =>
+                            onResizeEvent(
+                              event.id,
+                              new Date(Date.parse(event.endsAt) + 15 * 60 * 1000).toISOString()
+                            )
+                          );
+                        }}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <StepForward aria-hidden="true" size={12} />
+                      </span>
+                    </div>
                   ))
                 ) : (
                   <button
@@ -2292,9 +2370,11 @@ function DayView({
 
 function WeekView({
   onCreate,
+  onMoveEvent,
   onOpen
 }: {
   onCreate: (seed?: { startsAt?: string; allDay?: boolean }) => void;
+  onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   const source = useCoreViewModelSource();
@@ -2310,6 +2390,26 @@ function WeekView({
             )}
             key={day.id}
             onClick={() => onCreate({ startsAt: `${day.id.slice("week-".length)}T00:00:00.000Z`, allDay: true })}
+            onDragOver={allowCalendarDrop}
+            onDrop={(dragEvent) => {
+              dragEvent.preventDefault();
+              const eventId = calendarEventDragId(dragEvent);
+              const draggedEvent = eventId ? source.calendarEventsById[eventId] : undefined;
+
+              if (!draggedEvent) {
+                return;
+              }
+
+              const dayKey = day.id.slice("week-".length);
+
+              onMoveEvent(
+                draggedEvent.id,
+                draggedEvent.allDay
+                  ? `${dayKey}T00:00:00.000Z`
+                  : sameTimeOnDate(draggedEvent.startsAt, dayKey),
+                draggedEvent.allDay
+              );
+            }}
             onKeyDown={(event) =>
               handleActivationKeyDown(event, () =>
                 onCreate({ startsAt: `${day.id.slice("week-".length)}T00:00:00.000Z`, allDay: true })
@@ -2325,12 +2425,14 @@ function WeekView({
             <div className="mt-2 grid gap-1">
               {day.events.slice(0, 3).map((calendarEvent) => (
                 <span
-                  className="truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary"
+                  className="cursor-grab truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary active:cursor-grabbing"
+                  draggable
                   key={calendarEvent.id}
                   onClick={(clickEvent) => {
                     clickEvent.stopPropagation();
                     onOpen(calendarEvent);
                   }}
+                  onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, calendarEvent.id)}
                   onKeyDown={(keyEvent) => {
                     keyEvent.stopPropagation();
                     handleActivationKeyDown(keyEvent, () => onOpen(calendarEvent));
@@ -2415,6 +2517,7 @@ function CalendarView(): JSX.Element {
   const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
   const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
   const [formError, setFormError] = useState<string | undefined>();
+  const [calendarActionError, setCalendarActionError] = useState<string | undefined>();
   const [availabilityStartDate, setAvailabilityStartDate] = useState(() =>
     dateInputValue(startOfUtcDayIso(new Date()))
   );
@@ -2560,6 +2663,53 @@ function CalendarView(): JSX.Element {
     source.refresh();
   }
 
+  async function updateCalendarEventTime(
+    request: Pick<CalendarEventUpdateRequest, "id" | "startsAt" | "endsAt" | "allDay">
+  ): Promise<void> {
+    const result = await window.hcb?.calendar.update(request);
+
+    if (!result?.ok) {
+      setCalendarActionError(result?.error.message ?? "Calendar event update failed.");
+      return;
+    }
+
+    setCalendarActionError(undefined);
+    source.refresh();
+  }
+
+  function moveCalendarEvent(eventId: string, startsAt: string, allDay: boolean): void {
+    const event = source.calendarEventsById[eventId];
+
+    if (!event) {
+      return;
+    }
+
+    const durationMs = Math.max(5 * 60 * 1000, Date.parse(event.endsAt) - Date.parse(event.startsAt));
+    const endsAt = allDay
+      ? addUtcDaysIso(startsAt, Math.max(1, Math.round(durationMs / (24 * 60 * 60 * 1000))))
+      : new Date(Date.parse(startsAt) + durationMs).toISOString();
+
+    void updateCalendarEventTime({
+      id: event.id,
+      startsAt,
+      endsAt,
+      allDay
+    });
+  }
+
+  function resizeCalendarEvent(eventId: string, endsAt: string): void {
+    const event = source.calendarEventsById[eventId];
+
+    if (!event || Date.parse(endsAt) <= Date.parse(event.startsAt)) {
+      return;
+    }
+
+    void updateCalendarEventTime({
+      id: event.id,
+      endsAt
+    });
+  }
+
   function toggleAvailabilityCalendar(calendarId: string, selected: boolean): void {
     setAvailabilityCalendarIds((current) => {
       const next = new Set(current);
@@ -2643,6 +2793,23 @@ function CalendarView(): JSX.Element {
           </Badge>
         </div>
       </div>
+
+      {calendarActionError ? (
+        <StatusBanner
+          action={
+            <IconButton
+              icon={X}
+              label="Dismiss calendar interaction error"
+              onClick={() => setCalendarActionError(undefined)}
+              variant="ghost"
+            />
+          }
+          description={calendarActionError}
+          icon={AlertTriangle}
+          title="Calendar interaction not saved"
+          tone="warning"
+        />
+      ) : null}
 
       <SectionChrome
         title="Calendar"
@@ -2773,8 +2940,21 @@ function CalendarView(): JSX.Element {
             />
           </Panel>
         ) : null}
-        {activeViewId === "day" ? <DayView onCreate={openCreate} onOpen={openEdit} /> : null}
-        {activeViewId === "week" ? <WeekView onCreate={openCreate} onOpen={openEdit} /> : null}
+        {activeViewId === "day" ? (
+          <DayView
+            onCreate={openCreate}
+            onMoveEvent={moveCalendarEvent}
+            onOpen={openEdit}
+            onResizeEvent={resizeCalendarEvent}
+          />
+        ) : null}
+        {activeViewId === "week" ? (
+          <WeekView
+            onCreate={openCreate}
+            onMoveEvent={moveCalendarEvent}
+            onOpen={openEdit}
+          />
+        ) : null}
         {activeViewId === "month" ? <MonthView onCreate={openCreate} onOpen={openEdit} /> : null}
       </SectionChrome>
     </div>
