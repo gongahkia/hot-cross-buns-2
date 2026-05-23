@@ -313,6 +313,7 @@ describe("shared IPC contracts", () => {
     expect(
       settingsUpdateRequestSchema.parse({
         setupCompletedAt: completedAt,
+        colorTheme: "dracula",
         selectedTaskListIds: ["list-inbox"],
         selectedCalendarIds: ["cal-product"],
         syncMode: "manual",
@@ -321,11 +322,13 @@ describe("shared IPC contracts", () => {
       })
     ).toMatchObject({
       setupCompletedAt: completedAt,
+      colorTheme: "dracula",
       syncMode: "manual"
     });
     expect(
       settingsSnapshotSchema.parse({
         theme: "system",
+        colorTheme: "notion",
         startOnLogin: false,
         quickCaptureShortcut: null,
         selectedTaskListIds: [],
@@ -361,6 +364,7 @@ describe("shared IPC contracts", () => {
         oauthClientSecret: "must-not-parse"
       }).success
     ).toBe(false);
+    expect(settingsUpdateRequestSchema.safeParse({ colorTheme: "missing-theme" }).success).toBe(false);
     expect(settingsRecoveryActionRequestSchema.parse({ action: "resetOnboarding" })).toEqual({
       action: "resetOnboarding"
     });
