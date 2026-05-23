@@ -10,6 +10,7 @@ import type {
   TaskUpdateRequest
 } from "@shared/ipc/contracts";
 import {
+  AlertTriangle,
   CalendarDays,
   CalendarPlus,
   CheckCircle2,
@@ -22,6 +23,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  StepBack,
   StepForward,
   Search,
   Settings2,
@@ -493,14 +495,21 @@ function TodayTimelineRow({
   }
 
   if (row.kind === "scheduledTaskBlock") {
+    const conflictDetail =
+      row.block.conflictTitles.length > 0
+        ? ` - Conflicts with ${row.block.conflictTitles.join(", ")}`
+        : "";
+
     return (
       <ListRow
-        description={`${row.block.rangeLabel} - ${row.block.calendar}`}
+        description={`${row.block.rangeLabel} - ${row.block.calendar}${conflictDetail}`}
         leading={<Clock3 aria-hidden="true" className="text-accent" size={17} />}
         meta={`${row.block.durationMinutes} min`}
         title={row.block.title}
         trailing={
           <div className="flex items-center gap-1">
+            {row.block.isNextUp ? <Badge tone="info">Next</Badge> : null}
+            {row.block.conflictCount > 0 ? <Badge tone="warning">Conflict</Badge> : null}
             {row.block.mutationState && row.block.mutationState !== "synced" ? (
               <Badge tone={row.block.mutationState === "failed" ? "danger" : "warning"}>
                 {row.block.mutationState === "failed" ? "Failed" : "Queued"}
@@ -510,6 +519,12 @@ function TodayTimelineRow({
                 {row.block.status === "orphaned" ? "Needs repair" : "Scheduled"}
               </Badge>
             )}
+            <IconButton
+              icon={StepBack}
+              label={`Move ${row.block.title} earlier`}
+              onClick={() => onMoveBlock(row.block, -30)}
+              variant="ghost"
+            />
             <IconButton
               icon={StepForward}
               label={`Move ${row.block.title} later`}
@@ -730,6 +745,19 @@ function TodayView(): JSX.Element {
     });
   }
 
+  const conflictSummary =
+    source.todayViewModel.conflictCount === 0
+      ? "No timeline conflicts"
+      : `${source.todayViewModel.conflictCount} timeline ${
+          source.todayViewModel.conflictCount === 1 ? "conflict" : "conflicts"
+        }`;
+  const timelineStatusTitle = source.todayViewModel.nextUp
+    ? `Next up: ${source.todayViewModel.nextUp.title}`
+    : `Now ${source.todayViewModel.currentTimeLabel}`;
+  const timelineStatusDescription = source.todayViewModel.nextUp
+    ? `${source.todayViewModel.nextUp.detail} - ${conflictSummary}`
+    : `No upcoming timed rows - ${conflictSummary}`;
+
   if (
     (source.dataState === "loading" ||
       source.dataState === "empty" ||
@@ -747,6 +775,13 @@ function TodayView(): JSX.Element {
           <MetricTile key={metric.id} label={metric.label} value={metric.value} />
         ))}
       </div>
+
+      <StatusBanner
+        description={timelineStatusDescription}
+        icon={source.todayViewModel.conflictCount > 0 ? AlertTriangle : Clock3}
+        title={timelineStatusTitle}
+        tone={source.todayViewModel.conflictCount > 0 ? "warning" : "info"}
+      />
 
       <SectionChrome
         title="Today"

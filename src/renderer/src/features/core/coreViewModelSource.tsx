@@ -102,6 +102,14 @@ export interface CoreViewModelSource {
   todayViewModel: {
     metrics: Array<{ id: string; label: string; value: string }>;
     focusTasks: TaskViewModel[];
+    currentTimeLabel: string;
+    conflictCount: number;
+    nextUp: {
+      kind: "event" | "scheduledTaskBlock";
+      itemId: string;
+      title: string;
+      detail: string;
+    } | null;
     timelineRows: Array<{ kind: "task" | "event" | "scheduledTaskBlock"; itemId: string }>;
   };
 }
@@ -1254,14 +1262,20 @@ function buildCoreViewModelSource(
     calendarEventViewModel(event, calendarTitleById[event.calendarId])
   );
   const eventsById = Object.fromEntries(events.map((event) => [event.id, event]));
-  const scheduledTaskBlocks = snapshot.scheduledTaskBlocks.map((block) =>
-    scheduledTaskBlockViewModel(block, calendarTitleById[block.calendarId])
+  const scheduledEventIds = new Set(snapshot.scheduledTaskBlocks.map((block) => block.calendarEventId));
+  const conflictTitlesByBlockId = scheduledTaskBlockConflicts(
+    snapshot.scheduledTaskBlocks,
+    events,
+    scheduledEventIds
   );
-  const scheduledTaskBlocksById = Object.fromEntries(
-    scheduledTaskBlocks.map((block) => [block.id, block])
+  const baseScheduledTaskBlocks = snapshot.scheduledTaskBlocks.map((block) =>
+    scheduledTaskBlockViewModel(
+      block,
+      calendarTitleById[block.calendarId],
+      conflictTitlesByBlockId.get(block.id) ?? []
+    )
   );
-  const scheduledEventIds = new Set(scheduledTaskBlocks.map((block) => block.calendarEventId));
-  const scheduledTaskIds = new Set(scheduledTaskBlocks.map((block) => block.taskId));
+  const scheduledTaskIds = new Set(baseScheduledTaskBlocks.map((block) => block.taskId));
   const eventDayIndex = buildCalendarEventDayIndex(events, snapshot.events);
   const notes = snapshot.notes.map(noteViewModel);
   const rootTasks = tasks.filter((task) => task.parentId === null);
@@ -1270,9 +1284,27 @@ function buildCoreViewModelSource(
   const completedTasks = rootTasks.filter((task) => task.status === "completed");
   const hiddenTasks = rootTasks.filter((task) => task.status === "hidden");
   const deletedTasks = rootTasks.filter((task) => task.status === "deleted");
-  const todayKey = dayKey(startOfUtcDay(new Date()));
-  const todayEvents = eventsForDate(eventDayIndex, startOfUtcDay(new Date())).filter(
-    (event) => !scheduledEventIds.has(event.eventId)
+  const now = new Date();
+  const today = startOfUtcDay(now);
+  const todayKey = dayKey(today);
+  const todayEvents = eventsForDate(eventDayIndex, today).filter(
+    (event) => !scheduledEventIds.has(event.eventId) && !scheduledEventIds.has(event.id)
+  );
+  const baseTodayScheduledBlocks = baseScheduledTaskBlocks
+    .filter((block) => block.startsAt.slice(0, 10) === todayKey)
+    .sort(
+      (left, right) =>
+        left.startsAt.localeCompare(right.startsAt) ||
+        left.endsAt.localeCompare(right.endsAt) ||
+        left.id.localeCompare(right.id)
+    );
+  const nextUp = nextUpTimelineItem(todayEvents, baseTodayScheduledBlocks, now);
+  const scheduledTaskBlocks = baseScheduledTaskBlocks.map((block) => ({
+    ...block,
+    isNextUp: nextUp?.kind === "scheduledTaskBlock" && nextUp.itemId === block.id
+  }));
+  const scheduledTaskBlocksById = Object.fromEntries(
+    scheduledTaskBlocks.map((block) => [block.id, block])
   );
   const todayScheduledBlocks = scheduledTaskBlocks
     .filter((block) => block.startsAt.slice(0, 10) === todayKey)
@@ -1289,13 +1321,25 @@ function buildCoreViewModelSource(
     deletedTasks,
     snapshot.taskLists
   );
+  const todayTimedRows = [
+    ...todayEvents.map((event) => ({
+      kind: "event" as const,
+      itemId: event.id,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt
+    })),
+    ...todayScheduledBlocks.map((block) => ({
+      kind: "scheduledTaskBlock" as const,
+      itemId: block.id,
+      startsAt: block.startsAt,
+      endsAt: block.endsAt
+    }))
+  ].sort(compareTimelineRows);
   const todayTimelineRows = [
-    ...todayEvents.slice(0, 5).map((event) => ({ kind: "event" as const, itemId: event.id })),
-    ...todayScheduledBlocks
-      .slice(0, 8)
-      .map((block) => ({ kind: "scheduledTaskBlock" as const, itemId: block.id })),
+    ...todayTimedRows.slice(0, 10).map(({ kind, itemId }) => ({ kind, itemId })),
     ...unscheduledOpenTasks.slice(0, 5).map((task) => ({ kind: "task" as const, itemId: task.id }))
-  ].slice(0, 12);
+  ].slice(0, 15);
+  const conflictCount = scheduledTaskBlocks.filter((block) => block.conflictCount > 0).length;
 
   return {
     calendarAgendaEvents: events,
@@ -1351,11 +1395,14 @@ function buildCoreViewModelSource(
       metrics: [
         { id: "open", label: "Open tasks", value: String(openTasks.length) },
         { id: "scheduled", label: "Scheduled", value: String(scheduledTaskBlocks.length) },
+        { id: "conflicts", label: "Conflicts", value: String(conflictCount) },
         { id: "events", label: "Events", value: String(events.length) },
-        { id: "notes", label: "Local notes", value: String(notes.length) },
         { id: "sync", label: "Sync", value: syncLabel(snapshot.syncStatus) }
       ],
       focusTasks: unscheduledOpenTasks.slice(0, 6),
+      currentTimeLabel: timeLabel(now.toISOString()),
+      conflictCount,
+      nextUp,
       timelineRows: todayTimelineRows
     }
   };
@@ -1803,7 +1850,8 @@ function calendarEventViewModel(
 
 function scheduledTaskBlockViewModel(
   block: ScheduledTaskBlockSummary,
-  calendarTitle: string | undefined
+  calendarTitle: string | undefined,
+  conflictTitles: string[] = []
 ): ScheduledTaskBlockViewModel {
   return {
     id: block.id,
@@ -1818,8 +1866,115 @@ function scheduledTaskBlockViewModel(
     endsAt: block.endsAt,
     durationMinutes: block.durationMinutes,
     status: block.status,
-    mutationState: block.mutationState
+    mutationState: block.mutationState,
+    conflictCount: conflictTitles.length,
+    conflictTitles
   };
+}
+
+function scheduledTaskBlockConflicts(
+  blocks: ScheduledTaskBlockSummary[],
+  events: CalendarEventViewModel[],
+  scheduledEventIds: Set<string>
+): Map<string, string[]> {
+  const timedEvents = events.filter(
+    (event) =>
+      !event.allDay &&
+      !scheduledEventIds.has(event.eventId) &&
+      !scheduledEventIds.has(event.id)
+  );
+  const conflicts = new Map<string, string[]>();
+
+  for (const block of blocks) {
+    const titles = new Set<string>();
+
+    for (const event of timedEvents) {
+      if (dateRangesOverlap(block.startsAt, block.endsAt, event.startsAt, event.endsAt)) {
+        titles.add(event.title);
+      }
+    }
+
+    for (const otherBlock of blocks) {
+      if (
+        otherBlock.id !== block.id &&
+        dateRangesOverlap(block.startsAt, block.endsAt, otherBlock.startsAt, otherBlock.endsAt)
+      ) {
+        titles.add(otherBlock.title);
+      }
+    }
+
+    conflicts.set(block.id, Array.from(titles).slice(0, 3));
+  }
+
+  return conflicts;
+}
+
+function nextUpTimelineItem(
+  events: CalendarEventViewModel[],
+  blocks: ScheduledTaskBlockViewModel[],
+  now: Date
+): {
+  kind: "event" | "scheduledTaskBlock";
+  itemId: string;
+  title: string;
+  detail: string;
+} | null {
+  const nowMs = now.getTime();
+  const candidates = [
+    ...events
+      .filter((event) => !event.allDay && Date.parse(event.endsAt) > nowMs)
+      .map((event) => ({
+        kind: "event" as const,
+        itemId: event.id,
+        title: event.title,
+        detail: `${event.rangeLabel} - ${event.calendar}`,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt
+      })),
+    ...blocks
+      .filter((block) => Date.parse(block.endsAt) > nowMs)
+      .map((block) => ({
+        kind: "scheduledTaskBlock" as const,
+        itemId: block.id,
+        title: block.title,
+        detail: `${block.rangeLabel} - ${block.calendar}`,
+        startsAt: block.startsAt,
+        endsAt: block.endsAt
+      }))
+  ].sort(compareTimelineRows);
+
+  const [next] = candidates;
+
+  if (!next) {
+    return null;
+  }
+
+  return {
+    kind: next.kind,
+    itemId: next.itemId,
+    title: next.title,
+    detail: next.detail
+  };
+}
+
+function compareTimelineRows(
+  left: { startsAt: string; endsAt: string; itemId: string },
+  right: { startsAt: string; endsAt: string; itemId: string }
+): number {
+  return (
+    left.startsAt.localeCompare(right.startsAt) ||
+    left.endsAt.localeCompare(right.endsAt) ||
+    left.itemId.localeCompare(right.itemId)
+  );
+}
+
+function dateRangesOverlap(
+  leftStart: string,
+  leftEnd: string,
+  rightStart: string,
+  rightEnd: string
+): boolean {
+  return Date.parse(leftStart) < Date.parse(rightEnd) && Date.parse(leftEnd) > Date.parse(rightStart);
 }
 
 function noteViewModel(note: NoteDetail | NoteSummary): NoteViewModel {

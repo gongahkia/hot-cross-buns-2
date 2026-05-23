@@ -84,6 +84,9 @@ export interface ScheduledTaskBlockViewModel {
   durationMinutes: number;
   status: "scheduled" | "orphaned";
   mutationState?: "synced" | "queued" | "failed";
+  conflictCount: number;
+  conflictTitles: string[];
+  isNextUp?: boolean;
 }
 
 export interface CalendarDayViewModel {

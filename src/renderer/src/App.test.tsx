@@ -740,6 +740,46 @@ describe("App shell", () => {
     expect(screen.getByText("Scheduled")).toBeInTheDocument();
   });
 
+  it("surfaces scheduled task conflicts and moves blocks earlier or later", async () => {
+    const api = seededHcb();
+    api.calendar.listScheduledTaskBlocks = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "block-conflict",
+            taskId: "task-inbox-rules",
+            calendarEventId: "event-task-block",
+            calendarId: "cal-product",
+            title: "Draft inbox triage rules",
+            startsAt: `${todayDate}T09:40:00.000Z`,
+            endsAt: `${todayDate}T10:10:00.000Z`,
+            durationMinutes: 30,
+            status: "scheduled" as const,
+            mutationState: "synced" as const,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
+    expect(screen.getByText("Conflict")).toBeInTheDocument();
+    expect(screen.getByText(/Conflicts with Planner shell standup/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Move Draft inbox triage rules earlier" }));
+
+    await waitFor(() => {
+      expect(api.calendar.moveScheduledTaskBlock).toHaveBeenCalledWith({
+        id: "block-conflict",
+        startsAt: `${todayDate}T09:10:00.000Z`
+      });
+    });
+  });
+
   it("renders task groups, subtasks, completion, empty state, and error state", async () => {
     const api = seededHcb();
     installHcb(api);
