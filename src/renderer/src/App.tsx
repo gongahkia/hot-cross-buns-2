@@ -10,6 +10,7 @@ import {
   Bell,
   Command,
   RefreshCw,
+  Settings2,
   X
 } from "lucide-react";
 import appIconUrl from "../../../assets/brand/buns-app-icon-sidebar.png";
@@ -148,6 +149,20 @@ function shellCanBeReported(source: CoreViewModelSource): boolean {
     source.appearanceReady ||
     source.dataState === "offline" ||
     source.dataState === "error"
+  );
+}
+
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === "input" ||
+    tagName === "select" ||
+    tagName === "textarea"
   );
 }
 
@@ -403,12 +418,28 @@ function AppShell(): JSX.Element {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "r") {
         event.preventDefault();
         source.refresh();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
+        event.preventDefault();
+        navigateToSection("settings");
+        return;
+      }
+
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === "n" &&
+        !isEditableShortcutTarget(event.target)
+      ) {
+        event.preventDefault();
+        setNotificationsOpen((open) => !open);
       }
     }
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [openCommandPalette, source.refresh]);
+  }, [navigateToSection, openCommandPalette, source.refresh]);
 
   useEffect(() => {
     if (!notificationsOpen) {
@@ -467,7 +498,6 @@ function AppShell(): JSX.Element {
           />
           <div className="hidden min-w-0 lg:block">
             <div className="truncate text-[var(--text-md)] font-semibold">Hot Cross Buns 2</div>
-            <div className="text-[var(--text-xs)] text-text-muted">Local planner</div>
           </div>
         </div>
 
@@ -520,7 +550,6 @@ function AppShell(): JSX.Element {
               <h1 className="truncate text-[var(--text-xl)] font-bold" id="planner-title">
                 {activeSection.title}
               </h1>
-              <p className="truncate text-[var(--text-sm)] text-text-muted">{activeSection.subtitle}</p>
             </div>
           </div>
 
@@ -541,16 +570,19 @@ function AppShell(): JSX.Element {
             <Button
               aria-expanded={notificationsOpen}
               aria-label={`Notifications, ${appNotifications.length} active`}
+              aria-keyshortcuts="Meta+N Control+N"
               className="min-w-8"
               onClick={() => setNotificationsOpen((open) => !open)}
               title="Notifications"
               variant={notificationsOpen ? "secondary" : "ghost"}
             >
               <Bell aria-hidden="true" size={15} />
-              <span className="hidden sm:inline">Notifications</span>
               <Badge tone={appNotifications.length > 1 ? "warning" : "neutral"}>
                 {appNotifications.length}
               </Badge>
+              <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
+                Cmd N
+              </span>
             </Button>
             <Button
               aria-label="Reload"
@@ -564,6 +596,19 @@ function AppShell(): JSX.Element {
               <RefreshCw aria-hidden="true" size={15} />
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
                 Cmd R
+              </span>
+            </Button>
+            <Button
+              aria-label="Settings"
+              aria-keyshortcuts="Meta+, Control+,"
+              className="min-w-8"
+              onClick={() => navigateToSection("settings")}
+              title="Settings"
+              variant={activeSectionId === "settings" ? "secondary" : "ghost"}
+            >
+              <Settings2 aria-hidden="true" size={15} />
+              <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
+                Cmd ,
               </span>
             </Button>
           </div>
