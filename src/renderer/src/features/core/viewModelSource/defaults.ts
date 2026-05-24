@@ -1,0 +1,154 @@
+import type {
+  GoogleStatusResponse,
+  NativeCapabilitiesResponse,
+  SettingsSnapshot,
+  SyncStatusResponse
+} from "@shared/ipc/contracts";
+import type { CoreDataSnapshot } from "./types";
+
+export const emptySyncStatus: SyncStatusResponse = {
+  state: "idle",
+  pendingMutationCount: 0,
+  offline: true,
+  stale: true
+};
+
+export const emptyGoogleStatus: GoogleStatusResponse = {
+  oauthClientConfigured: false,
+  clientId: null,
+  hasClientSecret: false
+};
+
+export const emptySettings: SettingsSnapshot = {
+  theme: "system",
+  colorTheme: "notion",
+  appLanguage: "system",
+  uiFontName: null,
+  uiTextSizePoints: 13,
+  perSurfaceFontOverrides: {},
+  performanceMode: "snappy",
+  appBackgroundTranslucencyEnabled: false,
+  appBackgroundOpacity: 1,
+  disableAnimations: false,
+  uiLayoutScale: 1,
+  navigationPlacement: "left",
+  hiddenNavigationTabs: [],
+  hiddenCalendarViewModes: [],
+  monthScrollPastMonths: 0,
+  monthScrollFutureMonths: 1,
+  quickCreateExpandedByDefault: false,
+  restoreWindowStateEnabled: true,
+  startOnLogin: false,
+  selectedTaskListIds: [],
+  selectedCalendarIds: [],
+  setupCompletedAt: null,
+  syncMode: "balanced",
+  eventRetentionDaysBack: 0,
+  completedTaskRetentionDaysBack: 365,
+  quickCaptureShortcut: "Ctrl+Space",
+  showTrayIcon: true,
+  trayClickAction: "open-menu",
+  menuBarPanelStyle: "adaptive",
+  showMenuBarBadge: true,
+  notificationsEnabled: false,
+  notificationLeadMinutes: 10,
+  mcpEnabled: false,
+  mcpPermissionMode: "confirm-writes",
+  mcpPort: 0,
+  defaultTimeZone: "UTC",
+  todayCapacityMinutes: 480,
+  todayWorkingHoursStart: 6,
+  todayWorkingHoursEnd: 22,
+  diagnosticsIncludePerformance: true,
+  rawGoogleDiagnosticsEnabled: false,
+  savedSearchViews: [],
+  savedTaskViews: []
+};
+
+const emptyCapabilityReport: NativeCapabilitiesResponse["capabilityReport"] = {
+  platform: "unknown",
+  adapterId: "unavailable",
+  packageFormat: "development",
+  flags: {
+    supportsAppPaths: false,
+    supportsTray: false,
+    supportsAppMenu: false,
+    supportsGlobalShortcut: false,
+    supportsNotifications: false,
+    supportsNotificationPermissionQuery: false,
+    supportsProtocolRegistration: false,
+    supportsProtocolRegistrationCheck: false,
+    supportsAutostart: false,
+    supportsInPlaceAutoUpdate: false,
+    supportsInstallerMetadata: false,
+    supportsExternalUrlOpen: false,
+    supportsDiagnosticsCollection: false,
+    supportsCredentialStorage: false,
+    supportsOAuthLoopback: false,
+    supportsMcpLoopback: false,
+    requiresSignedBuildForNotifications: false
+  },
+  paths: [],
+  capabilities: [],
+  diagnostics: []
+};
+
+export const emptyNativeCapabilities: NativeCapabilitiesResponse = {
+  platform: "unknown",
+  notifications: false,
+  globalShortcuts: false,
+  tray: false,
+  deepLinks: false,
+  trayStatus: {
+    state: "unsupported",
+    message: "Native shell is unavailable."
+  },
+  quickCaptureShortcut: {
+    accelerator: null,
+    registered: false,
+    state: "unsupported",
+    message: "Global shortcuts are unavailable."
+  },
+  notificationsStatus: {
+    permission: "unsupported",
+    scheduledCount: 0,
+    state: "unsupported",
+    message: "Notifications are unavailable."
+  },
+  deepLinkStatus: {
+    scheme: "hotcrossbuns",
+    registered: false,
+    state: "unsupported",
+    message: "Deep links are unavailable."
+  },
+  updaterStatus: {
+    state: "unsupported",
+    message: "Preview update checks are not configured."
+  },
+  mcpStatus: {
+    state: "disabled",
+    message: "MCP local agent access is disabled."
+  },
+  capabilityReport: emptyCapabilityReport,
+  deferredStartup: {
+    state: "pending"
+  }
+};
+
+export const emptySnapshot: CoreDataSnapshot = {
+  taskLists: [],
+  tasks: [],
+  calendars: [],
+  events: [],
+  scheduledTaskBlocks: [],
+  scheduleSuggestion: {
+    slots: [],
+    unscheduled: [],
+    overloadMinutes: 0
+  },
+  notes: [],
+  settings: emptySettings,
+  syncStatus: emptySyncStatus,
+  googleStatus: emptyGoogleStatus,
+  native: emptyNativeCapabilities
+};
