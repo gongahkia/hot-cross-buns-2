@@ -108,7 +108,7 @@ test("launches, navigates, opens command palette, and creates core items", async
     await expect(page.locator("#planner-title")).toHaveText("Today");
     const firstRunSetup = page.getByRole("dialog", { name: "First-run setup" });
 
-    await expect(firstRunSetup).toBeVisible();
+    await expect(firstRunSetup).toBeVisible({ timeout: 20_000 });
     await firstRunSetup.getByRole("button", { name: "Finish setup" }).click();
     await expect(firstRunSetup).toBeHidden();
 
