@@ -12,7 +12,9 @@ import {
   type NativeImage,
   type MenuItemConstructorOptions
 } from "electron";
+import { execFile } from "node:child_process";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { NativeRoute } from "@shared/ipc/contracts";
 import {
   HCB_DEEP_LINK_SCHEME,
@@ -39,6 +41,16 @@ const maxNotificationDelayMs = 2_147_483_647;
 const menuBarPanelWidth = 320;
 const menuBarPanelHeight = 442;
 const menuBarPanelGap = 8;
+const execFileAsync = promisify(execFile);
+const macFontFamiliesScript = `
+ObjC.import("AppKit");
+const fonts = $.NSFontManager.sharedFontManager.availableFontFamilies;
+const families = [];
+for (let index = 0; index < fonts.count; index += 1) {
+  families.push(ObjC.unwrap(fonts.objectAtIndex(index)));
+}
+JSON.stringify(families);
+`;
 
 export function createElectronMacNativeAdapter(): NativePlatformAdapter {
   return new ElectronMacNativeAdapter();
@@ -427,6 +439,30 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
     return {
       state: "prompt" as const
     };
+  }
+
+  async listFontFamilies(): Promise<string[]> {
+    if (process.platform !== "darwin") {
+      return [];
+    }
+
+    try {
+      const { stdout } = await execFileAsync(
+        "/usr/bin/osascript",
+        ["-l", "JavaScript", "-e", macFontFamiliesScript],
+        {
+          maxBuffer: 512 * 1024,
+          timeout: 2_000
+        }
+      );
+      const parsed = JSON.parse(stdout.trim()) as unknown;
+
+      return Array.isArray(parsed)
+        ? parsed.filter((family): family is string => typeof family === "string")
+        : [];
+    } catch {
+      return [];
+    }
   }
 
   scheduleNotification(

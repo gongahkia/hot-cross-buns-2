@@ -318,7 +318,11 @@ export function createSqliteDomainServices(
     },
     native: {
       capabilities: () => nativeCapabilities(),
-      requestNotificationPermission: () => nativeNotificationPermission()
+      requestNotificationPermission: () => nativeNotificationPermission(),
+      listFontFamilies: () => ({
+        platform: detectNativePlatform(),
+        families: []
+      })
     },
     mcpTools
   };
