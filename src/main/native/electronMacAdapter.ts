@@ -38,9 +38,7 @@ import {
 const fallbackTrayIconBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOUlEQVR4nGNgGArgP7macGGyDSHZufgMwGkgPqcT5SKKDCBFM1UMoV0gUmQAPu+QBKiSEklyLtkAAHbWV6m7KwjdAAAAAElFTkSuQmCC";
 const maxNotificationDelayMs = 2_147_483_647;
-const menuBarPanelWidth = 320;
-const menuBarPanelHeight = 442;
-const menuBarPanelGap = 8;
+const menuBarPanelGap = 2;
 const execFileAsync = promisify(execFile);
 const macFontFamiliesScript = `
 ObjC.import("AppKit");
@@ -59,6 +57,7 @@ export function createElectronMacNativeAdapter(): NativePlatformAdapter {
 class ElectronMacNativeAdapter implements NativePlatformAdapter {
   private tray: Tray | undefined;
   private menuBarPanelWindow: BrowserWindow | undefined;
+  private trayRefreshTimer: NodeJS.Timeout | undefined;
   private readonly shortcuts = new Set<string>();
   private readonly notificationTimers = new Map<string, NodeJS.Timeout>();
 
@@ -200,6 +199,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
       const image = trayIconImage();
       image.setTemplateImage(true);
       this.tray?.destroy();
+      this.clearTrayRefreshTimer();
       this.tray = new Tray(image);
       this.tray.setIgnoreDoubleClickEvents(true);
       this.refreshTrayPresentation(actions);
@@ -217,6 +217,10 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
         this.refreshTrayPresentation(actions);
         this.tray?.popUpContextMenu(trayUtilityMenu(actions));
       });
+      this.trayRefreshTimer = setInterval(() => {
+        this.refreshTrayPresentation(actions);
+      }, 60_000);
+      this.trayRefreshTimer.unref?.();
 
       return {
         ok: true,
@@ -236,18 +240,29 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
     const snapshot = actions.snapshot();
     const image = trayIconImage();
     image.setTemplateImage(true);
+    const title = snapshot.statusLabel ?? snapshot.badgeLabel ?? "";
 
     this.tray?.setImage(image);
     this.tray?.setToolTip(snapshot.tooltip);
-    this.tray?.setTitle(snapshot.badgeLabel ?? "", { fontType: "monospacedDigit" });
+    this.tray?.setTitle(title);
 
     return snapshot;
   }
 
   destroyTray(): void {
     this.destroyMenuBarPanel();
+    this.clearTrayRefreshTimer();
     this.tray?.destroy();
     this.tray = undefined;
+  }
+
+  private clearTrayRefreshTimer(): void {
+    if (!this.trayRefreshTimer) {
+      return;
+    }
+
+    clearInterval(this.trayRefreshTimer);
+    this.trayRefreshTimer = undefined;
   }
 
   private async toggleMenuBarPanel(
@@ -265,7 +280,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
 
     try {
       const panel = this.ensureMenuBarPanel(actions);
-      panel.setBounds(menuBarPanelBounds(this.tray.getBounds()));
+      panel.setBounds(menuBarPanelBounds(this.tray.getBounds(), snapshot));
       await panel.loadURL(menuBarPanelDataUrl(snapshot));
       panel.show();
       panel.focus();
@@ -280,10 +295,11 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
     }
 
     const panel = new BrowserWindow({
-      width: menuBarPanelWidth,
-      height: menuBarPanelHeight,
+      width: 340,
+      height: 640,
       show: false,
       frame: false,
+      transparent: true,
       resizable: false,
       minimizable: false,
       maximizable: false,
@@ -292,7 +308,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
       skipTaskbar: true,
       alwaysOnTop: true,
       title: "Hot Cross Buns 2 menu bar panel",
-      backgroundColor: "#f7f3ec",
+      backgroundColor: "#00000000",
       webPreferences: {
         contextIsolation: true,
         javascript: false,
@@ -621,6 +637,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
     this.clearScheduledNotifications();
     this.unregisterGlobalShortcut();
     this.destroyMenuBarPanel();
+    this.clearTrayRefreshTimer();
     this.tray?.destroy();
     this.tray = undefined;
   }
@@ -644,30 +661,59 @@ function developmentAutostartResult(enabled: boolean): NativeOperationResult {
   };
 }
 
-function menuBarPanelBounds(trayBounds: Rectangle): Rectangle {
+function menuBarPanelBounds(trayBounds: Rectangle, snapshot: NativeMenuBarSnapshot): Rectangle {
   const display = screen.getDisplayMatching(trayBounds);
   const workArea = display.workArea;
+  const size = menuBarPanelSize(snapshot, Math.max(240, workArea.height - 48));
   const x = clamp(
-    Math.round(trayBounds.x + trayBounds.width / 2 - menuBarPanelWidth / 2),
+    Math.round(trayBounds.x + trayBounds.width / 2 - size.width / 2),
     workArea.x + menuBarPanelGap,
-    workArea.x + workArea.width - menuBarPanelWidth - menuBarPanelGap
+    workArea.x + workArea.width - size.width - menuBarPanelGap
   );
   const menuBarIsAboveWorkArea = trayBounds.y < workArea.y + workArea.height / 2;
   const y = menuBarIsAboveWorkArea
     ? Math.min(
         trayBounds.y + trayBounds.height + menuBarPanelGap,
-        workArea.y + workArea.height - menuBarPanelHeight - menuBarPanelGap
+        workArea.y + workArea.height - size.height - menuBarPanelGap
       )
     : Math.max(
         workArea.y + menuBarPanelGap,
-        trayBounds.y - menuBarPanelHeight - menuBarPanelGap
+        trayBounds.y - size.height - menuBarPanelGap
       );
 
   return {
     x,
     y: Math.round(y),
-    width: menuBarPanelWidth,
-    height: menuBarPanelHeight
+    width: size.width,
+    height: size.height
+  };
+}
+
+function menuBarPanelSize(
+  snapshot: NativeMenuBarSnapshot,
+  maxHeight: number
+): { width: number; height: number } {
+  if (snapshot.panelStyle === "agenda") {
+    const selectedRows = snapshot.calendar?.selectedItems.length ?? 0;
+    return {
+      width: 320,
+      height: Math.min(maxHeight, Math.max(620, 474 + Math.min(selectedRows, 7) * 42))
+    };
+  }
+
+  if (snapshot.panelStyle === "compact") {
+    return {
+      width: 320,
+      height: Math.min(maxHeight, 360)
+    };
+  }
+
+  const rowCount = snapshot.sections.reduce((total, section) => total + section.items.length, 0);
+  const accountHeight = snapshot.account ? 78 : 0;
+
+  return {
+    width: 340,
+    height: Math.min(maxHeight, Math.max(300, 132 + rowCount * 44 + accountHeight + 112))
   };
 }
 

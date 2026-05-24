@@ -159,6 +159,9 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const nativeShell = new NativeShellService({
     adapter: options.nativeAdapter ?? createNoopNativeAdapter(),
     planner: plannerRepository,
+    account: {
+      latest: () => syncRepository.latestAccountStatus()
+    },
     settings: settingsRepository,
     windows: options.nativeWindows ?? noopWindowActions,
     sync: {

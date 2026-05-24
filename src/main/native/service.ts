@@ -570,7 +570,7 @@ export class NativeShellService implements NativeDomainService {
     });
     const todayCount = todayTasks.length + todayEvents.length;
     const calendar = settings.menuBarPanelStyle === "agenda"
-      ? menuBarCalendarSnapshot(todayStart, todayEvents, todayTasks)
+      ? menuBarCalendarSnapshot(todayStart, todayEvents, todayTasks, now)
       : undefined;
     const account = menuBarAccountSnapshot(this.options.account?.latest() ?? null);
     const syncLabel = account?.connectionState === "connected" ? "Synced" : "Local";
@@ -931,6 +931,94 @@ function statusTitle(value: string): string {
 
 function cappedBadgeLabel(count: number): string {
   return count > 99 ? "99+" : String(count);
+}
+
+function menuBarCalendarSnapshot(
+  selectedDay: Date,
+  events: CalendarEventSummary[],
+  tasks: TaskSummary[],
+  now: Date
+): NativeMenuBarSnapshot["calendar"] {
+  const sortedEvents = [...events].sort((left, right) => {
+    if (left.allDay !== right.allDay) {
+      return left.allDay ? -1 : 1;
+    }
+
+    return compareEventsByStart(left, right);
+  });
+  const sortedTasks = [...tasks].sort(compareTasksByDueDate);
+  const selectedItems = [
+    ...menuBarEventItems(sortedEvents, 8),
+    ...menuBarTaskItems(sortedTasks, "Due today", 6)
+  ];
+
+  return {
+    monthLabel: new Intl.DateTimeFormat(undefined, {
+      month: "long",
+      year: "numeric"
+    }).format(selectedDay),
+    weekdayLabels: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    days: calendarGridDays(selectedDay).map((day) => ({
+      key: localDateKey(day),
+      label: String(day.getDate()),
+      inCurrentMonth: day.getMonth() === selectedDay.getMonth(),
+      isToday: isSameLocalDay(day, now),
+      isSelected: isSameLocalDay(day, selectedDay)
+    })),
+    selectedLabel: new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "short"
+    }).format(selectedDay),
+    selectedMeta: `${events.length} event${events.length === 1 ? "" : "s"} · ${tasks.length} task${
+      tasks.length === 1 ? "" : "s"
+    }`,
+    selectedItems:
+      selectedItems.length > 0
+        ? selectedItems
+        : [{ label: "Nothing scheduled", detail: "today" }]
+  };
+}
+
+function menuBarAccountSnapshot(
+  account: GoogleAccountConnectionStatus | null
+): NativeMenuBarSnapshot["account"] {
+  if (!account || account.connectionState === "signed_out") {
+    return undefined;
+  }
+
+  const email = account.email?.trim();
+  const displayName = account.displayName?.trim() || email || "Google account";
+
+  return {
+    displayName,
+    ...(email ? { email } : {}),
+    connectionState: account.connectionState
+  };
+}
+
+function calendarGridDays(date: Date): Date[] {
+  const monthStart = new Date(date);
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const gridStart = addDays(monthStart, -monthStart.getDay());
+  return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+}
+
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isSameLocalDay(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
 }
 
 function startOfLocalDay(date: Date): Date {
