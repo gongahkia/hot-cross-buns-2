@@ -99,6 +99,14 @@ function textSizeVariables(baseSize: number): Record<string, string> {
   };
 }
 
+function surfaceTextSize(settings: SettingsSnapshot, surface: keyof SettingsSnapshot["perSurfaceFontOverrides"]): string {
+  return `${settings.perSurfaceFontOverrides[surface]?.uiTextSizePoints ?? settings.uiTextSizePoints}px`;
+}
+
+function surfaceFontFamily(settings: SettingsSnapshot, surface: keyof SettingsSnapshot["perSurfaceFontOverrides"]): string {
+  return cssFontFamily(settings.perSurfaceFontOverrides[surface]?.uiFontName ?? settings.uiFontName);
+}
+
 function shellBackgroundValue(settings: SettingsSnapshot): string {
   if (!settings.appBackgroundTranslucencyEnabled) {
     return "var(--color-bg-primary)";
@@ -138,8 +146,13 @@ function useAppliedTheme(settings: SettingsSnapshot): void {
     root.dataset.colorTheme = colorTheme.id;
     root.dataset.performanceMode = settings.performanceMode;
     root.dataset.animations = settings.disableAnimations ? "disabled" : "enabled";
+    root.lang = settings.appLanguage === "system" ? navigator.language || "en" : settings.appLanguage;
     root.style.setProperty("--font-family", cssFontFamily(settings.uiFontName));
     root.style.setProperty("--font-family-mono", cssMonoFontFamily(settings.uiFontName));
+    root.style.setProperty("--font-family-sidebar", surfaceFontFamily(settings, "sidebar"));
+    root.style.setProperty("--text-sidebar", surfaceTextSize(settings, "sidebar"));
+    root.style.setProperty("--font-family-menu-bar", surfaceFontFamily(settings, "menuBar"));
+    root.style.setProperty("--text-menu-bar", surfaceTextSize(settings, "menuBar"));
     root.style.setProperty("--app-shell-background", shellBackgroundValue(settings));
     root.style.fontSize = `${Math.round(Math.min(1.5, Math.max(0.8, settings.uiLayoutScale)) * 16 * 100) / 100}px`;
 
@@ -152,6 +165,7 @@ function useAppliedTheme(settings: SettingsSnapshot): void {
     }
   }, [
     prefersDark,
+    settings.appLanguage,
     settings.colorTheme,
     settings.appBackgroundOpacity,
     settings.appBackgroundTranslucencyEnabled,
@@ -160,6 +174,7 @@ function useAppliedTheme(settings: SettingsSnapshot): void {
     settings.theme,
     settings.uiFontName,
     settings.uiLayoutScale,
+    settings.perSurfaceFontOverrides,
     settings.uiTextSizePoints
   ]);
 }
@@ -634,6 +649,7 @@ function AppShell(): JSX.Element {
             sidebarOnRight ? "md:order-2 md:border-l" : "md:order-1 md:border-r"
           )}
           id="app-sidebar"
+          style={{ fontFamily: "var(--font-family-sidebar)", fontSize: "var(--text-sidebar)" }}
         >
           <div className="flex h-14 w-14 shrink-0 items-center justify-center border-r border-border px-3 md:w-auto md:border-b md:border-r-0 lg:justify-start lg:gap-3 lg:px-4">
             <img
