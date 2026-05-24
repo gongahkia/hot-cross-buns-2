@@ -93,12 +93,22 @@ describe("renderer privilege boundary", () => {
   });
 
   it("keeps core screens behind the swappable view-model source", () => {
-    const contents = readFileSync(
-      join(rendererRoot, "features", "core", "CoreScreens.tsx"),
-      "utf8"
-    );
+    const coreScreensRoot = join(rendererRoot, "features", "core");
+    const contents = sourceFiles(coreScreensRoot)
+      .filter((filePath) => {
+        const relativePath = relative(coreScreensRoot, filePath).split("\\").join("/");
 
-    expect(contents).toContain("./coreViewModelSource");
+        return (
+          relativePath === "CoreScreens.tsx" ||
+          relativePath === "coreScreenShared.tsx" ||
+          relativePath.startsWith("screens/")
+        );
+      })
+      .map((filePath) => readFileSync(filePath, "utf8"))
+      .join("\n");
+
+    expect(contents).toContain("coreViewModelSource");
     expect(contents).not.toContain("./mockCoreViewModels");
+    expect(contents).not.toContain("../mockCoreViewModels");
   });
 });
