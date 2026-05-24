@@ -50,6 +50,7 @@ import type {
 import { getTaskById as getMockTaskById } from "./mockCoreViewModels";
 
 export interface CoreViewModelSource {
+  appearanceReady: boolean;
   calendarAgendaEvents: CalendarEventViewModel[];
   calendarDayView: CalendarDayViewModel;
   calendarEventsById: Record<string, CalendarEventViewModel>;
@@ -138,6 +139,7 @@ interface CoreDataSnapshot {
 interface CoreDataLoadState {
   snapshot: CoreDataSnapshot;
   state: CoreDataState;
+  appearanceReady: boolean;
   errorMessage?: string;
 }
 
@@ -412,6 +414,7 @@ export function useLocalSearch(query: string): SearchHookState {
 function usePreloadCoreSource(): CoreViewModelSource {
   const [loadState, setLoadState] = useState<CoreDataLoadState>({
     snapshot: emptySnapshot,
+    appearanceReady: false,
     state: "loading"
   });
   const [taskMutation, setTaskMutation] = useState<TaskMutationUiState>({ pending: false });
@@ -1000,6 +1003,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
     if (!window.hcb) {
       setLoadState({
         snapshot: emptySnapshot,
+        appearanceReady: true,
         state: "offline",
         errorMessage: "Preload bridge is unavailable."
       });
@@ -1012,9 +1016,28 @@ function usePreloadCoreSource(): CoreViewModelSource {
       errorMessage: undefined
     }));
 
-    void loadCoreData().then(
+    const settingsPromise = window.hcb.settings
+      .get()
+      .then((result) => unwrap(result, "Settings failed"));
+
+    void settingsPromise.then(
+      (settings) => {
+        setLoadState((current) => ({
+          ...current,
+          appearanceReady: true,
+          snapshot: {
+            ...current.snapshot,
+            settings
+          }
+        }));
+      },
+      () => undefined
+    );
+
+    void loadCoreData(settingsPromise).then(
       (snapshot) => {
         setLoadState((current) => ({
+          appearanceReady: true,
           snapshot: {
             ...snapshot,
             googleStatus: current.snapshot.googleStatus
@@ -1131,6 +1154,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
 
   return useMemo(
     () => buildCoreViewModelSource(loadState.snapshot, {
+      appearanceReady: loadState.appearanceReady,
       state: loadState.state,
       errorMessage: loadState.errorMessage,
       refresh: load,
@@ -1182,12 +1206,14 @@ function usePreloadCoreSource(): CoreViewModelSource {
   );
 }
 
-async function loadCoreData(): Promise<CoreDataSnapshot> {
+async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>): Promise<CoreDataSnapshot> {
   if (!window.hcb) {
     throw new Error("Preload bridge is unavailable.");
   }
 
   const range = visibleCalendarRange();
+  const settingsLoad =
+    settingsPromise ?? window.hcb.settings.get().then((result) => unwrap(result, "Settings failed"));
   const [
     taskLists,
     tasks,
@@ -1219,7 +1245,7 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
       .listScheduledTaskBlocks({ start: range.start, end: range.end, limit: 250 })
       .then((result) => unwrap(result, "Scheduled task blocks failed")),
     window.hcb.notes.list({ limit: 50 }).then((result) => unwrap(result, "Notes failed")),
-    window.hcb.settings.get().then((result) => unwrap(result, "Settings failed")),
+    settingsLoad,
     window.hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
     window.hcb.native.capabilities().then((result) => unwrap(result, "Native status failed"))
   ]);
@@ -1253,6 +1279,7 @@ async function loadCoreData(): Promise<CoreDataSnapshot> {
 function buildCoreViewModelSource(
   snapshot: CoreDataSnapshot,
   options: {
+    appearanceReady: boolean;
     state: CoreDataState;
     errorMessage?: string;
     refresh: () => void;
@@ -1391,6 +1418,7 @@ function buildCoreViewModelSource(
   const conflictCount = scheduledTaskBlocks.filter((block) => block.conflictCount > 0).length;
 
   return {
+    appearanceReady: options.appearanceReady,
     calendarAgendaEvents: events,
     calendarDayView: dayView(eventDayIndex),
     calendarEventsById: eventsById,

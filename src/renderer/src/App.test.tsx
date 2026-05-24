@@ -666,6 +666,19 @@ function loadingHcb(): HcbApi {
   };
 }
 
+function settingsLoadingHcb(): HcbApi {
+  const api = seededHcb();
+  const pendingRead = new Promise<never>(() => undefined);
+
+  return {
+    ...api,
+    settings: {
+      ...api.settings,
+      get: vi.fn(() => pendingRead)
+    }
+  };
+}
+
 describe("App shell", () => {
   it("renders the loading cache state while preload reads are pending", () => {
     installHcb(loadingHcb());
@@ -675,16 +688,26 @@ describe("App shell", () => {
     expect(screen.getByText("Reading cached planner data from SQLite.")).toBeInTheDocument();
   });
 
-  it("waits for the first cache read before reporting the shell visible", async () => {
+  it("waits for cached settings before reporting the shell visible", async () => {
+    const api = settingsLoadingHcb();
+
+    installHcb(api);
+    render(<App />);
+
+    await waitFor(() => expect(api.tasks.listTaskLists).toHaveBeenCalled());
+    await new Promise((resolve) => window.setTimeout(resolve, 25));
+
+    expect(api.diagnostics.markShellVisible).not.toHaveBeenCalled();
+  });
+
+  it("reports the shell visible after cached settings load while other cache reads continue", async () => {
     const api = loadingHcb();
 
     installHcb(api);
     render(<App />);
 
-    await waitFor(() => expect(api.settings.get).toHaveBeenCalled());
-    await new Promise((resolve) => window.setTimeout(resolve, 25));
-
-    expect(api.diagnostics.markShellVisible).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.diagnostics.markShellVisible).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Loading local cache")).toBeInTheDocument();
   });
 
   it("reports the shell visible after the cached settings theme can be applied", async () => {

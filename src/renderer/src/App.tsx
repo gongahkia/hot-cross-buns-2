@@ -132,11 +132,9 @@ function useAppliedTheme(settings: SettingsSnapshot): void {
 
 function shellCanBeReported(source: CoreViewModelSource): boolean {
   return (
-    source.dataState === "ready" ||
-    source.dataState === "empty" ||
+    source.appearanceReady ||
     source.dataState === "offline" ||
-    source.dataState === "error" ||
-    (source.dataState === "stale" && source.hasCachedData)
+    source.dataState === "error"
   );
 }
 
