@@ -221,7 +221,6 @@ function AppShell(): JSX.Element {
   const sectionButtonRefs = useRef(new Map<SectionId, HTMLButtonElement>());
 
   const activeSection = getPlannerSection(activeSectionId);
-  const ActiveIcon = activeSection.icon;
   const SidebarToggleIcon = sidebarOpen ? PanelLeftClose : PanelLeftOpen;
   const appNotifications = getAppNotifications(source);
   const visibleNotification = appNotifications.find(
@@ -582,9 +581,6 @@ function AppShell(): JSX.Element {
                 Cmd S
               </span>
             </Button>
-            <div className="flex size-8 items-center justify-center rounded-hcbMd bg-surface-0 text-accent">
-              <ActiveIcon aria-hidden="true" size={18} />
-            </div>
             <div className="min-w-0">
               <h1 className="truncate text-[var(--text-xl)] font-bold" id="planner-title">
                 {activeSection.title}
