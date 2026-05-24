@@ -43,6 +43,13 @@ Current measurement note, 2026-05-23:
 - The perf smoke must run with the local native module rebuilt for Electron ABI; otherwise the app intentionally falls back to the Python compatibility adapter and the numbers are not representative of packaged runtime behavior.
 - Remaining renderer performance watch: calendar month navigation is still above a single-frame target at roughly 38-41ms.
 
+Current measurement note, 2026-05-24:
+
+- The command palette and first-run setup dialog are split into deferred renderer chunks and preloaded after the shell-visible frame. The largest initial renderer asset moved from roughly 679 KiB to 656.5 KiB; total renderer output is roughly 717 KiB because the deferred chunks add wrapper overhead.
+- The local perf smoke collected command palette open at 17.79ms cold / 8.97ms warm with the deferred command chunk preloaded after shell visibility.
+- Search UI measured 154.82ms cold / 96.64ms warm in the same local run. The cold result is still affected by the app runtime's compatibility-path IPC latency on this machine.
+- Remaining renderer performance watch: calendar month navigation is still above a single-frame target at roughly 39-43ms in stable warm/cold runs.
+
 Command palette and quick capture:
 
 - Keep initial command registry in memory.

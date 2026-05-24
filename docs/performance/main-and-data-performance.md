@@ -62,6 +62,8 @@ The Python subprocess bridge has been replaced on the primary Node/main-process 
 
 The same smoke intentionally rebuilt the local native module for Electron ABI 130 before launch, so Node-side direct SQLite measurements in that run used the Python compatibility fallback and were slow. The release gate should keep both checks: Node ABI tests prove local developer/unit-test behavior, and Electron/package smoke proves the actual app runtime does not fall back to Python.
 
+2026-05-24 local perf smoke without a working Electron-ABI native runtime showed the opposite split: direct Node-side SQLite stayed fast (`settings`-adjacent SQLite query families under a few ms, local search ~2.86ms), but app IPC timings indicated the Electron runtime was on the compatibility path (`settings.get` ~678ms, task/calendar reads ~76-99ms, schedule suggestions ~158ms). In that environment shell visible was roughly 3.3-3.5s and cached render 7.6-9.3s, so those startup numbers are not accepted packaged-runtime baselines. Keep the Electron-ABI/native-adapter check explicit in release performance runs.
+
 ## Search And Indexing
 
 Search must be local-first. It should not call Google on each keypress.
