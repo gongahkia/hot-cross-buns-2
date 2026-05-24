@@ -981,6 +981,10 @@ export function createPlaceholderDomainServices(): AppDomainServices {
       capabilities: () => nativeCapabilities(),
       requestNotificationPermission: () => ({
         state: "unsupported"
+      }),
+      listFontFamilies: () => ({
+        platform: detectNativePlatform(),
+        families: []
       })
     },
     mcpTools

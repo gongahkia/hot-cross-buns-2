@@ -112,6 +112,7 @@ class FakeNativeAdapter implements NativePlatformAdapter {
   protocolSchemes: string[] = [];
   scheduledNotifications: NativeNotificationRequest[] = [];
   autostartRequests: boolean[] = [];
+  fontFamilies: string[] = ["Avenir", "SF Pro Text"];
   trayCreateCount = 0;
   trayDestroyCount = 0;
 
@@ -164,6 +165,10 @@ class FakeNativeAdapter implements NativePlatformAdapter {
 
   requestNotificationPermission() {
     return { state: "prompt" as const };
+  }
+
+  listFontFamilies(): string[] {
+    return this.fontFamilies;
   }
 
   scheduleNotification(request: NativeNotificationRequest): ScheduledNativeNotification {
