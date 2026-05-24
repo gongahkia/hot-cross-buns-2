@@ -8319,6 +8319,132 @@ export function SettingsView(): JSX.Element {
     );
   }
 
+  const navigationTabs: Array<{ id: "tasks" | "calendar" | "notes"; label: string }> = [
+    { id: "tasks", label: "Tasks" },
+    { id: "calendar", label: "Calendar" },
+    { id: "notes", label: "Notes" }
+  ];
+  const calendarViewModes: Array<{ id: "agenda" | "day" | "multiDay" | "week" | "month"; label: string }> = [
+    { id: "agenda", label: "Agenda" },
+    { id: "day", label: "Day" },
+    { id: "multiDay", label: "Multi-day" },
+    { id: "week", label: "Week" },
+    { id: "month", label: "Month" }
+  ];
+  const retentionOptions: Array<{ label: string; value: number }> = [
+    { label: "Forever", value: 0 },
+    { label: "30 days", value: 30 },
+    { label: "90 days", value: 90 },
+    { label: "180 days", value: 180 },
+    { label: "1 year", value: 365 },
+    { label: "2 years", value: 730 }
+  ];
+  const fontSurfaceOptions: Array<{
+    id: keyof SettingsSnapshot["perSurfaceFontOverrides"];
+    label: string;
+  }> = [
+    { id: "markdownEditor", label: "Markdown editor" },
+    { id: "sidebar", label: "Sidebar" },
+    { id: "calendarGrid", label: "Calendar grid" },
+    { id: "taskList", label: "Task list" },
+    { id: "inspector", label: "Inspector" },
+    { id: "menuBar", label: "Menu bar" }
+  ];
+  const selectedTaskLists = new Set(settings.selectedTaskListIds);
+  const selectedCalendars = new Set(settings.selectedCalendarIds);
+
+  function updateNavigationTab(tabId: "tasks" | "calendar" | "notes", visible: boolean): void {
+    const hidden = new Set(settings.hiddenNavigationTabs);
+
+    if (visible) {
+      hidden.delete(tabId);
+    } else {
+      hidden.add(tabId);
+    }
+
+    if (navigationTabs.every((tab) => hidden.has(tab.id))) {
+      return;
+    }
+
+    updateSettings({ hiddenNavigationTabs: [...hidden] });
+  }
+
+  function updateCalendarViewMode(
+    viewId: "agenda" | "day" | "multiDay" | "week" | "month",
+    visible: boolean
+  ): void {
+    const hidden = new Set(settings.hiddenCalendarViewModes);
+
+    if (visible) {
+      hidden.delete(viewId);
+    } else {
+      hidden.add(viewId);
+    }
+
+    if (calendarViewModes.every((mode) => hidden.has(mode.id))) {
+      return;
+    }
+
+    updateSettings({ hiddenCalendarViewModes: [...hidden] });
+  }
+
+  function retentionPresetValue(daysBack: number): string {
+    return retentionOptions.some((option) => option.value === daysBack) ? String(daysBack) : "custom";
+  }
+
+  function customRetentionDays(): number {
+    const amount = Math.max(1, Math.round(Number(customRetentionAmount) || 1));
+
+    if (customRetentionUnit === "years") {
+      return Math.min(3650, amount * 365);
+    }
+
+    if (customRetentionUnit === "months") {
+      return Math.min(3650, amount * 30);
+    }
+
+    return Math.min(3650, amount);
+  }
+
+  function applyCustomRetention(): void {
+    const days = customRetentionDays();
+
+    updateSettings({
+      eventRetentionDaysBack: days,
+      completedTaskRetentionDaysBack: days
+    });
+  }
+
+  function updatePerSurfaceFont(
+    surface: keyof SettingsSnapshot["perSurfaceFontOverrides"],
+    patch: Partial<SettingsSnapshot["perSurfaceFontOverrides"][typeof surface]>
+  ): void {
+    const current = settings.perSurfaceFontOverrides[surface] ?? {
+      uiFontName: null,
+      uiTextSizePoints: null
+    };
+
+    updateSettings({
+      perSurfaceFontOverrides: {
+        ...settings.perSurfaceFontOverrides,
+        [surface]: {
+          ...current,
+          ...patch
+        }
+      }
+    });
+  }
+
+  function resetPerSurfaceFont(surface: keyof SettingsSnapshot["perSurfaceFontOverrides"]): void {
+    const next = { ...settings.perSurfaceFontOverrides };
+    delete next[surface];
+    updateSettings({ perSurfaceFontOverrides: next });
+  }
+
+  const account = googleStatus.account;
+  const accountLabel = account?.displayName || account?.email || "Not connected";
+  const accountDetail = account?.email ?? account?.connectionState ?? "Google account is not connected";
+
   return (
     <div className="grid min-h-0 gap-4">
       <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-bg-secondary px-2 pb-3">
@@ -8682,7 +8808,7 @@ export function SettingsView(): JSX.Element {
             ) : source.calendarSources.map((calendar) => (
               <SettingsSwitch
                 checked={selectedCalendars.size === 0 ? calendar.selected : selectedCalendars.has(calendar.id)}
-                description={calendar.timeZone}
+                description={calendar.timeZone ?? undefined}
                 key={calendar.id}
                 label={calendar.title}
                 onChange={(checked) => updateSelectedCalendar(calendar.id, checked)}
