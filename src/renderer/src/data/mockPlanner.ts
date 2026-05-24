@@ -110,6 +110,10 @@ export const plannerSections: PlannerSection[] = [
   }
 ];
 
+export const primaryPlannerSections = plannerSections.filter((section) =>
+  section.id === "calendar" || section.id === "tasks" || section.id === "notes"
+);
+
 export const mockTasks: MockTask[] = [
   {
     id: "task-inbox-rules",
