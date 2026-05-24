@@ -2448,40 +2448,26 @@ describe("App shell", () => {
 
     await goToSection("Settings");
 
-    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
-    for (const label of [
-      "Google",
-      "Resources",
-      "Sync",
-      "Appearance",
-      "Hotkeys",
-      "Tray",
-      "Notifications",
-      "Local data",
-      "MCP",
-      "Platform",
-      "Diagnostics"
-    ]) {
-      expect(within(settingsSupport).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
-    }
+    const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    expect(within(dialog).getByRole("button", { name: "General" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: "Profile" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Appearance" })).toBeInTheDocument();
 
-    await user.click(within(settingsSupport).getByRole("button", { name: /Hotkeys/ }));
-    expect(screen.getByText("Shortcut attention")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "App language" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Open Hot Cross Buns at login" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Sync mode" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Local MCP server" })).toBeInTheDocument();
 
-    await user.click(within(settingsSupport).getByRole("button", { name: /Sync/ }));
-    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
-    expect(screen.getByText("Applying")).toBeInTheDocument();
-    expect(screen.getByText("Auth paused")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Profile" }));
+    expect(screen.getByRole("textbox", { name: "Google OAuth client ID" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add Google Account/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Task lists" })).toBeInTheDocument();
 
-    await user.click(within(settingsSupport).getByRole("button", { name: /Local data/ }));
-    expect(screen.getByText("Privacy boundary")).toBeInTheDocument();
-
-    await user.click(within(settingsSupport).getByRole("button", { name: /Platform/ }));
-    expect(screen.getByText("No capability rows")).toBeInTheDocument();
-
-    await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
-    expect(screen.getByRole("button", { name: /Copy details/ })).toBeInTheDocument();
-    expect(screen.getByText("Credentials")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Appearance" }));
+    expect(screen.getByRole("combobox", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Color theme" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Translucent background" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Layout" })).toBeInTheDocument();
   });
 
   it("applies base theme and color theme settings", async () => {
@@ -2521,8 +2507,7 @@ describe("App shell", () => {
     });
 
     await goToSection("Settings");
-    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
-    await user.click(within(settingsSupport).getByRole("button", { name: /Appearance/ }));
+    await user.click(screen.getByRole("button", { name: "Appearance" }));
     await user.selectOptions(screen.getByLabelText("Theme"), "light");
 
     await waitFor(() => {
@@ -2543,7 +2528,7 @@ describe("App shell", () => {
     expect(screen.queryByText("Light themes")).not.toBeInTheDocument();
     await waitFor(() => expect(api.native.listFontFamilies).toHaveBeenCalled());
     await waitFor(() => {
-      expect(screen.getByRole("option", { name: "Avenir" })).toBeInTheDocument();
+      expect(screen.getAllByRole("option", { name: "Avenir" }).length).toBeGreaterThan(0);
     });
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Font family" }), "JetBrains Mono");
@@ -2554,7 +2539,7 @@ describe("App shell", () => {
       expect(document.documentElement.style.getPropertyValue("--font-family-mono")).toContain("\"JetBrains Mono\"");
     });
 
-    fireEvent.change(screen.getByLabelText("Text size"), { target: { value: "16" } });
+    fireEvent.change(screen.getByLabelText("Text size points"), { target: { value: "16" } });
 
     await waitFor(() => {
       expect(api.settings.update).toHaveBeenCalledWith({ uiTextSizePoints: 16 });
@@ -2579,9 +2564,7 @@ describe("App shell", () => {
     render(<App />);
 
     await goToSection("Settings");
-    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
-    await user.click(within(settingsSupport).getByRole("button", { name: /Diagnostics/ }));
-    await user.click(screen.getByRole("button", { name: /Copy details/ }));
+    await user.click(screen.getByRole("button", { name: /Open diagnostics/ }));
 
     const inspector = await screen.findByTestId("inspector-shell");
     expect(inspector).toHaveAttribute("data-inspector-kind", "diagnostics");
@@ -2591,50 +2574,22 @@ describe("App shell", () => {
     expect(within(inspector).getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
 
-  it("opens platform capability rows in the inspector", async () => {
+  it("updates general settings controls through settings IPC", async () => {
     const api = seededHcb();
-    const base = await api.native.capabilities();
-    if (!base.ok) {
-      throw new Error("Missing native capability fixture");
-    }
-    api.native.capabilities = vi.fn(async () =>
-      ok({
-        ...base.data,
-        capabilityReport: {
-          ...base.data.capabilityReport,
-          capabilities: [
-            {
-              key: "tray" as const,
-              label: "Tray icon",
-              supported: false,
-              state: "disabled" as const,
-              message: "Enable menu bar icon in Settings."
-            }
-          ],
-          diagnostics: [
-            {
-              key: "tray" as const,
-              severity: "warning" as const,
-              message: "Menu bar icon is disabled."
-            }
-          ]
-        }
-      })
-    );
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);
 
     await goToSection("Settings");
-    const settingsSupport = screen.getByRole("complementary", { name: "Settings support" });
-    await user.click(within(settingsSupport).getByRole("button", { name: /Platform/ }));
-    await user.click(await screen.findByRole("button", { name: "Open capability Tray icon" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Sync mode" }), "manual");
+    await user.click(screen.getByRole("checkbox", { name: "Local MCP server" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "MCP permission mode" }), "allow-writes");
 
-    const inspector = await screen.findByTestId("inspector-shell");
-    expect(inspector).toHaveAttribute("data-inspector-kind", "settings");
-    expect(within(inspector).getByText("Remediation")).toBeInTheDocument();
-    expect(within(inspector).getByText("Menu bar icon is disabled.")).toBeInTheDocument();
-    expect(within(inspector).getByLabelText("Capability metadata")).toHaveTextContent("disabled");
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ syncMode: "manual" });
+      expect(api.settings.update).toHaveBeenCalledWith({ mcpEnabled: true });
+      expect(api.settings.update).toHaveBeenCalledWith({ mcpPermissionMode: "allow-writes" });
+    });
   });
 
   it("shows onboarding for a fresh database and completes setup through settings IPC", async () => {
