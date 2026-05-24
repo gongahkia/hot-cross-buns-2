@@ -18,7 +18,7 @@ import {
 import appIconUrl from "../../../assets/brand/buns-app-icon-sidebar.png";
 import type { PlannerAction } from "./actions/plannerActions";
 import { InspectorProvider, InspectorShell } from "./components/Inspector";
-import { Badge, Button, IconButton, Input, StatusBanner, cx } from "./components/primitives";
+import { Badge, Button, IconButton, StatusBanner, cx } from "./components/primitives";
 import { getPlannerSection, primaryPlannerSections, type SectionId } from "./data/mockPlanner";
 import { getAppNotifications, type AppNotification, type AppNotificationTone } from "./features/core/appNotifications";
 import { SectionContent, type TaskSurfaceCommand } from "./features/core/CoreScreens";
@@ -691,13 +691,12 @@ function AppShell(): JSX.Element {
           <DeferredFirstRunOnboarding source={source} />
         </Suspense>
       ) : null}
-      {notificationsOpen ? (
-        <NotificationsOverlay
-          notifications={appNotifications}
-          onClose={() => setNotificationsOpen(false)}
-          source={source}
-        />
-      ) : null}
+        {notificationsOpen ? (
+          <NotificationsOverlay
+            notifications={appNotifications}
+            onClose={() => setNotificationsOpen(false)}
+          />
+        ) : null}
       {visibleNotification && !notificationsOpen ? (
         <AppNotificationToast
           notification={visibleNotification}
