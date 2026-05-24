@@ -4909,32 +4909,44 @@ function CalendarTimelineEventChip({
   onOpen: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   return (
-    <CalendarEventChip
-      className="min-h-5 px-1.5 py-0.5 text-[11px]"
-      draggable
-      event={event}
-      labelVariant={labelVariant}
-      onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, event.id)}
-      onKeyDown={(keyEvent) => {
-        if (keyEvent.key !== "ArrowDown" && keyEvent.key !== "ArrowUp") {
-          return;
-        }
+    <div className="grid grid-cols-[minmax(0,1fr)_10px] items-stretch gap-1">
+      <CalendarEventChip
+        className="min-h-5 px-1.5 py-0.5 text-[11px]"
+        draggable
+        event={event}
+        labelVariant={labelVariant}
+        onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, event.id)}
+        onKeyDown={(keyEvent) => {
+          if (keyEvent.key !== "ArrowDown" && keyEvent.key !== "ArrowUp") {
+            return;
+          }
 
-        keyEvent.preventDefault();
-        keyEvent.stopPropagation();
-        if (event.allDay) {
-          return;
-        }
+          keyEvent.preventDefault();
+          keyEvent.stopPropagation();
+          if (event.allDay) {
+            return;
+          }
 
-        const direction = keyEvent.key === "ArrowDown" ? 1 : -1;
-        onMoveEvent(
-          event.id,
-          new Date(Date.parse(event.startsAt) + direction * 15 * 60 * 1000).toISOString(),
-          event.allDay
-        );
-      }}
-      onOpen={onOpen}
-    />
+          const direction = keyEvent.key === "ArrowDown" ? 1 : -1;
+          onMoveEvent(
+            event.id,
+            new Date(Date.parse(event.startsAt) + direction * 15 * 60 * 1000).toISOString(),
+            event.allDay
+          );
+        }}
+        onOpen={onOpen}
+      />
+      {!event.allDay ? (
+        <button
+          aria-label={`Resize ${event.title} end`}
+          className="rounded-hcbSm border border-border bg-surface-0 hover:bg-surface-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          draggable
+          onDragStart={(dragEvent) => startCalendarEventResizeDrag(dragEvent, event.id)}
+          title={`Resize ${event.title} end`}
+          type="button"
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -4949,6 +4961,7 @@ function CalendarTimelineView({
   onCreate,
   onMoveEvent,
   onOpen,
+  onResizeEvent,
   timedLabelVariant = "time",
   title,
   visibleCalendarIds
@@ -4963,6 +4976,7 @@ function CalendarTimelineView({
   onCreate: (seed?: CalendarCreateSeed) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onResizeEvent: (eventId: string, endsAt: string) => void;
   timedLabelVariant?: "range" | "time";
   title: string;
   visibleCalendarIds: ReadonlySet<string>;
@@ -4997,6 +5011,13 @@ function CalendarTimelineView({
   ): void {
     dragEvent.preventDefault();
     dragEvent.stopPropagation();
+    const resizeEventId = calendarEventResizeDragId(dragEvent);
+
+    if (resizeEventId) {
+      onResizeEvent(resizeEventId, startsAt);
+      return;
+    }
+
     const eventId = calendarEventDragId(dragEvent);
     const draggedEvent = eventId ? source.calendarEventsById[eventId] : undefined;
 
@@ -5300,6 +5321,7 @@ function DayView({
   onCreate,
   onMoveEvent,
   onOpen,
+  onResizeEvent,
   visibleCalendarIds
 }: {
   availabilityMode: boolean;
@@ -5309,6 +5331,7 @@ function DayView({
   onCreate: (seed?: CalendarCreateSeed) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onResizeEvent: (eventId: string, endsAt: string) => void;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   return (
@@ -5322,6 +5345,7 @@ function DayView({
       onCreate={onCreate}
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
+      onResizeEvent={onResizeEvent}
       timedLabelVariant="range"
       title="Day view"
       visibleCalendarIds={visibleCalendarIds}
@@ -5339,6 +5363,7 @@ function MultiDayView({
   onDayCountChange,
   onMoveEvent,
   onOpen,
+  onResizeEvent,
   visibleCalendarIds
 }: {
   availabilityMode: boolean;
@@ -5350,6 +5375,7 @@ function MultiDayView({
   onDayCountChange: (dayCount: number) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onResizeEvent: (eventId: string, endsAt: string) => void;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   return (
@@ -5386,6 +5412,7 @@ function MultiDayView({
       onCreate={onCreate}
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
+      onResizeEvent={onResizeEvent}
       title="Multi-Day view"
       visibleCalendarIds={visibleCalendarIds}
     />
@@ -5400,6 +5427,7 @@ function WeekView({
   onCreate,
   onMoveEvent,
   onOpen,
+  onResizeEvent,
   visibleCalendarIds
 }: {
   availabilityMode: boolean;
@@ -5409,6 +5437,7 @@ function WeekView({
   onCreate: (seed?: CalendarCreateSeed) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onResizeEvent: (eventId: string, endsAt: string) => void;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   return (
@@ -5422,6 +5451,7 @@ function WeekView({
       onCreate={onCreate}
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
+      onResizeEvent={onResizeEvent}
       title="Week view"
       visibleCalendarIds={visibleCalendarIds}
     />
