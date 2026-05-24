@@ -791,7 +791,7 @@ describe("App shell", () => {
     tasksButton.focus();
     await user.keyboard("{ArrowDown}");
 
-    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
     expect(within(primaryNavigation()).getByRole("button", { name: /Calendar/ })).toHaveFocus();
 
     await user.keyboard("{Meta>}p{/Meta}");

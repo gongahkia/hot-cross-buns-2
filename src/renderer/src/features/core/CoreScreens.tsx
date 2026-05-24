@@ -4519,6 +4519,16 @@ function calendarEventLabel(
   return event.title;
 }
 
+function calendarEventTimeOfDayIso(sourceIso: string, dayKey: string): string {
+  const parsed = new Date(sourceIso);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return `${dayKey}T00:00:00.000Z`;
+  }
+
+  return `${dayKey}T${String(parsed.getUTCHours()).padStart(2, "0")}:${String(parsed.getUTCMinutes()).padStart(2, "0")}:00.000Z`;
+}
+
 function CalendarSourceSwatch({
   calendarId,
   className
@@ -4939,6 +4949,7 @@ function CalendarTimelineView({
   onCreate,
   onMoveEvent,
   onOpen,
+  timedLabelVariant = "time",
   title,
   visibleCalendarIds
 }: {
@@ -4952,6 +4963,7 @@ function CalendarTimelineView({
   onCreate: (seed?: CalendarCreateSeed) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  timedLabelVariant?: "range" | "time";
   title: string;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
@@ -4983,6 +4995,12 @@ function CalendarTimelineView({
     const draggedEvent = eventId ? source.calendarEventsById[eventId] : undefined;
 
     if (!draggedEvent) {
+      return;
+    }
+
+    if (allDay && !draggedEvent.allDay) {
+      const nextStartsAt = calendarEventTimeOfDayIso(draggedEvent.startsAt, dayKey);
+      onMoveEvent(draggedEvent.id, nextStartsAt, false);
       return;
     }
 
@@ -5087,7 +5105,7 @@ function CalendarTimelineView({
         <div className="min-w-[720px]">
           <div className="grid grid-cols-[64px_minmax(0,1fr)] border-b border-border bg-bg-secondary/80">
             <div className="border-r border-border" aria-hidden="true" />
-            <div className="grid" style={{ gridTemplateColumns }}>
+            <div aria-label={`All-day events ${label}`} className="grid" role="group" style={{ gridTemplateColumns }}>
               {visibleDays.map(({ day }) => (
                 <div
                   className="min-h-16 border-r border-border px-2 py-2 text-center last:border-r-0"
@@ -5226,19 +5244,34 @@ function CalendarTimelineView({
                       role="gridcell"
                       tabIndex={0}
                     >
-                      {visibleEvents.map((calendarEvent) => (
-                        <CalendarTimelineEventChip
-                          event={calendarEvent}
-                          key={calendarEvent.id}
-                          labelVariant="time"
-                          onMoveEvent={onMoveEvent}
-                          onOpen={onOpen}
-                        />
-                      ))}
-                      {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}
-                    </div>
-                  );
-                })}
+                    {visibleEvents.map((calendarEvent) => (
+                      <CalendarTimelineEventChip
+                        event={calendarEvent}
+                        key={calendarEvent.id}
+                        labelVariant={timedLabelVariant}
+                        onMoveEvent={onMoveEvent}
+                        onOpen={onOpen}
+                      />
+                    ))}
+                    {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}
+                    {!availabilityMode && visibleEvents.length === 0 ? (
+                      <button
+                        aria-label={`Create event at ${hourSlotLabel(hour)}`}
+                        className="sr-only"
+                        onClick={(buttonEvent) => {
+                          buttonEvent.stopPropagation();
+                          onCreate({
+                            allDay: false,
+                            startsAt,
+                            endsAt: addUtcMinutesIso(startsAt, 60)
+                          });
+                        }}
+                        type="button"
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
               </div>
             </div>
           ))}
@@ -5278,6 +5311,7 @@ function DayView({
       onCreate={onCreate}
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
+      timedLabelVariant="range"
       title="Day view"
       visibleCalendarIds={visibleCalendarIds}
     />
@@ -5467,36 +5501,52 @@ function ShareAvailabilityPanel({
   calendarId,
   calendars,
   durationMinutes,
+  endDate,
   error,
+  exportBusyBlockCount,
+  exportPending,
+  exportText,
   onCalendarChange,
   onClose,
   onCopySnippet,
   onCreateHolds,
   onDurationChange,
+  onEndDateChange,
+  onExportAvailability,
   onRemoveSlot,
+  onStartDateChange,
   onTitleChange,
   pending,
   pendingHoldCount,
   slots,
   snippet,
+  startDate,
   timeZone,
   title
 }: {
   calendarId: string;
   calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
   durationMinutes: number;
+  endDate: string;
   error?: string;
+  exportBusyBlockCount: number | null;
+  exportPending: boolean;
+  exportText: string;
   onCalendarChange: (calendarId: string) => void;
   onClose: () => void;
   onCopySnippet: () => void;
   onCreateHolds: () => void;
   onDurationChange: (duration: number) => void;
+  onEndDateChange: (date: string) => void;
+  onExportAvailability: () => void;
   onRemoveSlot: (slotId: string) => void;
+  onStartDateChange: (date: string) => void;
   onTitleChange: (title: string) => void;
   pending: boolean;
   pendingHoldCount: number;
   slots: CalendarTimeBlock[];
   snippet: string;
+  startDate: string;
   timeZone: string;
   title: string;
 }): JSX.Element {
@@ -5557,6 +5607,47 @@ function ShareAvailabilityPanel({
             <option value={timeZone}>{timeZone}</option>
           </select>
         </label>
+        <div className="grid gap-3 border-t border-border pt-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="grid gap-1 text-[var(--text-sm)] font-semibold text-text-secondary">
+              <span>Start</span>
+              <input
+                aria-label="Availability start"
+                className={selectClass}
+                onChange={(event) => onStartDateChange(event.target.value)}
+                type="date"
+                value={startDate}
+              />
+            </label>
+            <label className="grid gap-1 text-[var(--text-sm)] font-semibold text-text-secondary">
+              <span>End</span>
+              <input
+                aria-label="Availability end"
+                className={selectClass}
+                onChange={(event) => onEndDateChange(event.target.value)}
+                type="date"
+                value={endDate}
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button disabled={exportPending} onClick={onExportAvailability} size="sm" variant="secondary">
+              <CalendarPlus aria-hidden="true" size={14} />
+              {exportPending ? "Generating" : "Generate"}
+            </Button>
+            {exportBusyBlockCount !== null ? (
+              <Badge tone="info">
+                {exportBusyBlockCount} busy block{exportBusyBlockCount === 1 ? "" : "s"}
+              </Badge>
+            ) : null}
+          </div>
+          <textarea
+            aria-label="Availability export"
+            className="min-h-24 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 font-mono text-[var(--text-xs)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            readOnly
+            value={exportText}
+          />
+        </div>
         {error ? <ErrorState description={error} title="Availability not saved" /> : null}
         <div className="border-t border-border pt-3">
           <div className="mb-2 flex items-center justify-between gap-3">
@@ -5714,7 +5805,7 @@ function CalendarView(): JSX.Element {
   const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
   const [calendarAnchorDate, setCalendarAnchorDate] = useState(calendarTodayKey);
   const [multiDayCount, setMultiDayCount] = useState(3);
-  const [shareAvailabilityOpen, setShareAvailabilityOpen] = useState(false);
+  const [shareAvailabilityOpen, setShareAvailabilityOpen] = useState(true);
   const [availabilityTitle, setAvailabilityTitle] = useState("Meeting");
   const [availabilityDurationMinutes, setAvailabilityDurationMinutes] = useState(30);
   const [availabilityCalendarId, setAvailabilityCalendarId] = useState(() => defaultCalendarId(source));
@@ -5809,12 +5900,7 @@ function CalendarView(): JSX.Element {
     [calendarAnchorDate, visibleEventDayIndex]
   );
   const visibleUpcomingEvent = useMemo(() => {
-    const nowMs = Date.now();
-    return (
-      visibleCalendarEvents.find((event) => Date.parse(event.endsAt) >= nowMs) ??
-      visibleCalendarEvents[0] ??
-      null
-    );
+    return visibleCalendarEvents[0] ?? null;
   }, [visibleCalendarEvents]);
   const calendarStatus = calendarStatusSummary(source);
   const selectedAvailabilityCalendarIds = availabilityCalendarIds.filter((calendarId) =>
@@ -5826,7 +5912,6 @@ function CalendarView(): JSX.Element {
     availabilityRange !== null &&
     Date.parse(availabilityRange.end) > Date.parse(availabilityRange.start) &&
     !availabilityPending;
-  const timelineViewActive = isCalendarTimelineView(activeViewId);
   const calendarRangeLabel =
     activeViewId === "month"
       ? calendarMonthTitle(calendarAnchorDate)
@@ -5971,14 +6056,6 @@ function CalendarView(): JSX.Element {
         : source.calendarSources.map((calendar) => calendar.id)
     );
   }, [availabilityCalendarIds.length, source.calendarSources]);
-
-  useEffect(() => {
-    if (timelineViewActive) {
-      return;
-    }
-
-    setShareAvailabilityOpen(false);
-  }, [timelineViewActive]);
 
   useEffect(() => {
     if (source.calendarSources.length === 0) {
@@ -6523,22 +6600,24 @@ function CalendarView(): JSX.Element {
           </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          {timelineViewActive ? (
-            <IconButton
-              aria-expanded={shareAvailabilityOpen}
-              icon={CalendarPlus}
-              label="Share availability"
-              onClick={() => setShareAvailabilityOpen((open) => !open)}
-              variant={shareAvailabilityOpen ? "secondary" : "ghost"}
-            />
-          ) : null}
-          {calendarStatus.label !== "Ready" || source.syncStatus.pendingMutationCount > 0 ? (
-            <CalendarStatusStrip
-              source={source}
-              visibleCalendarCount={visibleCalendarIdSet.size}
-              visibleEventCount={visibleCalendarEvents.length}
-            />
-          ) : null}
+          <Button data-action-id="calendar.create" onClick={() => openCreate()} size="sm" variant="primary">
+            <CalendarPlus aria-hidden="true" size={14} />
+            New event
+          </Button>
+          <Button
+            aria-expanded={shareAvailabilityOpen}
+            onClick={() => setShareAvailabilityOpen((open) => !open)}
+            size="sm"
+            variant={shareAvailabilityOpen ? "secondary" : "ghost"}
+          >
+            <CalendarPlus aria-hidden="true" size={14} />
+            Share availability
+          </Button>
+          <CalendarStatusStrip
+            source={source}
+            visibleCalendarCount={visibleCalendarIdSet.size}
+            visibleEventCount={visibleCalendarEvents.length}
+          />
         </div>
       </div>
 
@@ -6562,27 +6641,58 @@ function CalendarView(): JSX.Element {
       <SectionChrome
         title="Calendar"
         sidebar={
-          timelineViewActive && shareAvailabilityOpen ? (
-            <ShareAvailabilityPanel
-              calendarId={availabilityCalendarId}
-              calendars={source.calendarSources}
-              durationMinutes={availabilityDurationMinutes}
-              error={availabilityError}
-              onCalendarChange={setAvailabilityCalendarId}
-              onClose={() => setShareAvailabilityOpen(false)}
-              onCopySnippet={copyAvailabilitySnippet}
-              onCreateHolds={() => void createAvailabilityHolds()}
-              onDurationChange={setAvailabilityDurationMinutes}
-              onRemoveSlot={removeAvailabilitySlot}
-              onTitleChange={setAvailabilityTitle}
-              pending={availabilityHoldPending}
-              pendingHoldCount={source.syncStatus.pendingMutationCount}
-              slots={availabilitySlots}
-              snippet={availabilitySnippet}
-              timeZone={source.settings.defaultTimeZone}
-              title={availabilityTitle}
+          <div className="grid gap-3">
+            <Panel
+              title="Calendars"
+              description="Visible sources"
+              action={
+                <Button onClick={showAllCalendars} size="sm" variant="ghost">
+                  Show all
+                </Button>
+              }
+            >
+              <CalendarSourceVisibilityList
+                calendars={source.calendarSources}
+                defaultTimeZone={source.settings.defaultTimeZone}
+                onToggle={toggleVisibleCalendar}
+                visibleCalendarIds={visibleCalendarIdSet}
+              />
+            </Panel>
+            <CalendarContextPanel
+              defaultTimeZone={source.settings.defaultTimeZone}
+              event={visibleUpcomingEvent}
+              onOpen={openEdit}
             />
-          ) : undefined
+            {shareAvailabilityOpen ? (
+              <ShareAvailabilityPanel
+                calendarId={availabilityCalendarId}
+                calendars={source.calendarSources}
+                durationMinutes={availabilityDurationMinutes}
+                error={availabilityError}
+                onCalendarChange={setAvailabilityCalendarId}
+                onClose={() => setShareAvailabilityOpen(false)}
+                onCopySnippet={copyAvailabilitySnippet}
+                onCreateHolds={() => void createAvailabilityHolds()}
+                onDurationChange={setAvailabilityDurationMinutes}
+                onEndDateChange={setAvailabilityEndDate}
+                onExportAvailability={() => void exportAvailability()}
+                onRemoveSlot={removeAvailabilitySlot}
+                onStartDateChange={setAvailabilityStartDate}
+                onTitleChange={setAvailabilityTitle}
+                pending={availabilityHoldPending}
+                exportBusyBlockCount={availabilityBusyBlockCount}
+                exportPending={availabilityPending}
+                exportText={availabilityText}
+                pendingHoldCount={source.syncStatus.pendingMutationCount}
+                slots={availabilitySlots}
+                snippet={availabilitySnippet}
+                startDate={availabilityStartDate}
+                timeZone={source.settings.defaultTimeZone}
+                title={availabilityTitle}
+                endDate={availabilityEndDate}
+              />
+            ) : null}
+          </div>
         }
       >
         <div className="h-full min-h-0 overflow-auto pr-1">
