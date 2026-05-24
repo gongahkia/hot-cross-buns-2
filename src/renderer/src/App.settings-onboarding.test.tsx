@@ -1,0 +1,299 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { ok } from "@shared/ipc/result";
+import App from "./App";
+import {
+  goToSection,
+  installHcb,
+  now,
+  onboardingHcb,
+  seededHcb,
+  testSettings
+} from "./test/appTestHelpers";
+
+describe("App settings and onboarding", () => {
+  it("renders required settings sections and section controls", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+
+    const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    expect(within(dialog).getByRole("button", { name: "General" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("button", { name: "Profile" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Appearance" })).toBeInTheDocument();
+
+    expect(screen.getByRole("combobox", { name: "App language" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Open Hot Cross Buns at login" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Sync mode" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Local MCP server" })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Profile" }));
+    expect(screen.getByRole("textbox", { name: "Google OAuth client ID" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add Google Account/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Task lists" })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Appearance" }));
+    expect(screen.getByRole("combobox", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Color theme" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Translucent background" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Layout" })).toBeInTheDocument();
+  });
+
+  it("applies base theme and color theme settings", async () => {
+    const api = seededHcb();
+    let settings = testSettings({
+      theme: "dark",
+      colorTheme: "dracula",
+      uiFontName: "Inter",
+      uiTextSizePoints: 15
+    });
+    api.settings.get = vi.fn(async () => ok(settings));
+    api.settings.update = vi.fn(async (request) => {
+      settings = testSettings({
+        ...settings,
+        ...request
+      });
+
+      return ok(settings);
+    });
+    api.native.listFontFamilies = vi.fn(async () =>
+      ok({
+        platform: "darwin" as const,
+        families: ["Avenir", "JetBrains Mono", "SF Pro Text"]
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+      expect(document.documentElement).toHaveAttribute("data-color-theme", "dracula");
+      expect(document.documentElement.style.getPropertyValue("--color-accent")).toBe("#FF79C6");
+      expect(document.documentElement.style.getPropertyValue("--font-family")).toContain("\"Inter\"");
+      expect(document.documentElement.style.getPropertyValue("--font-family-mono")).toContain("\"Inter\"");
+      expect(document.documentElement.style.getPropertyValue("--text-base")).toBe("15px");
+    });
+
+    await goToSection("Settings");
+    await user.click(screen.getByRole("button", { name: "Appearance" }));
+    await user.selectOptions(screen.getByLabelText("Theme"), "light");
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({
+        theme: "light",
+        colorTheme: "notion"
+      });
+      expect(document.documentElement).toHaveAttribute("data-theme", "light");
+      expect(document.documentElement).toHaveAttribute("data-color-theme", "notion");
+    });
+
+    await user.selectOptions(screen.getByLabelText("Color theme"), "githubLight");
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ colorTheme: "githubLight" });
+      expect(document.documentElement).toHaveAttribute("data-color-theme", "githubLight");
+    });
+    expect(screen.queryByText("Light themes")).not.toBeInTheDocument();
+    await waitFor(() => expect(api.native.listFontFamilies).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getAllByRole("option", { name: "Avenir" }).length).toBeGreaterThan(0);
+    });
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Font family" }), "JetBrains Mono");
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ uiFontName: "JetBrains Mono" });
+      expect(document.documentElement.style.getPropertyValue("--font-family")).toContain("\"JetBrains Mono\"");
+      expect(document.documentElement.style.getPropertyValue("--font-family-mono")).toContain("\"JetBrains Mono\"");
+    });
+
+    fireEvent.change(screen.getByLabelText("Text size points"), { target: { value: "16" } });
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ uiTextSizePoints: 16 });
+      expect(document.documentElement.style.getPropertyValue("--text-base")).toBe("16px");
+    });
+  });
+
+  it("opens sanitized diagnostics details in the inspector", async () => {
+    const api = seededHcb();
+    const base = await api.diagnostics.summary();
+    if (!base.ok) {
+      throw new Error("Missing diagnostics fixture");
+    }
+    api.diagnostics.summary = vi.fn(async () =>
+      ok({
+        ...base.data,
+        dangerousToken: "raw-google-token"
+      } as typeof base.data & { dangerousToken: string })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    await user.click(screen.getByRole("button", { name: /Open diagnostics/ }));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "diagnostics");
+    const json = screen.getByLabelText("Sanitized diagnostics JSON");
+    expect(json).toHaveTextContent("redaction");
+    expect(json).not.toHaveTextContent("raw-google-token");
+    expect(within(inspector).getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  it("updates general settings controls through settings IPC", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Sync mode" }), "manual");
+    await user.click(screen.getByRole("checkbox", { name: "Local MCP server" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "MCP permission mode" }), "allow-writes");
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ syncMode: "manual" });
+      expect(api.settings.update).toHaveBeenCalledWith({ mcpEnabled: true });
+      expect(api.settings.update).toHaveBeenCalledWith({ mcpPermissionMode: "allow-writes" });
+    });
+  });
+
+  it("shows onboarding for a fresh database and completes setup through settings IPC", async () => {
+    const { api, getSettings } = onboardingHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
+
+    expect(within(dialog).getByText("1. Google runtime")).toBeInTheDocument();
+    expect(within(dialog).getByText("2. Task lists")).toBeInTheDocument();
+    expect(within(dialog).getByText("3. Calendars")).toBeInTheDocument();
+    expect(within(dialog).getByText("4. Sync mode")).toBeInTheDocument();
+    expect(within(dialog).getByText("5. Notifications")).toBeInTheDocument();
+    expect(within(dialog).getByText("6. MCP access")).toBeInTheDocument();
+
+    await user.selectOptions(within(dialog).getByLabelText("Onboarding sync mode"), "near-real-time");
+    await user.click(within(dialog).getByLabelText("Local notifications"));
+    await user.click(within(dialog).getByLabelText("Enable MCP"));
+    await user.click(within(dialog).getByRole("button", { name: "Finish setup" }));
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedTaskListIds: ["list-inbox", "list-planning"],
+          selectedCalendarIds: ["cal-product"],
+          syncMode: "near-real-time",
+          notificationsEnabled: true,
+          mcpEnabled: true,
+          setupCompletedAt: expect.any(String)
+        })
+      );
+      expect(getSettings().setupCompletedAt).toEqual(expect.any(String));
+      expect(screen.queryByRole("dialog", { name: "First-run setup" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("lets users skip Google setup and keep local notes and settings usable", async () => {
+    const { api } = onboardingHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
+    await user.click(within(dialog).getByRole("button", { name: "Use local-only" }));
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedTaskListIds: [],
+          selectedCalendarIds: [],
+          syncMode: "manual",
+          notificationsEnabled: false,
+          mcpEnabled: false,
+          mcpPermissionMode: "read-only",
+          setupCompletedAt: expect.any(String)
+        })
+      );
+      expect(screen.queryByRole("dialog", { name: "First-run setup" })).not.toBeInTheDocument();
+    });
+
+    await goToSection("Notes");
+    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
+
+    await goToSection("Settings");
+    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("resets onboarding from Settings without deleting planner data", async () => {
+    const { api } = onboardingHcb({ setupCompletedAt: now });
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
+
+    await goToSection("Settings");
+    await user.click(screen.getByRole("button", { name: "Run setup again" }));
+
+    await waitFor(() => {
+      expect(api.settings.recoveryAction).toHaveBeenCalledWith({ action: "resetOnboarding" });
+    });
+    expect(await screen.findByRole("dialog", { name: "First-run setup" })).toBeInTheDocument();
+    expect(api.notes.delete).not.toHaveBeenCalled();
+  });
+
+  it("updates startup setting from Settings", async () => {
+    const api = seededHcb();
+    api.settings.get = vi.fn(async () => ok(testSettings({ startOnLogin: false })));
+    api.settings.update = vi.fn(async (request) =>
+      ok(testSettings({ startOnLogin: request.startOnLogin ?? false }))
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    await user.click(screen.getByRole("checkbox", { name: "Open Hot Cross Buns at login" }));
+
+    await waitFor(() => {
+      expect(api.settings.update).toHaveBeenCalledWith({ startOnLogin: true });
+    });
+  });
+
+  it("requires confirmation before destructive sync recovery actions", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    await user.click(screen.getByRole("button", { name: /Force full resync/ }));
+
+    expect(api.settings.recoveryAction).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Confirm destructive action" })).toBeInTheDocument();
+
+    const confirmButton = screen.getByRole("button", { name: "Confirm" });
+    expect(confirmButton).toBeDisabled();
+
+    await user.type(screen.getByRole("textbox", { name: "Confirmation phrase" }), "FULL RESYNC");
+    await user.click(confirmButton);
+
+    await waitFor(() => {
+      expect(api.settings.recoveryAction).toHaveBeenCalledWith({
+        action: "forceFullResync",
+        confirmation: {
+          accepted: true,
+          phrase: "FULL RESYNC"
+        }
+      });
+    });
+  });
+});

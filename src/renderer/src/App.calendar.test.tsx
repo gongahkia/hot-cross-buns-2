@@ -1,0 +1,573 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { ok } from "@shared/ipc/result";
+import App from "./App";
+import {
+  goToSection,
+  installHcb,
+  now,
+  runPaletteCommand,
+  seededHcb,
+  testDataTransfer,
+  todayDate,
+  tomorrowIso,
+  utcWeekStartDate
+} from "./test/appTestHelpers";
+
+describe("App calendar", () => {
+  it("switches calendar agenda, day, week, and month shells", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    expect(within(agenda).getByText("Planner shell standup")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+    expect(screen.getByRole("grid", { name: "Calendar day view" })).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Week" }));
+    expect(screen.getByRole("grid", { name: "Calendar week view" })).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Month" }));
+    expect(screen.getByRole("grid", { name: "Calendar month view" })).toBeInTheDocument();
+  });
+
+  it("separates all-day calendar events and summarizes dense month cells", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-launch-freeze",
+            calendarId: "cal-product",
+            title: "Launch freeze",
+            startsAt: now,
+            endsAt: tomorrowIso,
+            allDay: true,
+            updatedAt: now
+          },
+          {
+            id: "event-design-sync",
+            calendarId: "cal-product",
+            title: "Design sync",
+            startsAt: `${todayDate}T09:00:00.000Z`,
+            endsAt: `${todayDate}T09:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-roadmap-check",
+            calendarId: "cal-product",
+            title: "Roadmap check",
+            startsAt: `${todayDate}T10:00:00.000Z`,
+            endsAt: `${todayDate}T10:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-partner-review",
+            calendarId: "cal-product",
+            title: "Partner review",
+            startsAt: `${todayDate}T11:00:00.000Z`,
+            endsAt: `${todayDate}T11:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-release-notes",
+            calendarId: "cal-product",
+            title: "Release notes",
+            startsAt: `${todayDate}T12:00:00.000Z`,
+            endsAt: `${todayDate}T12:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 5 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+
+    const allDayLane = screen.getByRole("group", { name: /All-day events/ });
+    expect(within(allDayLane).getByRole("button", { name: "Launch freeze" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "09:00-09:30 Design sync" })).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Month" }));
+
+    const monthGrid = screen.getByRole("grid", { name: "Calendar month view" });
+    expect(within(monthGrid).getByRole("button", { name: "Launch freeze" })).toBeInTheDocument();
+    expect(within(monthGrid).getByRole("button", { name: "Design sync" })).toBeInTheDocument();
+    expect(within(monthGrid).getByText("2 more")).toBeInTheDocument();
+  });
+
+  it("opens calendar creation from keyboard-focused grid cells", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Week" }));
+    const grid = screen.getByRole("grid", { name: "Calendar week view" });
+    const firstCell = within(grid).getAllByRole("gridcell")[0];
+
+    firstCell.focus();
+    fireEvent.keyDown(firstCell, { key: "Enter" });
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    expect(screen.getByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "event");
+    expect(screen.getByRole("button", { name: "New event" })).toHaveAttribute(
+      "data-action-id",
+      "calendar.create"
+    );
+  });
+
+  it("creates timed calendar drafts from day planning slots", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+    await user.click(screen.getByRole("button", { name: "Create event at 11:00" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    expect(screen.getByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "event");
+    expect(screen.getByLabelText("Event starts")).toHaveValue(`${todayDate}T11:00`);
+    expect(screen.getByLabelText("Event ends")).toHaveValue(`${todayDate}T12:00`);
+  });
+
+  it("opens calendar events in the inspector", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(within(agenda).getByText("Planner shell standup"));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "event");
+    expect(inspector).toHaveAttribute("data-inspector-id", "event-standup");
+
+    const context = within(inspector).getByRole("group", { name: "Event context" });
+    expect(within(context).getByText("Product")).toBeInTheDocument();
+    expect(within(context).getByText(new RegExp(`${todayDate}.*09:30-09:50`))).toBeInTheDocument();
+    expect(within(context).getByText("UTC")).toBeInTheDocument();
+  });
+
+  it("shows event pending mutation badges in rows and inspector", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-standup",
+            calendarId: "cal-product",
+            title: "Planner shell standup",
+            startsAt: `${todayDate}T09:30:00.000Z`,
+            endsAt: `${todayDate}T09:50:00.000Z`,
+            allDay: false,
+            mutationState: "queued" as const,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    expect(within(agenda).getByText("Queued")).toBeInTheDocument();
+
+    await user.click(within(agenda).getByText("Planner shell standup"));
+    const inspector = await screen.findByTestId("inspector-shell");
+
+    expect(within(inspector).getByText("Queued")).toBeInTheDocument();
+  });
+
+  it("keeps a dirty calendar event inspector open on Escape", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(within(agenda).getByText("Planner shell standup"));
+
+    const titleInput = await screen.findByRole("textbox", { name: "Event title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Planner shell sync");
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "event");
+    expect(screen.getByText("Unsaved")).toBeInTheDocument();
+  });
+
+  it("filters calendar views by visible calendar source", async () => {
+    const api = seededHcb();
+    api.calendar.listCalendars = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "cal-product",
+            title: "Product",
+            selected: true,
+            timeZone: "UTC",
+            updatedAt: now,
+            eventCount: 1
+          },
+          {
+            id: "cal-engineering",
+            title: "Engineering",
+            selected: true,
+            timeZone: "UTC",
+            updatedAt: now,
+            eventCount: 1
+          }
+        ],
+        page: { limit: 100, totalKnown: 2 }
+      })
+    );
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-standup",
+            calendarId: "cal-product",
+            title: "Planner shell standup",
+            startsAt: `${todayDate}T09:30:00.000Z`,
+            endsAt: `${todayDate}T09:50:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-engineering-sync",
+            calendarId: "cal-engineering",
+            title: "Engineering sync",
+            startsAt: `${todayDate}T10:30:00.000Z`,
+            endsAt: `${todayDate}T11:00:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 2 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    expect(await within(agenda).findByText("Planner shell standup")).toBeInTheDocument();
+    expect(within(agenda).getByText("Engineering sync")).toBeInTheDocument();
+    expect(screen.getAllByText("UTC").length).toBeGreaterThan(0);
+    expect(screen.getByRole("status", { name: "Calendar status" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Calendar context" })).getByText("Planner shell standup")).toBeInTheDocument();
+
+    const visibility = screen.getByRole("group", { name: "Calendar visibility" });
+    expect(within(visibility).getByText("Shown")).toBeInTheDocument();
+    await user.click(within(visibility).getByLabelText(/Product/));
+
+    await waitFor(() => {
+      expect(within(agenda).queryByText("Planner shell standup")).not.toBeInTheDocument();
+      expect(within(agenda).getByText("Engineering sync")).toBeInTheDocument();
+      expect(within(visibility).getByText("Hidden")).toBeInTheDocument();
+      expect(within(visibility).getByLabelText(/Show Product/)).toBeInTheDocument();
+    });
+  });
+
+  it("drags and resizes calendar events in the day planning grid", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+
+    const eventButton = screen.getByRole("button", {
+      name: "09:30-09:50 Planner shell standup"
+    });
+    eventButton.focus();
+    await user.keyboard("{ArrowDown}");
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${todayDate}T09:45:00.000Z`,
+        endsAt: `${todayDate}T10:05:00.000Z`,
+        allDay: false
+      });
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+    vi.mocked(api.calendar.update).mockClear();
+
+    eventButton.focus();
+    await user.keyboard("{ArrowUp}");
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${todayDate}T09:15:00.000Z`,
+        endsAt: `${todayDate}T09:35:00.000Z`,
+        allDay: false
+      });
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+    vi.mocked(api.calendar.update).mockClear();
+
+    const moveTransfer = testDataTransfer();
+    const moveTarget = screen.getByRole("row", { name: "11:00 Open slot" });
+
+    fireEvent.dragStart(eventButton, { dataTransfer: moveTransfer });
+    fireEvent.dragOver(moveTarget, { dataTransfer: moveTransfer });
+    fireEvent.drop(moveTarget, { dataTransfer: moveTransfer });
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${todayDate}T11:00:00.000Z`,
+        endsAt: `${todayDate}T11:20:00.000Z`,
+        allDay: false
+      });
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+
+    const resizeHandle = screen.getByRole("button", { name: "Resize Planner shell standup end" });
+    const resizeTransfer = testDataTransfer();
+    const resizeTarget = screen.getByRole("row", { name: "12:00 Open slot" });
+
+    fireEvent.dragStart(resizeHandle, { dataTransfer: resizeTransfer });
+    fireEvent.dragOver(resizeTarget, { dataTransfer: resizeTransfer });
+    fireEvent.drop(resizeTarget, { dataTransfer: resizeTransfer });
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        endsAt: `${todayDate}T12:00:00.000Z`
+      });
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+  });
+
+  it("drags calendar events across week days while preserving time", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Week" }));
+
+    const eventButton = screen.getByRole("button", {
+      name: "09:30 Planner shell standup"
+    });
+    const weekGrid = screen.getByRole("grid", { name: "Calendar week view" });
+    const targetDay = within(weekGrid).getAllByRole("gridcell")[0];
+    const transfer = testDataTransfer();
+    const targetDate = utcWeekStartDate(now);
+
+    fireEvent.dragStart(eventButton, { dataTransfer: transfer });
+    fireEvent.dragOver(targetDay, { dataTransfer: transfer });
+    fireEvent.drop(targetDay, { dataTransfer: transfer });
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith({
+        id: "event-standup",
+        startsAt: `${targetDate}T09:30:00.000Z`,
+        endsAt: `${targetDate}T09:50:00.000Z`,
+        allDay: false
+      });
+    });
+  });
+
+  it("creates, edits, and deletes calendar events through preload", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /New event/ }));
+    await user.type(screen.getByRole("textbox", { name: "Event title" }), "Design review");
+    fireEvent.change(screen.getByLabelText("Event starts"), { target: { value: `${todayDate}T11:00` } });
+    fireEvent.change(screen.getByLabelText("Event ends"), { target: { value: `${todayDate}T12:00` } });
+    await user.type(screen.getByRole("textbox", { name: "Event location" }), "Room 3");
+    await user.type(screen.getByRole("textbox", { name: "Event guests" }), "ada@example.com");
+    await user.selectOptions(screen.getByLabelText("Event reminder"), "15");
+    await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "weekly");
+    fireEvent.change(screen.getByLabelText("Repeat interval"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Repeat end date"), { target: { value: "2026-12-31" } });
+    expect(screen.getByText("Every 2 weeks, until 2026-12-31")).toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Event notes" }), "Bring mocks.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Design review",
+          calendarId: "cal-product",
+          startsAt: `${todayDate}T11:00:00.000Z`,
+          endsAt: `${todayDate}T12:00:00.000Z`,
+          allDay: false,
+          location: "Room 3",
+          notes: "Bring mocks.",
+          guestEmails: ["ada@example.com"],
+          reminderMinutes: [15],
+          recurrence: {
+            frequency: "weekly",
+            interval: 2,
+            endsOn: "2026-12-31",
+            count: null
+          }
+        })
+      );
+    });
+
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(within(agenda).getByText("Planner shell standup"));
+    const titleInput = screen.getByRole("textbox", { name: "Event title" });
+    await user.clear(titleInput);
+    await user.type(titleInput, "Planner shell sync");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "event-standup",
+          title: "Planner shell sync"
+        })
+      );
+    });
+
+    await user.click(within(agenda).getByText("Planner shell standup"));
+    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    expect(api.calendar.delete).toHaveBeenCalledWith({ id: "event-standup" });
+  });
+
+  it("loads existing event recurrence into the inspector and persists recurrence changes", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-recurring-review",
+            calendarId: "cal-product",
+            title: "Recurring release review",
+            startsAt: `${todayDate}T13:00:00.000Z`,
+            endsAt: `${todayDate}T14:00:00.000Z`,
+            allDay: false,
+            updatedAt: now,
+            recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4"
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(await within(agenda).findByText("Recurring release review"));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "event");
+    expect(screen.getByLabelText("Event repeat frequency")).toHaveValue("monthly");
+    expect(screen.getByLabelText("Repeat interval")).toHaveValue(2);
+    expect(screen.getByLabelText("Repeat count")).toHaveValue(4);
+    expect(screen.getByText("Every 2 months, 4 times")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "none");
+    expect(screen.getByLabelText("Repeat interval")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "event-recurring-review",
+          recurrence: null
+        })
+      );
+    });
+  });
+
+  it("generates static availability from selected calendar sources", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Share availability")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Availability start"), {
+      target: { value: todayDate }
+    });
+    fireEvent.change(screen.getByLabelText("Availability end"), {
+      target: { value: todayDate }
+    });
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => {
+      expect(api.calendar.exportAvailability).toHaveBeenCalledWith({
+        calendarIds: ["cal-product"],
+        start: now,
+        end: tomorrowIso,
+        format: "text"
+      });
+    });
+    expect(await screen.findByRole("textbox", { name: "Availability export" })).toHaveValue(
+      `Availability from ${now} to ${tomorrowIso}`
+    );
+    expect(screen.getByText("2 busy blocks")).toBeInTheDocument();
+  });
+
+  it("runs calendar-focused command palette actions", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await runPaletteCommand(user, "calendar week", /Calendar week view/);
+    expect(await screen.findByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+    expect(await screen.findByText("Week view")).toBeInTheDocument();
+
+    await runPaletteCommand(user, "new event", /New event/);
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+  });
+});
