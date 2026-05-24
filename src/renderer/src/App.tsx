@@ -250,6 +250,16 @@ function AppShell(): JSX.Element {
     setActiveSectionId(sectionId);
   }, []);
 
+  const navigateToPrimarySection = useCallback(
+    (sectionId: SectionId): void => {
+      setCommandPaletteOpen(false);
+      setNotificationsOpen(false);
+      setSettingsOpen(false);
+      navigateToSection(sectionId);
+    },
+    [navigateToSection]
+  );
+
   const openSettingsPanel = useCallback((): void => {
     setCommandPaletteOpen(false);
     setNotificationsOpen(false);
@@ -448,6 +458,17 @@ function AppShell(): JSX.Element {
 
   useEffect(() => {
     function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.metaKey || event.ctrlKey) {
+        const primaryShortcutIndex = Number(event.key) - 1;
+        const primaryShortcutSection = primaryPlannerSections[primaryShortcutIndex];
+
+        if (primaryShortcutSection) {
+          event.preventDefault();
+          navigateToPrimarySection(primaryShortcutSection.id);
+          return;
+        }
+      }
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
         event.preventDefault();
         openCommandPalette();
@@ -484,7 +505,14 @@ function AppShell(): JSX.Element {
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [openCommandPalette, openSettingsPanel, source.refresh, toggleNotificationsPanel, toggleSidebar]);
+  }, [
+    navigateToPrimarySection,
+    openCommandPalette,
+    openSettingsPanel,
+    source.refresh,
+    toggleNotificationsPanel,
+    toggleSidebar
+  ]);
 
   useEffect(() => {
     if (!notificationsOpen) {
@@ -574,13 +602,15 @@ function AppShell(): JSX.Element {
           </div>
 
           <nav aria-label="Primary" className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-x-auto px-2 py-2 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:py-3">
-            {primaryPlannerSections.map((section) => {
+            {primaryPlannerSections.map((section, index) => {
               const Icon = section.icon;
               const selected = section.id === activeSectionId;
+              const shortcutKey = String(index + 1);
 
               return (
                 <button
                   aria-current={selected ? "page" : undefined}
+                  aria-keyshortcuts={`Meta+${shortcutKey} Control+${shortcutKey}`}
                   aria-label={section.label}
                   className={cx(
                     "flex h-9 w-auto min-w-9 items-center justify-center gap-3 rounded-hcbMd px-2 text-left text-[var(--text-base)] transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:w-full lg:justify-start lg:px-3",
@@ -592,6 +622,7 @@ function AppShell(): JSX.Element {
                   onClick={() => navigateToSection(section.id)}
                   onKeyDown={(event) => handleNavigationKeyDown(event, section.id)}
                   ref={setSectionButtonRef(section.id)}
+                  title={`${section.label} (Cmd ${shortcutKey})`}
                   type="button"
                 >
                   <Icon aria-hidden="true" className="shrink-0" size={16} strokeWidth={2} />

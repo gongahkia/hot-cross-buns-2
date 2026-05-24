@@ -160,7 +160,7 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-start justify-center bg-bg-tertiary px-4 pt-[12vh]"
+      className="fixed inset-0 z-50 grid place-items-start justify-center bg-bg-tertiary/45 px-4 pt-[12vh] backdrop-blur-sm"
       onKeyDown={handleDialogKeyDown}
       role="presentation"
     >

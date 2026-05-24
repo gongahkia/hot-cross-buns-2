@@ -788,6 +788,33 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
   });
 
+  it("supports command-number shortcuts for primary sidebar sections", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(within(primaryNavigation()).getByRole("button", { name: "Tasks" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Meta+1 Control+1"
+    );
+    expect(within(primaryNavigation()).getByRole("button", { name: "Calendar" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Meta+2 Control+2"
+    );
+    expect(within(primaryNavigation()).getByRole("button", { name: "Notes" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Meta+3 Control+3"
+    );
+
+    await user.keyboard("{Meta>}1{/Meta}");
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
+
+    await user.keyboard("{Meta>}2{/Meta}");
+    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+
+    await user.keyboard("{Meta>}3{/Meta}");
+    expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
+  });
+
   it("opens notifications as a toolbar overlay instead of a primary navigation section", async () => {
     const user = userEvent.setup();
     installHcb(seededHcb());
