@@ -112,14 +112,33 @@ test("launches, navigates, opens command palette, and creates core items", async
     await firstRunSetup.getByRole("button", { name: "Finish setup" }).click();
     await expect(firstRunSetup).toBeHidden();
 
-    for (const label of ["Today", "Tasks", "Calendar", "Notes", "Search", "Settings"]) {
+    for (const label of ["Tasks", "Calendar", "Notes"]) {
       await expect(page.getByRole("button", { name: new RegExp(`^${label}\\b`) })).toBeVisible();
     }
+    await expect(page.getByRole("button", { name: "Command palette" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
 
-    for (const label of ["Tasks", "Calendar", "Notes", "Search", "Settings", "Today"]) {
+    for (const label of ["Tasks", "Calendar", "Notes"]) {
       await page.getByRole("button", { name: new RegExp(`^${label}\\b`) }).click();
       await expect(page.locator("#planner-title")).toHaveText(label);
     }
+
+    await page.keyboard.press("Control+P");
+    await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Filter commands" }).fill("go to search");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#planner-title")).toHaveText("Search");
+
+    await page.keyboard.press("Control+P");
+    await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Filter commands" }).fill("go to today");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#planner-title")).toHaveText("Today");
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await page.getByRole("button", { name: "Close settings" }).click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
 
     await page.keyboard.press("Control+P");
     await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
