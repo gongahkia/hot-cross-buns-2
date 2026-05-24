@@ -7405,6 +7405,9 @@ export function SettingsView(): JSX.Element {
   } | null>(null);
   const [confirmationInput, setConfirmationInput] = useState("");
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+  const [selectedSettingsTab, setSelectedSettingsTab] = useState<"general" | "profile" | "appearance">("general");
+  const [customRetentionAmount, setCustomRetentionAmount] = useState("60");
+  const [customRetentionUnit, setCustomRetentionUnit] = useState<"days" | "months" | "years">("days");
   const selectedSection =
     source.settingsSections.find((section) => section.id === selectedSectionId) ??
     source.settingsSections[0];
@@ -7436,7 +7439,12 @@ export function SettingsView(): JSX.Element {
   }, [googleStatus.clientId]);
 
   useEffect(() => {
-    if (selectedSectionId !== "appearance" || systemFontFamiliesRequested.current || !window.hcb) {
+    if (
+      selectedSettingsTab !== "appearance" &&
+      selectedSectionId !== "appearance" ||
+      systemFontFamiliesRequested.current ||
+      !window.hcb
+    ) {
       return;
     }
 
@@ -7446,7 +7454,7 @@ export function SettingsView(): JSX.Element {
         setSystemFontFamilies(result.data.families);
       }
     });
-  }, [selectedSectionId]);
+  }, [selectedSectionId, selectedSettingsTab]);
 
   function updateSettings(request: SettingsUpdateRequest): void {
     setRecoveryMessage(null);
