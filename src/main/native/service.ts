@@ -1,6 +1,7 @@
 import { nativeActionSchema } from "@shared/ipc/contracts";
 import type {
   CalendarEventSummary,
+  GoogleAccountConnectionStatus,
   NativeAction,
   NativeCapabilityKey,
   NativeCapabilityReport,
@@ -34,6 +35,9 @@ const maxScheduledNotifications = 40;
 export interface NativeShellServiceOptions {
   adapter: NativePlatformAdapter;
   planner: NativePlannerSnapshotSource;
+  account?: {
+    latest: () => GoogleAccountConnectionStatus | null;
+  };
   settings: NativeSettingsSource;
   windows: NativeShellWindowActions;
   sync: NativeShellSyncActions;
@@ -565,24 +569,47 @@ export class NativeShellService implements NativeDomainService {
       tomorrowEvents
     });
     const todayCount = todayTasks.length + todayEvents.length;
-    const title = menuBarTitle(overdueTasks.length, todayCount, currentEvent, nextEvent);
-    const subtitle = menuBarSubtitle(overdueTasks.length, todayCount, tomorrowTasks.length + tomorrowEvents.length);
-    const adaptiveLabel =
+    const calendar = settings.menuBarPanelStyle === "agenda"
+      ? menuBarCalendarSnapshot(todayStart, todayEvents, todayTasks)
+      : undefined;
+    const account = menuBarAccountSnapshot(this.options.account?.latest() ?? null);
+    const syncLabel = account?.connectionState === "connected" ? "Synced" : "Local";
+    const statusLabel =
       settings.menuBarPanelStyle === "adaptive"
-        ? adaptiveTrayLabel(overdueTasks.length, todayCount, currentEvent, nextEvent)
-        : "";
+        ? adaptiveTrayLabel(now, tasks, events)
+        : undefined;
+    const title =
+      settings.menuBarPanelStyle === "adaptive"
+        ? "Agenda"
+        : settings.menuBarPanelStyle === "agenda"
+          ? "Calendar"
+          : menuBarTitle(overdueTasks.length, todayCount, currentEvent, nextEvent);
+    const subtitle =
+      settings.menuBarPanelStyle === "adaptive" || settings.menuBarPanelStyle === "agenda"
+        ? undefined
+        : menuBarSubtitle(overdueTasks.length, todayCount, tomorrowTasks.length + tomorrowEvents.length);
+    const badgeLabel =
+      settings.showMenuBarBadge && overdueTasks.length > 0
+        ? cappedBadgeLabel(overdueTasks.length)
+        : undefined;
+    const tooltip = statusLabel
+      ? `Hot Cross Buns 2 - ${statusLabel}`
+      : subtitle
+        ? `${title} - ${subtitle}`
+        : title;
 
     return {
       panelStyle: settings.menuBarPanelStyle,
       primaryClickAction: settings.trayClickAction,
       title,
       subtitle,
-      badgeLabel:
-        settings.showMenuBarBadge && overdueTasks.length > 0
-          ? cappedBadgeLabel(overdueTasks.length)
-          : adaptiveLabel,
-      tooltip: subtitle ? `${title} - ${subtitle}` : title,
-      sections
+      statusLabel,
+      syncLabel,
+      badgeLabel,
+      tooltip,
+      sections,
+      calendar,
+      account
     };
   }
 
@@ -708,30 +735,42 @@ function menuBarSections(
     ];
   }
 
-  const sections: NativeMenuBarSnapshot["sections"] = [];
-
-  if (style === "adaptive" && data.overdueTasks.length > 0) {
-    sections.push({
-      title: "Needs Attention",
-      items: menuBarTaskItems(data.overdueTasks, "Overdue")
-    });
+  if (style === "adaptive") {
+    return [
+      {
+        title: "Today",
+        items: menuBarEventItems(data.todayEvents, 40)
+      },
+      {
+        title: "Tomorrow",
+        items: menuBarEventItems(data.tomorrowEvents, 40)
+      }
+    ].map((section) =>
+      section.items.length > 0
+        ? section
+        : {
+            ...section,
+            items: [{ label: "Nothing scheduled", detail: section.title?.toLowerCase() }]
+          }
+    );
   }
 
-  sections.push({
-    title: "Today",
-    items: [
-      ...menuBarEventItems(data.todayEvents),
-      ...menuBarTaskItems(data.todayTasks, "Due today")
-    ].slice(0, 8)
-  });
-
-  sections.push({
-    title: "Tomorrow",
-    items: [
-      ...menuBarEventItems(data.tomorrowEvents),
-      ...menuBarTaskItems(data.tomorrowTasks, "Due tomorrow")
-    ].slice(0, 8)
-  });
+  const sections: NativeMenuBarSnapshot["sections"] = [
+    {
+      title: "Today",
+      items: [
+        ...menuBarEventItems(data.todayEvents, 12),
+        ...menuBarTaskItems(data.todayTasks, "Due today", 8)
+      ].slice(0, 20)
+    },
+    {
+      title: "Tomorrow",
+      items: [
+        ...menuBarEventItems(data.tomorrowEvents, 12),
+        ...menuBarTaskItems(data.tomorrowTasks, "Due tomorrow", 8)
+      ].slice(0, 20)
+    }
+  ];
 
   return sections.map((section) =>
     section.items.length > 0
@@ -743,16 +782,16 @@ function menuBarSections(
   );
 }
 
-function menuBarTaskItems(tasks: TaskSummary[], fallbackDetail: string) {
-  return tasks.slice(0, 5).map((task) => ({
+function menuBarTaskItems(tasks: TaskSummary[], fallbackDetail: string, limit = 5) {
+  return tasks.slice(0, limit).map((task) => ({
     label: truncateMenuLabel(task.title),
     detail: task.dueAt ? dueDetail(task.dueAt, fallbackDetail) : fallbackDetail,
     route: { kind: "task", id: task.id } as const
   }));
 }
 
-function menuBarEventItems(events: CalendarEventSummary[]) {
-  return events.slice(0, 5).map((event) => ({
+function menuBarEventItems(events: CalendarEventSummary[], limit = 5) {
+  return events.slice(0, limit).map((event) => ({
     label: truncateMenuLabel(event.title),
     detail: eventDetail(event),
     route: { kind: "event", id: event.id } as const
@@ -799,26 +838,95 @@ function menuBarSubtitle(
 }
 
 function adaptiveTrayLabel(
-  overdueCount: number,
-  todayCount: number,
-  currentEvent: CalendarEventSummary | undefined,
-  nextEvent: CalendarEventSummary | undefined
-): string {
-  if (overdueCount > 0) {
-    return cappedBadgeLabel(overdueCount);
-  }
+  now: Date,
+  tasks: TaskSummary[],
+  events: CalendarEventSummary[]
+): string | undefined {
+  const currentEvent = events
+    .filter((event) => !event.allDay)
+    .find((event) => {
+      const startsAt = dateFromIso(event.startsAt);
+      const endsAt = dateFromIso(event.endsAt);
+
+      return Boolean(startsAt && endsAt && startsAt <= now && endsAt > now);
+    });
 
   if (currentEvent) {
-    return "Now";
+    const endsAt = dateFromIso(currentEvent.endsAt);
+    return `${statusTitle(currentEvent.title)} - ${endsAt ? durationText(now, endsAt) : "now"} left`;
   }
+
+  const nextEvent = events
+    .filter((event) => !event.allDay)
+    .find((event) => {
+      const startsAt = dateFromIso(event.startsAt);
+
+      return Boolean(startsAt && startsAt > now);
+    });
 
   if (nextEvent) {
     const startsAt = dateFromIso(nextEvent.startsAt);
-
-    return startsAt ? formatShortTime(startsAt) : "Next";
+    return `${statusTitle(nextEvent.title)} - ${startsAt ? `in ${durationText(now, startsAt)}` : "next"}`;
   }
 
-  return todayCount > 0 ? String(todayCount) : "";
+  const nextTask = tasks
+    .filter((task) => task.dueAt)
+    .sort(compareTasksByDueDate)[0];
+
+  if (!nextTask || !nextTask.dueAt) {
+    return undefined;
+  }
+
+  return `${statusTitle(nextTask.title)} - ${taskDueStatus(new Date(now), nextTask.dueAt)}`;
+}
+
+function durationText(from: Date, to: Date): string {
+  const minutes = Math.max(1, Math.ceil(Math.max(0, to.getTime() - from.getTime()) / 60_000));
+
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours < 24) {
+    return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours === 0 ? `${days}d` : `${days}d ${remainingHours}h`;
+}
+
+function taskDueStatus(now: Date, dueAtIso: string): string {
+  const dueAt = dateFromIso(dueAtIso);
+
+  if (!dueAt) {
+    return "due";
+  }
+
+  const today = startOfLocalDay(now);
+  const dueDay = startOfLocalDay(dueAt);
+  const dayDelta = Math.round((dueDay.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (dayDelta < 0) {
+    return "overdue";
+  }
+
+  if (dayDelta === 0) {
+    return "due today";
+  }
+
+  if (dayDelta === 1) {
+    return "due tomorrow";
+  }
+
+  return `due in ${dayDelta}d`;
+}
+
+function statusTitle(value: string): string {
+  return truncateMenuLabel(value, 28);
 }
 
 function cappedBadgeLabel(count: number): string {

@@ -53,11 +53,41 @@ export interface NativeTrayActions {
   quit: () => void;
 }
 
+export type NativeMenuBarAction =
+  | "quickCapture"
+  | "refresh"
+  | "openSettings"
+  | "showWindow"
+  | "quit";
+
 export interface NativeMenuBarItem {
   label: string;
   detail?: string;
   route?: NativeRoute;
-  action?: "quickCapture" | "refresh" | "openSettings" | "showWindow";
+  action?: NativeMenuBarAction;
+}
+
+export interface NativeMenuBarCalendarDay {
+  key: string;
+  label: string;
+  inCurrentMonth: boolean;
+  isToday: boolean;
+  isSelected: boolean;
+}
+
+export interface NativeMenuBarCalendarSnapshot {
+  monthLabel: string;
+  weekdayLabels: string[];
+  days: NativeMenuBarCalendarDay[];
+  selectedLabel: string;
+  selectedMeta: string;
+  selectedItems: NativeMenuBarItem[];
+}
+
+export interface NativeMenuBarAccountSnapshot {
+  displayName: string;
+  email?: string;
+  connectionState: string;
 }
 
 export interface NativeMenuBarSection {
@@ -70,9 +100,13 @@ export interface NativeMenuBarSnapshot {
   primaryClickAction: SettingsSnapshot["trayClickAction"];
   title: string;
   subtitle?: string;
+  statusLabel?: string;
+  syncLabel: string;
   badgeLabel?: string;
   tooltip: string;
   sections: NativeMenuBarSection[];
+  calendar?: NativeMenuBarCalendarSnapshot;
+  account?: NativeMenuBarAccountSnapshot;
 }
 
 export interface NativeNotificationRequest {
