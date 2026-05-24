@@ -1,7 +1,6 @@
 import { nativeActionSchema } from "@shared/ipc/contracts";
 import type {
   CalendarEventSummary,
-  GoogleAccountConnectionStatus,
   NativeAction,
   NativeCapabilityKey,
   NativeCapabilityReport,
@@ -14,6 +13,7 @@ import type {
   SettingsSnapshot
 } from "@shared/ipc/contracts";
 import { redactDiagnosticText } from "@shared/redaction";
+import type { GoogleAccountConnectionStatusDto } from "../google";
 import type { NativeDomainService } from "../services/domainInterfaces";
 import {
   HCB_DEEP_LINK_SCHEME,
@@ -36,7 +36,7 @@ export interface NativeShellServiceOptions {
   adapter: NativePlatformAdapter;
   planner: NativePlannerSnapshotSource;
   account?: {
-    latest: () => GoogleAccountConnectionStatus | null;
+    latest: () => GoogleAccountConnectionStatusDto | null;
   };
   settings: NativeSettingsSource;
   windows: NativeShellWindowActions;
@@ -853,7 +853,7 @@ function adaptiveTrayLabel(
 
   if (currentEvent) {
     const endsAt = dateFromIso(currentEvent.endsAt);
-    return `${statusTitle(currentEvent.title)} - ${endsAt ? durationText(now, endsAt) : "now"} left`;
+    return statusLabel(currentEvent.title, `${endsAt ? durationText(now, endsAt) : "now"} left`);
   }
 
   const nextEvent = events
@@ -866,7 +866,7 @@ function adaptiveTrayLabel(
 
   if (nextEvent) {
     const startsAt = dateFromIso(nextEvent.startsAt);
-    return `${statusTitle(nextEvent.title)} - ${startsAt ? `in ${durationText(now, startsAt)}` : "next"}`;
+    return statusLabel(nextEvent.title, startsAt ? `in ${durationText(now, startsAt)}` : "next");
   }
 
   const nextTask = tasks
@@ -877,7 +877,7 @@ function adaptiveTrayLabel(
     return undefined;
   }
 
-  return `${statusTitle(nextTask.title)} - ${taskDueStatus(new Date(now), nextTask.dueAt)}`;
+  return statusLabel(nextTask.title, taskDueStatus(new Date(now), nextTask.dueAt));
 }
 
 function durationText(from: Date, to: Date): string {
@@ -925,8 +925,26 @@ function taskDueStatus(now: Date, dueAtIso: string): string {
   return `due in ${dayDelta}d`;
 }
 
-function statusTitle(value: string): string {
-  return truncateMenuLabel(value, 28);
+function statusLabel(title: string, detail: string): string {
+  const shortened = shortStatusTitle(title);
+
+  return shortened.isTruncated
+    ? `${shortened.text} (${detail})`
+    : `${shortened.text} - ${detail}`;
+}
+
+function shortStatusTitle(value: string): { text: string; isTruncated: boolean } {
+  const trimmed = value.trim() || "Untitled";
+  const maxLength = 28;
+
+  if (trimmed.length <= maxLength) {
+    return { text: trimmed, isTruncated: false };
+  }
+
+  return {
+    text: `${trimmed.slice(0, maxLength - 3)}...`,
+    isTruncated: true
+  };
 }
 
 function cappedBadgeLabel(count: number): string {
@@ -970,7 +988,7 @@ function menuBarCalendarSnapshot(
       day: "numeric",
       month: "short"
     }).format(selectedDay),
-    selectedMeta: `${events.length} event${events.length === 1 ? "" : "s"} · ${tasks.length} task${
+    selectedMeta: `${events.length} event${events.length === 1 ? "" : "s"} - ${tasks.length} task${
       tasks.length === 1 ? "" : "s"
     }`,
     selectedItems:
@@ -981,7 +999,7 @@ function menuBarCalendarSnapshot(
 }
 
 function menuBarAccountSnapshot(
-  account: GoogleAccountConnectionStatus | null
+  account: GoogleAccountConnectionStatusDto | null
 ): NativeMenuBarSnapshot["account"] {
   if (!account || account.connectionState === "signed_out") {
     return undefined;

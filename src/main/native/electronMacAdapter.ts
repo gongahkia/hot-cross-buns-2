@@ -360,6 +360,8 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
       actions.openSettings();
     } else if (parsed.action === "showWindow") {
       actions.openMainWindow();
+    } else if (parsed.action === "quit") {
+      actions.quit();
     }
   }
 
@@ -722,28 +724,12 @@ function menuBarPanelDataUrl(snapshot: NativeMenuBarSnapshot): string {
 }
 
 function menuBarPanelHtml(snapshot: NativeMenuBarSnapshot): string {
-  const sections = snapshot.sections
-    .map((section) => {
-      const items = section.items
-        .map((item) => {
-          const href = menuBarItemHref(item);
-          const disabled = href === "#";
-
-          return `
-            <a class="item ${disabled ? "disabled" : ""}" href="${escapeHtml(href)}" aria-disabled="${disabled}">
-              <span class="item-main">${escapeHtml(item.label)}</span>
-              ${item.detail ? `<span class="item-detail">${escapeHtml(item.detail)}</span>` : ""}
-            </a>`;
-        })
-        .join("");
-
-      return `
-        <section class="section">
-          ${section.title ? `<h2>${escapeHtml(section.title)}</h2>` : ""}
-          <div class="items">${items}</div>
-        </section>`;
-    })
-    .join("");
+  const panel =
+    snapshot.panelStyle === "agenda" && snapshot.calendar
+      ? calendarPanelMarkup(snapshot)
+      : snapshot.panelStyle === "compact"
+        ? compactPanelMarkup(snapshot)
+        : adaptivePanelMarkup(snapshot);
 
   return `<!doctype html>
 <html lang="en">
@@ -760,7 +746,14 @@ function menuBarPanelHtml(snapshot: NativeMenuBarSnapshot): string {
         color-scheme: light dark;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
         background: transparent;
-        color: #292522;
+        color: #262626;
+        --panel: rgba(255, 255, 255, 0.98);
+        --panel-border: rgba(0, 0, 0, 0.18);
+        --separator: rgba(0, 0, 0, 0.11);
+        --muted: rgba(0, 0, 0, 0.52);
+        --faint: rgba(0, 0, 0, 0.22);
+        --hover: rgba(0, 0, 0, 0.06);
+        --accent: #74aef1;
       }
       * { box-sizing: border-box; }
       body {
@@ -770,170 +763,495 @@ function menuBarPanelHtml(snapshot: NativeMenuBarSnapshot): string {
         background: transparent;
         -webkit-font-smoothing: antialiased;
       }
+      .popover {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        padding-top: 9px;
+      }
+      .popover::before {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: calc(50% - 7px);
+        width: 14px;
+        height: 14px;
+        transform: rotate(45deg);
+        border-left: 1px solid var(--panel-border);
+        border-top: 1px solid var(--panel-border);
+        border-top-left-radius: 3px;
+        background: var(--panel);
+      }
       .panel {
-        width: 320px;
-        height: 442px;
+        position: relative;
+        width: 100%;
+        height: calc(100vh - 9px);
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        border: 1px solid rgba(64, 57, 48, 0.18);
-        border-radius: 14px;
-        background: rgba(250, 247, 241, 0.98);
-        box-shadow: 0 20px 56px rgba(35, 31, 27, 0.24);
+        border: 1px solid var(--panel-border);
+        border-radius: 13px;
+        background: var(--panel);
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
       }
-      header {
-        padding: 12px 14px 10px;
-        border-bottom: 1px solid rgba(64, 57, 48, 0.12);
-      }
-      .eyebrow {
+      .panel-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        color: #7b7167;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0;
-        text-transform: uppercase;
+        gap: 12px;
+        padding: 14px 18px 9px;
       }
-      .style {
-        max-width: 88px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        border: 1px solid rgba(64, 57, 48, 0.14);
-        border-radius: 999px;
-        padding: 2px 7px;
-        color: #6c6258;
-        text-transform: none;
-      }
-      h1 {
-        margin: 8px 0 0;
+      .panel-header h1 {
+        margin: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         font-size: 17px;
         line-height: 22px;
+        font-weight: 500;
       }
-      .subtitle {
-        margin-top: 2px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: #756b61;
+      .sync-label,
+      .section-count,
+      .secondary {
+        color: var(--muted);
+      }
+      .sync-label {
         font-size: 12px;
+        font-weight: 600;
       }
-      main {
+      .scroll-body {
         min-height: 0;
         flex: 1;
         overflow-y: auto;
-        padding: 8px;
+        padding: 0 14px 10px;
       }
-      .section + .section { margin-top: 6px; }
-      h2 {
-        margin: 7px 8px 5px;
-        color: #7b7167;
-        font-size: 11px;
+      .native-section {
+        margin-top: 10px;
+      }
+      .section-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 0 2px 6px;
+        color: var(--muted);
+        font-size: 12px;
         font-weight: 700;
         letter-spacing: 0;
-        text-transform: uppercase;
       }
-      .items {
-        overflow: hidden;
-        border: 1px solid rgba(64, 57, 48, 0.1);
-        border-radius: 10px;
-        background: rgba(255, 252, 247, 0.78);
-      }
-      .item {
+      .native-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 10px;
+        grid-template-columns: 22px minmax(0, 1fr);
+        gap: 8px;
         min-height: 38px;
         align-items: center;
-        padding: 8px 10px;
-        border-bottom: 1px solid rgba(64, 57, 48, 0.08);
+        padding: 4px 4px;
+        border-radius: 7px;
         color: inherit;
         text-decoration: none;
       }
-      .item:last-child { border-bottom: 0; }
-      .item:hover { background: rgba(238, 231, 220, 0.78); }
-      .item-main,
-      .item-detail {
+      .native-row:hover { background: var(--hover); }
+      .row-icon {
+        width: 18px;
+        height: 18px;
+        justify-self: center;
+        opacity: 0.58;
+        position: relative;
+      }
+      .row-icon.event::before,
+      .row-icon.placeholder::before {
+        content: "";
+        position: absolute;
+        inset: 2px;
+        border: 1.5px solid currentColor;
+        border-radius: 3px;
+      }
+      .row-icon.event::after {
+        content: "";
+        position: absolute;
+        left: 6px;
+        top: 7px;
+        width: 2px;
+        height: 2px;
+        background: currentColor;
+        box-shadow: 4px 0 0 currentColor, 0 4px 0 currentColor, 4px 4px 0 currentColor;
+      }
+      .row-icon.task {
+        border: 1.5px solid currentColor;
+        border-radius: 50%;
+      }
+      .row-icon.task::after {
+        content: "";
+        position: absolute;
+        left: 5px;
+        top: 5px;
+        width: 7px;
+        height: 4px;
+        border-left: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(-45deg);
+      }
+      .row-title,
+      .row-detail {
+        display: block;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .item-main {
+      .row-title {
         font-size: 13px;
-        font-weight: 600;
+        line-height: 18px;
+        font-weight: 500;
       }
-      .item-detail {
-        color: #766b61;
+      .row-detail {
+        color: var(--muted);
         font-size: 12px;
+        line-height: 16px;
       }
       .disabled {
         pointer-events: none;
-        color: #9a9188;
+        color: var(--muted);
       }
-      footer {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 6px;
-        padding: 9px;
-        border-top: 1px solid rgba(64, 57, 48, 0.12);
+      .divider {
+        border-top: 1px solid var(--separator);
+        margin: 10px 0;
       }
-      .action {
-        min-width: 0;
-        height: 32px;
+      .account {
         display: grid;
-        place-items: center;
-        border: 1px solid rgba(64, 57, 48, 0.12);
-        border-radius: 9px;
-        background: rgba(255, 252, 247, 0.82);
-        color: #342f2a;
+        grid-template-columns: 28px minmax(0, 1fr) 18px;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+      }
+      .avatar {
+        width: 20px;
+        height: 20px;
+        border: 1.5px solid var(--muted);
+        border-radius: 50%;
+        position: relative;
+        opacity: 0.75;
+      }
+      .avatar::before {
+        content: "";
+        position: absolute;
+        left: 6px;
+        top: 4px;
+        width: 6px;
+        height: 6px;
+        border: 1.5px solid currentColor;
+        border-radius: 50%;
+      }
+      .avatar::after {
+        content: "";
+        position: absolute;
+        left: 4px;
+        bottom: 3px;
+        width: 10px;
+        height: 5px;
+        border: 1.5px solid currentColor;
+        border-radius: 8px 8px 3px 3px;
+      }
+      .account-kicker {
+        display: block;
         font-size: 12px;
         font-weight: 700;
+        color: var(--muted);
+      }
+      .account-name {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        line-height: 17px;
+        font-weight: 700;
+      }
+      .account-email {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 16px;
+      }
+      .chevrons {
+        color: var(--muted);
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .quick-actions {
+        display: grid;
+        gap: 2px;
+        padding-bottom: 2px;
+      }
+      .quick-action {
+        display: block;
+        min-height: 26px;
+        padding: 3px 2px;
+        border-radius: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 19px;
         text-decoration: none;
       }
-      .action:hover { background: rgba(238, 231, 220, 0.9); }
+      .quick-action:hover { background: var(--hover); color: inherit; }
+      .calendar-wrap {
+        padding: 13px 18px 0;
+      }
+      .calendar-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 24px 24px 24px;
+        align-items: center;
+        gap: 4px;
+        margin-bottom: 12px;
+      }
+      .calendar-title {
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 22px;
+        font-weight: 400;
+      }
+      .calendar-control {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 21px;
+        line-height: 1;
+      }
+      .calendar-control:hover { background: var(--hover); }
+      .calendar-dot {
+        font-size: 18px;
+      }
+      .weekday-grid,
+      .day-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 4px;
+      }
+      .weekday {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .day {
+        display: grid;
+        place-items: center;
+        height: 29px;
+        border-radius: 7px;
+        color: inherit;
+        font-size: 15px;
+        font-variant-numeric: tabular-nums;
+        text-decoration: none;
+      }
+      .day.muted { color: var(--faint); }
+      .day.selected {
+        color: white;
+        background: var(--accent);
+        font-weight: 700;
+      }
+      .day.today:not(.selected) {
+        background: rgba(116, 174, 241, 0.18);
+      }
+      .selected-agenda {
+        border-top: 1px solid var(--separator);
+        margin-top: 15px;
+        padding-top: 12px;
+      }
+      .selected-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .selected-title {
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .quick-add {
+        display: block;
+        margin-top: 10px;
+        padding: 6px 8px;
+        border: 1px solid var(--separator);
+        border-radius: 7px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 17px;
+        text-decoration: none;
+      }
+      .quick-add:hover { background: var(--hover); }
       @media (prefers-color-scheme: dark) {
-        :root { color: #eee8df; }
-        .panel {
-          border-color: rgba(255, 255, 255, 0.12);
-          background: rgba(35, 32, 29, 0.98);
-          box-shadow: 0 20px 56px rgba(0, 0, 0, 0.42);
+        :root {
+          color: #f2f2f2;
+          --panel: rgba(36, 36, 36, 0.98);
+          --panel-border: rgba(255, 255, 255, 0.16);
+          --separator: rgba(255, 255, 255, 0.13);
+          --muted: rgba(255, 255, 255, 0.58);
+          --faint: rgba(255, 255, 255, 0.24);
+          --hover: rgba(255, 255, 255, 0.08);
+          --accent: #5e9de6;
         }
-        header, footer { border-color: rgba(255, 255, 255, 0.1); }
-        .eyebrow, .subtitle, h2, .item-detail { color: #afa69b; }
-        .style, .items, .action { border-color: rgba(255, 255, 255, 0.1); }
-        .items, .action { background: rgba(47, 43, 39, 0.78); }
-        .item { border-color: rgba(255, 255, 255, 0.08); }
-        .item:hover, .action:hover { background: rgba(64, 59, 53, 0.9); }
-        .action { color: #f2ece3; }
       }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <header>
-        <div class="eyebrow">
-          <span>Hot Cross Buns 2</span>
-          <span class="style">${escapeHtml(snapshot.panelStyle)}</span>
-        </div>
-        <h1>${escapeHtml(snapshot.title)}</h1>
-        ${snapshot.subtitle ? `<div class="subtitle">${escapeHtml(snapshot.subtitle)}</div>` : ""}
-      </header>
-      <main>${sections}</main>
-      <footer>
-        <a class="action" href="${panelActionHref("quickCapture")}">Capture</a>
-        <a class="action" href="${panelActionHref("refresh")}">Refresh</a>
-        <a class="action" href="${panelActionHref("showWindow")}">Open</a>
-        <a class="action" href="${panelActionHref("openSettings")}">Settings</a>
-      </footer>
+    <div class="popover">
+      ${panel}
     </div>
   </body>
 </html>`;
+}
+
+function adaptivePanelMarkup(snapshot: NativeMenuBarSnapshot): string {
+  return `
+    <main class="panel adaptive-panel">
+      <header class="panel-header">
+        <h1>${escapeHtml(snapshot.title)}</h1>
+        <span class="sync-label">${escapeHtml(snapshot.syncLabel)}</span>
+      </header>
+      <div class="scroll-body">
+        ${nativeSectionsMarkup(snapshot.sections)}
+        ${accountMarkup(snapshot)}
+        ${quickActionsMarkup()}
+      </div>
+    </main>`;
+}
+
+function calendarPanelMarkup(snapshot: NativeMenuBarSnapshot): string {
+  const calendar = snapshot.calendar;
+
+  if (!calendar) {
+    return adaptivePanelMarkup(snapshot);
+  }
+
+  const days = calendar.days
+    .map((day) => {
+      const classes = [
+        "day",
+        day.inCurrentMonth ? "" : "muted",
+        day.isToday ? "today" : "",
+        day.isSelected ? "selected" : ""
+      ].filter(Boolean).join(" ");
+
+      return `<span class="${classes}">${escapeHtml(day.label)}</span>`;
+    })
+    .join("");
+  const weekdays = calendar.weekdayLabels
+    .map((label) => `<span class="weekday">${escapeHtml(label)}</span>`)
+    .join("");
+
+  return `
+    <main class="panel calendar-panel">
+      <div class="scroll-body calendar-wrap">
+        <section>
+          <div class="calendar-header">
+            <div class="calendar-title">${escapeHtml(calendar.monthLabel)}</div>
+            <a class="calendar-control" href="${panelRouteHref({ kind: "calendar" })}" aria-label="Previous month">&lsaquo;</a>
+            <a class="calendar-control calendar-dot" href="${panelRouteHref({ kind: "calendar" })}" aria-label="Today">&bull;</a>
+            <a class="calendar-control" href="${panelRouteHref({ kind: "calendar" })}" aria-label="Next month">&rsaquo;</a>
+          </div>
+          <div class="weekday-grid">${weekdays}</div>
+          <div class="day-grid">${days}</div>
+        </section>
+        <section class="selected-agenda">
+          <div class="selected-header">
+            <div class="selected-title">${escapeHtml(calendar.selectedLabel)}</div>
+            <div class="secondary">${escapeHtml(calendar.selectedMeta)}</div>
+          </div>
+          ${rowsMarkup(calendar.selectedItems)}
+          <a class="quick-add" href="${panelActionHref("quickCapture")}">Add a task - tmr 9am #work</a>
+        </section>
+        ${accountMarkup(snapshot)}
+        ${quickActionsMarkup()}
+      </div>
+    </main>`;
+}
+
+function compactPanelMarkup(snapshot: NativeMenuBarSnapshot): string {
+  return `
+    <main class="panel compact-panel">
+      <header class="panel-header">
+        <h1>${escapeHtml(snapshot.title)}</h1>
+        <span class="sync-label">${escapeHtml(snapshot.syncLabel)}</span>
+      </header>
+      <div class="scroll-body">
+        ${nativeSectionsMarkup(snapshot.sections)}
+        ${accountMarkup(snapshot)}
+        ${quickActionsMarkup()}
+      </div>
+    </main>`;
+}
+
+function nativeSectionsMarkup(sections: NativeMenuBarSnapshot["sections"]): string {
+  return sections.map((section) => {
+    const count = section.items.filter((item) => item.route || item.action).length;
+
+    return `
+      <section class="native-section">
+        ${section.title ? `
+          <div class="section-heading">
+            <span>${escapeHtml(section.title)}</span>
+            ${count > 0 ? `<span class="section-count">${count}</span>` : ""}
+          </div>` : ""}
+        ${rowsMarkup(section.items)}
+      </section>`;
+  }).join("");
+}
+
+function rowsMarkup(items: NativeMenuBarItem[]): string {
+  return items.map((item) => {
+    const href = menuBarItemHref(item);
+    const disabled = href === "#";
+    const kind = item.route?.kind === "event"
+      ? "event"
+      : item.route?.kind === "task"
+        ? "task"
+        : "placeholder";
+
+    return `
+      <a class="native-row ${disabled ? "disabled" : ""}" href="${escapeHtml(href)}" aria-disabled="${disabled}">
+        <span class="row-icon ${kind}" aria-hidden="true"></span>
+        <span class="row-text">
+          <span class="row-title">${escapeHtml(item.label)}</span>
+          ${item.detail ? `<span class="row-detail">${escapeHtml(item.detail)}</span>` : ""}
+        </span>
+      </a>`;
+  }).join("");
+}
+
+function accountMarkup(snapshot: NativeMenuBarSnapshot): string {
+  if (!snapshot.account) {
+    return "";
+  }
+
+  return `
+    <div class="divider"></div>
+    <section class="account">
+      <span class="avatar" aria-hidden="true"></span>
+      <span class="account-copy">
+        <span class="account-kicker">Google account</span>
+        <span class="account-name">${escapeHtml(snapshot.account.displayName)}</span>
+        ${snapshot.account.email ? `<span class="account-email">${escapeHtml(snapshot.account.email)}</span>` : ""}
+      </span>
+      <span class="chevrons" aria-hidden="true">v</span>
+    </section>`;
+}
+
+function quickActionsMarkup(): string {
+  return `
+    <div class="divider"></div>
+    <nav class="quick-actions" aria-label="Menu bar actions">
+      <a class="quick-action" href="${panelActionHref("showWindow")}">Open Hot Cross Buns</a>
+      <a class="quick-action" href="${panelActionHref("refresh")}">Refresh</a>
+      <a class="quick-action" href="${panelActionHref("openSettings")}">Settings</a>
+      <a class="quick-action" href="${panelActionHref("quit")}">Quit</a>
+    </nav>`;
 }
 
 function menuBarItemHref(item: NativeMenuBarItem): string {
@@ -1033,7 +1351,8 @@ function parseMenuBarPanelAction(params: URLSearchParams): MenuBarPanelNavigatio
     action !== "quickCapture" &&
     action !== "refresh" &&
     action !== "openSettings" &&
-    action !== "showWindow"
+    action !== "showWindow" &&
+    action !== "quit"
   ) {
     return null;
   }

@@ -8065,7 +8065,7 @@ function SettingsView(): JSX.Element {
               value={settings.menuBarPanelStyle}
             >
               <option value="adaptive">Adaptive</option>
-              <option value="agenda">Agenda</option>
+              <option value="agenda">Calendar</option>
               <option value="compact">Compact</option>
             </select>
           </label>

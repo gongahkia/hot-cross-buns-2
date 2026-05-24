@@ -425,13 +425,64 @@ describe("native shell service", () => {
     expect(snapshot).toMatchObject({
       panelStyle: "adaptive",
       primaryClickAction: "open-menu",
-      title: "1 overdue",
+      title: "Agenda",
+      statusLabel: "Release sync - in 1h",
+      syncLabel: "Local",
       badgeLabel: "1"
     });
-    expect(snapshot?.sections.map((section) => section.title)).toContain("Needs Attention");
+    expect(snapshot?.sections.map((section) => section.title)).toEqual(["Today", "Tomorrow"]);
     expect(snapshot?.sections.flatMap((section) => section.items.map((item) => item.label))).toEqual(
-      expect.arrayContaining(["File overdue report", "Release sync", "Send launch notes"])
+      expect.arrayContaining(["Release sync"])
     );
+  });
+
+  it("builds a calendar-style menu bar snapshot with month and selected day data", async () => {
+    const { adapter, service } = createService({
+      settings: defaultSettings({ menuBarPanelStyle: "agenda" }),
+      tasks: [
+        {
+          id: "task-today",
+          listId: "inbox",
+          title: "Send launch notes",
+          status: "active",
+          dueAt: "2026-05-22T02:00:00.000Z",
+          updatedAt: now.toISOString(),
+          priority: "none"
+        }
+      ],
+      events: [
+        {
+          id: "event-today",
+          calendarId: "cal-1",
+          title: "Release sync",
+          startsAt: "2026-05-22T13:00:00.000Z",
+          endsAt: "2026-05-22T13:30:00.000Z",
+          allDay: false,
+          updatedAt: now.toISOString(),
+          reminderMinutes: []
+        }
+      ]
+    });
+
+    service.startDeferredStartup();
+    await flushNativeStartup();
+
+    const snapshot = adapter.trayActions?.snapshot();
+
+    expect(snapshot).toMatchObject({
+      panelStyle: "agenda",
+      title: "Calendar",
+      syncLabel: "Local",
+      calendar: {
+        monthLabel: "May 2026",
+        selectedMeta: "1 event - 1 task"
+      }
+    });
+    expect(snapshot?.calendar?.days).toHaveLength(42);
+    expect(snapshot?.calendar?.selectedItems.map((item) => item.label)).toEqual([
+      "Release sync",
+      "Send launch notes"
+    ]);
   });
 
   it("parses and dispatches custom protocol deep links safely", () => {
