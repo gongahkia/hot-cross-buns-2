@@ -757,7 +757,7 @@ describe("App shell", () => {
     render(<App />);
 
     expect(screen.getByTestId("app-shell")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: "Calendar" })[0]).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Today" })[0]).toBeInTheDocument();
 
     for (const label of ["Calendar", "Tasks", "Notes"]) {
       expect(within(primaryNavigation()).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
@@ -791,7 +791,7 @@ describe("App shell", () => {
     tasksButton.focus();
     await user.keyboard("{ArrowDown}");
 
-    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
     expect(within(primaryNavigation()).getByRole("button", { name: /Calendar/ })).toHaveFocus();
 
     await user.keyboard("{Meta>}p{/Meta}");
@@ -833,7 +833,7 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
 
     await user.keyboard("{Meta>}2{/Meta}");
-    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Today" })).toBeInTheDocument();
 
     await user.keyboard("{Meta>}3{/Meta}");
     expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();

@@ -5701,7 +5701,7 @@ function CalendarView(): JSX.Element {
     open: openInspector,
     update: updateInspector
   } = useInspector();
-  const [activeViewId, setActiveViewId] = useState<CalendarViewId>("month");
+  const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
   const [calendarAnchorDate, setCalendarAnchorDate] = useState(calendarTodayKey);
   const [multiDayCount, setMultiDayCount] = useState(3);
   const [shareAvailabilityOpen, setShareAvailabilityOpen] = useState(false);
@@ -9336,7 +9336,7 @@ export function SectionContent({
   }
 
   if (activeSectionId === "notes") {
-    return <TaskNotesView />;
+    return <NotesView />;
   }
 
   if (activeSectionId === "search") {
