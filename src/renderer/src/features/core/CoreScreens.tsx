@@ -67,6 +67,8 @@ import { getAppNotifications, type AppNotificationTone } from "./appNotification
 import { useCoreViewModelSource, useLocalSearch } from "./coreViewModelSource";
 import type {
   CalendarEventViewModel,
+  CalendarDayViewModel,
+  CalendarMonthWeekViewModel,
   CalendarViewId,
   CorePriority,
   NoteViewModel,
@@ -3822,6 +3824,24 @@ interface CalendarDaySlot {
   events: CalendarEventViewModel[];
 }
 
+interface VisibleCalendarDay {
+  day: CalendarDayViewModel;
+  visibleEvents: CalendarEventViewModel[];
+  allDayEvents: CalendarEventViewModel[];
+  timedEvents: CalendarEventViewModel[];
+}
+
+interface VisibleCalendarMonthDay {
+  day: CalendarDayViewModel;
+  visibleEventChips: CalendarEventViewModel[];
+  overflowCount: number;
+}
+
+interface VisibleCalendarMonthWeek {
+  id: string;
+  days: VisibleCalendarMonthDay[];
+}
+
 function hourSlotIso(day: string, hour: number): string {
   return `${day}T${String(hour).padStart(2, "0")}:00:00.000Z`;
 }
@@ -3835,6 +3855,63 @@ function eventOverlapsHour(event: CalendarEventViewModel, day: string, hour: num
   const endsAt = Date.parse(hourSlotIso(day, hour + 1));
 
   return Date.parse(event.startsAt) < endsAt && Date.parse(event.endsAt) > startsAt;
+}
+
+function visibleCalendarDay(
+  day: CalendarDayViewModel,
+  visibleCalendarIds: ReadonlySet<string>
+): VisibleCalendarDay {
+  const visibleEvents = day.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds));
+  const { allDayEvents, timedEvents } = splitAllDayEvents(visibleEvents);
+
+  return {
+    allDayEvents,
+    day,
+    timedEvents,
+    visibleEvents
+  };
+}
+
+function calendarDaySlots(day: string, timedEvents: CalendarEventViewModel[]): CalendarDaySlot[] {
+  const eventsByHour = new Map<number, CalendarEventViewModel[]>();
+
+  for (const event of timedEvents) {
+    for (const hour of dayPlanningHours) {
+      if (!eventOverlapsHour(event, day, hour)) {
+        continue;
+      }
+
+      const hourEvents = eventsByHour.get(hour) ?? [];
+      hourEvents.push(event);
+      eventsByHour.set(hour, hourEvents);
+    }
+  }
+
+  return dayPlanningHours.map((hour) => ({
+    hour,
+    label: hourSlotLabel(hour),
+    startsAt: hourSlotIso(day, hour),
+    events: eventsByHour.get(hour) ?? []
+  }));
+}
+
+function visibleCalendarMonthWeeks(
+  weeks: CalendarMonthWeekViewModel[],
+  visibleCalendarIds: ReadonlySet<string>
+): VisibleCalendarMonthWeek[] {
+  return weeks.map((week) => ({
+    id: week.id,
+    days: week.days.map((day) => {
+      const visibleEvents = day.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds));
+      const visibleEventChips = visibleEvents.slice(0, calendarMonthVisibleChipCount);
+
+      return {
+        day,
+        overflowCount: Math.max(0, visibleEvents.length - visibleEventChips.length),
+        visibleEventChips
+      };
+    })
+  }));
 }
 
 function startCalendarEventDrag(dragEvent: DragEvent<HTMLElement>, eventId: string): void {
@@ -3874,14 +3951,24 @@ function visibleCalendarEvent(
   return visibleCalendarIds.has(event.calendarId);
 }
 
+const calendarSourceToneCache = new Map<string, (typeof calendarSourceTones)[number]>();
+
 function calendarSourceTone(calendarId: string): (typeof calendarSourceTones)[number] {
+  const cached = calendarSourceToneCache.get(calendarId);
+
+  if (cached) {
+    return cached;
+  }
+
   let hash = 0;
 
   for (let index = 0; index < calendarId.length; index += 1) {
     hash = (hash * 31 + calendarId.charCodeAt(index)) >>> 0;
   }
 
-  return calendarSourceTones[hash % calendarSourceTones.length];
+  const tone = calendarSourceTones[hash % calendarSourceTones.length];
+  calendarSourceToneCache.set(calendarId, tone);
+  return tone;
 }
 
 function calendarEventLabel(
@@ -4281,25 +4368,13 @@ function DayView({
 }): JSX.Element {
   const source = useCoreViewModelSource();
   const day = source.calendarDayView.id.slice("day-".length);
-  const visibleDayEvents = useMemo(
-    () => source.calendarDayView.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds)),
+  const visibleDay = useMemo(
+    () => visibleCalendarDay(source.calendarDayView, visibleCalendarIds),
     [source.calendarDayView.events, visibleCalendarIds]
   );
-  const { allDayEvents } = useMemo(
-    () => splitAllDayEvents(visibleDayEvents),
-    [visibleDayEvents]
-  );
   const slots = useMemo<CalendarDaySlot[]>(
-    () =>
-      dayPlanningHours.map((hour) => ({
-        hour,
-        label: hourSlotLabel(hour),
-        startsAt: hourSlotIso(day, hour),
-        events: visibleDayEvents.filter(
-          (event) => !event.allDay && eventOverlapsHour(event, day, hour)
-        )
-      })),
-    [day, visibleDayEvents]
+    () => calendarDaySlots(day, visibleDay.timedEvents),
+    [day, visibleDay.timedEvents]
   );
 
   return (
@@ -4322,7 +4397,7 @@ function DayView({
       <div className="overflow-hidden rounded-hcbMd border border-border" role="grid" aria-label="Calendar day view">
         <CalendarAllDayLane
           dayLabel={source.calendarDayView.dateLabel}
-          events={allDayEvents}
+          events={visibleDay.allDayEvents}
           onCreate={() => onCreate({ startsAt: `${day}T00:00:00.000Z`, allDay: true })}
           onOpen={onOpen}
         />
@@ -4460,7 +4535,13 @@ function WeekView({
       totalWidth: source.calendarWeekDays.length * calendarWeekColumnWidth
     };
   }, [scrollLeft, source.calendarWeekDays.length]);
-  const visibleWeekDays = source.calendarWeekDays.slice(weekWindow.startIndex, weekWindow.endIndex);
+  const visibleWeekDays = useMemo(
+    () =>
+      source.calendarWeekDays
+        .slice(weekWindow.startIndex, weekWindow.endIndex)
+        .map((day) => visibleCalendarDay(day, visibleCalendarIds)),
+    [source.calendarWeekDays, visibleCalendarIds, weekWindow.endIndex, weekWindow.startIndex]
+  );
 
   function handleWeekScroll(event: UIEvent<HTMLDivElement>): void {
     setScrollLeft(event.currentTarget.scrollLeft);
@@ -4479,12 +4560,8 @@ function WeekView({
             className="absolute inset-y-0 top-0 flex gap-2"
             style={{ transform: `translateX(${weekWindow.offsetX}px)` }}
           >
-            {visibleWeekDays.map((day) => {
+            {visibleWeekDays.map(({ allDayEvents, day, timedEvents }) => {
               const dayKey = day.id.slice("week-".length);
-              const visibleEvents = day.events.filter((event) =>
-                visibleCalendarEvent(event, visibleCalendarIds)
-              );
-              const { allDayEvents, timedEvents } = splitAllDayEvents(visibleEvents);
               const visibleAllDayEvents = allDayEvents.slice(0, calendarWeekVisibleAllDayCount);
               const visibleTimedEvents = timedEvents.slice(0, calendarWeekVisibleTimedCount);
               const overflowCount = Math.max(
@@ -4597,34 +4674,17 @@ function MonthView({
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   const source = useCoreViewModelSource();
-  const visibleMonthEventsByDay = useMemo(() => {
-    const eventsByDay = new Map<string, CalendarEventViewModel[]>();
-
-    for (const week of source.calendarMonthWeeks) {
-      for (const day of week.days) {
-        const visibleEvents = day.events.filter((event) =>
-          visibleCalendarEvent(event, visibleCalendarIds)
-        );
-
-        if (visibleEvents.length > 0) {
-          eventsByDay.set(day.id, visibleEvents);
-        }
-      }
-    }
-
-    return eventsByDay;
-  }, [source.calendarMonthWeeks, visibleCalendarIds]);
+  const visibleWeeks = useMemo(
+    () => visibleCalendarMonthWeeks(source.calendarMonthWeeks, visibleCalendarIds),
+    [source.calendarMonthWeeks, visibleCalendarIds]
+  );
 
   return (
     <Panel title="Month view" description="Cached event range by day">
       <div className="grid gap-1 p-3" role="grid" aria-label="Calendar month view">
-        {source.calendarMonthWeeks.map((week) => (
+        {visibleWeeks.map((week) => (
           <div className="grid grid-cols-7 gap-1" key={week.id} role="row">
-            {week.days.map((day) => {
-              const visibleEvents = visibleMonthEventsByDay.get(day.id) ?? [];
-              const visibleEventChips = visibleEvents.slice(0, calendarMonthVisibleChipCount);
-              const overflowCount = Math.max(0, visibleEvents.length - visibleEventChips.length);
-
+            {week.days.map(({ day, overflowCount, visibleEventChips }) => {
               return (
                 <div
                   className={cx(

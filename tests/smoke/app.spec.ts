@@ -121,7 +121,7 @@ test("launches, navigates, opens command palette, and creates core items", async
       await expect(page.locator("#planner-title")).toHaveText(label);
     }
 
-    await page.keyboard.press("Control+K");
+    await page.keyboard.press("Control+P");
     await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
     await page.getByRole("searchbox", { name: "Filter commands" }).fill("quick capture");
     await page.keyboard.press("Enter");

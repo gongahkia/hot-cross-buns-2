@@ -692,7 +692,7 @@ async function collectLaunchTiming(
 
 async function measureCommandPaletteOpen(page: Page): Promise<number> {
   const startedAt = performance.now();
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await page.keyboard.press("Control+P");
   const dialog = page.getByRole("dialog", { name: "Command palette" });
   await dialog.waitFor({ state: "visible", timeout: 5_000 });
   const durationMs = roundMs(performance.now() - startedAt);

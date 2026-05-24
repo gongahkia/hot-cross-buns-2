@@ -174,7 +174,7 @@ const emptyGoogleStatus: GoogleStatusResponse = {
   clientId: null,
   hasClientSecret: false
 };
-const LOCAL_SEARCH_DEBOUNCE_MS = 24;
+const LOCAL_SEARCH_DEBOUNCE_MS = 12;
 
 const emptySettings: SettingsSnapshot = {
   theme: "system",
@@ -422,6 +422,9 @@ function usePreloadCoreSource(): CoreViewModelSource {
   const googleStatusRequested = useRef(false);
   const retryTaskMutation = useRef<() => void>(() => undefined);
   const taskViewModelCache = useRef(new Map<string, { signature: string; viewModel: TaskViewModel }>());
+  const calendarEventViewModelCache = useRef(
+    new Map<string, { signature: string; viewModel: CalendarEventViewModel }>()
+  );
 
   const setTasksSnapshot = useCallback((updater: (tasks: TaskSummary[]) => TaskSummary[]) => {
     setLoadState((current) => ({
@@ -1134,6 +1137,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
       refreshGoogleStatus,
       setGoogleStatus,
       taskViewModelCache: taskViewModelCache.current,
+      calendarEventViewModelCache: calendarEventViewModelCache.current,
       taskMutation,
       settingsMutation,
       updateSettings,
@@ -1258,6 +1262,7 @@ function buildCoreViewModelSource(
     refreshGoogleStatus: () => void;
     setGoogleStatus: (status: GoogleStatusResponse) => void;
     taskViewModelCache: Map<string, { signature: string; viewModel: TaskViewModel }>;
+    calendarEventViewModelCache: Map<string, { signature: string; viewModel: CalendarEventViewModel }>;
     taskMutation: TaskMutationUiState;
     settingsMutation: SettingsMutationUiState;
     updateSettings: (request: SettingsUpdateRequest) => Promise<boolean>;
@@ -1280,6 +1285,8 @@ function buildCoreViewModelSource(
     unscheduleTaskBlock: (blockId: string) => Promise<boolean>;
   }
 ): CoreViewModelSource {
+  pruneViewModelCache(options.taskViewModelCache, snapshot.tasks);
+  pruneViewModelCache(options.calendarEventViewModelCache, snapshot.events);
   const taskListsById = Object.fromEntries(snapshot.taskLists.map((list) => [list.id, list]));
   const childTasksByParentId = groupChildTasks(snapshot.tasks);
   const tasks = snapshot.tasks.map((task) =>
@@ -1298,11 +1305,12 @@ function buildCoreViewModelSource(
     snapshot.calendars.map((calendar) => [calendar.id, calendar.timeZone])
   );
   const events = snapshot.events.map((event) =>
-    calendarEventViewModel(
+    stableCalendarEventViewModel(
       event,
       calendarTitleById[event.calendarId],
       calendarTimeZoneById[event.calendarId] ?? null,
-      snapshot.settings.defaultTimeZone
+      snapshot.settings.defaultTimeZone,
+      options.calendarEventViewModelCache
     )
   );
   const eventsById = Object.fromEntries(events.map((event) => [event.id, event]));
@@ -1320,7 +1328,7 @@ function buildCoreViewModelSource(
     )
   );
   const scheduledTaskIds = new Set(baseScheduledTaskBlocks.map((block) => block.taskId));
-  const eventDayIndex = buildCalendarEventDayIndex(events, snapshot.events);
+  const eventDayIndex = buildCalendarEventDayIndex(events);
   const notes = snapshot.notes.map(noteViewModel);
   const rootTasks = tasks.filter((task) => task.parentId === null);
   const openTasks = rootTasks.filter((task) => task.status === "open");
@@ -1812,6 +1820,13 @@ function stableTaskViewModel(
 ): TaskViewModel {
   const fixtureTask = getMockTaskById(task.id);
   const hasFixtureTask = fixtureTask.id === task.id;
+  const signature = taskViewModelSignature(task, listTitle, children, hasFixtureTask ? fixtureTask : null);
+  const cached = cache.get(task.id);
+
+  if (cached?.signature === signature) {
+    return cached.viewModel;
+  }
+
   const subtasks = children.length > 0
     ? children.map((child) => ({
         id: child.id,
@@ -1842,15 +1857,44 @@ function stableTaskViewModel(
     mutationState: task.mutationState,
     subtasks
   };
-  const signature = JSON.stringify(viewModel);
-  const cached = cache.get(task.id);
-
-  if (cached?.signature === signature) {
-    return cached.viewModel;
-  }
 
   cache.set(task.id, { signature, viewModel });
   return viewModel;
+}
+
+function taskViewModelSignature(
+  task: TaskSummary,
+  listTitle: string | undefined,
+  children: TaskSummary[],
+  fixtureTask: TaskViewModel | null
+): string {
+  return [
+    task.id,
+    task.listId,
+    task.parentId ?? "",
+    task.title,
+    task.notes ?? "",
+    task.status,
+    task.dueAt ?? "",
+    task.updatedAt ?? "",
+    task.priority ?? "",
+    task.plannedStart ?? "",
+    task.plannedEnd ?? "",
+    task.durationMinutes ?? "",
+    task.lockedSchedule ? "1" : "0",
+    task.snoozeUntil ?? "",
+    task.mutationState ?? "",
+    listTitle ?? "",
+    (task.tags ?? []).join("\u001f"),
+    children.map((child) => `${child.id}\u001f${child.title}\u001f${child.status}`).join("\u001e"),
+    fixtureTask
+      ? [
+          fixtureTask.detail,
+          fixtureTask.priority,
+          fixtureTask.subtasks.map((child) => `${child.id}\u001f${child.title}\u001f${child.completed}`).join("\u001e")
+        ].join("\u001d")
+      : ""
+  ].join("\u001c");
 }
 
 function taskStatusViewModel(status: TaskSummary["status"]): TaskViewModel["status"] {
@@ -1905,15 +1949,55 @@ function uniqueTasks(tasks: TaskSummary[]): TaskSummary[] {
   return Array.from(new Map(tasks.map((task) => [task.id, task])).values());
 }
 
-function calendarEventViewModel(
+function pruneViewModelCache<T extends { id: string }, V>(
+  cache: Map<string, { signature: string; viewModel: V }>,
+  records: readonly T[]
+): void {
+  if (cache.size === 0) {
+    return;
+  }
+
+  const liveIds = new Set(records.map((record) => record.id));
+
+  for (const id of cache.keys()) {
+    if (!liveIds.has(id)) {
+      cache.delete(id);
+    }
+  }
+}
+
+function stableCalendarEventViewModel(
   event: CalendarEventSummary,
   calendarTitle: string | undefined,
   calendarTimeZone: string | null | undefined,
-  defaultTimeZone: string
+  defaultTimeZone: string,
+  cache: Map<string, { signature: string; viewModel: CalendarEventViewModel }>
 ): CalendarEventViewModel {
   const timeZone = event.timeZone?.trim() || calendarTimeZone?.trim() || defaultTimeZone || "UTC";
+  const signature = [
+    event.id,
+    event.eventId ?? "",
+    event.calendarId,
+    event.title,
+    event.startsAt,
+    event.endsAt,
+    timeZone,
+    event.allDay ? "1" : "0",
+    event.location ?? "",
+    event.notes ?? "",
+    (event.guestEmails ?? []).join("\u001f"),
+    (event.reminderMinutes ?? []).join("\u001f"),
+    event.mutationState ?? "",
+    event.recurrenceRule ?? "",
+    calendarTitle ?? ""
+  ].join("\u001c");
+  const cached = cache.get(event.id);
 
-  return {
+  if (cached?.signature === signature) {
+    return cached.viewModel;
+  }
+
+  const viewModel: CalendarEventViewModel = {
     id: event.id,
     eventId: event.eventId ?? event.id,
     calendarId: event.calendarId,
@@ -1934,6 +2018,9 @@ function calendarEventViewModel(
     mutationState: event.mutationState,
     recurrenceRule: event.recurrenceRule ?? null
   };
+
+  cache.set(event.id, { signature, viewModel });
+  return viewModel;
 }
 
 function scheduledTaskBlockViewModel(
@@ -1965,24 +2052,38 @@ function scheduledTaskBlockConflicts(
   events: CalendarEventViewModel[],
   scheduledEventIds: Set<string>
 ): Map<string, string[]> {
-  const timedEvents = events.filter(
-    (event) =>
-      !event.allDay &&
-      !scheduledEventIds.has(event.eventId) &&
-      !scheduledEventIds.has(event.id)
-  );
+  const timedEventsByDay = new Map<string, CalendarEventViewModel[]>();
+  const blocksByDay = new Map<string, ScheduledTaskBlockSummary[]>();
   const conflicts = new Map<string, string[]>();
+
+  for (const event of events) {
+    if (
+      event.allDay ||
+      scheduledEventIds.has(event.eventId) ||
+      scheduledEventIds.has(event.id)
+    ) {
+      continue;
+    }
+
+    addRangeToDayBuckets(timedEventsByDay, event, event.startsAt, event.endsAt);
+  }
+
+  for (const block of blocks) {
+    addRangeToDayBuckets(blocksByDay, block, block.startsAt, block.endsAt);
+  }
 
   for (const block of blocks) {
     const titles = new Set<string>();
+    const timedCandidates = candidatesForRange(timedEventsByDay, block.startsAt, block.endsAt);
+    const blockCandidates = candidatesForRange(blocksByDay, block.startsAt, block.endsAt);
 
-    for (const event of timedEvents) {
+    for (const event of timedCandidates) {
       if (dateRangesOverlap(block.startsAt, block.endsAt, event.startsAt, event.endsAt)) {
         titles.add(event.title);
       }
     }
 
-    for (const otherBlock of blocks) {
+    for (const otherBlock of blockCandidates) {
       if (
         otherBlock.id !== block.id &&
         dateRangesOverlap(block.startsAt, block.endsAt, otherBlock.startsAt, otherBlock.endsAt)
@@ -1995,6 +2096,35 @@ function scheduledTaskBlockConflicts(
   }
 
   return conflicts;
+}
+
+function addRangeToDayBuckets<T>(
+  buckets: Map<string, T[]>,
+  value: T,
+  startsAt: string,
+  endsAt: string
+): void {
+  for (const key of dayKeysForRange(startsAt, endsAt)) {
+    const values = buckets.get(key) ?? [];
+    values.push(value);
+    buckets.set(key, values);
+  }
+}
+
+function candidatesForRange<T>(
+  buckets: Map<string, T[]>,
+  startsAt: string,
+  endsAt: string
+): T[] {
+  const candidates = new Set<T>();
+
+  for (const key of dayKeysForRange(startsAt, endsAt)) {
+    for (const value of buckets.get(key) ?? []) {
+      candidates.add(value);
+    }
+  }
+
+  return Array.from(candidates);
 }
 
 function nextUpTimelineItem(
@@ -2065,6 +2195,26 @@ function dateRangesOverlap(
   return Date.parse(leftStart) < Date.parse(rightEnd) && Date.parse(leftEnd) > Date.parse(rightStart);
 }
 
+function dayKeysForRange(startsAt: string, endsAt: string): string[] {
+  const startMs = Date.parse(startsAt);
+  const endMs = Date.parse(endsAt);
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return [];
+  }
+
+  const keys: string[] = [];
+  const cursor = startOfUtcDay(new Date(startMs));
+  const lastDay = startOfUtcDay(new Date(endMs - 1));
+
+  while (cursor.getTime() <= lastDay.getTime()) {
+    keys.push(dayKey(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return keys;
+}
+
 function noteViewModel(note: NoteDetail | NoteSummary): NoteViewModel {
   return {
     id: note.id,
@@ -2075,22 +2225,12 @@ function noteViewModel(note: NoteDetail | NoteSummary): NoteViewModel {
   };
 }
 
-function buildCalendarEventDayIndex(
-  events: CalendarEventViewModel[],
-  summaries: CalendarEventSummary[]
-): CalendarEventDayIndex {
-  const eventById = new Map(events.map((event) => [event.id, event]));
+function buildCalendarEventDayIndex(events: CalendarEventViewModel[]): CalendarEventDayIndex {
   const eventsByDay = new Map<string, CalendarEventViewModel[]>();
 
-  for (const summary of summaries) {
-    const event = eventById.get(summary.id);
-
-    if (!event) {
-      continue;
-    }
-
-    const start = new Date(summary.startsAt);
-    const end = new Date(summary.endsAt);
+  for (const event of events) {
+    const start = new Date(event.startsAt);
+    const end = new Date(event.endsAt);
 
     if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
       continue;
