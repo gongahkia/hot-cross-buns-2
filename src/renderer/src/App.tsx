@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 import type { NativeAction, SettingsSnapshot } from "@shared/ipc/contracts";
 import {
   resolveAppColorTheme,
@@ -21,7 +21,7 @@ import { InspectorProvider, InspectorShell } from "./components/Inspector";
 import { Badge, Button, IconButton, StatusBanner, cx } from "./components/primitives";
 import { getPlannerSection, primaryPlannerSections, type SectionId } from "./data/mockPlanner";
 import { getAppNotifications, type AppNotification, type AppNotificationTone } from "./features/core/appNotifications";
-import { SectionContent, type TaskSurfaceCommand } from "./features/core/CoreScreens";
+import { SectionContent, SettingsView, type TaskSurfaceCommand } from "./features/core/CoreScreens";
 import {
   CoreDataProvider,
   type CoreViewModelSource,
@@ -212,12 +212,14 @@ function AppShell(): JSX.Element {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [healthLabel, setHealthLabel] = useState("Starting");
   const [searchQuery, setSearchQuery] = useState("");
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
   const shellVisibleReported = useRef(false);
   const commandPaletteOpenStartedAt = useRef<number | null>(null);
+  const settingsDialogRef = useRef<HTMLElement | null>(null);
   const sectionButtonRefs = useRef(new Map<SectionId, HTMLButtonElement>());
 
   const activeSection = getPlannerSection(activeSectionId);
@@ -248,6 +250,22 @@ function AppShell(): JSX.Element {
     setActiveSectionId(sectionId);
   }, []);
 
+  const openSettingsPanel = useCallback((): void => {
+    setSettingsOpen(true);
+  }, []);
+
+  const navigateOrOpenSettings = useCallback(
+    (sectionId: SectionId): void => {
+      if (sectionId === "settings") {
+        openSettingsPanel();
+        return;
+      }
+
+      navigateToSection(sectionId);
+    },
+    [navigateToSection, openSettingsPanel]
+  );
+
   const openCommandPalette = useCallback((): void => {
     commandPaletteOpenStartedAt.current = rendererNow();
     setCommandPaletteOpen(true);
@@ -276,7 +294,7 @@ function AppShell(): JSX.Element {
       }
 
       if (action.type === "openSettings") {
-        navigateToSection("settings");
+        openSettingsPanel();
         return;
       }
 
@@ -292,7 +310,7 @@ function AppShell(): JSX.Element {
       }
 
       if (action.route.kind === "settings") {
-        navigateToSection("settings");
+        openSettingsPanel();
         return;
       }
 
@@ -313,7 +331,7 @@ function AppShell(): JSX.Element {
 
       navigateToSection("today");
     },
-    [navigateToSection, source.refresh, triggerTaskCommand]
+    [navigateToSection, openSettingsPanel, source.refresh, triggerTaskCommand]
   );
 
   const handlePaletteCommand = useCallback(
@@ -321,6 +339,11 @@ function AppShell(): JSX.Element {
       if (command.id === "sync.refresh") {
         source.refresh();
         navigateToSection("today");
+        return true;
+      }
+
+      if (command.sectionId === "settings") {
+        openSettingsPanel();
         return true;
       }
 
@@ -337,7 +360,7 @@ function AppShell(): JSX.Element {
       triggerTaskCommand(command.taskCommand as TaskSurfaceCommand["id"]);
       return true;
     },
-    [navigateToSection, source.refresh, triggerTaskCommand]
+    [navigateToSection, openSettingsPanel, source.refresh, triggerTaskCommand]
   );
 
   const focusSection = useCallback(
@@ -436,7 +459,7 @@ function AppShell(): JSX.Element {
 
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
         event.preventDefault();
-        navigateToSection("settings");
+        openSettingsPanel();
         return;
       }
 
@@ -452,7 +475,7 @@ function AppShell(): JSX.Element {
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [navigateToSection, openCommandPalette, source.refresh, toggleSidebar]);
+  }, [openCommandPalette, openSettingsPanel, source.refresh, toggleSidebar]);
 
   useEffect(() => {
     if (!notificationsOpen) {
@@ -469,6 +492,24 @@ function AppShell(): JSX.Element {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [notificationsOpen]);
+
+  useEffect(() => {
+    if (!settingsOpen) {
+      return;
+    }
+
+    scheduleFrame(() => settingsDialogRef.current?.focus());
+
+    function handleKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSettingsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (!visibleNotification) {
@@ -635,11 +676,12 @@ function AppShell(): JSX.Element {
             </Button>
             <Button
               aria-label="Settings"
+              aria-expanded={settingsOpen}
               aria-keyshortcuts="Meta+, Control+,"
               className="min-w-8"
-              onClick={() => navigateToSection("settings")}
+              onClick={() => setSettingsOpen((open) => !open)}
               title="Settings"
-              variant={activeSectionId === "settings" ? "secondary" : "ghost"}
+              variant={settingsOpen ? "secondary" : "ghost"}
             >
               <Settings2 aria-hidden="true" size={15} />
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
@@ -675,7 +717,7 @@ function AppShell(): JSX.Element {
               canWriteEvents: true
             }}
             onCommand={handlePaletteCommand}
-            onNavigate={navigateToSection}
+            onNavigate={navigateOrOpenSettings}
             onOpenChange={setCommandPaletteOpen}
             open={commandPaletteOpen}
           />
@@ -693,6 +735,12 @@ function AppShell(): JSX.Element {
             onClose={() => setNotificationsOpen(false)}
           />
         ) : null}
+      {settingsOpen ? (
+        <SettingsOverlay
+          dialogRef={settingsDialogRef}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
       {visibleNotification && !notificationsOpen ? (
         <AppNotificationToast
           notification={visibleNotification}
@@ -786,6 +834,53 @@ function NotificationsOverlay({
               ))}
             </div>
           </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SettingsOverlay({
+  dialogRef,
+  onClose
+}: {
+  dialogRef: RefObject<HTMLElement>;
+  onClose: () => void;
+}): JSX.Element {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center overflow-auto bg-bg-tertiary/45 p-3 backdrop-blur-sm sm:p-5"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section
+        aria-labelledby="settings-overlay-title"
+        aria-modal="true"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-[1120px] flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary/90 shadow-2xl backdrop-blur-xl sm:max-h-[calc(100dvh-72px)]"
+        ref={dialogRef}
+        role="dialog"
+        tabIndex={-1}
+      >
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-bg-secondary/75 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-hcbMd bg-surface-0 text-accent">
+              <Settings2 aria-hidden="true" size={18} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-[var(--text-lg)] font-semibold" id="settings-overlay-title">
+                Settings
+              </h2>
+              <p className="truncate text-[var(--text-sm)] text-text-muted">App preferences</p>
+            </div>
+          </div>
+          <IconButton icon={X} label="Close settings" onClick={onClose} variant="ghost" />
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+          <SettingsView />
         </div>
       </section>
     </div>

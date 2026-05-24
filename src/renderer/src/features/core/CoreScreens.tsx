@@ -7349,7 +7349,7 @@ function SearchView({
   );
 }
 
-function SettingsView(): JSX.Element {
+export function SettingsView(): JSX.Element {
   const source = useCoreViewModelSource();
   const { open: openInspector } = useInspector();
   const [selectedSectionId, setSelectedSectionId] = useState<SettingsSectionId>("google");
