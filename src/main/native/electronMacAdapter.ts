@@ -1,15 +1,19 @@
 import {
+  BrowserWindow,
   Notification,
   Tray,
   app,
   globalShortcut,
   nativeImage,
   Menu,
+  screen,
   shell,
+  type Rectangle,
   type NativeImage,
   type MenuItemConstructorOptions
 } from "electron";
 import { join } from "node:path";
+import type { NativeRoute } from "@shared/ipc/contracts";
 import {
   HCB_DEEP_LINK_SCHEME,
   type NativeAppPaths,
@@ -32,6 +36,9 @@ import {
 const fallbackTrayIconBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOUlEQVR4nGNgGArgP7macGGyDSHZufgMwGkgPqcT5SKKDCBFM1UMoV0gUmQAPu+QBKiSEklyLtkAAHbWV6m7KwjdAAAAAElFTkSuQmCC";
 const maxNotificationDelayMs = 2_147_483_647;
+const menuBarPanelWidth = 320;
+const menuBarPanelHeight = 442;
+const menuBarPanelGap = 8;
 
 export function createElectronMacNativeAdapter(): NativePlatformAdapter {
   return new ElectronMacNativeAdapter();
@@ -39,6 +46,7 @@ export function createElectronMacNativeAdapter(): NativePlatformAdapter {
 
 class ElectronMacNativeAdapter implements NativePlatformAdapter {
   private tray: Tray | undefined;
+  private menuBarPanelWindow: BrowserWindow | undefined;
   private readonly shortcuts = new Set<string>();
   private readonly notificationTimers = new Map<string, NodeJS.Timeout>();
 
@@ -185,7 +193,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
         const snapshot = this.refreshTrayPresentation(actions);
 
         if (snapshot.primaryClickAction === "open-menu") {
-          this.tray?.popUpContextMenu(menuBarPanelMenu(actions, snapshot));
+          void this.toggleMenuBarPanel(actions, snapshot);
           return;
         }
 
@@ -223,8 +231,116 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
   }
 
   destroyTray(): void {
+    this.destroyMenuBarPanel();
     this.tray?.destroy();
     this.tray = undefined;
+  }
+
+  private async toggleMenuBarPanel(
+    actions: NativeTrayActions,
+    snapshot: NativeMenuBarSnapshot
+  ): Promise<void> {
+    if (!this.tray) {
+      return;
+    }
+
+    if (this.menuBarPanelWindow?.isVisible()) {
+      this.menuBarPanelWindow.hide();
+      return;
+    }
+
+    try {
+      const panel = this.ensureMenuBarPanel(actions);
+      panel.setBounds(menuBarPanelBounds(this.tray.getBounds()));
+      await panel.loadURL(menuBarPanelDataUrl(snapshot));
+      panel.show();
+      panel.focus();
+    } catch {
+      this.tray.popUpContextMenu(menuBarPanelMenu(actions, snapshot));
+    }
+  }
+
+  private ensureMenuBarPanel(actions: NativeTrayActions): BrowserWindow {
+    if (this.menuBarPanelWindow && !this.menuBarPanelWindow.isDestroyed()) {
+      return this.menuBarPanelWindow;
+    }
+
+    const panel = new BrowserWindow({
+      width: menuBarPanelWidth,
+      height: menuBarPanelHeight,
+      show: false,
+      frame: false,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      movable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      title: "Hot Cross Buns 2 menu bar panel",
+      backgroundColor: "#f7f3ec",
+      webPreferences: {
+        contextIsolation: true,
+        javascript: false,
+        nodeIntegration: false,
+        sandbox: true,
+        webSecurity: true
+      }
+    });
+
+    panel.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    panel.setAlwaysOnTop(true, "pop-up-menu");
+    panel.on("blur", () => panel.hide());
+    panel.on("closed", () => {
+      if (this.menuBarPanelWindow === panel) {
+        this.menuBarPanelWindow = undefined;
+      }
+    });
+    panel.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    panel.webContents.on("will-navigate", (event, url) => {
+      if (!url.startsWith("hcb-panel://")) {
+        event.preventDefault();
+        return;
+      }
+
+      event.preventDefault();
+      this.handleMenuBarPanelNavigation(url, actions);
+    });
+
+    this.menuBarPanelWindow = panel;
+    return panel;
+  }
+
+  private handleMenuBarPanelNavigation(url: string, actions: NativeTrayActions): void {
+    this.menuBarPanelWindow?.hide();
+
+    const parsed = parseMenuBarPanelUrl(url);
+
+    if (!parsed) {
+      return;
+    }
+
+    if (parsed.kind === "route") {
+      actions.openRoute(parsed.route);
+    } else if (parsed.action === "quickCapture") {
+      actions.quickCapture();
+    } else if (parsed.action === "refresh") {
+      actions.refresh();
+    } else if (parsed.action === "openSettings") {
+      actions.openSettings();
+    } else if (parsed.action === "showWindow") {
+      actions.openMainWindow();
+    }
+  }
+
+  private destroyMenuBarPanel(): void {
+    if (!this.menuBarPanelWindow || this.menuBarPanelWindow.isDestroyed()) {
+      this.menuBarPanelWindow = undefined;
+      return;
+    }
+
+    this.menuBarPanelWindow.destroy();
+    this.menuBarPanelWindow = undefined;
   }
 
   registerGlobalShortcut(accelerator: string, action: () => void): NativeOperationResult {
@@ -458,6 +574,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
   dispose(): void {
     this.clearScheduledNotifications();
     this.unregisterGlobalShortcut();
+    this.destroyMenuBarPanel();
     this.tray?.destroy();
     this.tray = undefined;
   }
@@ -469,6 +586,384 @@ function trayIconImage(): NativeImage {
   return image.isEmpty()
     ? nativeImage.createFromDataURL(`data:image/png;base64,${fallbackTrayIconBase64}`)
     : image;
+}
+
+function menuBarPanelBounds(trayBounds: Rectangle): Rectangle {
+  const display = screen.getDisplayMatching(trayBounds);
+  const workArea = display.workArea;
+  const x = clamp(
+    Math.round(trayBounds.x + trayBounds.width / 2 - menuBarPanelWidth / 2),
+    workArea.x + menuBarPanelGap,
+    workArea.x + workArea.width - menuBarPanelWidth - menuBarPanelGap
+  );
+  const menuBarIsAboveWorkArea = trayBounds.y < workArea.y + workArea.height / 2;
+  const y = menuBarIsAboveWorkArea
+    ? Math.min(
+        trayBounds.y + trayBounds.height + menuBarPanelGap,
+        workArea.y + workArea.height - menuBarPanelHeight - menuBarPanelGap
+      )
+    : Math.max(
+        workArea.y + menuBarPanelGap,
+        trayBounds.y - menuBarPanelHeight - menuBarPanelGap
+      );
+
+  return {
+    x,
+    y: Math.round(y),
+    width: menuBarPanelWidth,
+    height: menuBarPanelHeight
+  };
+}
+
+function menuBarPanelDataUrl(snapshot: NativeMenuBarSnapshot): string {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(menuBarPanelHtml(snapshot))}`;
+}
+
+function menuBarPanelHtml(snapshot: NativeMenuBarSnapshot): string {
+  const sections = snapshot.sections
+    .map((section) => {
+      const items = section.items
+        .map((item) => {
+          const href = menuBarItemHref(item);
+          const disabled = href === "#";
+
+          return `
+            <a class="item ${disabled ? "disabled" : ""}" href="${escapeHtml(href)}" aria-disabled="${disabled}">
+              <span class="item-main">${escapeHtml(item.label)}</span>
+              ${item.detail ? `<span class="item-detail">${escapeHtml(item.detail)}</span>` : ""}
+            </a>`;
+        })
+        .join("");
+
+      return `
+        <section class="section">
+          ${section.title ? `<h2>${escapeHtml(section.title)}</h2>` : ""}
+          <div class="items">${items}</div>
+        </section>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; navigate-to hcb-panel:"
+    >
+    <meta name="color-scheme" content="light dark">
+    <title>Hot Cross Buns 2 menu bar panel</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+        background: transparent;
+        color: #292522;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        overflow: hidden;
+        background: transparent;
+        -webkit-font-smoothing: antialiased;
+      }
+      .panel {
+        width: 320px;
+        height: 442px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid rgba(64, 57, 48, 0.18);
+        border-radius: 14px;
+        background: rgba(250, 247, 241, 0.98);
+        box-shadow: 0 20px 56px rgba(35, 31, 27, 0.24);
+      }
+      header {
+        padding: 12px 14px 10px;
+        border-bottom: 1px solid rgba(64, 57, 48, 0.12);
+      }
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: #7b7167;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      .style {
+        max-width: 88px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border: 1px solid rgba(64, 57, 48, 0.14);
+        border-radius: 999px;
+        padding: 2px 7px;
+        color: #6c6258;
+        text-transform: none;
+      }
+      h1 {
+        margin: 8px 0 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 17px;
+        line-height: 22px;
+      }
+      .subtitle {
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #756b61;
+        font-size: 12px;
+      }
+      main {
+        min-height: 0;
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+      }
+      .section + .section { margin-top: 6px; }
+      h2 {
+        margin: 7px 8px 5px;
+        color: #7b7167;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      .items {
+        overflow: hidden;
+        border: 1px solid rgba(64, 57, 48, 0.1);
+        border-radius: 10px;
+        background: rgba(255, 252, 247, 0.78);
+      }
+      .item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        min-height: 38px;
+        align-items: center;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(64, 57, 48, 0.08);
+        color: inherit;
+        text-decoration: none;
+      }
+      .item:last-child { border-bottom: 0; }
+      .item:hover { background: rgba(238, 231, 220, 0.78); }
+      .item-main,
+      .item-detail {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .item-main {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .item-detail {
+        color: #766b61;
+        font-size: 12px;
+      }
+      .disabled {
+        pointer-events: none;
+        color: #9a9188;
+      }
+      footer {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        padding: 9px;
+        border-top: 1px solid rgba(64, 57, 48, 0.12);
+      }
+      .action {
+        min-width: 0;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(64, 57, 48, 0.12);
+        border-radius: 9px;
+        background: rgba(255, 252, 247, 0.82);
+        color: #342f2a;
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .action:hover { background: rgba(238, 231, 220, 0.9); }
+      @media (prefers-color-scheme: dark) {
+        :root { color: #eee8df; }
+        .panel {
+          border-color: rgba(255, 255, 255, 0.12);
+          background: rgba(35, 32, 29, 0.98);
+          box-shadow: 0 20px 56px rgba(0, 0, 0, 0.42);
+        }
+        header, footer { border-color: rgba(255, 255, 255, 0.1); }
+        .eyebrow, .subtitle, h2, .item-detail { color: #afa69b; }
+        .style, .items, .action { border-color: rgba(255, 255, 255, 0.1); }
+        .items, .action { background: rgba(47, 43, 39, 0.78); }
+        .item { border-color: rgba(255, 255, 255, 0.08); }
+        .item:hover, .action:hover { background: rgba(64, 59, 53, 0.9); }
+        .action { color: #f2ece3; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <header>
+        <div class="eyebrow">
+          <span>Hot Cross Buns 2</span>
+          <span class="style">${escapeHtml(snapshot.panelStyle)}</span>
+        </div>
+        <h1>${escapeHtml(snapshot.title)}</h1>
+        ${snapshot.subtitle ? `<div class="subtitle">${escapeHtml(snapshot.subtitle)}</div>` : ""}
+      </header>
+      <main>${sections}</main>
+      <footer>
+        <a class="action" href="${panelActionHref("quickCapture")}">Capture</a>
+        <a class="action" href="${panelActionHref("refresh")}">Refresh</a>
+        <a class="action" href="${panelActionHref("showWindow")}">Open</a>
+        <a class="action" href="${panelActionHref("openSettings")}">Settings</a>
+      </footer>
+    </div>
+  </body>
+</html>`;
+}
+
+function menuBarItemHref(item: NativeMenuBarItem): string {
+  if (item.route) {
+    return panelRouteHref(item.route);
+  }
+
+  if (item.action) {
+    return panelActionHref(item.action);
+  }
+
+  return "#";
+}
+
+function panelRouteHref(route: NativeRoute): string {
+  const params = new URLSearchParams({ kind: route.kind });
+
+  if (route.id) {
+    params.set("id", route.id);
+  }
+
+  if (route.query) {
+    params.set("query", route.query);
+  }
+
+  return `hcb-panel://route?${params.toString()}`;
+}
+
+function panelActionHref(action: NonNullable<NativeMenuBarItem["action"]>): string {
+  return `hcb-panel://action?name=${encodeURIComponent(action)}`;
+}
+
+type MenuBarPanelNavigation =
+  | { kind: "route"; route: NativeRoute }
+  | { kind: "action"; action: NonNullable<NativeMenuBarItem["action"]> };
+
+function parseMenuBarPanelUrl(url: string): MenuBarPanelNavigation | null {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== "hcb-panel:") {
+    return null;
+  }
+
+  if (parsed.hostname === "route") {
+    return parseMenuBarPanelRoute(parsed.searchParams);
+  }
+
+  if (parsed.hostname === "action") {
+    return parseMenuBarPanelAction(parsed.searchParams);
+  }
+
+  return null;
+}
+
+function parseMenuBarPanelRoute(params: URLSearchParams): MenuBarPanelNavigation | null {
+  const kind = params.get("kind");
+
+  if (
+    kind !== "today" &&
+    kind !== "tasks" &&
+    kind !== "task" &&
+    kind !== "calendar" &&
+    kind !== "event" &&
+    kind !== "notes" &&
+    kind !== "note" &&
+    kind !== "settings" &&
+    kind !== "search"
+  ) {
+    return null;
+  }
+
+  const route: NativeRoute = { kind };
+  const id = params.get("id")?.trim();
+  const query = params.get("query")?.trim();
+
+  if (id) {
+    route.id = id;
+  }
+
+  if (query) {
+    route.query = query;
+  }
+
+  return { kind: "route", route };
+}
+
+function parseMenuBarPanelAction(params: URLSearchParams): MenuBarPanelNavigation | null {
+  const action = params.get("name");
+
+  if (
+    action !== "quickCapture" &&
+    action !== "refresh" &&
+    action !== "openSettings" &&
+    action !== "showWindow"
+  ) {
+    return null;
+  }
+
+  return { kind: "action", action };
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case "\"":
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return character;
+    }
+  });
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min;
+  }
+
+  return Math.min(max, Math.max(min, value));
 }
 
 function menuBarPanelMenu(actions: NativeTrayActions, snapshot: NativeMenuBarSnapshot): Menu {

@@ -19,7 +19,8 @@ Use this checklist for release PRs or local verification when tray, hotkey, noti
 - App launches to the main window before native deferred startup finishes.
 - Menu bar icon appears after the renderer reports shell-visible.
 - Menu bar icon uses the copied template asset from `assets/brand/menubar-template.png`.
-- Left-click opens the menu bar panel when Primary click is set to Open menu bar panel.
+- Left-click opens the custom compact menu bar panel when Primary click is set to Open menu bar panel.
+- The custom panel is a main-process-owned Electron `BrowserWindow` with no preload, no Node integration, no renderer IPC access, and link navigation handled by the native adapter.
 - Right-click opens the utility menu with Open Hot Cross Buns 2, Quick Capture, Refresh Tasks and Calendar, Settings, and Quit.
 - The menu bar panel shows Today/Tomorrow agenda items and overdue tasks according to the selected panel style.
 - If Show overdue badge is enabled, overdue tasks appear as a capped menu bar title badge.
