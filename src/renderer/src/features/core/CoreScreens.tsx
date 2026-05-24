@@ -4933,22 +4933,26 @@ function CalendarTimelineView({
   availabilitySlots = [],
   days,
   dayCountControl,
+  gridLabel,
   label,
   onAddAvailabilitySlot,
   onCreate,
   onMoveEvent,
   onOpen,
+  title,
   visibleCalendarIds
 }: {
   availabilityMode?: boolean;
   availabilitySlots?: CalendarTimeBlock[];
   days: CalendarDayViewModel[];
   dayCountControl?: ReactNode;
+  gridLabel: string;
   label: string;
   onAddAvailabilitySlot?: (slot: CalendarTimeBlock) => void;
   onCreate: (seed?: CalendarCreateSeed) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  title: string;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   const source = useCoreViewModelSource();
@@ -5074,12 +5078,12 @@ function CalendarTimelineView({
     <div className="flex h-full min-h-[680px] flex-col overflow-hidden rounded-hcbMd border border-border bg-bg-secondary">
       <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border bg-bg-primary/40 px-3 py-2">
         <div className="min-w-0">
-          <div className="truncate text-[var(--text-md)] font-semibold text-text-primary">{label}</div>
-          <div className="truncate text-[var(--text-xs)] text-text-muted">{days.length} day view</div>
+          <div className="truncate text-[var(--text-md)] font-semibold text-text-primary">{title}</div>
+          <div className="truncate text-[var(--text-xs)] text-text-muted">{label}</div>
         </div>
         {dayCountControl}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto" role="grid" aria-label={label}>
+      <div className="min-h-0 flex-1 overflow-auto" role="grid" aria-label={gridLabel}>
         <div className="min-w-[720px]">
           <div className="grid grid-cols-[64px_minmax(0,1fr)] border-b border-border bg-bg-secondary/80">
             <div className="border-r border-border" aria-hidden="true" />
@@ -5268,11 +5272,13 @@ function DayView({
       availabilityMode={availabilityMode}
       availabilitySlots={availabilitySlots}
       days={[day]}
+      gridLabel="Calendar day view"
       label={calendarDateTitle(day)}
       onAddAvailabilitySlot={onAddAvailabilitySlot}
       onCreate={onCreate}
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
+      title="Day view"
       visibleCalendarIds={visibleCalendarIds}
     />
   );
@@ -5329,11 +5335,13 @@ function MultiDayView({
         </div>
       }
       days={days}
+      gridLabel="Calendar multi-day view"
       label={calendarRangeTitle(days)}
       onAddAvailabilitySlot={onAddAvailabilitySlot}
       onCreate={onCreate}
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
+      title="Multi-Day view"
       visibleCalendarIds={visibleCalendarIds}
     />
   );
@@ -5363,11 +5371,13 @@ function WeekView({
       availabilityMode={availabilityMode}
       availabilitySlots={availabilitySlots}
       days={days}
+      gridLabel="Calendar week view"
       label={calendarRangeTitle(days)}
       onAddAvailabilitySlot={onAddAvailabilitySlot}
       onCreate={onCreate}
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
+      title="Week view"
       visibleCalendarIds={visibleCalendarIds}
     />
   );
@@ -5430,7 +5440,7 @@ function CalendarAgendaView({
     <div className="flex min-h-[680px] flex-col overflow-hidden rounded-hcbMd border border-border bg-bg-secondary">
       <div className="flex min-h-12 items-center justify-between gap-3 border-b border-border bg-bg-primary/40 px-3 py-2">
         <div className="min-w-0">
-          <div className="truncate text-[var(--text-md)] font-semibold text-text-primary">Agenda</div>
+          <div className="truncate text-[var(--text-md)] font-semibold text-text-primary">Agenda view</div>
           <div className="truncate text-[var(--text-xs)] text-text-muted">
             {label} - {events.length} visible events
           </div>
