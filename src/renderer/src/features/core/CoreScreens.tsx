@@ -6435,6 +6435,36 @@ function CalendarView(): JSX.Element {
               </CalendarTabButton>
             ))}
           </div>
+          <div
+            aria-label="Calendar range navigation"
+            className="flex shrink-0 items-center gap-1 rounded-hcbMd border border-border bg-bg-secondary p-1"
+            role="group"
+          >
+            <IconButton
+              icon={ChevronLeft}
+              label={previousRangeLabel}
+              onClick={() => shiftCalendarAnchor(-1)}
+              size="sm"
+              variant="ghost"
+            />
+            <Button
+              aria-label="Return calendar to today"
+              className="min-w-32 max-w-48 truncate px-2"
+              onClick={resetCalendarAnchor}
+              size="sm"
+              title="Return to today"
+              variant="ghost"
+            >
+              <span className="truncate">{calendarRangeLabel}</span>
+            </Button>
+            <IconButton
+              icon={ChevronRight}
+              label={nextRangeLabel}
+              onClick={() => shiftCalendarAnchor(1)}
+              size="sm"
+              variant="ghost"
+            />
+          </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {timelineViewActive ? (
@@ -6501,12 +6531,17 @@ function CalendarView(): JSX.Element {
       >
         <div className="h-full min-h-0 overflow-auto pr-1">
           {activeViewId === "agenda" ? (
-            <CalendarAgendaView events={visibleCalendarEvents} onOpen={openEdit} />
+            <CalendarAgendaView
+              events={calendarAgendaEvents}
+              label={calendarDateTitleFromIso(calendarAnchorDate)}
+              onOpen={openEdit}
+            />
           ) : null}
           {activeViewId === "day" ? (
             <DayView
               availabilityMode={shareAvailabilityOpen}
               availabilitySlots={shareAvailabilityOpen ? availabilitySlots : []}
+              day={calendarDay}
               onAddAvailabilitySlot={addAvailabilitySlot}
               onCreate={openCreate}
               onMoveEvent={moveCalendarEvent}
@@ -6519,6 +6554,7 @@ function CalendarView(): JSX.Element {
               availabilityMode={shareAvailabilityOpen}
               availabilitySlots={shareAvailabilityOpen ? availabilitySlots : []}
               dayCount={multiDayCount}
+              days={calendarMultiDayDays}
               onAddAvailabilitySlot={addAvailabilitySlot}
               onCreate={openCreate}
               onDayCountChange={setMultiDayCount}
@@ -6531,6 +6567,7 @@ function CalendarView(): JSX.Element {
             <WeekView
               availabilityMode={shareAvailabilityOpen}
               availabilitySlots={shareAvailabilityOpen ? availabilitySlots : []}
+              days={calendarWeekDays}
               onAddAvailabilitySlot={addAvailabilitySlot}
               onCreate={openCreate}
               onMoveEvent={moveCalendarEvent}
@@ -6540,6 +6577,7 @@ function CalendarView(): JSX.Element {
           ) : null}
           {activeViewId === "month" ? (
             <MonthView
+              weeks={calendarMonthWeeks}
               onCreate={openCreate}
               onOpen={openEdit}
               visibleCalendarIds={visibleCalendarIdSet}
