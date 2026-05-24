@@ -6020,7 +6020,7 @@ function CalendarView(): JSX.Element {
     setCalendarAnchorDate((current) => {
       if (activeViewId === "month") {
         const next = calendarAddUtcMonths(current, direction);
-        const offset = calendarMonthOffset(calendarTodayKey, next);
+        const offset = calendarMonthOffset(calendarTodayKey(), next);
 
         if (
           offset < -source.settings.monthScrollPastMonths ||
