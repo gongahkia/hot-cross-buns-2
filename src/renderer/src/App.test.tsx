@@ -725,9 +725,11 @@ describe("App shell", () => {
     expect(screen.getByTestId("app-shell")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: "Today" })[0]).toBeInTheDocument();
 
-    for (const label of ["Today", "Tasks", "Calendar", "Notes", "Search", "Notifications", "Settings"]) {
+    for (const label of ["Today", "Tasks", "Calendar", "Notes", "Search", "Settings"]) {
       expect(within(primaryNavigation()).getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
+    expect(within(primaryNavigation()).queryByRole("button", { name: /Notifications/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Notifications, \d+ active/ })).toBeInTheDocument();
 
     expect(await screen.findByText("Fresh local cache")).toBeInTheDocument();
     expect(screen.getByText("Nothing cached yet")).toBeInTheDocument();
@@ -765,6 +767,23 @@ describe("App shell", () => {
     await user.click(within(dialog).getByRole("option", { name: /Go to Notes/ }));
     expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
+  });
+
+  it("opens notifications as a toolbar overlay instead of a primary navigation section", async () => {
+    const user = userEvent.setup();
+    installHcb(seededHcb());
+    render(<App />);
+
+    expect(within(primaryNavigation()).queryByRole("button", { name: /Notifications/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Notifications, \d+ active/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Notifications" });
+    expect(within(dialog).getByText("App notices")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Notification lead minutes")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Notifications" })).not.toBeInTheDocument();
   });
 
   it("routes palette action command shells without waiting on sync or search", async () => {
