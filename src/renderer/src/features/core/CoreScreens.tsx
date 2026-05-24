@@ -427,6 +427,132 @@ function CacheStatePanel({ title }: { title: string }): JSX.Element | null {
     );
   }
 
+  const navigationTabs: Array<{ id: "tasks" | "calendar" | "notes"; label: string }> = [
+    { id: "tasks", label: "Tasks" },
+    { id: "calendar", label: "Calendar" },
+    { id: "notes", label: "Notes" }
+  ];
+  const calendarViewModes: Array<{ id: "agenda" | "day" | "multiDay" | "week" | "month"; label: string }> = [
+    { id: "agenda", label: "Agenda" },
+    { id: "day", label: "Day" },
+    { id: "multiDay", label: "Multi-day" },
+    { id: "week", label: "Week" },
+    { id: "month", label: "Month" }
+  ];
+  const retentionOptions = [
+    { label: "Forever", value: 0 },
+    { label: "30 days", value: 30 },
+    { label: "90 days", value: 90 },
+    { label: "180 days", value: 180 },
+    { label: "1 year", value: 365 },
+    { label: "2 years", value: 730 }
+  ];
+  const fontSurfaceOptions: Array<{
+    id: keyof SettingsSnapshot["perSurfaceFontOverrides"];
+    label: string;
+  }> = [
+    { id: "markdownEditor", label: "Markdown editor" },
+    { id: "sidebar", label: "Sidebar" },
+    { id: "calendarGrid", label: "Calendar grid" },
+    { id: "taskList", label: "Task list" },
+    { id: "inspector", label: "Inspector" },
+    { id: "menuBar", label: "Menu bar" }
+  ];
+  const selectedTaskLists = new Set(settings.selectedTaskListIds);
+  const selectedCalendars = new Set(settings.selectedCalendarIds);
+
+  function updateNavigationTab(tabId: "tasks" | "calendar" | "notes", visible: boolean): void {
+    const hidden = new Set(settings.hiddenNavigationTabs);
+
+    if (visible) {
+      hidden.delete(tabId);
+    } else {
+      hidden.add(tabId);
+    }
+
+    if (navigationTabs.every((tab) => hidden.has(tab.id))) {
+      return;
+    }
+
+    updateSettings({ hiddenNavigationTabs: [...hidden] });
+  }
+
+  function updateCalendarViewMode(
+    viewId: "agenda" | "day" | "multiDay" | "week" | "month",
+    visible: boolean
+  ): void {
+    const hidden = new Set(settings.hiddenCalendarViewModes);
+
+    if (visible) {
+      hidden.delete(viewId);
+    } else {
+      hidden.add(viewId);
+    }
+
+    if (calendarViewModes.every((mode) => hidden.has(mode.id))) {
+      return;
+    }
+
+    updateSettings({ hiddenCalendarViewModes: [...hidden] });
+  }
+
+  function retentionPresetValue(daysBack: number): string {
+    return retentionOptions.some((option) => option.value === daysBack) ? String(daysBack) : "custom";
+  }
+
+  function customRetentionDays(): number {
+    const amount = Math.max(1, Math.round(Number(customRetentionAmount) || 1));
+
+    if (customRetentionUnit === "years") {
+      return Math.min(3650, amount * 365);
+    }
+
+    if (customRetentionUnit === "months") {
+      return Math.min(3650, amount * 30);
+    }
+
+    return Math.min(3650, amount);
+  }
+
+  function applyCustomRetention(): void {
+    const days = customRetentionDays();
+
+    updateSettings({
+      eventRetentionDaysBack: days,
+      completedTaskRetentionDaysBack: days
+    });
+  }
+
+  function updatePerSurfaceFont(
+    surface: keyof SettingsSnapshot["perSurfaceFontOverrides"],
+    patch: Partial<SettingsSnapshot["perSurfaceFontOverrides"][typeof surface]>
+  ): void {
+    const current = settings.perSurfaceFontOverrides[surface] ?? {
+      uiFontName: null,
+      uiTextSizePoints: null
+    };
+
+    updateSettings({
+      perSurfaceFontOverrides: {
+        ...settings.perSurfaceFontOverrides,
+        [surface]: {
+          ...current,
+          ...patch
+        }
+      }
+    });
+  }
+
+  function resetPerSurfaceFont(surface: keyof SettingsSnapshot["perSurfaceFontOverrides"]): void {
+    const next = { ...settings.perSurfaceFontOverrides };
+    delete next[surface];
+    updateSettings({ perSurfaceFontOverrides: next });
+  }
+
+  const account = googleStatus.account;
+  const accountLabel = account?.displayName || account?.email || "Not connected";
+  const accountDetail = account?.email ?? account?.connectionState ?? "Google account is not connected";
+
   if (source.dataState === "error" && !source.hasCachedData) {
     return (
       <Panel title={title} description="Local cache">
@@ -8320,98 +8446,644 @@ export function SettingsView(): JSX.Element {
   }
 
   return (
-    <SectionChrome
-      title="Settings"
-      sidebar={
-        <Panel title="Settings sections" description="Required v1 preference areas">
-          <div className="grid gap-1 p-2" role="list">
-            {source.settingsSections.map((section) => (
-              <button
-                aria-pressed={section.id === selectedSectionId}
-                className={cx(
-                  "flex min-h-9 w-full items-center gap-2 rounded-hcbMd px-2 text-left transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                  section.id === selectedSectionId
-                    ? "bg-surface-0 text-text-primary"
-                    : "text-text-secondary hover:bg-surface-0 hover:text-text-primary"
-                )}
-                key={section.id}
-                onClick={() => setSelectedSectionId(section.id)}
-                type="button"
+    <div className="grid min-h-0 gap-4">
+      <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-bg-secondary px-2 pb-3">
+        <SettingsTabButton
+          active={selectedSettingsTab === "general"}
+          icon={Settings2}
+          label="General"
+          onClick={() => setSelectedSettingsTab("general")}
+        />
+        <SettingsTabButton
+          active={selectedSettingsTab === "profile"}
+          icon={Users}
+          label="Profile"
+          onClick={() => setSelectedSettingsTab("profile")}
+        />
+        <SettingsTabButton
+          active={selectedSettingsTab === "appearance"}
+          icon={Brush}
+          label="Appearance"
+          onClick={() => setSelectedSettingsTab("appearance")}
+        />
+      </div>
+
+      {source.settingsMutationError ? (
+        <StatusBanner
+          description={source.settingsMutationError}
+          title="Settings action not applied"
+          tone="warning"
+        />
+      ) : null}
+      {recoveryMessage ? (
+        <StatusBanner description={recoveryMessage} title="Settings action applied" tone="success" />
+      ) : null}
+      {confirmation ? (
+        <Panel title="Confirm destructive action" description={confirmation.action}>
+          <div className="grid gap-3 p-3">
+            <Input
+              aria-label="Confirmation phrase"
+              onChange={(event) => setConfirmationInput(event.target.value)}
+              placeholder={confirmation.phrase}
+              value={confirmationInput}
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                disabled={confirmationInput !== confirmation.phrase || source.settingsMutationPending}
+                onClick={confirmRecoveryAction}
+                variant="danger"
               >
-                <Settings2 aria-hidden="true" size={15} />
-                <span className="min-w-0 flex-1 truncate">{section.title}</span>
-                <Badge tone={settingTone(section.status)}>{section.status}</Badge>
-              </button>
-            ))}
+                Confirm
+              </Button>
+              <Button onClick={() => setConfirmation(null)} variant="ghost">
+                Cancel
+              </Button>
+            </div>
           </div>
         </Panel>
-      }
-    >
-      <div className="grid gap-3">
-        <Panel
-          action={
-            <Button
-              data-action-id="diagnostics.copy"
-              onClick={() => void openDiagnosticsDetails()}
-              size="sm"
-              title={actionDescription("diagnostics.copy")}
-              variant="ghost"
-            >
-              <Copy aria-hidden="true" size={14} />
-              Copy details
-            </Button>
-          }
-          title={selectedSection.title}
-          description={selectedSection.detail}
-        >
-          {renderSectionControls()}
-        </Panel>
+      ) : null}
 
-        {source.settingsMutationError ? (
-          <StatusBanner
-            description={source.settingsMutationError}
-            title="Settings action not applied"
-            tone="warning"
-          />
-        ) : null}
-        {recoveryMessage ? (
-          <StatusBanner description={recoveryMessage} title="Recovery action applied" tone="success" />
-        ) : null}
-        {confirmation ? (
-          <Panel title="Confirm destructive action" description={confirmation.action}>
-            <div className="grid gap-3 p-3">
+      {selectedSettingsTab === "general" ? (
+        <div className="grid gap-5">
+          <SettingsGroup title="Language">
+            <SettingsControlRow
+              description="System Default follows your macOS language order."
+              icon={Languages}
+              label="App language"
+            >
+              <select
+                aria-label="App language"
+                className={settingsSelectClass}
+                onChange={(event) =>
+                  updateSettings({ appLanguage: event.target.value as SettingsSnapshot["appLanguage"] })
+                }
+                value={settings.appLanguage}
+              >
+                <option value="system">System Default</option>
+                <option value="en">English</option>
+              </select>
+            </SettingsControlRow>
+          </SettingsGroup>
+
+          <SettingsGroup title="Startup">
+            <SettingsSwitch
+              checked={settings.startOnLogin}
+              description="Starts the app automatically when you sign in to this Mac."
+              icon={Power}
+              label="Open Hot Cross Buns at login"
+              onChange={(checked) => updateSettings({ startOnLogin: checked })}
+            />
+          </SettingsGroup>
+
+          <SettingsGroup title="Diagnostics">
+            <SettingsControlRow
+              description="Inspect logs, mutation history, sync queues, and support bundles."
+              icon={ShieldCheck}
+              label="Diagnostics"
+            >
+              <Button onClick={() => void openDiagnosticsDetails()} variant="secondary">
+                <Copy aria-hidden="true" size={14} />
+                Open diagnostics
+              </Button>
+            </SettingsControlRow>
+            <SettingsSwitch
+              checked={settings.diagnosticsIncludePerformance}
+              description="Includes startup, migration, slow query, and MCP request timings in diagnostics."
+              label="Include performance diagnostics"
+              onChange={(checked) => updateSettings({ diagnosticsIncludePerformance: checked })}
+            />
+            <SettingsSwitch
+              checked={settings.rawGoogleDiagnosticsEnabled}
+              description="Future local logs may include field-redacted Google troubleshooting snippets."
+              label="Include field-redacted Google payloads in local logs"
+              onChange={(checked) => updateSettings({ rawGoogleDiagnosticsEnabled: checked })}
+            />
+          </SettingsGroup>
+
+          <SettingsGroup title="Agent access">
+            <SettingsSwitch
+              checked={settings.mcpEnabled}
+              icon={Server}
+              label="Local MCP server"
+              onChange={(checked) => updateSettings({ mcpEnabled: checked })}
+            />
+            <SettingsControlRow
+              description="MCP clients must follow this write policy before changes apply."
+              label="Permission mode"
+            >
+              <select
+                aria-label="MCP permission mode"
+                className={settingsSelectClass}
+                onChange={(event) =>
+                  updateSettings({
+                    mcpPermissionMode: event.target.value as SettingsSnapshot["mcpPermissionMode"]
+                  })
+                }
+                value={settings.mcpPermissionMode}
+              >
+                <option value="read-only">Read-only</option>
+                <option value="confirm-writes">Confirm writes</option>
+                <option value="allow-writes">Allow writes</option>
+              </select>
+            </SettingsControlRow>
+            <SettingsControlRow label="Port">
               <Input
-                aria-label="Confirmation phrase"
-                onChange={(event) => setConfirmationInput(event.target.value)}
-                placeholder={confirmation.phrase}
-                value={confirmationInput}
+                aria-label="MCP port"
+                max={65535}
+                min={0}
+                onBlur={(event) => updateSettings({ mcpPort: Number(event.currentTarget.value) || 0 })}
+                defaultValue={String(settings.mcpPort)}
+                type="number"
               />
-              <div className="flex items-center gap-2">
-                <Button
-                  disabled={confirmationInput !== confirmation.phrase || source.settingsMutationPending}
-                  onClick={confirmRecoveryAction}
-                  variant="danger"
+            </SettingsControlRow>
+            <SettingsControlRow
+              description={settings.mcpEnabled ? "The local MCP server is enabled." : "The local MCP server is disabled."}
+              label={settings.mcpEnabled ? "Running" : "Stopped"}
+            >
+              <Button
+                disabled={source.settingsMutationPending}
+                onClick={() => beginRecoveryAction("resetMcpToken")}
+                variant="secondary"
+              >
+                <RotateCcw aria-hidden="true" size={14} />
+                Reset token
+              </Button>
+            </SettingsControlRow>
+          </SettingsGroup>
+
+          <SettingsGroup title="Sync">
+            <SettingsControlRow
+              description="Refresh cadence for launch, foreground, and periodic app activity."
+              label="Mode"
+            >
+              <select
+                aria-label="Sync mode"
+                className={settingsSelectClass}
+                onChange={(event) =>
+                  updateSettings({ syncMode: event.target.value as SettingsSnapshot["syncMode"] })
+                }
+                value={settings.syncMode}
+              >
+                <option value="manual">Manual</option>
+                <option value="balanced">Balanced</option>
+                <option value="near-real-time">Near real-time</option>
+              </select>
+            </SettingsControlRow>
+            <SettingsControlRow label="Keep past events">
+              <select
+                aria-label="Keep past events"
+                className={settingsSelectClass}
+                onChange={(event) => {
+                  if (event.target.value !== "custom") {
+                    updateSettings({ eventRetentionDaysBack: Number(event.target.value) });
+                  }
+                }}
+                value={retentionPresetValue(settings.eventRetentionDaysBack)}
+              >
+                {retentionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                <option value="custom">Custom</option>
+              </select>
+            </SettingsControlRow>
+            <SettingsControlRow label="Keep completed tasks">
+              <select
+                aria-label="Keep completed tasks"
+                className={settingsSelectClass}
+                onChange={(event) => {
+                  if (event.target.value !== "custom") {
+                    updateSettings({ completedTaskRetentionDaysBack: Number(event.target.value) });
+                  }
+                }}
+                value={retentionPresetValue(settings.completedTaskRetentionDaysBack)}
+              >
+                {retentionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                <option value="custom">Custom</option>
+              </select>
+            </SettingsControlRow>
+            <SettingsControlRow
+              description="Applies the same retention window to cached past events and completed tasks."
+              label="Custom"
+            >
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                <Input
+                  aria-label="Custom retention amount"
+                  className="w-24"
+                  min={1}
+                  onChange={(event) => setCustomRetentionAmount(event.currentTarget.value)}
+                  type="number"
+                  value={customRetentionAmount}
+                />
+                <select
+                  aria-label="Custom retention unit"
+                  className={settingsSelectClass}
+                  onChange={(event) => setCustomRetentionUnit(event.target.value as "days" | "months" | "years")}
+                  value={customRetentionUnit}
                 >
-                  Confirm
-                </Button>
-                <Button onClick={() => setConfirmation(null)} variant="ghost">
-                  Cancel
+                  <option value="days">Days</option>
+                  <option value="months">Months</option>
+                  <option value="years">Years</option>
+                </select>
+                <Button onClick={applyCustomRetention} variant="primary">Apply</Button>
+              </div>
+            </SettingsControlRow>
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
+              <Button onClick={() => beginRecoveryAction("refresh")} variant="secondary">
+                <RotateCcw aria-hidden="true" size={14} />
+                Refresh
+              </Button>
+              <Button onClick={() => beginRecoveryAction("forceFullResync")} variant="danger">
+                Force full resync
+              </Button>
+            </div>
+          </SettingsGroup>
+
+          <SettingsGroup title="Setup">
+            <SettingsControlRow
+              description="Clears onboarding completion so setup opens again."
+              icon={Sparkles}
+              label="Setup assistant"
+            >
+              <Button onClick={() => beginRecoveryAction("resetOnboarding")} variant="secondary">
+                Run setup again
+              </Button>
+            </SettingsControlRow>
+          </SettingsGroup>
+        </div>
+      ) : null}
+
+      {selectedSettingsTab === "profile" ? (
+        <div className="grid gap-5">
+          <SettingsGroup title="Google OAuth client">
+            <SettingsControlRow
+              description={googleStatus.oauthClientConfigured ? "Google Cloud OAuth client saved." : "Missing"}
+              icon={ShieldCheck}
+              label="Google Cloud OAuth client"
+            >
+              <Badge tone={googleStatus.oauthClientConfigured ? "success" : "warning"}>
+                {googleStatus.oauthClientConfigured ? "Configured" : "Missing"}
+              </Badge>
+            </SettingsControlRow>
+            <SettingsControlRow label="Desktop OAuth client ID">
+              <Input
+                aria-label="Google OAuth client ID"
+                onChange={(event) => setGoogleClientId(event.currentTarget.value)}
+                placeholder="Client ID from Google Cloud Console"
+                value={googleClientId}
+              />
+            </SettingsControlRow>
+            <SettingsControlRow label="Client secret (optional)">
+              <Input
+                aria-label="Google OAuth client secret"
+                onChange={(event) => setGoogleClientSecret(event.currentTarget.value)}
+                placeholder={googleStatus.hasClientSecret ? "Stored in Keychain" : "Optional for Desktop clients"}
+                type="password"
+                value={googleClientSecret}
+              />
+            </SettingsControlRow>
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
+              <Button
+                disabled={googleClientId.trim().length < 10 || source.settingsMutationPending}
+                onClick={() => void saveGoogleOAuthClient()}
+                variant="primary"
+              >
+                <Save aria-hidden="true" size={14} />
+                Save OAuth Client
+              </Button>
+              <Button onClick={() => setGoogleClientSecret("")} variant="secondary">
+                <Trash2 aria-hidden="true" size={14} />
+                Clear
+              </Button>
+            </div>
+          </SettingsGroup>
+
+          <SettingsGroup title="Google accounts">
+            <SettingsControlRow
+              description={accountDetail}
+              icon={Users}
+              label={accountLabel}
+            >
+              <Badge tone={account?.connectionState === "connected" ? "success" : "warning"}>
+                {account?.connectionState === "connected" ? "Active" : "Disconnected"}
+              </Badge>
+            </SettingsControlRow>
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
+              <Button
+                disabled={!googleStatus.oauthClientConfigured}
+                onClick={() => void beginGoogleOAuth()}
+                variant="primary"
+              >
+                <Users aria-hidden="true" size={14} />
+                Add Google Account
+              </Button>
+              <Button disabled={!account} onClick={() => void disconnectGoogle()} variant="secondary">
+                Disconnect
+              </Button>
+            </div>
+          </SettingsGroup>
+
+          <SettingsGroup title="Task lists">
+            {source.taskLists.length === 0 ? (
+              <EmptyState description="No task lists are cached yet." title="No task lists" />
+            ) : source.taskLists.map((taskList) => (
+              <SettingsSwitch
+                checked={selectedTaskLists.size === 0 || selectedTaskLists.has(taskList.id)}
+                key={taskList.id}
+                label={taskList.title}
+                onChange={(checked) => updateSelectedTaskList(taskList.id, checked)}
+                trailing={<Badge>{taskList.activeTaskCount ?? taskList.taskCount ?? 0}</Badge>}
+              />
+            ))}
+          </SettingsGroup>
+
+          <SettingsGroup title="Calendars">
+            {source.calendarSources.length === 0 ? (
+              <EmptyState description="No calendars are cached yet." title="No calendars" />
+            ) : source.calendarSources.map((calendar) => (
+              <SettingsSwitch
+                checked={selectedCalendars.size === 0 ? calendar.selected : selectedCalendars.has(calendar.id)}
+                description={calendar.timeZone}
+                key={calendar.id}
+                label={calendar.title}
+                onChange={(checked) => updateSelectedCalendar(calendar.id, checked)}
+                trailing={<Badge>{calendar.eventCount ?? 0}</Badge>}
+              />
+            ))}
+          </SettingsGroup>
+        </div>
+      ) : null}
+
+      {selectedSettingsTab === "appearance" ? (
+        <div className="grid gap-5">
+          <SettingsGroup title="Appearance">
+            <SettingsControlRow
+              description="Choose whether app chrome resolves as dark, light, or follows macOS."
+              label="Base colour scheme"
+            >
+              <select
+                aria-label="Theme"
+                className={settingsSelectClass}
+                onChange={(event) => updateBaseTheme(event.target.value as SettingsSnapshot["theme"])}
+                value={settings.theme}
+              >
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </SettingsControlRow>
+            <SettingsControlRow
+              description="Palette used by cards, text, and app surfaces."
+              label="Theme"
+            >
+              <select
+                aria-label="Color theme"
+                className={settingsSelectClass}
+                onChange={(event) => updateSettings({ colorTheme: event.target.value as AppColorThemeId })}
+                value={activeColorTheme.id}
+              >
+                {matchingColorThemes.map((theme) => (
+                  <option key={theme.id} value={theme.id}>
+                    {theme.title}
+                  </option>
+                ))}
+              </select>
+            </SettingsControlRow>
+            <SettingsControlRow
+              description="Snappy uses shorter transitions; Rich uses longer app motion."
+              label="Performance"
+            >
+              <SegmentedControl
+                options={[
+                  { label: "Snappy", value: "snappy" },
+                  { label: "Rich", value: "rich" }
+                ]}
+                onChange={(value) =>
+                  updateSettings({ performanceMode: value as SettingsSnapshot["performanceMode"] })
+                }
+                value={settings.performanceMode}
+              />
+            </SettingsControlRow>
+            <SettingsSwitch
+              checked={settings.appBackgroundTranslucencyEnabled}
+              description="Allows the app shell background to use the configured opacity."
+              label="Translucent background"
+              onChange={(checked) => updateSettings({ appBackgroundTranslucencyEnabled: checked })}
+            />
+            <SettingsControlRow label="App surface opacity">
+              <div className="flex min-w-0 items-center gap-3">
+                <input
+                  aria-label="App surface opacity"
+                  className="w-56 accent-[var(--color-accent)]"
+                  max={1}
+                  min={0.35}
+                  onChange={(event) => updateSettings({ appBackgroundOpacity: Number(event.target.value) })}
+                  step={0.05}
+                  type="range"
+                  value={settings.appBackgroundOpacity}
+                />
+                <span className="w-12 text-right font-mono text-[var(--text-xs)] text-text-muted">
+                  {Math.round(settings.appBackgroundOpacity * 100)}%
+                </span>
+              </div>
+            </SettingsControlRow>
+            <SettingsSwitch
+              checked={settings.disableAnimations}
+              description="Turns off app-driven transitions, panel motion, and animated state changes."
+              label="Disable animations"
+              onChange={(checked) => updateSettings({ disableAnimations: checked })}
+            />
+            <SettingsControlRow label="Layout scale">
+              <div className="flex min-w-0 items-center gap-3">
+                <input
+                  aria-label="Layout scale"
+                  className="w-56 accent-[var(--color-accent)]"
+                  max={1.5}
+                  min={0.8}
+                  onChange={(event) => updateSettings({ uiLayoutScale: Number(event.target.value) })}
+                  step={0.05}
+                  type="range"
+                  value={settings.uiLayoutScale}
+                />
+                <span className="w-12 text-right font-mono text-[var(--text-xs)] text-text-muted">
+                  {Math.round(settings.uiLayoutScale * 100)}%
+                </span>
+              </div>
+            </SettingsControlRow>
+            <SettingsControlRow label="Text size">
+              <div className="flex min-w-0 items-center gap-3">
+                <Input
+                  aria-label="Text size points"
+                  className="w-24"
+                  max={24}
+                  min={9}
+                  onChange={(event) =>
+                    updateSettings({
+                      uiTextSizePoints: Math.min(24, Math.max(9, Number(event.target.value) || 13))
+                    })
+                  }
+                  type="number"
+                  value={settings.uiTextSizePoints}
+                />
+                <Button onClick={() => updateSettings({ uiTextSizePoints: 13 })} variant="ghost">
+                  Reset
                 </Button>
               </div>
-            </div>
-          </Panel>
-        ) : null}
+            </SettingsControlRow>
+            <SettingsControlRow label="UI font">
+              <select
+                aria-label="Font family"
+                className={settingsSelectClass}
+                onChange={(event) =>
+                  updateSettings({
+                    uiFontName: event.target.value.trim() ? event.target.value : null
+                  })
+                }
+                value={settings.uiFontName ?? ""}
+              >
+                <option value="">System</option>
+                {availableFontFamilies.map((fontName) => (
+                  <option key={fontName} value={fontName}>
+                    {fontName}
+                  </option>
+                ))}
+              </select>
+            </SettingsControlRow>
+          </SettingsGroup>
 
-        <Panel title="Diagnostics state" description="Sanitized status and recoverable errors">
-          <div className="grid grid-cols-2 gap-2 p-3 lg:grid-cols-4">
-            <MetricTile label="Credentials" value={diagnostics?.redaction.credentials ?? "redacted"} />
-            <MetricTile label="Google payloads" value={diagnostics?.redaction.googlePayloads ?? "omitted"} />
-            <MetricTile label="MCP bearer" value={diagnostics?.redaction.mcpBearerTokens ?? "redacted"} />
-            <MetricTile label="Sensitive bodies" value={diagnostics?.redaction.sensitiveBodies ?? "omitted"} />
-          </div>
-        </Panel>
-      </div>
-    </SectionChrome>
+          <SettingsGroup title="Per-surface fonts">
+            {fontSurfaceOptions.map((surface) => {
+              const override = settings.perSurfaceFontOverrides[surface.id];
+
+              return (
+                <SettingsControlRow key={surface.id} label={surface.label}>
+                  <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                    <select
+                      aria-label={`${surface.label} font`}
+                      className={settingsSelectClass}
+                      onChange={(event) =>
+                        updatePerSurfaceFont(surface.id, {
+                          uiFontName: event.target.value.trim() ? event.target.value : null
+                        })
+                      }
+                      value={override?.uiFontName ?? ""}
+                    >
+                      <option value="">(inherit)</option>
+                      {availableFontFamilies.map((fontName) => (
+                        <option key={fontName} value={fontName}>
+                          {fontName}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      aria-label={`${surface.label} size`}
+                      className="w-20"
+                      max={24}
+                      min={9}
+                      onChange={(event) =>
+                        updatePerSurfaceFont(surface.id, {
+                          uiTextSizePoints: event.target.value ? Number(event.target.value) : null
+                        })
+                      }
+                      placeholder="Size"
+                      type="number"
+                      value={override?.uiTextSizePoints ?? ""}
+                    />
+                    <Button onClick={() => resetPerSurfaceFont(surface.id)} variant="ghost">
+                      Reset
+                    </Button>
+                  </div>
+                </SettingsControlRow>
+              );
+            })}
+          </SettingsGroup>
+
+          <SettingsGroup title="Layout">
+            <SettingsControlRow
+              description="Left keeps the native sidebar placement; right moves the same tabs around the current view."
+              label="Navigation placement"
+            >
+              <SegmentedControl
+                options={[
+                  { label: "Left", value: "left", icon: PanelLeft },
+                  { label: "Right", value: "right", icon: PanelRight }
+                ]}
+                onChange={(value) =>
+                  updateSettings({ navigationPlacement: value as SettingsSnapshot["navigationPlacement"] })
+                }
+                value={settings.navigationPlacement}
+              />
+            </SettingsControlRow>
+            <div className="grid gap-1 border-b border-border px-3 py-3 last:border-b-0">
+              <h3 className="text-[var(--text-md)] font-semibold text-text-primary">Navigation tabs</h3>
+              {navigationTabs.map((tab) => (
+                <SettingsSwitch
+                  checked={!settings.hiddenNavigationTabs.includes(tab.id)}
+                  key={tab.id}
+                  label={tab.label}
+                  onChange={(checked) => updateNavigationTab(tab.id, checked)}
+                />
+              ))}
+            </div>
+            <div className="grid gap-1 border-b border-border px-3 py-3 last:border-b-0">
+              <h3 className="text-[var(--text-md)] font-semibold text-text-primary">Calendar view modes</h3>
+              {calendarViewModes.map((mode) => (
+                <SettingsSwitch
+                  checked={!settings.hiddenCalendarViewModes.includes(mode.id)}
+                  key={mode.id}
+                  label={mode.label}
+                  onChange={(checked) => updateCalendarViewMode(mode.id, checked)}
+                />
+              ))}
+            </div>
+            <SettingsControlRow
+              description="Month view will not navigate beyond these loaded month bounds."
+              label="Month scroll range"
+            >
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                <span className="text-[var(--text-sm)] text-text-muted">Past</span>
+                <Input
+                  aria-label="Past months"
+                  className="w-20"
+                  max={24}
+                  min={0}
+                  onChange={(event) => updateSettings({ monthScrollPastMonths: Number(event.target.value) || 0 })}
+                  type="number"
+                  value={settings.monthScrollPastMonths}
+                />
+                <span className="text-[var(--text-sm)] text-text-muted">Future</span>
+                <Input
+                  aria-label="Future months"
+                  className="w-20"
+                  max={24}
+                  min={0}
+                  onChange={(event) => updateSettings({ monthScrollFutureMonths: Number(event.target.value) || 0 })}
+                  type="number"
+                  value={settings.monthScrollFutureMonths}
+                />
+              </div>
+            </SettingsControlRow>
+            <SettingsSwitch
+              checked={settings.quickCreateExpandedByDefault}
+              description="Calendar quick creation opens with optional fields visible when supported."
+              label="Show all quick-create fields by default"
+              onChange={(checked) => updateSettings({ quickCreateExpandedByDefault: checked })}
+            />
+            <SettingsSwitch
+              checked={settings.restoreWindowStateEnabled}
+              description="Keeps window restoration enabled across app launches."
+              label="Restore previous session"
+              onChange={(checked) => updateSettings({ restoreWindowStateEnabled: checked })}
+            />
+          </SettingsGroup>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
