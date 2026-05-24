@@ -734,7 +734,6 @@ function NotificationsOverlay({
   notifications: AppNotification[];
   onClose: () => void;
 }): JSX.Element {
-}): JSX.Element {
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-end overflow-auto bg-bg-tertiary/45 p-3 backdrop-blur-sm sm:p-5"
@@ -759,9 +758,7 @@ function NotificationsOverlay({
               <h2 className="truncate text-[var(--text-lg)] font-semibold" id="notifications-overlay-title">
                 Notifications
               </h2>
-              <p className="truncate text-[var(--text-sm)] text-text-muted">
-                App notices and local reminders
-              </p>
+              <p className="truncate text-[var(--text-sm)] text-text-muted">App notices</p>
             </div>
           </div>
           <IconButton icon={X} label="Close notifications" onClick={onClose} variant="ghost" />
@@ -791,63 +788,6 @@ function NotificationsOverlay({
                   <p className="text-[var(--text-sm)] text-text-muted">{notification.description}</p>
                 </div>
               ))}
-            </div>
-          </section>
-
-          <section className="grid gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="truncate text-[var(--text-md)] font-semibold">Local reminders</h3>
-                <p className="truncate text-[var(--text-sm)] text-text-muted">
-                  {notificationSection?.status ?? "Not configured"}
-                </p>
-              </div>
-              <Badge tone={source.settings.notificationsEnabled ? "success" : "neutral"}>
-                {source.settings.notificationsEnabled ? "On" : "Off"}
-              </Badge>
-            </div>
-            <label className="flex min-h-9 items-center gap-3 text-[var(--text-sm)] text-text-secondary">
-              <input
-                checked={source.settings.notificationsEnabled}
-                className="accent-[var(--color-accent)]"
-                onChange={(event) =>
-                  void source.updateSettings({ notificationsEnabled: event.target.checked })
-                }
-                type="checkbox"
-              />
-              <span className="min-w-0 flex-1">Enable local notifications</span>
-            </label>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <Input
-                aria-label="Notification lead minutes"
-                defaultValue={String(source.settings.notificationLeadMinutes)}
-                label="Lead time minutes"
-                max={40320}
-                min={0}
-                onBlur={(event) => updateLeadMinutes(event.currentTarget.value)}
-                type="number"
-              />
-              <Button className="self-end" onClick={requestNotificationPermission} variant="ghost">
-                Request permission
-              </Button>
-            </div>
-          </section>
-
-          <section className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
-            <h3 className="text-[var(--text-md)] font-semibold">Delivery status</h3>
-            <div className="grid gap-2 text-[var(--text-sm)] sm:grid-cols-3">
-              <div>
-                <div className="text-text-muted">Permission</div>
-                <div className="truncate font-medium">{permission}</div>
-              </div>
-              <div>
-                <div className="text-text-muted">Scheduled</div>
-                <div className="truncate font-medium">{scheduled}</div>
-              </div>
-              <div>
-                <div className="text-text-muted">Lead time</div>
-                <div className="truncate font-medium">{source.settings.notificationLeadMinutes} min</div>
-              </div>
             </div>
           </section>
         </div>
