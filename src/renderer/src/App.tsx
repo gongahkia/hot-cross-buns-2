@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, RefObject } from "react";
 import type { NativeAction, SettingsSnapshot } from "@shared/ipc/contracts";
 import {
@@ -99,6 +99,15 @@ function textSizeVariables(baseSize: number): Record<string, string> {
   };
 }
 
+function shellBackgroundValue(settings: SettingsSnapshot): string {
+  if (!settings.appBackgroundTranslucencyEnabled) {
+    return "var(--color-bg-primary)";
+  }
+
+  const opacity = Math.round(Math.min(1, Math.max(0.35, settings.appBackgroundOpacity)) * 100);
+  return `color-mix(in srgb, var(--color-bg-primary) ${opacity}%, transparent)`;
+}
+
 function useAppliedTheme(settings: SettingsSnapshot): void {
   const [prefersDark, setPrefersDark] = useState(systemPrefersDark);
 
@@ -127,8 +136,12 @@ function useAppliedTheme(settings: SettingsSnapshot): void {
 
     root.dataset.theme = mode;
     root.dataset.colorTheme = colorTheme.id;
+    root.dataset.performanceMode = settings.performanceMode;
+    root.dataset.animations = settings.disableAnimations ? "disabled" : "enabled";
     root.style.setProperty("--font-family", cssFontFamily(settings.uiFontName));
     root.style.setProperty("--font-family-mono", cssMonoFontFamily(settings.uiFontName));
+    root.style.setProperty("--app-shell-background", shellBackgroundValue(settings));
+    root.style.fontSize = `${Math.round(Math.min(1.5, Math.max(0.8, settings.uiLayoutScale)) * 16 * 100) / 100}px`;
 
     for (const [name, value] of Object.entries(semanticThemeVariables(colorTheme))) {
       root.style.setProperty(name, value);
@@ -140,8 +153,13 @@ function useAppliedTheme(settings: SettingsSnapshot): void {
   }, [
     prefersDark,
     settings.colorTheme,
+    settings.appBackgroundOpacity,
+    settings.appBackgroundTranslucencyEnabled,
+    settings.disableAnimations,
+    settings.performanceMode,
     settings.theme,
     settings.uiFontName,
+    settings.uiLayoutScale,
     settings.uiTextSizePoints
   ]);
 }
@@ -228,6 +246,13 @@ function AppShell(): JSX.Element {
   const visibleNotification = appNotifications.find(
     (notification) => !dismissedNotificationIds.includes(notification.id)
   );
+  const visiblePrimarySections = useMemo(() => {
+    const hidden = new Set<SectionId>(source.settings.hiddenNavigationTabs);
+    return primaryPlannerSections
+      .map((section, index) => ({ section, shortcutKey: String(index + 1) }))
+      .filter(({ section }) => !hidden.has(section.id));
+  }, [source.settings.hiddenNavigationTabs]);
+  const sidebarOnRight = source.settings.navigationPlacement === "right";
   const onboardingVisible =
     source.settings.setupCompletedAt === null &&
     source.dataState !== "loading" &&
@@ -392,23 +417,23 @@ function AppShell(): JSX.Element {
   );
 
   function handleNavigationKeyDown(event: KeyboardEvent<HTMLButtonElement>, sectionId: SectionId): void {
-    const currentIndex = primaryPlannerSections.findIndex((section) => section.id === sectionId);
+    const currentIndex = visiblePrimarySections.findIndex(({ section }) => section.id === sectionId);
     let nextIndex = currentIndex;
 
     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-      nextIndex = Math.min(currentIndex + 1, primaryPlannerSections.length - 1);
+      nextIndex = Math.min(currentIndex + 1, visiblePrimarySections.length - 1);
     } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
       nextIndex = Math.max(currentIndex - 1, 0);
     } else if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = primaryPlannerSections.length - 1;
+      nextIndex = visiblePrimarySections.length - 1;
     } else {
       return;
     }
 
     event.preventDefault();
-    focusSection(primaryPlannerSections[nextIndex].id);
+    focusSection(visiblePrimarySections[nextIndex]?.section.id ?? sectionId);
   }
 
   useEffect(() => {
@@ -457,12 +482,25 @@ function AppShell(): JSX.Element {
   useEffect(() => window.hcb?.native.subscribeAction(handleNativeAction), [handleNativeAction]);
 
   useEffect(() => {
+    if (!visiblePrimarySections.some(({ section }) => section.id === activeSectionId)) {
+      const replacement = visiblePrimarySections[0]?.section.id;
+
+      if (replacement) {
+        navigateToSection(replacement);
+      }
+    }
+  }, [activeSectionId, navigateToSection, visiblePrimarySections]);
+
+  useEffect(() => {
     function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {
       if (event.metaKey || event.ctrlKey) {
         const primaryShortcutIndex = Number(event.key) - 1;
         const primaryShortcutSection = primaryPlannerSections[primaryShortcutIndex];
 
-        if (primaryShortcutSection) {
+        if (
+          primaryShortcutSection &&
+          !source.settings.hiddenNavigationTabs.includes(primaryShortcutSection.id as "tasks" | "calendar" | "notes")
+        ) {
           event.preventDefault();
           navigateToPrimarySection(primaryShortcutSection.id);
           return;
@@ -510,6 +548,7 @@ function AppShell(): JSX.Element {
     openCommandPalette,
     openSettingsPanel,
     source.refresh,
+    source.settings.hiddenNavigationTabs,
     toggleNotificationsPanel,
     toggleSidebar
   ]);
@@ -576,16 +615,22 @@ function AppShell(): JSX.Element {
   return (
     <div
       className={cx(
-        "grid h-dvh min-h-0 overflow-hidden bg-bg-primary text-text-primary",
+        "grid h-dvh min-h-0 overflow-hidden text-text-primary",
         sidebarOpen
-          ? "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[72px_minmax(0,1fr)] md:grid-rows-none lg:grid-cols-[232px_minmax(0,1fr)]"
+          ? sidebarOnRight
+            ? "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_72px] md:grid-rows-none lg:grid-cols-[minmax(0,1fr)_232px]"
+            : "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[72px_minmax(0,1fr)] md:grid-rows-none lg:grid-cols-[232px_minmax(0,1fr)]"
           : "grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)] md:grid-rows-none"
       )}
       data-testid="app-shell"
+      style={{ background: "var(--app-shell-background)" }}
     >
       {sidebarOpen ? (
         <aside
-          className="flex min-h-0 min-w-0 flex-row items-center overflow-x-auto border-b border-border bg-bg-secondary md:flex-col md:items-stretch md:overflow-hidden md:border-b-0 md:border-r"
+          className={cx(
+            "flex min-h-0 min-w-0 flex-row items-center overflow-x-auto border-b border-border bg-bg-secondary md:flex-col md:items-stretch md:overflow-hidden md:border-b-0",
+            sidebarOnRight ? "md:order-2 md:border-l" : "md:order-1 md:border-r"
+          )}
           id="app-sidebar"
         >
           <div className="flex h-14 w-14 shrink-0 items-center justify-center border-r border-border px-3 md:w-auto md:border-b md:border-r-0 lg:justify-start lg:gap-3 lg:px-4">
@@ -602,10 +647,9 @@ function AppShell(): JSX.Element {
           </div>
 
           <nav aria-label="Primary" className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-x-auto px-2 py-2 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:py-3">
-            {primaryPlannerSections.map((section, index) => {
+            {visiblePrimarySections.map(({ section, shortcutKey }) => {
               const Icon = section.icon;
               const selected = section.id === activeSectionId;
-              const shortcutKey = String(index + 1);
 
               return (
                 <button
@@ -650,7 +694,7 @@ function AppShell(): JSX.Element {
         </aside>
       ) : null}
 
-      <main className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <main className={cx("flex min-h-0 min-w-0 flex-col overflow-hidden", sidebarOnRight ? "md:order-1" : "md:order-2")}>
         <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-bg-primary px-3 py-2 sm:flex-nowrap md:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <Button

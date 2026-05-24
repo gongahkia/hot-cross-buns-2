@@ -48,6 +48,7 @@
   --duration-normal: 200ms;
   --duration-slow: 350ms;
   --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --app-shell-background: var(--color-bg-primary);
 }
 
 [data-theme="light"] {
@@ -86,11 +87,32 @@ body,
 
 body {
   overflow: hidden;
-  background: var(--color-bg-primary);
+  background: var(--app-shell-background);
   color: var(--color-text-primary);
   font-family: var(--font-family);
   font-size: var(--text-base);
   letter-spacing: 0;
+}
+
+[data-performance-mode="snappy"] {
+  --duration-fast: 75ms;
+  --duration-normal: 120ms;
+  --duration-slow: 180ms;
+}
+
+[data-performance-mode="rich"] {
+  --duration-fast: 180ms;
+  --duration-normal: 260ms;
+  --duration-slow: 420ms;
+}
+
+[data-animations="disabled"] *,
+[data-animations="disabled"] *::before,
+[data-animations="disabled"] *::after {
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
 }
 
 button,
