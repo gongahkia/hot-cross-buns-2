@@ -7,6 +7,7 @@ import {
   semanticThemeVariables
 } from "@shared/ipc/themeCatalog";
 import {
+  Bell,
   Command,
   RefreshCw,
   X
@@ -14,9 +15,9 @@ import {
 import appIconUrl from "../../../assets/brand/buns-app-icon-sidebar.png";
 import type { PlannerAction } from "./actions/plannerActions";
 import { InspectorProvider, InspectorShell } from "./components/Inspector";
-import { Badge, Button, IconButton, StatusBanner, cx } from "./components/primitives";
+import { Badge, Button, IconButton, Input, StatusBanner, cx } from "./components/primitives";
 import { getPlannerSection, plannerSections, type SectionId } from "./data/mockPlanner";
-import { getAppNotifications, type AppNotification } from "./features/core/appNotifications";
+import { getAppNotifications, type AppNotification, type AppNotificationTone } from "./features/core/appNotifications";
 import { SectionContent, type TaskSurfaceCommand } from "./features/core/CoreScreens";
 import {
   CoreDataProvider,
@@ -155,10 +156,6 @@ function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): strin
     return "local";
   }
 
-  if (sectionId === "notifications") {
-    return String(getAppNotifications(source).length);
-  }
-
   if (sectionId === "settings") {
     return source.syncStatus.state;
   }
@@ -185,6 +182,7 @@ function AppShell(): JSX.Element {
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("today");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [healthLabel, setHealthLabel] = useState("Starting");
   const [searchQuery, setSearchQuery] = useState("");
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
@@ -401,6 +399,22 @@ function AppShell(): JSX.Element {
   }, [openCommandPalette, source.refresh]);
 
   useEffect(() => {
+    if (!notificationsOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setNotificationsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [notificationsOpen]);
+
+  useEffect(() => {
     if (!visibleNotification) {
       return;
     }
@@ -513,6 +527,20 @@ function AppShell(): JSX.Element {
               </span>
             </Button>
             <Button
+              aria-expanded={notificationsOpen}
+              aria-label={`Notifications, ${appNotifications.length} active`}
+              className="min-w-8"
+              onClick={() => setNotificationsOpen((open) => !open)}
+              title="Notifications"
+              variant={notificationsOpen ? "secondary" : "ghost"}
+            >
+              <Bell aria-hidden="true" size={15} />
+              <span className="hidden sm:inline">Notifications</span>
+              <Badge tone={appNotifications.length > 1 ? "warning" : "neutral"}>
+                {appNotifications.length}
+              </Badge>
+            </Button>
+            <Button
               aria-label="Reload"
               aria-keyshortcuts="Meta+R Control+R"
               className="min-w-8"
@@ -568,7 +596,14 @@ function AppShell(): JSX.Element {
           <DeferredFirstRunOnboarding source={source} />
         </Suspense>
       ) : null}
-      {visibleNotification ? (
+      {notificationsOpen ? (
+        <NotificationsOverlay
+          notifications={appNotifications}
+          onClose={() => setNotificationsOpen(false)}
+          source={source}
+        />
+      ) : null}
+      {visibleNotification && !notificationsOpen ? (
         <AppNotificationToast
           notification={visibleNotification}
           onDismiss={() =>
@@ -578,6 +613,170 @@ function AppShell(): JSX.Element {
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+function notificationBadgeTone(tone: AppNotificationTone): "neutral" | "success" | "warning" | "danger" | "info" {
+  if (tone === "success") {
+    return "success";
+  }
+
+  if (tone === "danger") {
+    return "danger";
+  }
+
+  if (tone === "warning" || tone === "offline") {
+    return "warning";
+  }
+
+  return "info";
+}
+
+function NotificationsOverlay({
+  notifications,
+  onClose,
+  source
+}: {
+  notifications: AppNotification[];
+  onClose: () => void;
+  source: CoreViewModelSource;
+}): JSX.Element {
+  const notificationSection = source.settingsSections.find((section) => section.id === "notifications");
+  const permission =
+    notificationSection?.rows.find((row) => row.id === "permission")?.value ??
+    source.native.notificationsStatus.permission;
+  const scheduled =
+    notificationSection?.rows.find((row) => row.id === "scheduled")?.value ??
+    String(source.native.notificationsStatus.scheduledCount);
+
+  function updateLeadMinutes(value: string): void {
+    void source.updateSettings({ notificationLeadMinutes: Number(value) || 0 });
+  }
+
+  function requestNotificationPermission(): void {
+    void window.hcb?.native.requestNotificationPermission().then(() => {
+      source.refresh();
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-end bg-bg-tertiary/45 p-3 backdrop-blur-sm sm:p-5"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section
+        aria-labelledby="notifications-overlay-title"
+        aria-modal="true"
+        className="mt-12 flex max-h-[calc(100vh-96px)] w-full max-w-[720px] flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary/95 shadow-2xl"
+        role="dialog"
+      >
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-bg-secondary/80 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-hcbMd bg-surface-0 text-accent">
+              <Bell aria-hidden="true" size={18} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-[var(--text-lg)] font-semibold" id="notifications-overlay-title">
+                Notifications
+              </h2>
+              <p className="truncate text-[var(--text-sm)] text-text-muted">
+                App notices and local reminders
+              </p>
+            </div>
+          </div>
+          <IconButton icon={X} label="Close notifications" onClick={onClose} variant="ghost" />
+        </header>
+
+        <div className="grid min-h-0 gap-3 overflow-auto p-4">
+          <section className="grid gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-[var(--text-md)] font-semibold">App notices</h3>
+              <Badge tone={notifications.length > 1 ? "warning" : "neutral"}>
+                {notifications.length}
+              </Badge>
+            </div>
+            <div className="grid gap-2" role="list">
+              {notifications.map((notification) => (
+                <div
+                  className="grid gap-1 rounded-hcbMd border border-border bg-bg-tertiary px-3 py-2"
+                  key={notification.id}
+                  role="listitem"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-[var(--text-base)] font-medium">
+                      {notification.title}
+                    </span>
+                    <Badge tone={notificationBadgeTone(notification.tone)}>{notification.status}</Badge>
+                  </div>
+                  <p className="text-[var(--text-sm)] text-text-muted">{notification.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="grid gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-[var(--text-md)] font-semibold">Local reminders</h3>
+                <p className="truncate text-[var(--text-sm)] text-text-muted">
+                  {notificationSection?.status ?? "Not configured"}
+                </p>
+              </div>
+              <Badge tone={source.settings.notificationsEnabled ? "success" : "neutral"}>
+                {source.settings.notificationsEnabled ? "On" : "Off"}
+              </Badge>
+            </div>
+            <label className="flex min-h-9 items-center gap-3 text-[var(--text-sm)] text-text-secondary">
+              <input
+                checked={source.settings.notificationsEnabled}
+                className="accent-[var(--color-accent)]"
+                onChange={(event) =>
+                  void source.updateSettings({ notificationsEnabled: event.target.checked })
+                }
+                type="checkbox"
+              />
+              <span className="min-w-0 flex-1">Enable local notifications</span>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <Input
+                aria-label="Notification lead minutes"
+                defaultValue={String(source.settings.notificationLeadMinutes)}
+                label="Lead time minutes"
+                max={40320}
+                min={0}
+                onBlur={(event) => updateLeadMinutes(event.currentTarget.value)}
+                type="number"
+              />
+              <Button className="self-end" onClick={requestNotificationPermission} variant="ghost">
+                Request permission
+              </Button>
+            </div>
+          </section>
+
+          <section className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+            <h3 className="text-[var(--text-md)] font-semibold">Delivery status</h3>
+            <div className="grid gap-2 text-[var(--text-sm)] sm:grid-cols-3">
+              <div>
+                <div className="text-text-muted">Permission</div>
+                <div className="truncate font-medium">{permission}</div>
+              </div>
+              <div>
+                <div className="text-text-muted">Scheduled</div>
+                <div className="truncate font-medium">{scheduled}</div>
+              </div>
+              <div>
+                <div className="text-text-muted">Lead time</div>
+                <div className="truncate font-medium">{source.settings.notificationLeadMinutes} min</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </div>
   );
 }

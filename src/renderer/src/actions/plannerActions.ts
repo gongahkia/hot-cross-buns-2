@@ -183,14 +183,6 @@ export const plannerActions: PlannerAction[] = [
     sectionId: "notes"
   },
   {
-    id: "navigation.notifications",
-    label: "Go to Notifications",
-    description: "Show app notices and local reminder status",
-    category: "Navigate",
-    keywords: ["notifications", "notices", "reminders", "alerts"],
-    sectionId: "notifications"
-  },
-  {
     id: "search.open",
     label: "Go to Search",
     description: "Search the local cache",
