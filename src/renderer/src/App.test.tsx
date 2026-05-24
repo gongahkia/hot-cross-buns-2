@@ -845,7 +845,26 @@ describe("App shell", () => {
     });
   });
 
-  it("surfaces Today conflicts and moves task blocks with the keyboard", async () => {
+  it("schedules an unscheduled task from the Today focus queue", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Schedule Draft inbox triage rules at 10:30"));
+
+    await waitFor(() => {
+      expect(api.calendar.scheduleTaskBlock).toHaveBeenCalledWith({
+        taskId: "task-inbox-rules",
+        calendarId: "cal-product",
+        startsAt: expect.stringContaining("T10:30:00.000Z"),
+        durationMinutes: 30
+      });
+    });
+  });
+
+  it("surfaces Today conflicts and creates a scheduled block from keyboard moves", async () => {
     const api = seededHcb();
     api.calendar.scheduleSuggest = vi.fn(async (request) =>
       ok({
@@ -879,14 +898,120 @@ describe("App shell", () => {
     });
 
     await waitFor(() => {
-      expect(api.tasks.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "task-inbox-rules",
-          plannedStart: expect.stringContaining("T10:15:00.000Z"),
-          plannedEnd: expect.stringContaining("T11:00:00.000Z"),
-          durationMinutes: 45
-        })
-      );
+      expect(api.calendar.scheduleTaskBlock).toHaveBeenCalledWith({
+        taskId: "task-inbox-rules",
+        calendarId: "cal-product",
+        startsAt: expect.stringContaining("T10:15:00.000Z"),
+        durationMinutes: 45
+      });
+    });
+  });
+
+  it("moves and unschedules existing scheduled task blocks from Today", async () => {
+    const api = seededHcb();
+    api.calendar.listScheduledTaskBlocks = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "block-inbox",
+            taskId: "task-inbox-rules",
+            calendarEventId: "event-task-block",
+            calendarId: "cal-product",
+            title: "Draft inbox triage rules",
+            startsAt: `${todayDate}T10:00:00.000Z`,
+            endsAt: `${todayDate}T10:30:00.000Z`,
+            durationMinutes: 30,
+            status: "scheduled" as const,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    api.calendar.scheduleSuggest = vi.fn(async (request) =>
+      ok({
+        slots: [
+          {
+            startsAt: `${request.date}T10:00:00.000Z`,
+            endsAt: `${request.date}T10:30:00.000Z`,
+            taskId: "task-inbox-rules",
+            locked: false,
+            conflict: false
+          }
+        ],
+        unscheduled: [],
+        overloadMinutes: 0
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const blocks = await screen.findByRole("list", { name: "Scheduled task blocks" });
+    expect(within(blocks).getByText("Scheduled")).toBeInTheDocument();
+
+    await user.click(within(blocks).getByLabelText("Move Draft inbox triage rules later"));
+    await waitFor(() => {
+      expect(api.calendar.moveScheduledTaskBlock).toHaveBeenCalledWith({
+        id: "block-inbox",
+        calendarId: "cal-product",
+        startsAt: expect.stringContaining("T10:30:00.000Z"),
+        durationMinutes: 30
+      });
+    });
+
+    await user.click(within(blocks).getByLabelText("Unschedule Draft inbox triage rules"));
+    await waitFor(() => {
+      expect(api.calendar.unscheduleTaskBlock).toHaveBeenCalledWith({
+        id: "block-inbox",
+        deleteCalendarEvent: true
+      });
+    });
+  });
+
+  it("repairs orphaned scheduled task blocks from Today", async () => {
+    const api = seededHcb();
+    api.calendar.listScheduledTaskBlocks = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "block-orphan",
+            taskId: "task-inbox-rules",
+            calendarEventId: "event-missing",
+            calendarId: "cal-product",
+            title: "Draft inbox triage rules",
+            startsAt: `${todayDate}T10:00:00.000Z`,
+            endsAt: `${todayDate}T10:30:00.000Z`,
+            durationMinutes: 30,
+            status: "orphaned" as const,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    api.calendar.scheduleSuggest = vi.fn(async () =>
+      ok({
+        slots: [],
+        unscheduled: [],
+        overloadMinutes: 0
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const blocks = await screen.findByRole("list", { name: "Scheduled task blocks" });
+    expect(within(blocks).getByText("Needs repair")).toBeInTheDocument();
+
+    await user.click(within(blocks).getByLabelText("Repair Draft inbox triage rules"));
+    await waitFor(() => {
+      expect(api.calendar.moveScheduledTaskBlock).toHaveBeenCalledWith({
+        id: "block-orphan",
+        calendarId: "cal-product",
+        startsAt: expect.stringContaining("T10:00:00.000Z"),
+        durationMinutes: 30
+      });
     });
   });
 
@@ -926,6 +1051,9 @@ describe("App shell", () => {
     await goToSection("Tasks");
 
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
+    const inboxTasks = screen.getByRole("list", { name: "Inbox tasks" });
+    expect(within(inboxTasks).getByLabelText("Task due state Draft inbox triage rules")).toHaveTextContent("Due today");
+    expect(within(inboxTasks).getByLabelText("Task priority Draft inbox triage rules")).toHaveTextContent("High priority");
     expect(screen.getByRole("heading", { name: "Planning" })).toBeInTheDocument();
     expect(screen.getByText("Map shortcut states")).toBeInTheDocument();
     expect(screen.getByText("Month grid shell")).toBeInTheDocument();

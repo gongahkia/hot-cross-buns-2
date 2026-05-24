@@ -1122,6 +1122,27 @@ function todayGridRows(date: string, startHour: number, endHour: number): TodayG
   return rows;
 }
 
+function nextOpenScheduleStart(
+  rows: TodayGridRow[],
+  slotsByRow: Map<string, ScheduleSlot[]>
+): string | null {
+  let lastBusyIndex = -1;
+
+  rows.forEach((row, index) => {
+    if ((slotsByRow.get(row.id) ?? []).length > 0) {
+      lastBusyIndex = index;
+    }
+  });
+
+  const afterBusy = rows.find((row, index) => index > lastBusyIndex && (slotsByRow.get(row.id) ?? []).length === 0);
+
+  if (afterBusy) {
+    return afterBusy.startsAt;
+  }
+
+  return rows.find((row) => (slotsByRow.get(row.id) ?? []).length === 0)?.startsAt ?? rows[0]?.startsAt ?? null;
+}
+
 function scheduleSlotDurationMinutes(slot: ScheduleSlot): number {
   return Math.max(5, Math.round((Date.parse(slot.endsAt) - Date.parse(slot.startsAt)) / 60_000));
 }
@@ -1223,6 +1244,26 @@ function TodayView(): JSX.Element {
 
     return byRow;
   }, [schedule.slots]);
+  const scheduledBlocksByTaskId = useMemo(
+    () => scheduledBlockByTaskId(source.scheduledTaskBlocks),
+    [source.scheduledTaskBlocks]
+  );
+  const todayScheduledBlocks = useMemo(
+    () =>
+      source.scheduledTaskBlocks
+        .filter((block) => block.startsAt.slice(0, 10) === todayDate || block.status === "orphaned")
+        .sort(
+          (left, right) =>
+            left.startsAt.localeCompare(right.startsAt) ||
+            left.endsAt.localeCompare(right.endsAt) ||
+            left.title.localeCompare(right.title)
+        ),
+    [source.scheduledTaskBlocks, todayDate]
+  );
+  const nextScheduleStart = useMemo(
+    () => nextOpenScheduleStart(rows, slotsByRow),
+    [rows, slotsByRow]
+  );
   const unscheduledTasks = schedule.unscheduled.map((task) => source.getTaskById(task.id));
   const usedCapacityMinutes = schedule.slots
     .filter((slot) => slot.taskId)
@@ -1247,22 +1288,42 @@ function TodayView(): JSX.Element {
     return <CacheStatePanel title="Today" />;
   }
 
-  async function moveTaskSlot(taskId: string, startsAt: string, durationMinutes: number): Promise<void> {
+  async function saveTaskSchedule(taskId: string, startsAt: string, durationMinutes: number): Promise<void> {
     const existingSlot = schedule.slots.find((slot) => slot.taskId === taskId);
 
     if (existingSlot?.locked) {
       return;
     }
 
-    const saved = await source.updateTask({
-      id: taskId,
-      plannedStart: startsAt,
-      plannedEnd: addMinutesIso(startsAt, durationMinutes),
-      durationMinutes
-    });
+    setTodayActionError(null);
+
+    const existingBlock = scheduledBlocksByTaskId.get(taskId);
+    const calendarId = existingBlock?.calendarId ?? defaultCalendarId(source);
+    const saved = existingBlock
+      ? await source.moveScheduledTaskBlock({
+          id: existingBlock.id,
+          calendarId,
+          startsAt,
+          durationMinutes
+        })
+      : calendarId
+        ? await source.scheduleTaskBlock({
+            taskId,
+            calendarId,
+            startsAt,
+            durationMinutes
+          })
+        : await source.updateTask({
+            id: taskId,
+            plannedStart: startsAt,
+            plannedEnd: addMinutesIso(startsAt, durationMinutes),
+            durationMinutes
+          });
 
     if (saved) {
       source.refresh();
+    } else {
+      setTodayActionError("Task schedule was not saved.");
     }
   }
 
@@ -1271,11 +1332,63 @@ function TodayView(): JSX.Element {
       return;
     }
 
-    await moveTaskSlot(
+    await saveTaskSchedule(
       slot.taskId,
       addMinutesIso(slot.startsAt, minutes),
       scheduleSlotDurationMinutes(slot)
     );
+  }
+
+  function scheduleTaskAt(task: TaskViewModel, startsAt: string): void {
+    void saveTaskSchedule(task.id, startsAt, task.durationMinutes ?? 30);
+  }
+
+  async function moveScheduledBlockBy(block: ScheduledTaskBlockViewModel, minutes: number): Promise<void> {
+    const saved = await source.moveScheduledTaskBlock({
+      id: block.id,
+      calendarId: block.calendarId,
+      startsAt: addMinutesIso(block.startsAt, minutes),
+      durationMinutes: block.durationMinutes
+    });
+
+    if (saved) {
+      source.refresh();
+    }
+  }
+
+  async function resizeScheduledBlockBy(block: ScheduledTaskBlockViewModel, minutes: number): Promise<void> {
+    const durationMinutes = Math.max(15, block.durationMinutes + minutes);
+    const saved = await source.moveScheduledTaskBlock({
+      id: block.id,
+      calendarId: block.calendarId,
+      startsAt: block.startsAt,
+      durationMinutes
+    });
+
+    if (saved) {
+      source.refresh();
+    }
+  }
+
+  async function repairScheduledBlock(block: ScheduledTaskBlockViewModel): Promise<void> {
+    const saved = await source.moveScheduledTaskBlock({
+      id: block.id,
+      calendarId: block.calendarId || defaultCalendarId(source),
+      startsAt: block.startsAt,
+      durationMinutes: block.durationMinutes
+    });
+
+    if (saved) {
+      source.refresh();
+    }
+  }
+
+  async function unscheduleBlock(blockId: string): Promise<void> {
+    const saved = await source.unscheduleTaskBlock(blockId);
+
+    if (saved) {
+      source.refresh();
+    }
   }
 
   async function createQuickAdd(): Promise<void> {
@@ -1341,7 +1454,7 @@ function TodayView(): JSX.Element {
     event.preventDefault();
     const slot = schedule.slots.find((candidate) => candidate.taskId === taskId);
     const durationMinutes = slot ? scheduleSlotDurationMinutes(slot) : source.getTaskById(taskId).durationMinutes ?? 30;
-    void moveTaskSlot(taskId, row.startsAt, durationMinutes);
+    void saveTaskSchedule(taskId, row.startsAt, durationMinutes);
   }
 
   return (
@@ -1367,20 +1480,51 @@ function TodayView(): JSX.Element {
             <Panel title="Focus queue" description="Open unscheduled tasks">
               <VirtualizedList
                 ariaLabel="Today focus queue"
-                estimateRowHeight={58}
+                estimateRowHeight={68}
                 getKey={(task) => task.id}
                 items={unscheduledTasks}
                 performanceLabel="today.focus-tasks"
                 renderRow={(task) => (
-                  <ListRow
-                    description={task.detail}
-                    leading={<Circle aria-hidden="true" className="text-text-muted" size={17} />}
-                    meta={task.dueLabel}
-                    title={task.title}
-                    trailing={<Badge tone={priorityTone(task.priority)}>{priorityLabel(task.priority)}</Badge>}
+                  <TodayFocusTaskRow
+                    nextStart={nextScheduleStart}
+                    onSchedule={scheduleTaskAt}
+                    onToggleTask={(taskId) => void source.completeTask(taskId)}
+                    task={task}
                   />
                 )}
                 viewportHeight={220}
+              />
+            </Panel>
+            <Panel
+              title="Scheduled blocks"
+              description={
+                todayScheduledBlocks.length === 0
+                  ? "No linked blocks today"
+                  : `${todayScheduledBlocks.length} linked ${todayScheduledBlocks.length === 1 ? "block" : "blocks"}`
+              }
+            >
+              <VirtualizedList
+                ariaLabel="Scheduled task blocks"
+                emptyState={
+                  <EmptyState
+                    description="Schedule a task from the focus queue or by dropping it on the timeline."
+                    title="No scheduled blocks"
+                  />
+                }
+                estimateRowHeight={64}
+                getKey={(block) => block.id}
+                items={todayScheduledBlocks}
+                performanceLabel="today.scheduled-blocks"
+                renderRow={(block) => (
+                  <TodayScheduledBlockRow
+                    block={block}
+                    onMoveBlock={(candidate, minutes) => void moveScheduledBlockBy(candidate, minutes)}
+                    onRepairBlock={(candidate) => void repairScheduledBlock(candidate)}
+                    onResizeBlock={(candidate, minutes) => void resizeScheduledBlockBy(candidate, minutes)}
+                    onUnscheduleBlock={(blockId) => void unscheduleBlock(blockId)}
+                  />
+                )}
+                viewportHeight={180}
               />
             </Panel>
           </div>
@@ -1498,10 +1642,15 @@ function TodayView(): JSX.Element {
                     ) : null}
                     {rowSlots.map((slot) => {
                       const tone = slotTone(slot);
+                      const slotTask = slot.taskId ? source.getTaskById(slot.taskId) : null;
+                      const slotBlock = slot.taskId ? scheduledBlocksByTaskId.get(slot.taskId) : undefined;
                       const durationRows = scheduleSlotDurationMinutes(slot) / 30;
                       const top = ((scheduleSlotMinutesFromStart(slot, startHour) % 30) / 30) * 56;
                       const height = Math.max(34, durationRows * 56 - 4);
                       const draggable = Boolean(slot.taskId && !slot.locked);
+                      const statusLabel = slotBlock
+                        ? slotBlock.status === "orphaned" ? "Needs repair" : "Scheduled"
+                        : tone.label;
 
                       return (
                         <button
@@ -1536,12 +1685,33 @@ function TodayView(): JSX.Element {
                             <span className="truncate text-[var(--text-sm)] font-medium text-text-primary">
                               {slotTitle(slot, source)}
                             </span>
-                            <Badge tone={slot.conflict ? "danger" : slot.eventId ? "accent" : slot.locked ? "warning" : "success"}>
-                              {tone.label}
+                            <Badge
+                              tone={
+                                slot.conflict
+                                  ? "danger"
+                                  : slotBlock?.status === "orphaned"
+                                    ? "warning"
+                                    : slotBlock
+                                      ? "info"
+                                      : slot.eventId
+                                        ? "accent"
+                                        : slot.locked
+                                          ? "warning"
+                                          : "success"
+                              }
+                            >
+                              {statusLabel}
                             </Badge>
+                            {slotTask ? (
+                              <Badge className="gap-1" tone={priorityTone(slotTask.priority)}>
+                                <Flag aria-hidden="true" size={10} />
+                                {priorityLabel(slotTask.priority)}
+                              </Badge>
+                            ) : null}
                           </span>
                           <span className="block truncate text-[var(--text-xs)] text-text-muted">
                             {slotDetail(slot, source)}
+                            {slotBlock ? ` - ${slotBlock.calendar}` : ""}
                           </span>
                         </button>
                       );
@@ -2225,6 +2395,10 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
   const parentOptions = useMemo(
     () => taskParentOptions(source.largeTaskWindow, draft),
     [draft.id, source.largeTaskWindow]
+  );
+  const scheduledBlocksByTask = useMemo(
+    () => scheduledBlockByTaskId(source.scheduledTaskBlocks),
+    [source.scheduledTaskBlocks]
   );
   const parsedQuickTask = parseQuickTaskInput(quickCaptureInput, source.taskLists);
   const canSaveTask = canSaveTaskDraft(draft, source.taskMutationPending);
@@ -3044,6 +3218,7 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
                   onDeleteTask={(taskId) => void deleteTask(taskId)}
                   onSelectTask={selectTask}
                   onToggleTask={(taskId) => void toggleTask(taskId)}
+                  scheduledBlocksByTaskId={scheduledBlocksByTask}
                   selectedTaskId={selectedTaskId}
                 />
               ))}
