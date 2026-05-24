@@ -530,10 +530,10 @@ function AppShell(): JSX.Element {
               aria-keyshortcuts="Meta+P Control+P"
               className="min-w-8"
               onClick={openCommandPalette}
+              title="Command palette"
               variant="secondary"
             >
               <Command aria-hidden="true" size={15} />
-              <span className="hidden sm:inline">Command palette</span>
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
                 Cmd P
               </span>
@@ -562,7 +562,6 @@ function AppShell(): JSX.Element {
               variant="ghost"
             >
               <RefreshCw aria-hidden="true" size={15} />
-              <span className="hidden sm:inline">Reload</span>
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
                 Cmd R
               </span>

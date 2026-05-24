@@ -6110,7 +6110,6 @@ function SettingsView(): JSX.Element {
   ]);
   const [googleClientId, setGoogleClientId] = useState(googleStatus.clientId ?? "");
   const [googleClientSecret, setGoogleClientSecret] = useState("");
-  const [fontNameDraft, setFontNameDraft] = useState(settings.uiFontName ?? "");
   const [systemFontFamilies, setSystemFontFamilies] = useState<string[]>([]);
   const systemFontFamiliesRequested = useRef(false);
   const availableFontFamilies = useMemo(
@@ -6121,10 +6120,6 @@ function SettingsView(): JSX.Element {
   useEffect(() => {
     setGoogleClientId(googleStatus.clientId ?? "");
   }, [googleStatus.clientId]);
-
-  useEffect(() => {
-    setFontNameDraft(settings.uiFontName ?? "");
-  }, [settings.uiFontName]);
 
   useEffect(() => {
     if (selectedSectionId !== "appearance" || systemFontFamiliesRequested.current || !window.hcb) {
@@ -6155,12 +6150,6 @@ function SettingsView(): JSX.Element {
       theme,
       colorTheme: nextColorTheme.id
     });
-  }
-
-  function saveFontName(value: string): void {
-    const trimmed = value.trim();
-
-    updateSettings({ uiFontName: trimmed ? trimmed : null });
   }
 
   function updateSelectedTaskList(taskListId: string, selected: boolean): void {
@@ -6671,28 +6660,26 @@ function SettingsView(): JSX.Element {
           <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
               <span>Font family</span>
-              <Input
+              <select
                 aria-label="Font family"
-                list="ui-font-family-options"
-                onBlur={(event) => saveFontName(event.currentTarget.value)}
-                onChange={(event) => setFontNameDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-                placeholder="System"
-                value={fontNameDraft}
-              />
-              <datalist id="ui-font-family-options">
+                className={settingsSelectClass}
+                onChange={(event) =>
+                  updateSettings({
+                    uiFontName: event.target.value.trim() ? event.target.value : null
+                  })
+                }
+                value={settings.uiFontName ?? ""}
+              >
+                <option value="">System</option>
                 {availableFontFamilies.map((fontName) => (
-                  <option key={fontName} value={fontName} />
+                  <option key={fontName} value={fontName}>
+                    {fontName}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </label>
             <Button
               onClick={() => {
-                setFontNameDraft("");
                 updateSettings({ uiFontName: null });
               }}
               size="sm"

@@ -2443,13 +2443,10 @@ describe("App shell", () => {
     expect(screen.queryByText("Light themes")).not.toBeInTheDocument();
     await waitFor(() => expect(api.native.listFontFamilies).toHaveBeenCalled());
     await waitFor(() => {
-      expect(document.querySelector('datalist#ui-font-family-options option[value="Avenir"]')).toBeTruthy();
+      expect(screen.getByRole("option", { name: "Avenir" })).toBeInTheDocument();
     });
 
-    const fontInput = screen.getByRole("combobox", { name: "Font family" });
-    await user.clear(fontInput);
-    await user.type(fontInput, "JetBrains Mono");
-    fireEvent.blur(fontInput);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Font family" }), "JetBrains Mono");
 
     await waitFor(() => {
       expect(api.settings.update).toHaveBeenCalledWith({ uiFontName: "JetBrains Mono" });

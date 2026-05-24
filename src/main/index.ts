@@ -16,10 +16,13 @@ const pendingNativeActions: NativeAction[] = [];
 const rendererReadyFallbackMs = 8_000;
 let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 let deferredRuntimeStarted = false;
+const macAppDisplayName = "Hot Cross Buns";
 
 if (process.env.HCB_USER_DATA_DIR && !app.isPackaged) {
   app.setPath("userData", process.env.HCB_USER_DATA_DIR);
 }
+
+app.setName(macAppDisplayName);
 
 markStartupTiming("processStartedMs");
 

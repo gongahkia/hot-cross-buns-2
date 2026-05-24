@@ -175,6 +175,8 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
       return unsupported("macOS application menu is unavailable on this platform.");
     }
 
+    app.setName(macAppDisplayName());
+
     const dockIcon = brandImage("app-icon.png");
     if (!dockIcon.isEmpty()) {
       app.dock?.setIcon(dockIcon);
@@ -1124,24 +1126,37 @@ function menuItemFromSnapshotItem(
   };
 }
 
+function macAppDisplayName(): string {
+  const currentName = app.name?.trim();
+  return currentName && currentName !== "Electron" ? currentName : "Hot Cross Buns";
+}
+
 function appMenuTemplate(actions: NativeTrayActions): MenuItemConstructorOptions[] {
+  const appName = macAppDisplayName();
+
   return [
     {
-      label: app.name || "Hot Cross Buns 2",
+      label: appName,
       submenu: [
-        { role: "about" },
+        { label: `About ${appName}`, role: "about" },
         { type: "separator" },
         {
-          label: "Settings",
-          accelerator: "CommandOrControl+,",
+          label: "Settings...",
+          accelerator: "Command+,",
           click: actions.openSettings
         },
         { type: "separator" },
-        { role: "hide" },
+        { role: "services" },
+        { type: "separator" },
+        { label: `Hide ${appName}`, role: "hide" },
         { role: "hideOthers" },
         { role: "unhide" },
         { type: "separator" },
-        { role: "quit" }
+        {
+          label: `Quit ${appName}`,
+          accelerator: "Command+Q",
+          click: actions.quit
+        }
       ]
     },
     {
@@ -1149,12 +1164,13 @@ function appMenuTemplate(actions: NativeTrayActions): MenuItemConstructorOptions
       submenu: [
         {
           label: "Quick Capture",
+          accelerator: "Command+Shift+Space",
           click: actions.quickCapture
         },
         {
-          label: "Refresh",
-          accelerator: "CommandOrControl+R",
-          click: actions.refresh
+          label: "Open Today",
+          accelerator: "Command+1",
+          click: () => actions.openRoute({ kind: "today" })
         },
         { type: "separator" },
         { role: "close" }
@@ -1177,20 +1193,124 @@ function appMenuTemplate(actions: NativeTrayActions): MenuItemConstructorOptions
     {
       label: "View",
       submenu: [
-        { role: "reload" },
-        { role: "forceReload" },
-        { role: "toggleDevTools" },
+        {
+          label: "Today",
+          accelerator: "Command+1",
+          click: () => actions.openRoute({ kind: "today" })
+        },
+        {
+          label: "Tasks",
+          accelerator: "Command+2",
+          click: () => actions.openRoute({ kind: "tasks" })
+        },
+        {
+          label: "Calendar",
+          accelerator: "Command+3",
+          click: () => actions.openRoute({ kind: "calendar" })
+        },
+        {
+          label: "Notes",
+          accelerator: "Command+4",
+          click: () => actions.openRoute({ kind: "notes" })
+        },
+        {
+          label: "Search",
+          accelerator: "Command+5",
+          click: () => actions.openRoute({ kind: "search" })
+        },
         { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },
         { role: "zoomOut" },
         { type: "separator" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
         { role: "togglefullscreen" }
       ]
     },
     {
+      label: "Sync",
+      submenu: [
+        {
+          label: "Sync Now",
+          accelerator: "Command+R",
+          click: actions.refresh
+        },
+        {
+          label: "Sync Settings",
+          click: actions.openSettings
+        }
+      ]
+    },
+    {
+      label: "Tasks",
+      submenu: [
+        {
+          label: "Open Tasks",
+          accelerator: "Command+2",
+          click: () => actions.openRoute({ kind: "tasks" })
+        },
+        {
+          label: "Quick Capture",
+          accelerator: "Command+Shift+Space",
+          click: actions.quickCapture
+        },
+        {
+          label: "Search Tasks",
+          click: () => actions.openRoute({ kind: "search", query: "tasks" })
+        }
+      ]
+    },
+    {
+      label: "Calendar",
+      submenu: [
+        {
+          label: "Open Calendar",
+          accelerator: "Command+3",
+          click: () => actions.openRoute({ kind: "calendar" })
+        },
+        {
+          label: "Open Today",
+          accelerator: "Command+1",
+          click: () => actions.openRoute({ kind: "today" })
+        },
+        {
+          label: "Refresh Calendar",
+          click: actions.refresh
+        }
+      ]
+    },
+    {
       label: "Window",
-      submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }]
+      submenu: [
+        {
+          label: `Show ${appName}`,
+          click: actions.openMainWindow
+        },
+        {
+          label: "Hide Window",
+          click: actions.showOrHideMainWindow
+        },
+        { type: "separator" },
+        { role: "minimize" },
+        { role: "zoom" },
+        { type: "separator" },
+        { role: "front" }
+      ]
+    },
+    {
+      role: "help",
+      submenu: [
+        {
+          label: "Search",
+          accelerator: "Command+5",
+          click: () => actions.openRoute({ kind: "search" })
+        },
+        {
+          label: "Settings",
+          click: actions.openSettings
+        }
+      ]
     }
   ];
 }
