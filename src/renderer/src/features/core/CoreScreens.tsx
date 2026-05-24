@@ -5684,6 +5684,7 @@ function CalendarView(): JSX.Element {
     update: updateInspector
   } = useInspector();
   const [activeViewId, setActiveViewId] = useState<CalendarViewId>("month");
+  const [calendarAnchorDate, setCalendarAnchorDate] = useState(calendarTodayKey);
   const [multiDayCount, setMultiDayCount] = useState(3);
   const [shareAvailabilityOpen, setShareAvailabilityOpen] = useState(false);
   const [availabilityTitle, setAvailabilityTitle] = useState("Meeting");
@@ -5747,6 +5748,30 @@ function CalendarView(): JSX.Element {
       ),
     [source.calendarAgendaEvents, visibleCalendarIdSet]
   );
+  const visibleEventDayIndex = useMemo(
+    () => buildCalendarEventDayIndex(visibleCalendarEvents),
+    [visibleCalendarEvents]
+  );
+  const calendarDay = useMemo(
+    () => calendarDayViewForDate(visibleEventDayIndex, calendarAnchorDate, "day"),
+    [calendarAnchorDate, visibleEventDayIndex]
+  );
+  const calendarWeekDays = useMemo(
+    () => calendarWeekDaysForDate(visibleEventDayIndex, calendarAnchorDate),
+    [calendarAnchorDate, visibleEventDayIndex]
+  );
+  const calendarMultiDayDays = useMemo(
+    () => calendarRangeDaysForDate(visibleEventDayIndex, calendarAnchorDate, multiDayCount),
+    [calendarAnchorDate, multiDayCount, visibleEventDayIndex]
+  );
+  const calendarMonthWeeks = useMemo(
+    () => calendarMonthWeeksForDate(visibleEventDayIndex, calendarAnchorDate),
+    [calendarAnchorDate, visibleEventDayIndex]
+  );
+  const calendarAgendaEvents = useMemo(
+    () => calendarEventsForDay(visibleEventDayIndex, calendarAnchorDate),
+    [calendarAnchorDate, visibleEventDayIndex]
+  );
   const visibleUpcomingEvent = useMemo(() => {
     const nowMs = Date.now();
     return (
@@ -5766,6 +5791,30 @@ function CalendarView(): JSX.Element {
     Date.parse(availabilityRange.end) > Date.parse(availabilityRange.start) &&
     !availabilityPending;
   const timelineViewActive = isCalendarTimelineView(activeViewId);
+  const calendarRangeLabel =
+    activeViewId === "month"
+      ? calendarMonthTitle(calendarAnchorDate)
+      : activeViewId === "week"
+        ? calendarRangeTitle(calendarWeekDays)
+        : activeViewId === "multiDay"
+          ? calendarRangeTitle(calendarMultiDayDays)
+          : calendarDateTitleFromIso(calendarAnchorDate);
+  const previousRangeLabel =
+    activeViewId === "month"
+      ? "Previous month"
+      : activeViewId === "week"
+        ? "Previous week"
+        : activeViewId === "multiDay"
+          ? `Previous ${multiDayCount} days`
+          : "Previous day";
+  const nextRangeLabel =
+    activeViewId === "month"
+      ? "Next month"
+      : activeViewId === "week"
+        ? "Next week"
+        : activeViewId === "multiDay"
+          ? `Next ${multiDayCount} days`
+          : "Next day";
   const availabilitySnippet = useMemo(
     () =>
       calendarAvailabilitySnippet({
@@ -5808,6 +5857,30 @@ function CalendarView(): JSX.Element {
   function setCalendarView(viewId: CalendarViewId): void {
     calendarNavigationStartedAt.current = rendererNow();
     setActiveViewId(viewId);
+  }
+
+  function shiftCalendarAnchor(direction: -1 | 1): void {
+    calendarNavigationStartedAt.current = rendererNow();
+    setCalendarAnchorDate((current) => {
+      if (activeViewId === "month") {
+        return calendarAddUtcMonths(current, direction);
+      }
+
+      if (activeViewId === "week") {
+        return calendarAddUtcDays(current, direction * 7);
+      }
+
+      if (activeViewId === "multiDay") {
+        return calendarAddUtcDays(current, direction * multiDayCount);
+      }
+
+      return calendarAddUtcDays(current, direction);
+    });
+  }
+
+  function resetCalendarAnchor(): void {
+    calendarNavigationStartedAt.current = rendererNow();
+    setCalendarAnchorDate(calendarTodayKey());
   }
 
   useEffect(() => {
@@ -5894,12 +5967,13 @@ function CalendarView(): JSX.Element {
   useEffect(() => {
     scheduleRendererFrame(() => {
       reportRendererTimingSince("calendar.navigate", calendarNavigationStartedAt.current, {
+        anchor: calendarAnchorDate,
         view: activeViewId,
         eventCount: visibleCalendarEvents.length
       });
       calendarNavigationStartedAt.current = null;
     });
-  }, [activeViewId, visibleCalendarEvents.length]);
+  }, [activeViewId, calendarAnchorDate, visibleCalendarEvents.length]);
 
   useEffect(() => {
     if (currentInspector?.kind !== "event" || !draft) {
