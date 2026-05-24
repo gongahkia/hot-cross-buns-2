@@ -16,7 +16,7 @@ import appIconUrl from "../../../assets/brand/buns-app-icon-sidebar.png";
 import type { PlannerAction } from "./actions/plannerActions";
 import { InspectorProvider, InspectorShell } from "./components/Inspector";
 import { Badge, Button, IconButton, Input, StatusBanner, cx } from "./components/primitives";
-import { getPlannerSection, plannerSections, type SectionId } from "./data/mockPlanner";
+import { getPlannerSection, primaryPlannerSections, type SectionId } from "./data/mockPlanner";
 import { getAppNotifications, type AppNotification, type AppNotificationTone } from "./features/core/appNotifications";
 import { SectionContent, type TaskSurfaceCommand } from "./features/core/CoreScreens";
 import {
@@ -161,7 +161,7 @@ function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): strin
   }
 
   if (sectionId === "notes") {
-    return String(source.initialNotes.length);
+    return String(source.largeTaskWindow.filter((task) => task.status === "open" && !task.dueDate && !task.plannedStart).length);
   }
 
   if (sectionId === "search") {
@@ -191,7 +191,7 @@ function AppShell(): JSX.Element {
 
   const source = useCoreViewModelSource();
   useAppliedTheme(source.settings);
-  const [activeSectionId, setActiveSectionId] = useState<SectionId>("today");
+  const [activeSectionId, setActiveSectionId] = useState<SectionId>("calendar");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -328,11 +328,11 @@ function AppShell(): JSX.Element {
   );
 
   function handleNavigationKeyDown(event: KeyboardEvent<HTMLButtonElement>, sectionId: SectionId): void {
-    const currentIndex = plannerSections.findIndex((section) => section.id === sectionId);
+    const currentIndex = primaryPlannerSections.findIndex((section) => section.id === sectionId);
     let nextIndex = currentIndex;
 
     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-      nextIndex = Math.min(currentIndex + 1, plannerSections.length - 1);
+      nextIndex = Math.min(currentIndex + 1, primaryPlannerSections.length - 1);
     } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
       nextIndex = Math.max(currentIndex - 1, 0);
     } else if (event.key === "Home") {
@@ -344,7 +344,7 @@ function AppShell(): JSX.Element {
     }
 
     event.preventDefault();
-    focusSection(plannerSections[nextIndex].id);
+    focusSection(primaryPlannerSections[nextIndex].id);
   }
 
   useEffect(() => {
@@ -472,7 +472,7 @@ function AppShell(): JSX.Element {
         </div>
 
         <nav aria-label="Primary" className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-x-auto px-2 py-2 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:py-3">
-          {plannerSections.map((section) => {
+          {primaryPlannerSections.map((section) => {
             const Icon = section.icon;
             const selected = section.id === activeSectionId;
 

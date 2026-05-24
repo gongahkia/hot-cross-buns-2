@@ -36,6 +36,7 @@ import {
   EyeOff,
   FileText,
   Flag,
+  Gift,
   ListPlus,
   MapPin,
   Pencil,
@@ -452,6 +453,10 @@ function SectionChrome({
   sidebar?: ReactNode;
   title: string;
 }): JSX.Element {
+  if (!sidebar) {
+    return <div className="min-h-0 min-w-0 flex-1">{children}</div>;
+  }
+
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
       <div className="min-w-0">{children}</div>
@@ -3210,6 +3215,7 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
 }
 
 type CalendarRepeatFrequency = "none" | CalendarEventRecurrence["frequency"];
+type CalendarCreateMode = "event" | "task" | "birthday";
 
 interface CalendarEventDraft {
   mode: "create" | "edit";
@@ -3469,18 +3475,66 @@ function calendarDraftDurationLabel(draft: CalendarEventDraft): string {
   return remainingMinutes === 0 ? `${hours} hr` : `${hours} hr ${remainingMinutes} min`;
 }
 
+function CalendarCreateModeTabs({
+  mode,
+  onChange
+}: {
+  mode: CalendarCreateMode;
+  onChange: (mode: CalendarCreateMode) => void;
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-3 gap-1 rounded-hcbMd bg-surface-0 p-1" role="tablist" aria-label="Create item type">
+      {([
+        { id: "event" as const, label: "Event", icon: CalendarPlus },
+        { id: "task" as const, label: "Task", icon: ListPlus },
+        { id: "birthday" as const, label: "Birthday", icon: Gift }
+      ]).map((item) => {
+        const Icon = item.icon;
+        const active = item.id === mode;
+
+        return (
+          <button
+            aria-selected={active}
+            className={cx(
+              "inline-flex min-h-8 items-center justify-center gap-2 rounded-hcbSm px-2 text-[var(--text-sm)] font-medium transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              active ? "bg-accent text-bg-tertiary" : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+            )}
+            key={item.id}
+            onClick={() => onChange(item.id)}
+            role="tab"
+            type="button"
+          >
+            <Icon aria-hidden="true" size={14} />
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function CalendarEventForm({
   calendars,
+  createMode,
   defaultTimeZone,
   draft,
   error,
-  setDraft
+  onCreateModeChange,
+  setDraft,
+  setTaskListId,
+  taskListId,
+  taskLists
 }: {
   calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
+  createMode: CalendarCreateMode;
   defaultTimeZone: string;
   draft: CalendarEventDraft;
   error?: string;
+  onCreateModeChange: (mode: CalendarCreateMode) => void;
   setDraft: (draft: CalendarEventDraft) => void;
+  setTaskListId: (listId: string) => void;
+  taskListId: string;
+  taskLists: ReturnType<typeof useCoreViewModelSource>["taskLists"];
 }): JSX.Element {
   const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
   const sourceTimeZone = selectedCalendar?.timeZone ?? defaultTimeZone;
@@ -3524,8 +3578,118 @@ function CalendarEventForm({
     });
   }
 
+  function setCreateDate(value: string): void {
+    const startsAt = dateInputToIso(value);
+    setDraft({
+      ...draft,
+      allDay: true,
+      startsAt,
+      endsAt: addUtcDaysIso(startsAt, 1),
+      repeatFrequency: createMode === "birthday" ? "yearly" : draft.repeatFrequency
+    });
+  }
+
+  if (draft.mode === "create" && createMode === "task") {
+    return (
+      <div className="grid gap-3">
+        <CalendarCreateModeTabs mode={createMode} onChange={onCreateModeChange} />
+        {error ? <ErrorState description={error} title="Task not saved" /> : null}
+        <Input
+          aria-label="Task title"
+          autoFocus
+          onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+          placeholder="New task"
+          value={draft.title}
+        />
+        <textarea
+          aria-label="Task notes"
+          className="min-h-32 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+          placeholder="Notes"
+          value={draft.notes}
+        />
+        <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+          <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Date & list</legend>
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Date</span>
+            <Input
+              aria-label="Task date"
+              onChange={(event) => setCreateDate(event.target.value)}
+              type="date"
+              value={dateInputValue(draft.startsAt)}
+            />
+          </label>
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>List</span>
+            <select
+              aria-label="Task list"
+              className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onChange={(event) => setTaskListId(event.target.value)}
+              value={taskListId}
+            >
+              {taskLists.map((taskList) => (
+                <option key={taskList.id} value={taskList.id}>
+                  {taskList.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </fieldset>
+      </div>
+    );
+  }
+
+  if (draft.mode === "create" && createMode === "birthday") {
+    return (
+      <div className="grid gap-3">
+        <CalendarCreateModeTabs mode={createMode} onChange={onCreateModeChange} />
+        {error ? <ErrorState description={error} title="Birthday not saved" /> : null}
+        <Input
+          aria-label="Birthday title"
+          autoFocus
+          onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+          placeholder="Whose birthday?"
+          value={draft.title}
+        />
+        <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+          <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Birthday</legend>
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Date</span>
+            <Input
+              aria-label="Birthday date"
+              onChange={(event) => setCreateDate(event.target.value)}
+              type="date"
+              value={dateInputValue(draft.startsAt)}
+            />
+          </label>
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span>Calendar</span>
+            <select
+              aria-label="Birthday calendar"
+              className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onChange={(event) => setDraft({ ...draft, calendarId: event.target.value })}
+              value={draft.calendarId}
+            >
+              {calendars.map((calendar) => (
+                <option key={calendar.id} value={calendar.id}>
+                  {calendar.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-[var(--text-xs)] text-text-muted">
+            Repeats yearly as an all-day calendar event.
+          </p>
+        </fieldset>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-3">
+      {draft.mode === "create" ? (
+        <CalendarCreateModeTabs mode={createMode} onChange={onCreateModeChange} />
+      ) : null}
       {error ? <ErrorState description={error} title="Event not saved" /> : null}
       <div
         aria-label="Event context"
@@ -4657,30 +4821,39 @@ function MonthView({
   );
 
   return (
-    <Panel title="Month view" description="Cached event range by day">
-      <div className="grid gap-1 p-3" role="grid" aria-label="Calendar month view">
+    <div className="flex min-h-[680px] flex-col overflow-hidden rounded-hcbMd border border-border bg-bg-secondary" role="grid" aria-label="Calendar month view">
+      <div className="grid grid-cols-7 border-b border-border bg-bg-primary/40 text-center text-[var(--text-xs)] font-semibold text-text-muted" role="row">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((weekday) => (
+          <div className="border-r border-border px-2 py-2 last:border-r-0" key={weekday} role="columnheader">
+            {weekday}
+          </div>
+        ))}
+      </div>
+      <div className="grid flex-1 grid-rows-6" role="rowgroup">
         {visibleWeeks.map((week) => (
-          <div className="grid grid-cols-7 gap-1" key={week.id} role="row">
+          <div className="grid grid-cols-7 border-b border-border last:border-b-0" key={week.id} role="row">
             {week.days.map(({ day, overflowCount, visibleEventChips }) => {
+              const dayKey = day.id.slice("month-".length);
+
               return (
                 <div
                   className={cx(
-                    "grid min-h-[104px] grid-rows-[auto_minmax(0,1fr)] rounded-hcbSm border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                    day.isToday && "border-accent",
-                    day.isOutsideMonth && "opacity-55"
+                    "grid min-h-[104px] grid-rows-[auto_minmax(0,1fr)] border-r border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    day.isToday && "bg-surface-0 ring-1 ring-inset ring-accent",
+                    day.isOutsideMonth && "opacity-50"
                   )}
                   key={day.id}
-                  onClick={() => onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })}
+                  onClick={() => onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true })}
                   onKeyDown={(event) =>
                     handleActivationKeyDown(event, () =>
-                      onCreate({ startsAt: `${day.id.slice("month-".length)}T00:00:00.000Z`, allDay: true })
+                      onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true })
                     )
                   }
                   role="gridcell"
                   tabIndex={0}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[var(--text-xs)] text-text-muted">{day.weekday}</span>
+                    <span className="sr-only">{day.weekday}</span>
                     <span className="text-[var(--text-sm)] font-semibold text-text-primary">{day.dateLabel}</span>
                   </div>
                   <div className="mt-2 grid min-h-0 content-start gap-1 overflow-hidden">
@@ -4705,7 +4878,7 @@ function MonthView({
           </div>
         ))}
       </div>
-    </Panel>
+    </div>
   );
 }
 
@@ -4717,7 +4890,7 @@ function CalendarView(): JSX.Element {
     open: openInspector,
     update: updateInspector
   } = useInspector();
-  const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
+  const [activeViewId, setActiveViewId] = useState<CalendarViewId>("month");
   const [draft, setDraftState] = useState<CalendarEventDraft | null>(null);
   const [formError, setFormError] = useState<string | undefined>();
   const [calendarActionError, setCalendarActionError] = useState<string | undefined>();
@@ -5216,134 +5389,7 @@ function CalendarView(): JSX.Element {
         />
       ) : null}
 
-      <SectionChrome
-        title="Calendar"
-        sidebar={
-          <div className="grid gap-3">
-            {source.isOffline ? (
-              <Panel title="Offline state" description="Google sync">
-                <OfflineState />
-              </Panel>
-            ) : null}
-            <Panel title="Status" description={calendarStatus.detail}>
-              <div className="grid gap-2 p-3">
-                <div className="flex items-center justify-between gap-2 text-[var(--text-sm)] text-text-secondary">
-                  <span>Cache</span>
-                  <Badge tone={calendarStatus.tone}>{calendarStatus.label}</Badge>
-                </div>
-                <div className="flex items-center justify-between gap-2 text-[var(--text-sm)] text-text-secondary">
-                  <span>Pending writes</span>
-                  <Badge tone={source.syncStatus.pendingMutationCount > 0 ? "warning" : "neutral"}>
-                    {source.syncStatus.pendingMutationCount}
-                  </Badge>
-                </div>
-              </div>
-            </Panel>
-            <CalendarContextPanel
-              defaultTimeZone={source.settings.defaultTimeZone}
-              event={visibleUpcomingEvent}
-              onOpen={openEdit}
-            />
-            <Panel
-              action={
-                <Button
-                  disabled={visibleCalendarIdSet.size === source.calendarSources.length}
-                  onClick={showAllCalendars}
-                  size="sm"
-                  variant="ghost"
-                >
-                  Show all
-                </Button>
-              }
-              title="Calendar visibility"
-              description={`${visibleCalendarIdSet.size}/${source.calendarSources.length} shown`}
-            >
-              <CalendarSourceVisibilityList
-                calendars={source.calendarSources}
-                defaultTimeZone={source.settings.defaultTimeZone}
-                onToggle={toggleVisibleCalendar}
-                visibleCalendarIds={visibleCalendarIdSet}
-              />
-            </Panel>
-            <Panel
-              action={
-                <Button
-                  disabled={!canExportAvailability}
-                  onClick={() => void exportAvailability()}
-                  size="sm"
-                  variant="primary"
-                >
-                  <Copy aria-hidden="true" size={14} />
-                  Generate
-                </Button>
-              }
-              title="Share availability"
-              description={`${selectedAvailabilityCalendarIds.length} calendars`}
-            >
-              <div className="grid gap-3 p-3">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Input
-                    aria-label="Availability start"
-                    onChange={(event) => setAvailabilityStartDate(event.target.value)}
-                    type="date"
-                    value={availabilityStartDate}
-                  />
-                  <Input
-                    aria-label="Availability end"
-                    min={availabilityStartDate || undefined}
-                    onChange={(event) => setAvailabilityEndDate(event.target.value)}
-                    type="date"
-                    value={availabilityEndDate}
-                  />
-                </div>
-                <div className="grid gap-2" role="group" aria-label="Availability calendars">
-                  {source.calendarSources.map((calendar) => (
-                    <label
-                      className="flex min-h-8 items-center gap-2 text-[var(--text-sm)] text-text-secondary"
-                      key={calendar.id}
-                    >
-                      <input
-                        checked={selectedAvailabilityCalendarIds.includes(calendar.id)}
-                        className="accent-[var(--color-accent)]"
-                        onChange={(event) =>
-                          toggleAvailabilityCalendar(calendar.id, event.target.checked)
-                        }
-                        type="checkbox"
-                      />
-                      <CalendarSourceSwatch calendarId={calendar.id} />
-                      <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
-                    </label>
-                  ))}
-                </div>
-                {availabilityError ? (
-                  <ErrorState description={availabilityError} title="Availability not generated" />
-                ) : null}
-                {availabilityText ? (
-                  <div className="grid gap-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <Badge tone="accent">
-                        {availabilityBusyBlockCount ?? 0} busy blocks
-                      </Badge>
-                      <IconButton
-                        icon={Copy}
-                        label="Copy availability"
-                        onClick={copyAvailability}
-                        variant="ghost"
-                      />
-                    </div>
-                    <textarea
-                      aria-label="Availability export"
-                      className="min-h-32 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 font-mono text-[var(--text-sm)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      readOnly
-                      value={availabilityText}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </Panel>
-          </div>
-        }
-      >
+      <SectionChrome title="Calendar">
         {activeViewId === "agenda" ? (
           <Panel title="Agenda view" description="Windowed rows from local event range">
             <VirtualizedList

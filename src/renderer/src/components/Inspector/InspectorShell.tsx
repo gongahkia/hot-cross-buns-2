@@ -45,15 +45,14 @@ export function InspectorShell(): JSX.Element | null {
     <>
       <div
         aria-hidden="true"
-        className="fixed inset-y-0 right-0 z-40 w-full bg-bg-primary/40 md:w-[420px]"
+        className="fixed inset-0 z-40 bg-bg-primary/70 backdrop-blur-sm"
         onClick={requestClose}
       />
-      <aside
+      <section
         aria-labelledby={titleId}
         aria-modal="true"
         className={cx(
-          "fixed inset-y-0 right-0 z-50 flex flex-col border-l border-border bg-bg-secondary shadow-hcbLg",
-          "w-full md:w-[420px]"
+          "fixed left-1/2 top-1/2 z-50 flex max-h-[min(820px,calc(100dvh-32px))] w-[min(760px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-secondary shadow-hcbLg"
         )}
         data-inspector-kind={current.kind}
         data-inspector-id={current.id}
@@ -99,7 +98,7 @@ export function InspectorShell(): JSX.Element | null {
             {current.actions}
           </footer>
         ) : null}
-      </aside>
+      </section>
     </>
   );
 }
