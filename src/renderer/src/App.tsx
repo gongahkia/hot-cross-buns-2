@@ -838,10 +838,10 @@ function NotificationsOverlay({
       <section
         aria-labelledby="notifications-overlay-title"
         aria-modal="true"
-        className="flex max-h-[calc(100dvh-24px)] w-full max-w-[720px] flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary/95 shadow-2xl sm:mt-12 sm:max-h-[calc(100dvh-96px)]"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-[720px] flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary shadow-2xl sm:mt-12 sm:max-h-[calc(100dvh-96px)]"
         role="dialog"
       >
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-bg-secondary/80 px-4 py-3">
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-bg-secondary px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-hcbMd bg-surface-0 text-accent">
               <Bell aria-hidden="true" size={18} />
@@ -907,12 +907,12 @@ function SettingsOverlay({
       <section
         aria-labelledby="settings-overlay-title"
         aria-modal="true"
-        className="flex max-h-[calc(100dvh-24px)] w-full max-w-[1120px] flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary/90 shadow-2xl backdrop-blur-xl sm:max-h-[calc(100dvh-72px)]"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-[1120px] flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary shadow-2xl sm:max-h-[calc(100dvh-72px)]"
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}
       >
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-bg-secondary/75 px-4 py-3">
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-bg-secondary px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-hcbMd bg-surface-0 text-accent">
               <Settings2 aria-hidden="true" size={18} />
