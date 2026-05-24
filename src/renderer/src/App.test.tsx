@@ -1350,6 +1350,11 @@ describe("App shell", () => {
     const inspector = await screen.findByTestId("inspector-shell");
     expect(inspector).toHaveAttribute("data-inspector-kind", "event");
     expect(inspector).toHaveAttribute("data-inspector-id", "event-standup");
+
+    const context = within(inspector).getByRole("group", { name: "Event context" });
+    expect(within(context).getByText("Product")).toBeInTheDocument();
+    expect(within(context).getByText(new RegExp(`${todayDate}.*09:30-09:50`))).toBeInTheDocument();
+    expect(within(context).getByText("UTC")).toBeInTheDocument();
   });
 
   it("shows event pending mutation badges in rows and inspector", async () => {
@@ -1461,13 +1466,18 @@ describe("App shell", () => {
     expect(await screen.findByText("Planner shell standup")).toBeInTheDocument();
     expect(screen.getByText("Engineering sync")).toBeInTheDocument();
     expect(screen.getAllByText("UTC").length).toBeGreaterThan(0);
+    expect(screen.getByRole("status", { name: "Calendar status" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Calendar context" })).getByText("Planner shell standup")).toBeInTheDocument();
 
     const visibility = screen.getByRole("group", { name: "Calendar visibility" });
+    expect(within(visibility).getByText("Shown")).toBeInTheDocument();
     await user.click(within(visibility).getByLabelText(/Product/));
 
     await waitFor(() => {
       expect(screen.queryByText("Planner shell standup")).not.toBeInTheDocument();
       expect(screen.getByText("Engineering sync")).toBeInTheDocument();
+      expect(within(visibility).getByText("Hidden")).toBeInTheDocument();
+      expect(within(visibility).getByLabelText(/Show Product/)).toBeInTheDocument();
     });
   });
 

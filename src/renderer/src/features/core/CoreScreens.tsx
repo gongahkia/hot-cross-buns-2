@@ -26,12 +26,17 @@ import {
 } from "@shared/ipc/themeCatalog";
 import {
   AlertTriangle,
+  Bell,
   CalendarPlus,
   CheckCircle2,
   Circle,
   Clock3,
   Copy,
+  Eye,
+  EyeOff,
+  FileText,
   ListPlus,
+  MapPin,
   Pencil,
   Filter,
   Minus,
@@ -43,6 +48,7 @@ import {
   Search,
   Settings2,
   Trash2,
+  Users,
   X
 } from "lucide-react";
 import { getPlannerAction, type PlannerActionId } from "../../actions/plannerActions";
@@ -80,6 +86,9 @@ import {
   type TaskDraft
 } from "./inspectors/TaskInspectorBody";
 import { buildNotePreview } from "./notesParsing";
+
+type CalendarSourceViewModel = ReturnType<typeof useCoreViewModelSource>["calendarSources"][number];
+type CompactTone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 
 function priorityTone(priority: CorePriority): "neutral" | "accent" | "warning" | "danger" {
   if (priority === "high") {
@@ -3004,17 +3013,50 @@ function allDayEndInputValue(endsAt: string): string {
   return dateInputValue(end.toISOString());
 }
 
+function calendarDraftRangeLabel(draft: CalendarEventDraft): string {
+  if (draft.allDay) {
+    return `${dateInputValue(draft.startsAt)} · All day`;
+  }
+
+  return `${dateInputValue(draft.startsAt)} · ${draft.startsAt.slice(11, 16)}-${draft.endsAt.slice(11, 16)}`;
+}
+
+function calendarDraftDurationLabel(draft: CalendarEventDraft): string {
+  if (draft.allDay) {
+    const days = Math.max(
+      1,
+      Math.round((Date.parse(draft.endsAt) - Date.parse(draft.startsAt)) / (24 * 60 * 60 * 1000))
+    );
+
+    return `${days} day${days === 1 ? "" : "s"}`;
+  }
+
+  const minutes = Math.max(0, Math.round((Date.parse(draft.endsAt) - Date.parse(draft.startsAt)) / 60_000));
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0 ? `${hours} hr` : `${hours} hr ${remainingMinutes} min`;
+}
+
 function CalendarEventForm({
   calendars,
+  defaultTimeZone,
   draft,
   error,
   setDraft
 }: {
   calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
+  defaultTimeZone: string;
   draft: CalendarEventDraft;
   error?: string;
   setDraft: (draft: CalendarEventDraft) => void;
 }): JSX.Element {
+  const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
+  const sourceTimeZone = selectedCalendar?.timeZone ?? defaultTimeZone;
+
   function setAllDay(allDay: boolean): void {
     if (allDay) {
       const startsAt = startOfUtcDayIso(draft.startsAt);
@@ -3057,98 +3099,147 @@ function CalendarEventForm({
   return (
     <div className="grid gap-3">
       {error ? <ErrorState description={error} title="Event not saved" /> : null}
-      {draft.mutationState && draft.mutationState !== "synced" ? (
-        <div className="flex justify-end">
-          <Badge tone={draft.mutationState === "failed" ? "danger" : "warning"}>
-            {draft.mutationState === "failed" ? "Failed" : "Queued"}
-          </Badge>
+      <div
+        aria-label="Event context"
+        className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3"
+        role="group"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <CalendarSourceSwatch calendarId={draft.calendarId} />
+          <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-primary">
+            {selectedCalendar?.title ?? "Calendar"}
+          </span>
+          {draft.mutationState && draft.mutationState !== "synced" ? (
+            <Badge tone={draft.mutationState === "failed" ? "danger" : "warning"}>
+              {draft.mutationState === "failed" ? "Failed" : "Queued"}
+            </Badge>
+          ) : (
+            <Badge tone="success">Synced</Badge>
+          )}
         </div>
-      ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <Clock3 aria-hidden="true" size={13} />
+            <span className="truncate">{calendarDraftRangeLabel(draft)}</span>
+          </span>
+          <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge>
+          <Badge tone="neutral">{sourceTimeZone}</Badge>
+        </div>
+      </div>
       <Input
         aria-label="Event title"
         onChange={(event) => setDraft({ ...draft, title: event.target.value })}
         placeholder="Title"
         value={draft.title}
       />
-      <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-        <span>Calendar</span>
-        <select
-          aria-label="Event calendar"
-          className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onChange={(event) => setDraft({ ...draft, calendarId: event.target.value })}
-          value={draft.calendarId}
-        >
-          {calendars.map((calendar) => (
-            <option key={calendar.id} value={calendar.id}>
-              {calendar.title}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex min-h-8 items-center gap-2 text-[var(--text-sm)] text-text-secondary">
-        <input
-          checked={draft.allDay}
-          className="accent-[var(--color-accent)]"
-          onChange={(event) => setAllDay(event.target.checked)}
-          type="checkbox"
-        />
-        All day
-      </label>
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          aria-label="Event starts"
-          onChange={(event) =>
-            draft.allDay
-              ? setAllDayStart(event.target.value)
-              : setDraft({ ...draft, startsAt: dateTimeLocalInputToIso(event.target.value) })
-          }
-          type={draft.allDay ? "date" : "datetime-local"}
-          value={draft.allDay ? dateInputValue(draft.startsAt) : dateTimeLocalInputValue(draft.startsAt)}
-        />
-        <Input
-          aria-label="Event ends"
-          min={draft.allDay ? dateInputValue(draft.startsAt) : undefined}
-          onChange={(event) =>
-            draft.allDay
-              ? setAllDayEnd(event.target.value)
-              : setDraft({ ...draft, endsAt: dateTimeLocalInputToIso(event.target.value) })
-          }
-          type={draft.allDay ? "date" : "datetime-local"}
-          value={draft.allDay ? allDayEndInputValue(draft.endsAt) : dateTimeLocalInputValue(draft.endsAt)}
-        />
-      </div>
-      <Input
-        aria-label="Event location"
-        onChange={(event) => setDraft({ ...draft, location: event.target.value })}
-        placeholder="Location"
-        value={draft.location}
-      />
-      <Input
-        aria-label="Event guests"
-        onChange={(event) => setDraft({ ...draft, guests: event.target.value })}
-        placeholder="guest@example.com, team@example.com"
-        value={draft.guests}
-      />
-      <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
-        <span>Reminder</span>
-        <select
-          aria-label="Event reminder"
-          className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onChange={(event) => setDraft({ ...draft, reminderMinutes: event.target.value })}
-          value={draft.reminderMinutes}
-        >
-          <option value="">None</option>
-          <option value="0">At start</option>
-          <option value="5">5 minutes before</option>
-          <option value="10">10 minutes before</option>
-          <option value="15">15 minutes before</option>
-          <option value="30">30 minutes before</option>
-          <option value="60">1 hour before</option>
-          <option value="1440">1 day before</option>
-        </select>
-      </label>
       <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
-        <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Repeat</legend>
+        <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Calendar</legend>
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span>Source</span>
+          <select
+            aria-label="Event calendar"
+            className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => setDraft({ ...draft, calendarId: event.target.value })}
+            value={draft.calendarId}
+          >
+            {calendars.map((calendar) => (
+              <option key={calendar.id} value={calendar.id}>
+                {calendar.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      </fieldset>
+      <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+        <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Time</legend>
+        <label className="flex min-h-8 items-center gap-2 text-[var(--text-sm)] text-text-secondary">
+          <input
+            checked={draft.allDay}
+            className="accent-[var(--color-accent)]"
+            onChange={(event) => setAllDay(event.target.checked)}
+            type="checkbox"
+          />
+          All day
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            aria-label="Event starts"
+            onChange={(event) =>
+              draft.allDay
+                ? setAllDayStart(event.target.value)
+                : setDraft({ ...draft, startsAt: dateTimeLocalInputToIso(event.target.value) })
+            }
+            type={draft.allDay ? "date" : "datetime-local"}
+            value={draft.allDay ? dateInputValue(draft.startsAt) : dateTimeLocalInputValue(draft.startsAt)}
+          />
+          <Input
+            aria-label="Event ends"
+            min={draft.allDay ? dateInputValue(draft.startsAt) : undefined}
+            onChange={(event) =>
+              draft.allDay
+                ? setAllDayEnd(event.target.value)
+                : setDraft({ ...draft, endsAt: dateTimeLocalInputToIso(event.target.value) })
+            }
+            type={draft.allDay ? "date" : "datetime-local"}
+            value={draft.allDay ? allDayEndInputValue(draft.endsAt) : dateTimeLocalInputValue(draft.endsAt)}
+          />
+        </div>
+      </fieldset>
+      <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+        <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Details</legend>
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span className="inline-flex items-center gap-1">
+            <MapPin aria-hidden="true" size={13} />
+            Location
+          </span>
+          <Input
+            aria-label="Event location"
+            onChange={(event) => setDraft({ ...draft, location: event.target.value })}
+            placeholder="Location"
+            value={draft.location}
+          />
+        </label>
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span className="inline-flex items-center gap-1">
+            <Users aria-hidden="true" size={13} />
+            Guests
+          </span>
+          <Input
+            aria-label="Event guests"
+            onChange={(event) => setDraft({ ...draft, guests: event.target.value })}
+            placeholder="guest@example.com, team@example.com"
+            value={draft.guests}
+          />
+        </label>
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span className="inline-flex items-center gap-1">
+            <Bell aria-hidden="true" size={13} />
+            Reminder
+          </span>
+          <select
+            aria-label="Event reminder"
+            className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => setDraft({ ...draft, reminderMinutes: event.target.value })}
+            value={draft.reminderMinutes}
+          >
+            <option value="">None</option>
+            <option value="0">At start</option>
+            <option value="5">5 minutes before</option>
+            <option value="10">10 minutes before</option>
+            <option value="15">15 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="1440">1 day before</option>
+          </select>
+        </label>
+      </fieldset>
+      <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+        <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">
+          <span className="inline-flex items-center gap-1">
+            <RotateCcw aria-hidden="true" size={13} />
+            Repeat
+          </span>
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
             <span>Frequency</span>
@@ -3196,13 +3287,19 @@ function CalendarEventForm({
         </div>
         <div className="text-[var(--text-xs)] text-text-muted">{calendarRecurrenceSummary(draft)}</div>
       </fieldset>
-      <textarea
-        aria-label="Event notes"
-        className="min-h-24 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
-        placeholder="Notes"
-        value={draft.notes}
-      />
+      <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+        <span className="inline-flex items-center gap-1">
+          <FileText aria-hidden="true" size={13} />
+          Notes
+        </span>
+        <textarea
+          aria-label="Event notes"
+          className="min-h-24 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+          placeholder="Notes"
+          value={draft.notes}
+        />
+      </label>
     </div>
   );
 }
@@ -3496,6 +3593,227 @@ function CalendarAllDayLane({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function calendarStatusSummary(source: ReturnType<typeof useCoreViewModelSource>): {
+  detail: string;
+  label: string;
+  tone: CompactTone;
+} {
+  if (source.isOffline) {
+    return {
+      detail: source.errorMessage ?? "Local cache only",
+      label: "Offline",
+      tone: "warning"
+    };
+  }
+
+  if (source.dataState === "error") {
+    return {
+      detail: source.errorMessage ?? "Refresh failed",
+      label: "Cache error",
+      tone: "danger"
+    };
+  }
+
+  if (source.isStale || source.dataState === "stale" || source.syncStatus.stale) {
+    return {
+      detail: "Cached rows visible",
+      label: "Refreshing",
+      tone: "info"
+    };
+  }
+
+  if (source.syncStatus.state === "running") {
+    return {
+      detail: "Sync in progress",
+      label: "Syncing",
+      tone: "info"
+    };
+  }
+
+  if (source.syncStatus.pendingMutationCount > 0) {
+    return {
+      detail: `${source.syncStatus.pendingMutationCount} pending write${source.syncStatus.pendingMutationCount === 1 ? "" : "s"}`,
+      label: "Pending",
+      tone: "warning"
+    };
+  }
+
+  return {
+    detail: source.syncStatus.lastCompletedAt ? "Fresh local cache" : "Local cache",
+    label: "Ready",
+    tone: "success"
+  };
+}
+
+function CalendarStatusStrip({
+  source,
+  visibleCalendarCount,
+  visibleEventCount
+}: {
+  source: ReturnType<typeof useCoreViewModelSource>;
+  visibleCalendarCount: number;
+  visibleEventCount: number;
+}): JSX.Element {
+  const status = calendarStatusSummary(source);
+
+  return (
+    <div
+      aria-label="Calendar status"
+      className="flex min-w-0 flex-wrap items-center justify-end gap-2"
+      role="status"
+    >
+      <Badge tone={status.tone}>{status.label}</Badge>
+      <Badge tone="accent">Visible calendars: {visibleCalendarCount}</Badge>
+      <Badge tone="neutral">{visibleEventCount} events</Badge>
+      <Badge tone="neutral">Default timezone: {source.settings.defaultTimeZone}</Badge>
+    </div>
+  );
+}
+
+function CalendarSourceRow({
+  calendar,
+  defaultTimeZone,
+  onToggle,
+  visible
+}: {
+  calendar: CalendarSourceViewModel;
+  defaultTimeZone: string;
+  onToggle: (calendarId: string, visible: boolean) => void;
+  visible: boolean;
+}): JSX.Element {
+  const VisibilityIcon = visible ? Eye : EyeOff;
+
+  return (
+    <label
+      className={cx(
+        "grid min-h-10 grid-cols-[18px_14px_minmax(0,1fr)_auto] items-center gap-2 rounded-hcbMd border px-2.5 text-[var(--text-sm)] transition-colors duration-fast ease-hcb",
+        visible
+          ? "border-border bg-bg-tertiary text-text-secondary"
+          : "border-dashed border-border bg-transparent text-text-muted"
+      )}
+    >
+      <input
+        aria-label={`${visible ? "Hide" : "Show"} ${calendar.title}`}
+        checked={visible}
+        className="accent-[var(--color-accent)]"
+        onChange={(event) => onToggle(calendar.id, event.target.checked)}
+        type="checkbox"
+      />
+      <CalendarSourceSwatch calendarId={calendar.id} className={visible ? undefined : "opacity-50"} />
+      <span className="min-w-0 truncate">{calendar.title}</span>
+      <span className="flex shrink-0 items-center gap-1">
+        <VisibilityIcon aria-hidden="true" className="text-text-muted" size={13} />
+        <Badge tone="neutral">{calendar.timeZone ?? defaultTimeZone}</Badge>
+      </span>
+    </label>
+  );
+}
+
+function CalendarSourceVisibilityList({
+  calendars,
+  defaultTimeZone,
+  onToggle,
+  visibleCalendarIds
+}: {
+  calendars: CalendarSourceViewModel[];
+  defaultTimeZone: string;
+  onToggle: (calendarId: string, visible: boolean) => void;
+  visibleCalendarIds: ReadonlySet<string>;
+}): JSX.Element {
+  const shownCalendars = calendars.filter((calendar) => visibleCalendarIds.has(calendar.id));
+  const hiddenCalendars = calendars.filter((calendar) => !visibleCalendarIds.has(calendar.id));
+
+  return (
+    <div className="grid gap-3 p-3" role="group" aria-label="Calendar visibility">
+      <div className="grid gap-2">
+        <div className="flex items-center justify-between gap-2 text-[var(--text-xs)] font-medium text-text-muted">
+          <span>Shown</span>
+          <span>{shownCalendars.length}</span>
+        </div>
+        {shownCalendars.map((calendar) => (
+          <CalendarSourceRow
+            calendar={calendar}
+            defaultTimeZone={defaultTimeZone}
+            key={calendar.id}
+            onToggle={onToggle}
+            visible
+          />
+        ))}
+      </div>
+      {hiddenCalendars.length > 0 ? (
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-2 text-[var(--text-xs)] font-medium text-text-muted">
+            <span>Hidden</span>
+            <span>{hiddenCalendars.length}</span>
+          </div>
+          {hiddenCalendars.map((calendar) => (
+            <CalendarSourceRow
+              calendar={calendar}
+              defaultTimeZone={defaultTimeZone}
+              key={calendar.id}
+              onToggle={onToggle}
+              visible={false}
+            />
+          ))}
+        </div>
+      ) : null}
+      {calendars.length === 0 ? (
+        <EmptyState
+          description="No calendars have been cached yet."
+          title="No calendars"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function CalendarContextPanel({
+  defaultTimeZone,
+  event,
+  onOpen
+}: {
+  defaultTimeZone: string;
+  event: CalendarEventViewModel | null;
+  onOpen: (event: CalendarEventViewModel) => void;
+}): JSX.Element {
+  return (
+    <Panel
+      title="Context"
+      description={event ? event.rangeLabel : "No visible event"}
+    >
+      <div className="p-3" role="region" aria-label="Calendar context">
+        {event ? (
+          <button
+            className="grid w-full gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={() => onOpen(event)}
+            type="button"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <CalendarSourceSwatch calendarId={event.calendarId} />
+              <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-primary">
+                {event.title}
+              </span>
+            </span>
+            <span className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
+              <Badge tone="neutral">{event.allDay ? "All day" : event.rangeLabel}</Badge>
+              <Badge tone="neutral">{event.calendar}</Badge>
+              <Badge tone="neutral">{event.timeZone || defaultTimeZone}</Badge>
+            </span>
+            {event.location ? (
+              <span className="inline-flex min-w-0 items-center gap-1 text-[var(--text-xs)] text-text-muted">
+                <MapPin aria-hidden="true" size={13} />
+                <span className="truncate">{event.location}</span>
+              </span>
+            ) : null}
+          </button>
+        ) : (
+          <EmptyState description="No events match the visible calendar sources." title="No context" />
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -3966,6 +4284,15 @@ function CalendarView(): JSX.Element {
       ),
     [source.calendarAgendaEvents, visibleCalendarIdSet]
   );
+  const visibleUpcomingEvent = useMemo(() => {
+    const nowMs = Date.now();
+    return (
+      visibleCalendarEvents.find((event) => Date.parse(event.endsAt) >= nowMs) ??
+      visibleCalendarEvents[0] ??
+      null
+    );
+  }, [visibleCalendarEvents]);
+  const calendarStatus = calendarStatusSummary(source);
   const selectedAvailabilityCalendarIds = availabilityCalendarIds.filter((calendarId) =>
     availableCalendarIds.has(calendarId)
   );
@@ -4063,6 +4390,7 @@ function CalendarView(): JSX.Element {
       actions: eventInspectorActions(draft),
       body: eventInspectorBody(draft),
       dirty,
+      subtitle: eventInspectorSubtitle(draft),
       title: eventInspectorTitle(draft)
     });
   }, [
@@ -4070,6 +4398,7 @@ function CalendarView(): JSX.Element {
     draft,
     formError,
     source.calendarSources,
+    source.settings.defaultTimeZone,
     updateInspector
   ]);
 
@@ -4090,10 +4419,16 @@ function CalendarView(): JSX.Element {
     return nextDraft.mode === "edit" ? nextDraft.title || "Event" : "New event";
   }
 
+  function eventInspectorSubtitle(nextDraft: CalendarEventDraft): string {
+    const calendar = source.calendarSources.find((calendarSource) => calendarSource.id === nextDraft.calendarId);
+    return `${calendar?.title ?? "Calendar"} · ${calendarDraftRangeLabel(nextDraft)}`;
+  }
+
   function eventInspectorBody(nextDraft: CalendarEventDraft): ReactNode {
     return (
       <CalendarEventForm
         calendars={source.calendarSources}
+        defaultTimeZone={source.settings.defaultTimeZone}
         draft={nextDraft}
         error={formError}
         key={calendarInspectorInstanceRef.current}
@@ -4137,6 +4472,7 @@ function CalendarView(): JSX.Element {
       id: nextDraft.id ?? "new",
       kind: "event",
       onConfirmClose: () => !calendarInspectorDirtyRef.current,
+      subtitle: eventInspectorSubtitle(nextDraft),
       title: eventInspectorTitle(nextDraft)
     });
   }
@@ -4358,7 +4694,7 @@ function CalendarView(): JSX.Element {
             </CalendarTabButton>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <Button
             data-action-id="calendar.create"
             onClick={() => openCreate()}
@@ -4369,14 +4705,11 @@ function CalendarView(): JSX.Element {
             <Plus aria-hidden="true" size={14} />
             {actionLabel("calendar.create")}
           </Button>
-          <Badge tone={source.syncStatus.pendingMutationCount > 0 ? "warning" : "accent"}>
-            {source.syncStatus.pendingMutationCount > 0
-              ? `${source.syncStatus.pendingMutationCount} pending`
-              : `Visible calendars: ${visibleCalendarIdSet.size}`}
-          </Badge>
-          <Badge tone="neutral">
-            Default timezone: {source.settings.defaultTimeZone}
-          </Badge>
+          <CalendarStatusStrip
+            source={source}
+            visibleCalendarCount={visibleCalendarIdSet.size}
+            visibleEventCount={visibleCalendarEvents.length}
+          />
         </div>
       </div>
 
@@ -4406,6 +4739,25 @@ function CalendarView(): JSX.Element {
                 <OfflineState />
               </Panel>
             ) : null}
+            <Panel title="Status" description={calendarStatus.detail}>
+              <div className="grid gap-2 p-3">
+                <div className="flex items-center justify-between gap-2 text-[var(--text-sm)] text-text-secondary">
+                  <span>Cache</span>
+                  <Badge tone={calendarStatus.tone}>{calendarStatus.label}</Badge>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[var(--text-sm)] text-text-secondary">
+                  <span>Pending writes</span>
+                  <Badge tone={source.syncStatus.pendingMutationCount > 0 ? "warning" : "neutral"}>
+                    {source.syncStatus.pendingMutationCount}
+                  </Badge>
+                </div>
+              </div>
+            </Panel>
+            <CalendarContextPanel
+              defaultTimeZone={source.settings.defaultTimeZone}
+              event={visibleUpcomingEvent}
+              onOpen={openEdit}
+            />
             <Panel
               action={
                 <Button
@@ -4418,32 +4770,14 @@ function CalendarView(): JSX.Element {
                 </Button>
               }
               title="Calendar visibility"
-              description={`${visibleCalendarIdSet.size}/${source.calendarSources.length} shown, empty event zones use ${source.settings.defaultTimeZone}`}
+              description={`${visibleCalendarIdSet.size}/${source.calendarSources.length} shown`}
             >
-              <div className="grid gap-2 p-3" role="group" aria-label="Calendar visibility">
-                {source.calendarSources.map((calendar) => (
-                  <label
-                    className="flex min-h-9 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary"
-                    key={calendar.id}
-                  >
-                    <input
-                      checked={visibleCalendarIdSet.has(calendar.id)}
-                      className="accent-[var(--color-accent)]"
-                      onChange={(event) => toggleVisibleCalendar(calendar.id, event.target.checked)}
-                      type="checkbox"
-                    />
-                    <CalendarSourceSwatch calendarId={calendar.id} />
-                    <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
-                    <Badge tone="neutral">{calendar.timeZone ?? source.settings.defaultTimeZone}</Badge>
-                  </label>
-                ))}
-                {source.calendarSources.length === 0 ? (
-                  <EmptyState
-                    description="No calendars have been cached yet."
-                    title="No calendars"
-                  />
-                ) : null}
-              </div>
+              <CalendarSourceVisibilityList
+                calendars={source.calendarSources}
+                defaultTimeZone={source.settings.defaultTimeZone}
+                onToggle={toggleVisibleCalendar}
+                visibleCalendarIds={visibleCalendarIdSet}
+              />
             </Panel>
             <Panel
               action={
