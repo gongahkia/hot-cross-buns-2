@@ -627,6 +627,12 @@ function AppShell(): JSX.Element {
                 >
                   <Icon aria-hidden="true" className="shrink-0" size={16} strokeWidth={2} />
                   <span className="hidden min-w-0 flex-1 truncate lg:inline">{section.label}</span>
+                  <span
+                    aria-hidden="true"
+                    className="hidden shrink-0 rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted lg:inline-flex"
+                  >
+                    Cmd {shortcutKey}
+                  </span>
                   <span className="hidden shrink-0 text-[var(--text-xs)] text-text-muted lg:inline">
                     {sectionMetric(source, section.id)}
                   </span>

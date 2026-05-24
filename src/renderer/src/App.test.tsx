@@ -792,18 +792,25 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(within(primaryNavigation()).getByRole("button", { name: "Tasks" })).toHaveAttribute(
+    const tasksButton = within(primaryNavigation()).getByRole("button", { name: "Tasks" });
+    const calendarButton = within(primaryNavigation()).getByRole("button", { name: "Calendar" });
+    const notesButton = within(primaryNavigation()).getByRole("button", { name: "Notes" });
+
+    expect(tasksButton).toHaveAttribute(
       "aria-keyshortcuts",
       "Meta+1 Control+1"
     );
-    expect(within(primaryNavigation()).getByRole("button", { name: "Calendar" })).toHaveAttribute(
+    expect(calendarButton).toHaveAttribute(
       "aria-keyshortcuts",
       "Meta+2 Control+2"
     );
-    expect(within(primaryNavigation()).getByRole("button", { name: "Notes" })).toHaveAttribute(
+    expect(notesButton).toHaveAttribute(
       "aria-keyshortcuts",
       "Meta+3 Control+3"
     );
+    expect(within(tasksButton).getByText("Cmd 1")).toBeInTheDocument();
+    expect(within(calendarButton).getByText("Cmd 2")).toBeInTheDocument();
+    expect(within(notesButton).getByText("Cmd 3")).toBeInTheDocument();
 
     await user.keyboard("{Meta>}1{/Meta}");
     expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
@@ -825,6 +832,9 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: /Notifications, \d+ active/ }));
 
     const dialog = await screen.findByRole("dialog", { name: "Notifications" });
+    expect(dialog.parentElement).toHaveClass("bg-bg-tertiary/45", "backdrop-blur-sm");
+    expect(dialog).toHaveClass("bg-bg-primary");
+    expect(dialog).not.toHaveClass("bg-bg-primary/95");
     expect(within(dialog).getByRole("heading", { level: 3, name: "App notices" })).toBeInTheDocument();
     expect(within(dialog).queryByText("Local reminders")).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Notification lead minutes")).not.toBeInTheDocument();
@@ -835,7 +845,7 @@ describe("App shell", () => {
     expect(screen.queryByRole("dialog", { name: "Notifications" })).not.toBeInTheDocument();
   });
 
-  it("opens settings as a centered translucent toolbar overlay", async () => {
+  it("opens settings as a centered opaque overlay with a blurred backdrop", async () => {
     const user = userEvent.setup();
     installHcb(seededHcb());
     render(<App />);
@@ -847,7 +857,8 @@ describe("App shell", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Settings" });
     expect(dialog.parentElement).toHaveClass("place-items-center", "bg-bg-tertiary/45", "backdrop-blur-sm");
-    expect(dialog).toHaveClass("max-w-[1120px]", "bg-bg-primary/90", "backdrop-blur-xl");
+    expect(dialog).toHaveClass("max-w-[1120px]", "bg-bg-primary");
+    expect(dialog).not.toHaveClass("bg-bg-primary/90", "backdrop-blur-xl");
     expect(within(dialog).getByRole("complementary", { name: "Settings support" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
 
