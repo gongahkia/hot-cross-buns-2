@@ -28,6 +28,7 @@ import type {
   MutationAck,
   NativeAction,
   NativeCapabilitiesResponse,
+  NativeFontFamiliesResponse,
   NativeNotificationPermissionResponse,
   NoteCreateRequest,
   NoteDeleteRequest,
@@ -154,6 +155,7 @@ export interface HcbApi {
     requestNotificationPermission: () => Promise<
       HcbResult<NativeNotificationPermissionResponse>
     >;
+    listFontFamilies: () => Promise<HcbResult<NativeFontFamiliesResponse>>;
     subscribeAction: (listener: (action: NativeAction) => void) => () => void;
   };
   diagnostics: {

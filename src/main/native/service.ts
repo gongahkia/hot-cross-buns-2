@@ -6,6 +6,7 @@ import type {
   NativeCapabilityReport,
   NativeCapabilitiesResponse,
   NativeFeatureState,
+  NativeFontFamiliesResponse,
   NativeNotificationPermissionResponse,
   NativeRoute,
   TaskSummary,
@@ -131,6 +132,15 @@ export class NativeShellService implements NativeDomainService {
 
   capabilities(): NativeCapabilitiesResponse {
     return structuredClone(this.status);
+  }
+
+  async listFontFamilies(): Promise<NativeFontFamiliesResponse> {
+    const families = normalizeFontFamilies(await this.options.adapter.listFontFamilies());
+
+    return {
+      platform: this.status.platform,
+      families
+    };
   }
 
   requestNotificationPermission(): NativeNotificationPermissionResponse {

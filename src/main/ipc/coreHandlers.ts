@@ -228,6 +228,10 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     {
       contract: ipcContracts.native.requestNotificationPermission,
       handle: () => services.native.requestNotificationPermission()
+    },
+    {
+      contract: ipcContracts.native.listFontFamilies,
+      handle: () => services.native.listFontFamilies()
     }
   ];
 }

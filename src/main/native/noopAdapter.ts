@@ -101,6 +101,7 @@ export function createNoopNativeAdapter(
     requestNotificationPermission: (): NativeNotificationPermissionResponse => ({
       state: "unsupported"
     }),
+    listFontFamilies: () => [],
     scheduleNotification: (
       _request: NativeNotificationRequest,
       _onClick: () => void

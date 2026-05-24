@@ -1321,6 +1321,19 @@ export type NativeNotificationPermissionResponse = z.infer<
   typeof nativeNotificationPermissionResponseSchema
 >;
 
+export const nativeFontFamiliesRequestSchema = emptyRequestSchema;
+
+export const nativeFontFamiliesResponseSchema = z
+  .object({
+    platform: z.enum(["darwin", "linux", "win32", "unknown"]),
+    families: z.array(z.string().trim().min(1).max(120)).max(2_000)
+  })
+  .strict();
+
+export type NativeFontFamiliesResponse = z.infer<
+  typeof nativeFontFamiliesResponseSchema
+>;
+
 export const nativeRouteSchema = z
   .object({
     kind: z.enum(["today", "tasks", "task", "calendar", "event", "notes", "note", "settings", "search"]),
@@ -1818,6 +1831,12 @@ export const ipcContracts = {
       "requestNotificationPermission",
       nativeNotificationPermissionRequestSchema,
       nativeNotificationPermissionResponseSchema
+    ),
+    listFontFamilies: defineIpcContract(
+      "native",
+      "listFontFamilies",
+      nativeFontFamiliesRequestSchema,
+      nativeFontFamiliesResponseSchema
     )
   },
   diagnostics: {

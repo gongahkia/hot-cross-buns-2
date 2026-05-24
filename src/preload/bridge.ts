@@ -301,6 +301,8 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           {},
           "Notification permission request failed"
         ),
+      listFontFamilies: () =>
+        invokeContract(ipc, ipcContracts.native.listFontFamilies, {}, "Native font list request failed"),
       subscribeAction: (listener) => {
         if (!ipc.on || !ipc.removeListener) {
           return () => undefined;

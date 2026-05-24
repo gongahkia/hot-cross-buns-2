@@ -19,6 +19,7 @@ import type {
   McpSetEnabledRequest,
   McpStatusResponse,
   NativeCapabilitiesResponse,
+  NativeFontFamiliesResponse,
   NativeNotificationPermissionResponse,
   NoteBrokenLinksRequest,
   NoteBrokenLinksResponse,
@@ -210,6 +211,7 @@ export interface McpControlDomainService {
 export interface NativeDomainService {
   capabilities: () => MaybePromise<NativeCapabilitiesResponse>;
   requestNotificationPermission: () => MaybePromise<NativeNotificationPermissionResponse>;
+  listFontFamilies: () => MaybePromise<NativeFontFamiliesResponse>;
 }
 
 export interface AppDomainServices {

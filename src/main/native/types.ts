@@ -102,6 +102,7 @@ export interface NativePlatformAdapter {
   unregisterGlobalShortcut: (accelerator?: string) => void;
   registerProtocolClient: (scheme: typeof HCB_DEEP_LINK_SCHEME) => NativeOperationResult;
   requestNotificationPermission: () => NativeNotificationPermissionResponse;
+  listFontFamilies: () => string[] | Promise<string[]>;
   scheduleNotification: (
     request: NativeNotificationRequest,
     onClick: () => void
