@@ -130,6 +130,16 @@ function useAppliedTheme(settings: SettingsSnapshot): void {
   ]);
 }
 
+function shellCanBeReported(source: CoreViewModelSource): boolean {
+  return (
+    source.dataState === "ready" ||
+    source.dataState === "empty" ||
+    source.dataState === "offline" ||
+    source.dataState === "error" ||
+    (source.dataState === "stale" && source.hasCachedData)
+  );
+}
+
 function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): string {
   if (sectionId === "tasks") {
     return source.taskFilterViewModels.find((filter) => filter.id === "open")?.countLabel ?? "0";
@@ -351,7 +361,7 @@ function AppShell(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (shellVisibleReported.current) {
+    if (shellVisibleReported.current || !shellCanBeReported(source)) {
       return;
     }
 
@@ -360,7 +370,7 @@ function AppShell(): JSX.Element {
       void window.hcb?.diagnostics.markShellVisible();
       void import("./components/CommandPalette");
     });
-  }, []);
+  }, [source]);
 
   useEffect(() => {
     if (!onboardingVisible) {

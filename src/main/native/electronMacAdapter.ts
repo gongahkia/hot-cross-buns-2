@@ -78,7 +78,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
       supportsNotificationPermissionQuery: false,
       supportsProtocolRegistration: isMac,
       supportsProtocolRegistrationCheck: isMac,
-      supportsAutostart: isMac,
+      supportsAutostart: isMac && app.isPackaged,
       supportsInPlaceAutoUpdate: false,
       supportsInstallerMetadata: isMac,
       supportsExternalUrlOpen: true,
@@ -478,6 +478,10 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
       return unsupported("Open-at-login is not handled by this platform adapter.");
     }
 
+    if (!app.isPackaged) {
+      return developmentAutostartResult(enabled);
+    }
+
     try {
       app.setLoginItemSettings({
         openAtLogin: enabled
@@ -506,6 +510,10 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
   autostartStatus(): NativeOperationResult {
     if (process.platform !== "darwin") {
       return unsupported("Open-at-login is not handled by this platform adapter.");
+    }
+
+    if (!app.isPackaged) {
+      return developmentAutostartResult(false);
     }
 
     try {
@@ -586,6 +594,16 @@ function trayIconImage(): NativeImage {
   return image.isEmpty()
     ? nativeImage.createFromDataURL(`data:image/png;base64,${fallbackTrayIconBase64}`)
     : image;
+}
+
+function developmentAutostartResult(enabled: boolean): NativeOperationResult {
+  return {
+    ok: !enabled,
+    state: enabled ? "unsupported" : "disabled",
+    message: enabled
+      ? "Open-at-login is only applied from a packaged macOS app."
+      : "Open-at-login is not modified during development runs."
+  };
 }
 
 function menuBarPanelBounds(trayBounds: Rectangle): Rectangle {

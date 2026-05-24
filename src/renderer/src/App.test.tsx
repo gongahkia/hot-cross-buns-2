@@ -675,6 +675,27 @@ describe("App shell", () => {
     expect(screen.getByText("Reading cached planner data from SQLite.")).toBeInTheDocument();
   });
 
+  it("waits for the first cache read before reporting the shell visible", async () => {
+    const api = loadingHcb();
+
+    installHcb(api);
+    render(<App />);
+
+    await waitFor(() => expect(api.settings.get).toHaveBeenCalled());
+    await new Promise((resolve) => window.setTimeout(resolve, 25));
+
+    expect(api.diagnostics.markShellVisible).not.toHaveBeenCalled();
+  });
+
+  it("reports the shell visible after the cached settings theme can be applied", async () => {
+    const api = seededHcb();
+
+    installHcb(api);
+    render(<App />);
+
+    await waitFor(() => expect(api.diagnostics.markShellVisible).toHaveBeenCalledTimes(1));
+  });
+
   it("renders from an empty fresh local cache and invokes preload read APIs", async () => {
     render(<App />);
 

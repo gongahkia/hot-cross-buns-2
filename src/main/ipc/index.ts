@@ -5,13 +5,20 @@ import { createCoreIpcHandlers } from "./coreHandlers";
 import { createDiagnosticsIpcHandlers } from "./diagnostics";
 import { createIpcMetrics, registerIpcDispatcher } from "./registry";
 
-export function registerHcbIpc(services: ServiceContainer): void {
+export interface HcbIpcLifecycleHooks {
+  onShellVisible?: () => void;
+}
+
+export function registerHcbIpc(
+  services: ServiceContainer,
+  lifecycleHooks: HcbIpcLifecycleHooks = {}
+): void {
   const metrics = createIpcMetrics();
 
   registerIpcDispatcher(
     ipcMain,
     [
-      ...createDiagnosticsIpcHandlers(metrics, services.performance, services),
+      ...createDiagnosticsIpcHandlers(metrics, services.performance, services, lifecycleHooks),
       ...createCoreIpcHandlers(services.domain)
     ],
     {

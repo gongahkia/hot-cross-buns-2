@@ -12,6 +12,7 @@ import { getStartupTimings, markStartupTiming } from "../startupTiming";
 import { appBuildMetadata } from "../buildMetadata";
 import { createNoopNativeAdapter } from "../native/noopAdapter";
 import type { ServiceContainer } from "../services/serviceContainer";
+import type { HcbIpcLifecycleHooks } from "./index";
 import type { IpcHandlerDefinition, IpcMetricsRecorder } from "./registry";
 
 type AppEnvironment = DiagnosticsHealthResponse["environment"];
@@ -37,7 +38,8 @@ export function createDiagnosticsIpcHandlers(
       durationMs: number;
     }) => void;
   },
-  services?: ServiceContainer
+  services?: ServiceContainer,
+  lifecycleHooks: HcbIpcLifecycleHooks = {}
 ): IpcHandlerDefinition[] {
   const appEnvironment = environment();
 
@@ -59,6 +61,7 @@ export function createDiagnosticsIpcHandlers(
       handle: () => {
         const snapshot = markStartupTiming("shellVisibleMs");
         services?.nativeShell.startDeferredStartup();
+        lifecycleHooks.onShellVisible?.();
         return snapshot;
       }
     },

@@ -13,6 +13,9 @@ let services: ServiceContainer | null = null;
 const nativeAdapter = createElectronMacNativeAdapter();
 const pendingDeepLinks: string[] = [];
 const pendingNativeActions: NativeAction[] = [];
+const rendererReadyFallbackMs = 8_000;
+let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+let deferredRuntimeStarted = false;
 
 if (process.env.HCB_USER_DATA_DIR && !app.isPackaged) {
   app.setPath("userData", process.env.HCB_USER_DATA_DIR);
@@ -43,6 +46,45 @@ function flushPendingNativeActions(): void {
   }
 }
 
+function clearRevealFallbackTimer(): void {
+  if (!revealFallbackTimer) {
+    return;
+  }
+
+  clearTimeout(revealFallbackTimer);
+  revealFallbackTimer = null;
+}
+
+function startDeferredRuntimeOnce(): void {
+  if (deferredRuntimeStarted) {
+    return;
+  }
+
+  deferredRuntimeStarted = true;
+  services?.startDeferredRuntime();
+}
+
+function revealMainWindow(window: BrowserWindow | null = mainWindow, focus = false): void {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  clearRevealFallbackTimer();
+
+  if (!window.isVisible()) {
+    window.show();
+  }
+
+  if (focus) {
+    window.focus();
+  }
+}
+
+function handleRendererShellVisible(): void {
+  revealMainWindow(mainWindow);
+  startDeferredRuntimeOnce();
+}
+
 function dispatchNativeAction(action: NativeAction): void {
   const target = mainWindow;
 
@@ -63,8 +105,7 @@ function showMainWindow(): void {
     mainWindow.restore();
   }
 
-  mainWindow.show();
-  mainWindow.focus();
+  revealMainWindow(mainWindow, true);
 }
 
 function hideMainWindow(): void {
@@ -108,18 +149,33 @@ function createMainWindow(): BrowserWindow {
     externalOpener: nativeAdapter
   });
 
-  window.once("ready-to-show", () => {
-    window.show();
-  });
-
   window.webContents.once("did-finish-load", () => {
     markStartupTiming("rendererLoadedMs");
     flushPendingNativeActions();
-    setTimeout(() => {
-      services?.nativeShell.startDeferredStartup();
-      services?.startDeferredRuntime();
-    }, 2_500);
   });
+
+  window.webContents.once("did-fail-load", () => {
+    revealMainWindow(window);
+    services?.nativeShell.startDeferredStartup();
+    startDeferredRuntimeOnce();
+  });
+
+  window.once("closed", () => {
+    if (mainWindow === window) {
+      clearRevealFallbackTimer();
+    }
+  });
+
+  clearRevealFallbackTimer();
+  revealFallbackTimer = setTimeout(() => {
+    if (mainWindow !== window) {
+      return;
+    }
+
+    revealMainWindow(window);
+    services?.nativeShell.startDeferredStartup();
+    startDeferredRuntimeOnce();
+  }, rendererReadyFallbackMs);
 
   if (rendererUrl) {
     void window.loadURL(rendererUrl);
@@ -145,7 +201,9 @@ app.whenReady().then(() => {
     }
   });
   services.nativeShell.installAppMenu();
-  registerHcbIpc(services);
+  registerHcbIpc(services, {
+    onShellVisible: handleRendererShellVisible
+  });
   mainWindow = createMainWindow();
 
   for (const url of pendingDeepLinks.splice(0)) {
