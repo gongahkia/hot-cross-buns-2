@@ -729,31 +729,12 @@ function notificationBadgeTone(tone: AppNotificationTone): "neutral" | "success"
 
 function NotificationsOverlay({
   notifications,
-  onClose,
-  source
+  onClose
 }: {
   notifications: AppNotification[];
   onClose: () => void;
-  source: CoreViewModelSource;
 }): JSX.Element {
-  const notificationSection = source.settingsSections.find((section) => section.id === "notifications");
-  const permission =
-    notificationSection?.rows.find((row) => row.id === "permission")?.value ??
-    source.native.notificationsStatus.permission;
-  const scheduled =
-    notificationSection?.rows.find((row) => row.id === "scheduled")?.value ??
-    String(source.native.notificationsStatus.scheduledCount);
-
-  function updateLeadMinutes(value: string): void {
-    void source.updateSettings({ notificationLeadMinutes: Number(value) || 0 });
-  }
-
-  function requestNotificationPermission(): void {
-    void window.hcb?.native.requestNotificationPermission().then(() => {
-      source.refresh();
-    });
-  }
-
+}): JSX.Element {
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-end overflow-auto bg-bg-tertiary/45 p-3 backdrop-blur-sm sm:p-5"
