@@ -8,6 +8,7 @@ export type PlannerActionId =
   | "calendar.create"
   | "calendar.view.agenda"
   | "calendar.view.day"
+  | "calendar.view.multiDay"
   | "calendar.view.week"
   | "calendar.view.month"
   | "note.create"
@@ -40,7 +41,7 @@ export interface PlannerAction {
   category: PlannerActionCategory;
   keywords: string[];
   sectionId?: SectionId;
-  calendarAction?: "new-event" | "agenda" | "day" | "week" | "month";
+  calendarAction?: "new-event" | "agenda" | "day" | "multiDay" | "week" | "month";
   noteAction?: "new-note";
   searchQuery?: string;
   taskCommand?: "task.create" | "task.quickCapture";
@@ -131,11 +132,11 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "navigation.calendar",
     label: "Go to Calendar",
-    description: "Show the agenda preview",
+    description: "Show the month calendar",
     category: "Navigate",
     keywords: ["calendar", "agenda", "events"],
     sectionId: "calendar",
-    calendarAction: "agenda"
+    calendarAction: "month"
   },
   {
     id: "calendar.view.agenda",
@@ -154,6 +155,15 @@ export const plannerActions: PlannerAction[] = [
     keywords: ["calendar", "day", "today"],
     sectionId: "calendar",
     calendarAction: "day"
+  },
+  {
+    id: "calendar.view.multiDay",
+    label: "Calendar multi-day view",
+    description: "Show a bounded multi-day calendar range",
+    category: "Calendar",
+    keywords: ["calendar", "multi-day", "range"],
+    sectionId: "calendar",
+    calendarAction: "multiDay"
   },
   {
     id: "calendar.view.week",
@@ -176,9 +186,9 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "navigation.notes",
     label: "Go to Notes",
-    description: "Show local notes",
+    description: "Show undated Google Tasks",
     category: "Navigate",
-    keywords: ["notes", "local"],
+    keywords: ["notes", "tasks", "undated"],
     sectionId: "notes"
   },
   {

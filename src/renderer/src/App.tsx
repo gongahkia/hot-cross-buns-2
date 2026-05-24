@@ -338,7 +338,7 @@ function AppShell(): JSX.Element {
     } else if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = plannerSections.length - 1;
+      nextIndex = primaryPlannerSections.length - 1;
     } else {
       return;
     }

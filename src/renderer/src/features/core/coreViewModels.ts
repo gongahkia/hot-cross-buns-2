@@ -1,7 +1,7 @@
 export type CorePriority = "none" | "low" | "medium" | "high";
 export type TaskStatus = "open" | "completed" | "hidden" | "deleted";
 export type TaskFilterId = "open" | "completed" | "hidden" | "deleted" | "empty" | "error";
-export type CalendarViewId = "agenda" | "day" | "week" | "month";
+export type CalendarViewId = "agenda" | "day" | "multiDay" | "week" | "month";
 export type SearchSource = "task" | "event" | "note";
 export type SettingsSectionId =
   | "google"
