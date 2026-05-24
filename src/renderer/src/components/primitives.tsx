@@ -243,7 +243,7 @@ export function ListRow({
   return (
     <div
       className={cx(
-        "flex min-h-11 w-full items-center gap-3 border-b border-border px-3 py-2 last:border-b-0",
+        "flex min-h-11 w-full flex-wrap items-center gap-3 border-b border-border px-3 py-2 last:border-b-0 sm:flex-nowrap",
         selected ? "bg-surface-0" : "bg-transparent",
         className
       )}

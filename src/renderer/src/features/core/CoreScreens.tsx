@@ -474,7 +474,7 @@ function SectionChrome({
   title: string;
 }): JSX.Element {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] gap-3">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
       <div className="min-w-0">{children}</div>
       <aside aria-label={`${title} support`} className="min-w-0">
         {sidebar}
@@ -542,7 +542,7 @@ function TaskRow({
       )}
       role="listitem"
     >
-      <div className="flex min-w-0 items-start gap-3">
+      <div className="flex min-w-0 flex-wrap items-start gap-3 sm:flex-nowrap">
         <TaskCompletionButton completed={completed} onToggle={onToggle} task={task} />
         <input
           aria-label={`Select ${task.title}`}
@@ -1459,7 +1459,7 @@ function TodayView(): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
         <MetricTile label="Used" value={`${usedCapacityMinutes}/${source.settings.todayCapacityMinutes} min`} />
         <MetricTile label="Scheduled" value={String(schedule.slots.length)} />
         <MetricTile label="Conflicts" value={String(conflictCount)} />
@@ -1560,7 +1560,7 @@ function TodayView(): JSX.Element {
                   </span>
                   <IconButton icon={X} label="Close quick add" onClick={() => setQuickAddSlot(null)} variant="ghost" />
                 </div>
-                <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                   <Input
                     aria-label="Quick add title"
                     onChange={(event) => setQuickAddTitle(event.target.value)}
@@ -2840,8 +2840,8 @@ function TasksView({ command }: { command?: TaskSurfaceCommand | null }): JSX.El
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2" role="toolbar" aria-label="Task actions">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1" role="toolbar" aria-label="Task actions">
           <Button
             data-action-id="task.create"
             onClick={openNewTask}
@@ -3610,7 +3610,7 @@ function CalendarEventForm({
           />
           All day
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Input
             aria-label="Event starts"
             onChange={(event) =>
@@ -3689,7 +3689,7 @@ function CalendarEventForm({
             Repeat
           </span>
         </legend>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
             <span>Frequency</span>
             <select
@@ -5129,8 +5129,8 @@ function CalendarView(): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2" role="tablist" aria-label="Calendar views">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Calendar views">
           {(["agenda", "day", "week", "month"] as CalendarViewId[]).map((viewId) => (
             <CalendarTabButton
               actionId={calendarViewActionId(viewId)}
@@ -5143,7 +5143,7 @@ function CalendarView(): JSX.Element {
             </CalendarTabButton>
           ))}
         </div>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <Button
             data-action-id="calendar.create"
             onClick={() => openCreate()}
@@ -5244,7 +5244,7 @@ function CalendarView(): JSX.Element {
               description={`${selectedAvailabilityCalendarIds.length} calendars`}
             >
               <div className="grid gap-3 p-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Input
                     aria-label="Availability start"
                     onChange={(event) => setAvailabilityStartDate(event.target.value)}
@@ -6221,7 +6221,7 @@ function SettingsView(): JSX.Element {
     openInspector({
       body: (
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <MetricTile label="State" value={capability.state} />
             <MetricTile label="Severity" value={primaryDiagnostic?.severity ?? (capability.supported ? "info" : "warning")} />
           </div>
@@ -6399,8 +6399,8 @@ function SettingsView(): JSX.Element {
       const selectedCalendars = new Set(settings.selectedCalendarIds);
 
       return (
-        <div className="grid grid-cols-2 gap-3 p-3">
-          <label className="col-span-2 grid gap-1 text-[var(--text-sm)] text-text-secondary">
+        <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary sm:col-span-2">
             <span>Default timezone</span>
             <select
               aria-label="Default timezone"
@@ -6428,7 +6428,7 @@ function SettingsView(): JSX.Element {
               value={settings.todayCapacityMinutes}
             />
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
               <span>Start hour</span>
               <Input
@@ -6548,7 +6548,7 @@ function SettingsView(): JSX.Element {
               Force full resync
             </Button>
           </div>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
             <MetricTile label="Pending" value={String(queue?.pendingCount ?? source.syncStatus.pendingMutationCount)} />
             <MetricTile label="Applying" value={String(queue?.applyingCount ?? 0)} />
             <MetricTile label="Failed" value={String(queue?.failedCount ?? 0)} />
@@ -6582,7 +6582,7 @@ function SettingsView(): JSX.Element {
     if (selectedSection.id === "appearance") {
       return (
         <div className="grid gap-3 p-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
               <span>Theme</span>
               <select
@@ -6612,7 +6612,7 @@ function SettingsView(): JSX.Element {
               </select>
             </label>
           </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+          <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
               <span>Font family</span>
               <Input
@@ -6665,7 +6665,7 @@ function SettingsView(): JSX.Element {
               type="range"
               value={settings.uiTextSizePoints}
             />
-            <div className="grid grid-cols-[96px_auto] items-center gap-2">
+            <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[96px_auto]">
               <Input
                 aria-label="Text size points"
                 max={24}
@@ -6825,7 +6825,7 @@ function SettingsView(): JSX.Element {
     if (selectedSection.id === "localData") {
       return (
         <div className="grid gap-3 p-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <MetricTile label="Cache rows" value={String((diagnostics?.cache.taskCount ?? 0) + (diagnostics?.cache.eventCount ?? 0))} />
             <MetricTile label="Checkpoints" value={String(diagnostics?.checkpoints.totalCount ?? 0)} />
             <MetricTile label="Pending" value={String(diagnostics?.pendingMutations.totalCount ?? 0)} />
@@ -6972,7 +6972,7 @@ function SettingsView(): JSX.Element {
           label="Include performance diagnostics"
           onChange={(checked) => updateSettings({ diagnosticsIncludePerformance: checked })}
         />
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <MetricTile label="Startup" value={`${Math.round(diagnostics?.performance.startup.shellVisibleMs ?? 0)}ms`} />
           <MetricTile label="Migration" value={`${Math.round(diagnostics?.performance.migrationDurationMs ?? 0)}ms`} />
           <MetricTile label="MCP requests" value={String(diagnostics?.performance.mcpRequestCounts.totalRequests ?? 0)} />
@@ -7066,7 +7066,7 @@ function SettingsView(): JSX.Element {
         ) : null}
 
         <Panel title="Diagnostics state" description="Sanitized status and recoverable errors">
-          <div className="grid grid-cols-4 gap-2 p-3">
+          <div className="grid grid-cols-2 gap-2 p-3 lg:grid-cols-4">
             <MetricTile label="Credentials" value={diagnostics?.redaction.credentials ?? "redacted"} />
             <MetricTile label="Google payloads" value={diagnostics?.redaction.googlePayloads ?? "omitted"} />
             <MetricTile label="MCP bearer" value={diagnostics?.redaction.mcpBearerTokens ?? "redacted"} />
@@ -7164,7 +7164,7 @@ function NotificationsView(): JSX.Element {
         </Panel>
 
         <Panel title="Delivery status" description="Local notification settings">
-          <div className="grid grid-cols-3 gap-2 p-3">
+          <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-3">
             <MetricTile label="Enabled" value={source.settings.notificationsEnabled ? "On" : "Off"} />
             <MetricTile label="Lead time" value={`${source.settings.notificationLeadMinutes} min`} />
             <MetricTile

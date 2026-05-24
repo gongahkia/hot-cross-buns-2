@@ -403,11 +403,11 @@ function AppShell(): JSX.Element {
 
   return (
     <div
-      className="grid h-screen min-h-[640px] grid-cols-[232px_minmax(0,1fr)] bg-bg-primary text-text-primary"
+      className="grid h-screen min-h-[520px] grid-rows-[auto_minmax(0,1fr)] bg-bg-primary text-text-primary md:min-h-[640px] md:grid-cols-[72px_minmax(0,1fr)] md:grid-rows-none lg:grid-cols-[232px_minmax(0,1fr)]"
       data-testid="app-shell"
     >
-      <aside className="flex min-h-0 flex-col border-r border-border bg-bg-secondary">
-        <div className="flex h-14 items-center gap-3 border-b border-border px-4">
+      <aside className="flex min-h-0 flex-row items-center overflow-x-auto border-b border-border bg-bg-secondary md:flex-col md:items-stretch md:overflow-hidden md:border-b-0 md:border-r">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center border-r border-border px-3 md:w-auto md:border-b md:border-r-0 lg:justify-start lg:gap-3 lg:px-4">
           <img
             alt=""
             aria-hidden="true"
@@ -415,13 +415,13 @@ function AppShell(): JSX.Element {
             draggable={false}
             src={appIconUrl}
           />
-          <div className="min-w-0">
+          <div className="hidden min-w-0 lg:block">
             <div className="truncate text-[var(--text-md)] font-semibold">Hot Cross Buns 2</div>
             <div className="text-[var(--text-xs)] text-text-muted">Local planner</div>
           </div>
         </div>
 
-        <nav aria-label="Primary" className="flex flex-1 flex-col gap-1 px-2 py-3">
+        <nav aria-label="Primary" className="flex min-w-0 flex-1 gap-1 overflow-x-auto px-2 py-2 md:flex-col md:overflow-visible md:py-3">
           {plannerSections.map((section) => {
             const Icon = section.icon;
             const selected = section.id === activeSectionId;
@@ -429,8 +429,9 @@ function AppShell(): JSX.Element {
             return (
               <button
                 aria-current={selected ? "page" : undefined}
+                aria-label={section.label}
                 className={cx(
-                  "flex h-9 w-full items-center gap-3 rounded-hcbMd px-3 text-left text-[var(--text-base)] transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  "flex h-9 w-auto min-w-9 items-center justify-center gap-3 rounded-hcbMd px-2 text-left text-[var(--text-base)] transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:w-full lg:justify-start lg:px-3",
                   selected
                     ? "bg-surface-0 text-text-primary"
                     : "text-text-secondary hover:bg-surface-0 hover:text-text-primary"
@@ -441,9 +442,9 @@ function AppShell(): JSX.Element {
                 ref={setSectionButtonRef(section.id)}
                 type="button"
               >
-                <Icon aria-hidden="true" size={16} strokeWidth={2} />
-                <span className="min-w-0 flex-1 truncate">{section.label}</span>
-                <span className="shrink-0 text-[var(--text-xs)] text-text-muted">
+                <Icon aria-hidden="true" className="shrink-0" size={16} strokeWidth={2} />
+                <span className="hidden min-w-0 flex-1 truncate lg:inline">{section.label}</span>
+                <span className="hidden shrink-0 text-[var(--text-xs)] text-text-muted lg:inline">
                   {sectionMetric(source, section.id)}
                 </span>
               </button>
@@ -451,7 +452,7 @@ function AppShell(): JSX.Element {
           })}
         </nav>
 
-        <div className="border-t border-border px-4 py-3 text-[var(--text-xs)] text-text-muted">
+        <div className="hidden border-t border-border px-4 py-3 text-[var(--text-xs)] text-text-muted lg:block">
           <div className="flex items-center justify-between gap-3">
             <span>Runtime</span>
             <Badge tone={healthLabel === "Ready" ? "success" : "neutral"}>{healthLabel}</Badge>
@@ -460,7 +461,7 @@ function AppShell(): JSX.Element {
       </aside>
 
       <main className="flex min-w-0 flex-col">
-        <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-bg-primary px-5">
+        <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border bg-bg-primary px-3 py-2 sm:flex-nowrap md:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-8 items-center justify-center rounded-hcbMd bg-surface-0 text-accent">
               <ActiveIcon aria-hidden="true" size={18} />
@@ -473,28 +474,30 @@ function AppShell(): JSX.Element {
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2" role="toolbar" aria-label="Planner actions">
+          <div className="flex min-w-0 shrink-0 items-center gap-2 overflow-x-auto" role="toolbar" aria-label="Planner actions">
             <Button
               aria-keyshortcuts="Meta+P Control+P"
+              className="min-w-8"
               onClick={openCommandPalette}
               variant="secondary"
             >
               <Command aria-hidden="true" size={15} />
-              Command palette
-              <span className="rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted">
+              <span className="hidden sm:inline">Command palette</span>
+              <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
                 Cmd P
               </span>
             </Button>
             <Button
               aria-keyshortcuts="Meta+R Control+R"
+              className="min-w-8"
               data-action-id="sync.refresh"
               onClick={source.refresh}
               title="Reload local cache"
               variant="ghost"
             >
               <RefreshCw aria-hidden="true" size={15} />
-              Reload
-              <span className="rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted">
+              <span className="hidden sm:inline">Reload</span>
+              <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
                 Cmd R
               </span>
             </Button>
@@ -503,7 +506,7 @@ function AppShell(): JSX.Element {
 
         <section
           aria-labelledby="planner-title"
-          className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4"
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-2 sm:p-3 md:p-4"
         >
           <RenderTimingBoundary id={`section:${activeSectionId}`}>
             <SectionContent
@@ -655,11 +658,11 @@ function FirstRunOnboarding({ source }: { source: CoreViewModelSource }): JSX.El
     <div
       aria-labelledby="first-run-title"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/80 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/80 p-3 sm:p-6"
       role="dialog"
     >
       <div className="flex max-h-[calc(100vh-48px)] w-full max-w-5xl flex-col overflow-hidden rounded-hcbMd border border-border bg-bg-primary shadow-hcbLg">
-        <header className="flex min-h-14 items-center justify-between gap-4 border-b border-border px-5">
+        <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border px-3 py-2 sm:px-5">
           <div className="min-w-0">
             <h2 className="truncate text-[var(--text-xl)] font-bold text-text-primary" id="first-run-title">
               First-run setup
@@ -674,7 +677,7 @@ function FirstRunOnboarding({ source }: { source: CoreViewModelSource }): JSX.El
         </header>
 
         <div className="grid min-h-0 gap-3 overflow-y-auto p-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <SetupCard
               description={
                 oauthLoopbackReady
@@ -699,7 +702,7 @@ function FirstRunOnboarding({ source }: { source: CoreViewModelSource }): JSX.El
             />
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <section className="min-w-0 rounded-hcbMd border border-border bg-bg-secondary">
               <div className="border-b border-border px-3 py-2">
                 <h3 className="text-[var(--text-md)] font-semibold text-text-primary">Task lists</h3>
@@ -755,7 +758,7 @@ function FirstRunOnboarding({ source }: { source: CoreViewModelSource }): JSX.El
             </section>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <SetupOption title="4. Sync mode" icon={RefreshCw}>
               <select
                 aria-label="Onboarding sync mode"
@@ -816,7 +819,7 @@ function FirstRunOnboarding({ source }: { source: CoreViewModelSource }): JSX.El
           ) : null}
         </div>
 
-        <footer className="flex min-h-14 items-center justify-between gap-3 border-t border-border px-5">
+        <footer className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2 sm:px-5">
           <Button
             disabled={submitting || source.settingsMutationPending}
             onClick={() =>
