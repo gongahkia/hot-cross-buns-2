@@ -1219,6 +1219,82 @@ describe("App shell", () => {
     expect(screen.getByRole("grid", { name: "Calendar month view" })).toBeInTheDocument();
   });
 
+  it("separates all-day calendar events and summarizes dense month cells", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-launch-freeze",
+            calendarId: "cal-product",
+            title: "Launch freeze",
+            startsAt: now,
+            endsAt: tomorrowIso,
+            allDay: true,
+            updatedAt: now
+          },
+          {
+            id: "event-design-sync",
+            calendarId: "cal-product",
+            title: "Design sync",
+            startsAt: `${todayDate}T09:00:00.000Z`,
+            endsAt: `${todayDate}T09:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-roadmap-check",
+            calendarId: "cal-product",
+            title: "Roadmap check",
+            startsAt: `${todayDate}T10:00:00.000Z`,
+            endsAt: `${todayDate}T10:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-partner-review",
+            calendarId: "cal-product",
+            title: "Partner review",
+            startsAt: `${todayDate}T11:00:00.000Z`,
+            endsAt: `${todayDate}T11:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          },
+          {
+            id: "event-release-notes",
+            calendarId: "cal-product",
+            title: "Release notes",
+            startsAt: `${todayDate}T12:00:00.000Z`,
+            endsAt: `${todayDate}T12:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 5 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+
+    const allDayLane = screen.getByRole("group", { name: /All-day events/ });
+    expect(within(allDayLane).getByRole("button", { name: "Launch freeze" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "09:00-09:30 Design sync" })).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Month" }));
+
+    const monthGrid = screen.getByRole("grid", { name: "Calendar month view" });
+    expect(within(monthGrid).getByRole("button", { name: "Launch freeze" })).toBeInTheDocument();
+    expect(within(monthGrid).getByRole("button", { name: "Design sync" })).toBeInTheDocument();
+    expect(within(monthGrid).getByText("2 more")).toBeInTheDocument();
+  });
+
   it("opens calendar creation from keyboard-focused grid cells", async () => {
     installHcb(seededHcb());
     const user = userEvent.setup();

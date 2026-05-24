@@ -26,7 +26,6 @@ import {
 } from "@shared/ipc/themeCatalog";
 import {
   AlertTriangle,
-  CalendarDays,
   CalendarPlus,
   CheckCircle2,
   Circle,
@@ -3240,9 +3239,35 @@ function calendarViewActionId(viewId: CalendarViewId): PlannerActionId {
 const dayPlanningHours = Array.from({ length: 12 }, (_, index) => index + 7);
 const calendarEventDragType = "application/x-hcb-calendar-event";
 const calendarEventResizeDragType = "application/x-hcb-calendar-event-resize";
-const calendarDaySlotRowHeight = 88;
+const calendarDaySlotRowHeight = 64;
 const calendarDayViewportHeight = 520;
 const calendarWeekColumnWidth = 160;
+const calendarMonthVisibleChipCount = 3;
+const calendarWeekVisibleTimedCount = 4;
+const calendarWeekVisibleAllDayCount = 2;
+
+const calendarSourceTones = [
+  {
+    border: "border-l-accent",
+    swatch: "bg-accent"
+  },
+  {
+    border: "border-l-success",
+    swatch: "bg-success"
+  },
+  {
+    border: "border-l-warning",
+    swatch: "bg-warning"
+  },
+  {
+    border: "border-l-info",
+    swatch: "bg-info"
+  },
+  {
+    border: "border-l-danger",
+    swatch: "bg-danger"
+  }
+] as const;
 
 interface CalendarDaySlot {
   hour: number;
@@ -3303,6 +3328,177 @@ function visibleCalendarEvent(
   return visibleCalendarIds.has(event.calendarId);
 }
 
+function calendarSourceTone(calendarId: string): (typeof calendarSourceTones)[number] {
+  let hash = 0;
+
+  for (let index = 0; index < calendarId.length; index += 1) {
+    hash = (hash * 31 + calendarId.charCodeAt(index)) >>> 0;
+  }
+
+  return calendarSourceTones[hash % calendarSourceTones.length];
+}
+
+function calendarEventLabel(
+  event: CalendarEventViewModel,
+  variant: "range" | "time" | "title"
+): string {
+  if (variant === "range") {
+    return `${event.rangeLabel} ${event.title}`;
+  }
+
+  if (variant === "time") {
+    return event.allDay ? event.title : `${event.timeLabel} ${event.title}`;
+  }
+
+  return event.title;
+}
+
+function CalendarSourceSwatch({
+  calendarId,
+  className
+}: {
+  calendarId: string;
+  className?: string;
+}): JSX.Element {
+  const tone = calendarSourceTone(calendarId);
+
+  return (
+    <span
+      aria-hidden="true"
+      className={cx("size-2.5 shrink-0 rounded-full", tone.swatch, className)}
+    />
+  );
+}
+
+function CalendarEventChip({
+  className,
+  draggable = false,
+  event,
+  labelVariant,
+  onDragStart,
+  onKeyDown,
+  onOpen
+}: {
+  className?: string;
+  draggable?: boolean;
+  event: CalendarEventViewModel;
+  labelVariant: "range" | "time" | "title";
+  onDragStart?: (dragEvent: DragEvent<HTMLElement>) => void;
+  onKeyDown?: (keyEvent: KeyboardEvent<HTMLElement>) => void;
+  onOpen?: (event: CalendarEventViewModel) => void;
+}): JSX.Element {
+  const tone = calendarSourceTone(event.calendarId);
+  const label = calendarEventLabel(event, labelVariant);
+
+  return (
+    <button
+      aria-label={label}
+      className={cx(
+        "group flex min-h-6 w-full min-w-0 cursor-default items-center gap-1.5 rounded-hcbSm border border-border border-l-4 bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary shadow-sm transition-colors duration-fast ease-hcb hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        draggable && "cursor-grab active:cursor-grabbing",
+        event.allDay && "bg-bg-secondary font-medium",
+        tone.border,
+        className
+      )}
+      draggable={draggable}
+      onClick={(clickEvent) => {
+        clickEvent.stopPropagation();
+        onOpen?.(event);
+      }}
+      onDragStart={onDragStart}
+      onKeyDown={onKeyDown}
+      title={`${label} - ${event.calendar}`}
+      type="button"
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {event.mutationState && event.mutationState !== "synced" ? (
+        <span
+          aria-hidden="true"
+          className={cx(
+            "shrink-0 rounded-hcbSm px-1 text-[10px] font-semibold",
+            event.mutationState === "failed" ? "bg-danger text-bg-tertiary" : "bg-warning text-bg-tertiary"
+          )}
+        >
+          {event.mutationState === "failed" ? "Failed" : "Queued"}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function CalendarOverflowChip({ count }: { count: number }): JSX.Element {
+  return (
+    <span className="inline-flex min-h-5 max-w-full items-center truncate rounded-hcbSm border border-dashed border-border px-2 text-[var(--text-xs)] text-text-muted">
+      {count} more
+    </span>
+  );
+}
+
+function splitAllDayEvents(events: CalendarEventViewModel[]): {
+  allDayEvents: CalendarEventViewModel[];
+  timedEvents: CalendarEventViewModel[];
+} {
+  const allDayEvents: CalendarEventViewModel[] = [];
+  const timedEvents: CalendarEventViewModel[] = [];
+
+  for (const event of events) {
+    if (event.allDay) {
+      allDayEvents.push(event);
+    } else {
+      timedEvents.push(event);
+    }
+  }
+
+  return { allDayEvents, timedEvents };
+}
+
+function CalendarAllDayLane({
+  dayLabel,
+  events,
+  onCreate,
+  onOpen,
+  visibleCount = 4
+}: {
+  dayLabel: string;
+  events: CalendarEventViewModel[];
+  onCreate?: () => void;
+  onOpen: (event: CalendarEventViewModel) => void;
+  visibleCount?: number;
+}): JSX.Element {
+  const visibleEvents = events.slice(0, visibleCount);
+  const overflowCount = Math.max(0, events.length - visibleEvents.length);
+
+  return (
+    <div
+      aria-label={`All-day events for ${dayLabel}`}
+      className="grid min-h-10 grid-cols-[72px_minmax(0,1fr)] border-b border-border bg-bg-secondary"
+      role="group"
+    >
+      <div className="border-r border-border px-2 py-2 text-[var(--text-xs)] font-medium text-text-muted">
+        All day
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-1 px-2 py-1.5">
+        {visibleEvents.map((event) => (
+          <div className="min-w-0 basis-[180px] grow" key={event.id}>
+            <CalendarEventChip event={event} labelVariant="title" onOpen={onOpen} />
+          </div>
+        ))}
+        {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}
+        {events.length === 0 && onCreate ? (
+          <button
+            className="min-h-7 rounded-hcbSm border border-dashed border-border px-2 text-left text-[var(--text-xs)] text-text-muted transition-colors duration-fast ease-hcb hover:bg-surface-0 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            data-action-id="calendar.create"
+            onClick={onCreate}
+            type="button"
+          >
+            Add all-day event
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function DayView({
   onCreate,
   onMoveEvent,
@@ -3318,20 +3514,25 @@ function DayView({
 }): JSX.Element {
   const source = useCoreViewModelSource();
   const day = source.calendarDayView.id.slice("day-".length);
+  const visibleDayEvents = useMemo(
+    () => source.calendarDayView.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds)),
+    [source.calendarDayView.events, visibleCalendarIds]
+  );
+  const { allDayEvents } = useMemo(
+    () => splitAllDayEvents(visibleDayEvents),
+    [visibleDayEvents]
+  );
   const slots = useMemo<CalendarDaySlot[]>(
     () =>
       dayPlanningHours.map((hour) => ({
         hour,
         label: hourSlotLabel(hour),
         startsAt: hourSlotIso(day, hour),
-        events: source.calendarDayView.events.filter(
-          (event) =>
-            visibleCalendarEvent(event, visibleCalendarIds) &&
-            !event.allDay &&
-            eventOverlapsHour(event, day, hour)
+        events: visibleDayEvents.filter(
+          (event) => !event.allDay && eventOverlapsHour(event, day, hour)
         )
       })),
-    [day, source.calendarDayView.events, visibleCalendarIds]
+    [day, visibleDayEvents]
   );
 
   return (
@@ -3351,7 +3552,13 @@ function DayView({
       title="Day view"
       description={`${source.calendarDayView.weekday}, ${source.calendarDayView.dateLabel}`}
     >
-      <div className="p-3" role="grid" aria-label="Calendar day view">
+      <div className="overflow-hidden rounded-hcbMd border border-border" role="grid" aria-label="Calendar day view">
+        <CalendarAllDayLane
+          dayLabel={source.calendarDayView.dateLabel}
+          events={allDayEvents}
+          onCreate={() => onCreate({ startsAt: `${day}T00:00:00.000Z`, allDay: true })}
+          onOpen={onOpen}
+        />
         <VirtualizedList
           ariaLabel="Calendar day hour slots"
           estimateRowHeight={calendarDaySlotRowHeight}
@@ -3362,7 +3569,8 @@ function DayView({
           viewportHeight={calendarDayViewportHeight}
           renderRow={(slot) => (
             <div
-              className="grid min-h-[72px] grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-2"
+              aria-label={`${slot.label} ${slot.events.length === 0 ? "Open slot" : `${slot.events.length} events`}`}
+              className="grid min-h-16 grid-cols-[72px_minmax(0,1fr)] border-b border-border bg-bg-tertiary last:border-b-0"
               onDragOver={allowCalendarDrop}
               onDrop={(dragEvent) => {
                 dragEvent.preventDefault();
@@ -3383,24 +3591,24 @@ function DayView({
             >
               <button
                 aria-label={`Create event at ${slot.label}`}
-                className="font-mono text-[var(--text-xs)] text-text-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="border-r border-border px-2 py-2 text-left font-mono text-[var(--text-xs)] text-text-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 data-action-id="calendar.create"
                 onClick={() => onCreate({ startsAt: slot.startsAt, allDay: false })}
                 type="button"
               >
                 {slot.label}
               </button>
-              <div className="grid content-start gap-1" role="gridcell">
+              <div className="grid content-start gap-1 px-2 py-1.5" role="gridcell">
                 {slot.events.length > 0 ? (
                   slot.events.map((event) => (
                     <div
                       className="grid grid-cols-[minmax(0,1fr)_24px] gap-1"
                       key={event.id}
                     >
-                      <button
-                        className="truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary transition-colors duration-fast ease-hcb hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      <CalendarEventChip
                         draggable
-                        onClick={() => onOpen(event)}
+                        event={event}
+                        labelVariant="range"
                         onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, event.id)}
                         onKeyDown={(keyEvent) => {
                           if (keyEvent.key !== "ArrowDown" && keyEvent.key !== "ArrowUp") {
@@ -3416,10 +3624,8 @@ function DayView({
                             event.allDay
                           );
                         }}
-                        type="button"
-                      >
-                        {event.rangeLabel} {event.title}
-                      </button>
+                        onOpen={onOpen}
+                      />
                       <span
                         aria-label={`Resize ${event.title} end`}
                         className="flex h-7 cursor-ns-resize items-center justify-center rounded-hcbSm border border-border bg-surface-0 text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -3443,7 +3649,7 @@ function DayView({
                   ))
                 ) : (
                   <button
-                    className="min-h-9 rounded-hcbSm border border-dashed border-border text-left text-[var(--text-sm)] text-text-muted transition-colors duration-fast ease-hcb hover:bg-surface-0 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className="min-h-8 rounded-hcbSm border border-dashed border-border px-2 text-left text-[var(--text-xs)] text-text-muted transition-colors duration-fast ease-hcb hover:bg-surface-0 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     data-action-id="calendar.create"
                     onClick={() => onCreate({ startsAt: slot.startsAt, allDay: false })}
                     type="button"
@@ -3506,71 +3712,107 @@ function WeekView({
             className="absolute inset-y-0 top-0 flex gap-2"
             style={{ transform: `translateX(${weekWindow.offsetX}px)` }}
           >
-        {visibleWeekDays.map((day) => (
-          <div
-            className={cx(
-              "min-h-44 shrink-0 rounded-hcbMd border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-              day.isToday && "border-accent"
-            )}
-            key={day.id}
-            onClick={() => onCreate({ startsAt: `${day.id.slice("week-".length)}T00:00:00.000Z`, allDay: true })}
-            onDragOver={allowCalendarDrop}
-            onDrop={(dragEvent) => {
-              dragEvent.preventDefault();
-              const eventId = calendarEventDragId(dragEvent);
-              const draggedEvent = eventId ? source.calendarEventsById[eventId] : undefined;
-
-              if (!draggedEvent) {
-                return;
-              }
-
+            {visibleWeekDays.map((day) => {
               const dayKey = day.id.slice("week-".length);
-
-              onMoveEvent(
-                draggedEvent.id,
-                draggedEvent.allDay
-                  ? `${dayKey}T00:00:00.000Z`
-                  : sameTimeOnDate(draggedEvent.startsAt, dayKey),
-                draggedEvent.allDay
+              const visibleEvents = day.events.filter((event) =>
+                visibleCalendarEvent(event, visibleCalendarIds)
               );
-            }}
-            onKeyDown={(event) =>
-              handleActivationKeyDown(event, () =>
-                onCreate({ startsAt: `${day.id.slice("week-".length)}T00:00:00.000Z`, allDay: true })
-              )
-            }
-            role="gridcell"
-            style={{ width: calendarWeekColumnWidth }}
-            tabIndex={0}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[var(--text-xs)] font-medium text-text-muted">{day.weekday}</span>
-              <span className="text-[var(--text-md)] font-semibold text-text-primary">{day.dateLabel}</span>
-            </div>
-            <div className="mt-2 grid gap-1">
-              {day.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds)).slice(0, 3).map((calendarEvent) => (
-                <span
-                  className="cursor-grab truncate rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary active:cursor-grabbing"
-                  draggable
-                  key={calendarEvent.id}
-                  onClick={(clickEvent) => {
-                    clickEvent.stopPropagation();
-                    onOpen(calendarEvent);
+              const { allDayEvents, timedEvents } = splitAllDayEvents(visibleEvents);
+              const visibleAllDayEvents = allDayEvents.slice(0, calendarWeekVisibleAllDayCount);
+              const visibleTimedEvents = timedEvents.slice(0, calendarWeekVisibleTimedCount);
+              const overflowCount = Math.max(
+                0,
+                allDayEvents.length -
+                  visibleAllDayEvents.length +
+                  timedEvents.length -
+                  visibleTimedEvents.length
+              );
+
+              return (
+                <div
+                  className={cx(
+                    "min-h-56 shrink-0 overflow-hidden rounded-hcbMd border border-border bg-bg-tertiary text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    day.isToday && "border-accent"
+                  )}
+                  key={day.id}
+                  onClick={() => onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true })}
+                  onDragOver={allowCalendarDrop}
+                  onDrop={(dragEvent) => {
+                    dragEvent.preventDefault();
+                    const eventId = calendarEventDragId(dragEvent);
+                    const draggedEvent = eventId ? source.calendarEventsById[eventId] : undefined;
+
+                    if (!draggedEvent) {
+                      return;
+                    }
+
+                    onMoveEvent(
+                      draggedEvent.id,
+                      draggedEvent.allDay
+                        ? `${dayKey}T00:00:00.000Z`
+                        : sameTimeOnDate(draggedEvent.startsAt, dayKey),
+                      draggedEvent.allDay
+                    );
                   }}
-                  onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, calendarEvent.id)}
-                  onKeyDown={(keyEvent) => {
-                    keyEvent.stopPropagation();
-                    handleActivationKeyDown(keyEvent, () => onOpen(calendarEvent));
-                  }}
-                  role="button"
+                  onKeyDown={(event) =>
+                    handleActivationKeyDown(event, () =>
+                      onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true })
+                    )
+                  }
+                  role="gridcell"
+                  style={{ width: calendarWeekColumnWidth }}
                   tabIndex={0}
                 >
-                  {calendarEvent.timeLabel} {calendarEvent.title}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
+                  <div className="flex min-h-10 items-center justify-between gap-2 border-b border-border px-2">
+                    <span className="text-[var(--text-xs)] font-medium text-text-muted">
+                      {day.weekday}
+                    </span>
+                    <span className="text-[var(--text-md)] font-semibold text-text-primary">
+                      {day.dateLabel}
+                    </span>
+                  </div>
+                  <div className="grid gap-1 border-b border-border bg-bg-secondary/60 px-2 py-1.5">
+                    {visibleAllDayEvents.length > 0 ? (
+                      visibleAllDayEvents.map((calendarEvent) => (
+                        <CalendarEventChip
+                          draggable
+                          event={calendarEvent}
+                          key={calendarEvent.id}
+                          labelVariant="title"
+                          onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, calendarEvent.id)}
+                          onKeyDown={(keyEvent) => {
+                            keyEvent.stopPropagation();
+                            handleActivationKeyDown(keyEvent, () => onOpen(calendarEvent));
+                          }}
+                          onOpen={onOpen}
+                        />
+                      ))
+                    ) : (
+                      <span className="min-h-6 truncate text-[var(--text-xs)] text-text-muted">
+                        All-day lane
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid gap-1 px-2 py-2">
+                    {visibleTimedEvents.map((calendarEvent) => (
+                      <CalendarEventChip
+                        draggable
+                        event={calendarEvent}
+                        key={calendarEvent.id}
+                        labelVariant="time"
+                        onDragStart={(dragEvent) => startCalendarEventDrag(dragEvent, calendarEvent.id)}
+                        onKeyDown={(keyEvent) => {
+                          keyEvent.stopPropagation();
+                          handleActivationKeyDown(keyEvent, () => onOpen(calendarEvent));
+                        }}
+                        onOpen={onOpen}
+                      />
+                    ))}
+                    {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -3612,12 +3854,14 @@ function MonthView({
         {source.calendarMonthWeeks.map((week) => (
           <div className="grid grid-cols-7 gap-1" key={week.id} role="row">
             {week.days.map((day) => {
-              const firstVisibleEvent = visibleMonthEventsByDay.get(day.id)?.[0];
+              const visibleEvents = visibleMonthEventsByDay.get(day.id) ?? [];
+              const visibleEventChips = visibleEvents.slice(0, calendarMonthVisibleChipCount);
+              const overflowCount = Math.max(0, visibleEvents.length - visibleEventChips.length);
 
               return (
                 <div
                   className={cx(
-                    "min-h-20 rounded-hcbSm border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    "grid min-h-[104px] grid-rows-[auto_minmax(0,1fr)] rounded-hcbSm border border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                     day.isToday && "border-accent",
                     day.isOutsideMonth && "opacity-55"
                   )}
@@ -3635,23 +3879,22 @@ function MonthView({
                     <span className="text-[var(--text-xs)] text-text-muted">{day.weekday}</span>
                     <span className="text-[var(--text-sm)] font-semibold text-text-primary">{day.dateLabel}</span>
                   </div>
-                  {firstVisibleEvent ? (
-                    <span
-                      className="mt-2 block truncate rounded-hcbSm bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-secondary"
-                      onClick={(clickEvent) => {
-                        clickEvent.stopPropagation();
-                        onOpen(firstVisibleEvent);
-                      }}
-                      onKeyDown={(keyEvent) => {
-                        keyEvent.stopPropagation();
-                        handleActivationKeyDown(keyEvent, () => onOpen(firstVisibleEvent));
-                      }}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      {firstVisibleEvent.title}
-                    </span>
-                  ) : null}
+                  <div className="mt-2 grid min-h-0 content-start gap-1 overflow-hidden">
+                    {visibleEventChips.map((calendarEvent) => (
+                      <CalendarEventChip
+                        className="min-h-5 px-1.5 py-0.5 text-[11px]"
+                        event={calendarEvent}
+                        key={calendarEvent.id}
+                        labelVariant="title"
+                        onKeyDown={(keyEvent) => {
+                          keyEvent.stopPropagation();
+                          handleActivationKeyDown(keyEvent, () => onOpen(calendarEvent));
+                        }}
+                        onOpen={onOpen}
+                      />
+                    ))}
+                    {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}
+                  </div>
                 </div>
               );
             })}
@@ -4189,7 +4432,7 @@ function CalendarView(): JSX.Element {
                       onChange={(event) => toggleVisibleCalendar(calendar.id, event.target.checked)}
                       type="checkbox"
                     />
-                    <CalendarDays aria-hidden="true" className="text-accent" size={16} />
+                    <CalendarSourceSwatch calendarId={calendar.id} />
                     <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
                     <Badge tone="neutral">{calendar.timeZone ?? source.settings.defaultTimeZone}</Badge>
                   </label>
@@ -4247,6 +4490,7 @@ function CalendarView(): JSX.Element {
                         }
                         type="checkbox"
                       />
+                      <CalendarSourceSwatch calendarId={calendar.id} />
                       <span className="min-w-0 flex-1 truncate">{calendar.title}</span>
                     </label>
                   ))}
