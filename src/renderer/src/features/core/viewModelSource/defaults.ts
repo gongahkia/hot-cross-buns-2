@@ -7,7 +7,7 @@ import type {
 import {
   defaultHistoryCategoryVisibility,
   defaultKeybindings
-} from "@shared/settingsCatalog";
+} from "@shared/ipc/contracts";
 import type { CoreDataSnapshot } from "./types";
 
 export const emptySyncStatus: SyncStatusResponse = {

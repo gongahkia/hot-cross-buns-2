@@ -1,3 +1,4 @@
+import { defaultHistoryCategoryVisibility } from "@shared/ipc/contracts";
 import type {
   CalendarListSummary,
   SettingsRecoveryActionRequest,
@@ -5,7 +6,6 @@ import type {
   SettingsUpdateRequest,
   TaskListSummary
 } from "@shared/ipc/contracts";
-import { defaultHistoryCategoryVisibility } from "@shared/settingsCatalog";
 import {
   Archive,
   CalendarDays,

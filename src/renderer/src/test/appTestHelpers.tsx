@@ -7,12 +7,12 @@ import type {
   SettingsSnapshot,
   TaskDetail
 } from "@shared/ipc/contracts";
-import type { HcbApi } from "@shared/ipc/preloadApi";
-import { ok } from "@shared/ipc/result";
 import {
   defaultHistoryCategoryVisibility,
   defaultKeybindings
-} from "@shared/settingsCatalog";
+} from "@shared/ipc/contracts";
+import type { HcbApi } from "@shared/ipc/preloadApi";
+import { ok } from "@shared/ipc/result";
 
 export const originalHcb = window.hcb;
 export const todayDate = new Date().toISOString().slice(0, 10);

@@ -1,7 +1,11 @@
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
-import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contracts";
-import { defaultKeybindings, type HotkeyActionId } from "@shared/settingsCatalog";
+import {
+  defaultKeybindings,
+  type HotkeyActionId,
+  type SettingsSnapshot,
+  type SettingsUpdateRequest
+} from "@shared/ipc/contracts";
 import { Keyboard, RotateCcw, X } from "lucide-react";
 import { Button, cx } from "../../../../components/primitives";
 import {
