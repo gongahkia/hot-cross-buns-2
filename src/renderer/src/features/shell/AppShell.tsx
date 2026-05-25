@@ -1,0 +1,625 @@
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { NativeAction, SettingsSnapshot } from "@shared/ipc/contracts";
+import type { PlannerAction } from "../../actions/plannerActions";
+import { cx } from "../../components/primitives";
+import { getPlannerSection, primaryPlannerSections, type SectionId } from "../../data/mockPlanner";
+import { getAppNotifications } from "../core/appNotifications";
+import { DiagnosticsOverlay } from "../core/DiagnosticsOverlay";
+import { SectionContent, type TaskSurfaceCommand } from "../core/CoreScreens";
+import { useCoreViewModelSource } from "../core/coreViewModelSource";
+import { eventMatchesAccelerator } from "../core/hotkeys";
+import {
+  RenderTimingBoundary,
+  rendererNow,
+  reportRendererTimingSince,
+  useRenderTiming
+} from "../../hooks/useRenderTiming";
+import { AppHeader } from "./AppHeader";
+import { AppNotificationToast, NotificationsOverlay, SettingsOverlay } from "./AppOverlays";
+import { AppSidebar } from "./AppSidebar";
+import {
+  isEditableShortcutTarget,
+  scheduleFrame,
+  shellCanBeReported
+} from "./shellUtils";
+import { useAppliedTheme } from "./theme";
+import type { VisiblePrimarySection } from "./types";
+
+const DeferredCommandPalette = lazy(() =>
+  import("../../components/CommandPalette").then((module) => ({
+    default: module.CommandPalette
+  }))
+);
+
+const DeferredFirstRunOnboarding = lazy(() =>
+  import("../../components/FirstRunOnboarding").then((module) => ({
+    default: module.FirstRunOnboarding
+  }))
+);
+
+export function AppShell(): JSX.Element {
+  useRenderTiming("App");
+
+  const source = useCoreViewModelSource();
+  useAppliedTheme(source.settings);
+  const [activeSectionId, setActiveSectionId] = useState<SectionId>("today");
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [healthLabel, setHealthLabel] = useState("Starting");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
+  const shellVisibleReported = useRef(false);
+  const commandPaletteOpenStartedAt = useRef<number | null>(null);
+  const settingsDialogRef = useRef<HTMLElement | null>(null);
+
+  const activeSection = getPlannerSection(activeSectionId);
+  const appNotifications = getAppNotifications(source);
+  const visibleNotification = appNotifications.find(
+    (notification) => !dismissedNotificationIds.includes(notification.id)
+  );
+  const visiblePrimarySections = useMemo<VisiblePrimarySection[]>(() => {
+    const hidden = new Set<SectionId>(source.settings.hiddenNavigationTabs);
+    return primaryPlannerSections
+      .map((section, index) => ({ section, shortcutKey: String(index + 1) }))
+      .filter(({ section }) => !hidden.has(section.id));
+  }, [source.settings.hiddenNavigationTabs]);
+  const sidebarOnRight = source.settings.navigationPlacement === "right";
+  const onboardingVisible =
+    source.settings.setupCompletedAt === null &&
+    source.dataState !== "loading" &&
+    source.dataState !== "offline" &&
+    source.dataState !== "error";
+
+  const navigateToSection = useCallback((sectionId: SectionId): void => {
+    setActiveSectionId(sectionId);
+  }, []);
+
+  const navigateToPrimarySection = useCallback(
+    (sectionId: SectionId): void => {
+      setCommandPaletteOpen(false);
+      setNotificationsOpen(false);
+      setSettingsOpen(false);
+      navigateToSection(sectionId);
+    },
+    [navigateToSection]
+  );
+
+  const openSettingsPanel = useCallback((): void => {
+    setCommandPaletteOpen(false);
+    setNotificationsOpen(false);
+    setDiagnosticsOpen(false);
+    setSettingsOpen(true);
+  }, []);
+
+  const openDiagnosticsPanel = useCallback((): void => {
+    setCommandPaletteOpen(false);
+    setNotificationsOpen(false);
+    setSettingsOpen(false);
+    setDiagnosticsOpen(true);
+  }, []);
+
+  const navigateOrOpenSettings = useCallback(
+    (sectionId: SectionId): void => {
+      if (sectionId === "settings") {
+        openSettingsPanel();
+        return;
+      }
+
+      navigateToSection(sectionId);
+    },
+    [navigateToSection, openSettingsPanel]
+  );
+
+  const openCommandPalette = useCallback((): void => {
+    commandPaletteOpenStartedAt.current = rendererNow();
+    setNotificationsOpen(false);
+    setDiagnosticsOpen(false);
+    setSettingsOpen(false);
+    setCommandPaletteOpen(true);
+  }, []);
+
+  const toggleNotificationsPanel = useCallback((): void => {
+    setSettingsOpen(false);
+    setDiagnosticsOpen(false);
+    setNotificationsOpen((open) => !open);
+  }, []);
+
+  const toggleDiagnosticsPanel = useCallback((): void => {
+    setSettingsOpen(false);
+    setNotificationsOpen(false);
+    setDiagnosticsOpen((open) => !open);
+  }, []);
+
+  const toggleSettingsPanel = useCallback((): void => {
+    if (settingsOpen) {
+      setSettingsOpen(false);
+      return;
+    }
+
+    openSettingsPanel();
+  }, [openSettingsPanel, settingsOpen]);
+
+  const toggleSidebar = useCallback((): void => {
+    setSidebarOpen((open) => !open);
+  }, []);
+
+  const triggerTaskCommand = useCallback(
+    (id: TaskSurfaceCommand["id"]): void => {
+      navigateToSection("tasks");
+      setTaskCommand((current) => ({
+        id,
+        nonce: (current?.nonce ?? 0) + 1
+      }));
+    },
+    [navigateToSection]
+  );
+
+  const handleNativeAction = useCallback(
+    (action: NativeAction): void => {
+      if (action.type === "quickCapture") {
+        triggerTaskCommand("task.quickCapture");
+        return;
+      }
+
+      if (action.type === "openSettings") {
+        openSettingsPanel();
+        return;
+      }
+
+      if (action.type === "refresh") {
+        source.refresh();
+        return;
+      }
+
+      if (action.route.kind === "search") {
+        setSearchQuery(action.route.query ?? "");
+        navigateToSection("search");
+        return;
+      }
+
+      if (action.route.kind === "settings") {
+        openSettingsPanel();
+        return;
+      }
+
+      if (action.route.kind === "calendar" || action.route.kind === "event") {
+        navigateToSection("calendar");
+        return;
+      }
+
+      if (action.route.kind === "notes" || action.route.kind === "note") {
+        navigateToSection("notes");
+        return;
+      }
+
+      if (action.route.kind === "tasks" || action.route.kind === "task") {
+        navigateToSection("tasks");
+        return;
+      }
+
+      navigateToSection("today");
+    },
+    [navigateToSection, openSettingsPanel, source.refresh, triggerTaskCommand]
+  );
+
+  const handlePaletteCommand = useCallback(
+    (command: PlannerAction): boolean => {
+      if (command.id === "sync.refresh") {
+        source.refresh();
+        navigateToSection("today");
+        return true;
+      }
+
+      if (command.id === "diagnostics.copy") {
+        openDiagnosticsPanel();
+        return true;
+      }
+
+      if (command.sectionId === "settings") {
+        openSettingsPanel();
+        return true;
+      }
+
+      if (command.searchQuery !== undefined) {
+        setSearchQuery(command.searchQuery);
+        navigateToSection("search");
+        return true;
+      }
+
+      if (command.taskCommand === undefined) {
+        return false;
+      }
+
+      triggerTaskCommand(command.taskCommand as TaskSurfaceCommand["id"]);
+      return true;
+    },
+    [navigateToSection, openDiagnosticsPanel, openSettingsPanel, source.refresh, triggerTaskCommand]
+  );
+
+  const runHotkeyAction = useCallback(
+    (actionId: keyof SettingsSnapshot["keybindings"]): void => {
+      if (actionId === "task.create") {
+        triggerTaskCommand("task.create");
+        return;
+      }
+
+      if (actionId === "task.quickCapture") {
+        triggerTaskCommand("task.quickCapture");
+        return;
+      }
+
+      if (actionId === "note.create") {
+        navigateToSection("notes");
+        window.dispatchEvent(new CustomEvent("hcb:note-command", { detail: { action: "new-note" } }));
+        return;
+      }
+
+      if (actionId === "calendar.create") {
+        navigateToSection("calendar");
+        window.dispatchEvent(new CustomEvent("hcb:calendar-command", { detail: { action: "new-event" } }));
+        return;
+      }
+
+      if (actionId === "commandPalette.open") {
+        openCommandPalette();
+        return;
+      }
+
+      if (actionId === "print.today") {
+        navigateToSection("today");
+        window.setTimeout(() => window.print(), 0);
+        return;
+      }
+
+      if (actionId === "sync.refresh") {
+        source.refresh();
+        return;
+      }
+
+      if (actionId === "sync.forceFullResync") {
+        void source.runRecoveryAction({
+          action: "forceFullResync",
+          confirmation: {
+            accepted: true,
+            phrase: "FULL RESYNC"
+          }
+        });
+        return;
+      }
+
+      if (actionId === "navigation.today") {
+        navigateToPrimarySection("today");
+        return;
+      }
+
+      if (actionId === "navigation.tasks") {
+        navigateToPrimarySection("tasks");
+        return;
+      }
+
+      if (actionId === "navigation.calendar") {
+        navigateToPrimarySection("calendar");
+        return;
+      }
+
+      if (actionId === "navigation.notes") {
+        navigateToPrimarySection("notes");
+        return;
+      }
+
+      if (actionId === "navigation.search") {
+        navigateToPrimarySection("search");
+        return;
+      }
+
+      if (actionId === "navigation.settings") {
+        openSettingsPanel();
+        return;
+      }
+
+      if (actionId === "navigation.diagnostics.toggle") {
+        toggleDiagnosticsPanel();
+        return;
+      }
+
+      if (actionId === "navigation.sidebar.toggle") {
+        toggleSidebar();
+        return;
+      }
+
+      if (actionId === "navigation.notifications.toggle") {
+        toggleNotificationsPanel();
+        return;
+      }
+
+      if (actionId.startsWith("calendar.view.")) {
+        const viewId = actionId.replace("calendar.view.", "");
+        navigateToPrimarySection("calendar");
+        window.dispatchEvent(new CustomEvent("hcb:calendar-command", { detail: { action: "set-view", viewId } }));
+      }
+    },
+    [
+      navigateToPrimarySection,
+      navigateToSection,
+      openCommandPalette,
+      toggleDiagnosticsPanel,
+      openSettingsPanel,
+      source.refresh,
+      source.runRecoveryAction,
+      toggleNotificationsPanel,
+      toggleSidebar,
+      triggerTaskCommand
+    ]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!window.hcb) {
+      setHealthLabel("Renderer only");
+      return;
+    }
+
+    window.hcb.diagnostics.health().then((result) => {
+      if (cancelled) {
+        return;
+      }
+
+      setHealthLabel(result.ok ? "Ready" : "Diagnostics unavailable");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (shellVisibleReported.current || !shellCanBeReported(source)) {
+      return;
+    }
+
+    shellVisibleReported.current = true;
+    scheduleFrame(() => {
+      void window.hcb?.diagnostics.markShellVisible();
+      void import("../../components/CommandPalette");
+    });
+  }, [source]);
+
+  useEffect(() => {
+    if (!onboardingVisible) {
+      return;
+    }
+
+    scheduleFrame(() => {
+      void import("../../components/FirstRunOnboarding");
+    });
+  }, [onboardingVisible]);
+
+  useEffect(() => window.hcb?.native.subscribeAction(handleNativeAction), [handleNativeAction]);
+
+  useEffect(() => {
+    const activePrimarySection = primaryPlannerSections.some((section) => section.id === activeSectionId);
+
+    if (activePrimarySection && !visiblePrimarySections.some(({ section }) => section.id === activeSectionId)) {
+      const replacement = visiblePrimarySections[0]?.section.id;
+
+      if (replacement) {
+        navigateToSection(replacement);
+      }
+    }
+  }, [activeSectionId, navigateToSection, visiblePrimarySections]);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {
+      if (isEditableShortcutTarget(event.target) && !(event.metaKey || event.ctrlKey)) {
+        return;
+      }
+
+      for (const [actionId, accelerator] of Object.entries(source.settings.keybindings) as Array<
+        [keyof SettingsSnapshot["keybindings"], string | null]
+      >) {
+        if (!eventMatchesAccelerator(event, accelerator)) {
+          continue;
+        }
+
+        event.preventDefault();
+        runHotkeyAction(actionId);
+        return;
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    runHotkeyAction,
+    source.settings.keybindings
+  ]);
+
+  useEffect(() => {
+    if (!notificationsOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setNotificationsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [notificationsOpen]);
+
+  useEffect(() => {
+    if (!diagnosticsOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDiagnosticsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [diagnosticsOpen]);
+
+  useEffect(() => {
+    if (!settingsOpen) {
+      return;
+    }
+
+    scheduleFrame(() => settingsDialogRef.current?.focus());
+
+    function handleKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSettingsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!visibleNotification) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setDismissedNotificationIds((current) =>
+        current.includes(visibleNotification.id) ? current : [...current, visibleNotification.id]
+      );
+    }, 6_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [visibleNotification?.id]);
+
+  useEffect(() => {
+    if (!commandPaletteOpen) {
+      return;
+    }
+
+    scheduleFrame(() => {
+      reportRendererTimingSince("command-palette.open", commandPaletteOpenStartedAt.current);
+      commandPaletteOpenStartedAt.current = null;
+    });
+  }, [commandPaletteOpen]);
+
+  return (
+    <div
+      className={cx(
+        "grid h-dvh min-h-0 overflow-hidden text-text-primary",
+        sidebarOpen
+          ? sidebarOnRight
+            ? "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_72px] md:grid-rows-none lg:grid-cols-[minmax(0,1fr)_232px]"
+            : "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[72px_minmax(0,1fr)] md:grid-rows-none lg:grid-cols-[232px_minmax(0,1fr)]"
+          : "grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)] md:grid-rows-none"
+      )}
+      data-testid="app-shell"
+      style={{ background: "var(--app-shell-background)" }}
+    >
+      {sidebarOpen ? (
+        <AppSidebar
+          activeSectionId={activeSectionId}
+          healthLabel={healthLabel}
+          onNavigateToSection={navigateToSection}
+          sidebarOnRight={sidebarOnRight}
+          source={source}
+          visiblePrimarySections={visiblePrimarySections}
+        />
+      ) : null}
+
+      <main className={cx("flex min-h-0 min-w-0 flex-col overflow-hidden", sidebarOnRight ? "md:order-1" : "md:order-2")}>
+        <AppHeader
+          activeSectionTitle={activeSection.title}
+          appNotificationsCount={appNotifications.length}
+          commandPaletteOpen={commandPaletteOpen}
+          diagnosticsOpen={diagnosticsOpen}
+          keybindings={source.settings.keybindings}
+          notificationsOpen={notificationsOpen}
+          onOpenCommandPalette={openCommandPalette}
+          onRefresh={source.refresh}
+          onToggleDiagnostics={toggleDiagnosticsPanel}
+          onToggleNotifications={toggleNotificationsPanel}
+          onToggleSettings={toggleSettingsPanel}
+          onToggleSidebar={toggleSidebar}
+          settingsOpen={settingsOpen}
+          sidebarOpen={sidebarOpen}
+        />
+
+        <section
+          aria-labelledby="planner-title"
+          className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-2 sm:p-3 md:p-4"
+        >
+          <RenderTimingBoundary id={`section:${activeSectionId}`}>
+            <SectionContent
+              activeSectionId={activeSectionId}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              taskCommand={taskCommand}
+            />
+          </RenderTimingBoundary>
+        </section>
+      </main>
+
+      <RenderTimingBoundary id="command-palette">
+        <Suspense fallback={null}>
+          <DeferredCommandPalette
+            actionContext={{
+              hasTaskLists: source.taskLists.length > 0,
+              hasCalendars: source.calendarSources.length > 0,
+              hasSelectedTask: false,
+              canWriteTasks: !source.taskMutationPending,
+              canWriteEvents: true
+            }}
+            onCommand={handlePaletteCommand}
+            onNavigate={navigateOrOpenSettings}
+            onOpenChange={setCommandPaletteOpen}
+            open={commandPaletteOpen}
+          />
+        </Suspense>
+      </RenderTimingBoundary>
+
+      {onboardingVisible ? (
+        <Suspense fallback={null}>
+          <DeferredFirstRunOnboarding source={source} />
+        </Suspense>
+      ) : null}
+      {notificationsOpen ? (
+        <NotificationsOverlay
+          notifications={appNotifications}
+          onClose={() => setNotificationsOpen(false)}
+        />
+      ) : null}
+      {diagnosticsOpen ? (
+        <DiagnosticsOverlay onClose={() => setDiagnosticsOpen(false)} />
+      ) : null}
+      {settingsOpen ? (
+        <SettingsOverlay
+          dialogRef={settingsDialogRef}
+          onOpenDiagnostics={openDiagnosticsPanel}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
+      {visibleNotification && !notificationsOpen ? (
+        <AppNotificationToast
+          notification={visibleNotification}
+          onDismiss={() =>
+            setDismissedNotificationIds((current) =>
+              current.includes(visibleNotification.id) ? current : [...current, visibleNotification.id]
+            )
+          }
+        />
+      ) : null}
+    </div>
+  );
+}

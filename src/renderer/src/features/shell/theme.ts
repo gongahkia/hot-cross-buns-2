@@ -1,0 +1,131 @@
+import { useEffect, useState } from "react";
+import type { SettingsSnapshot } from "@shared/ipc/contracts";
+import {
+  resolveAppColorTheme,
+  resolveAppThemeMode,
+  semanticThemeVariables
+} from "@shared/ipc/themeCatalog";
+
+const systemFontStack = "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Segoe UI\", system-ui, Roboto, \"Helvetica Neue\", Arial, sans-serif";
+const monoFontStack = "\"SF Mono\", \"Cascadia Code\", \"Fira Code\", \"JetBrains Mono\", ui-monospace, monospace";
+
+function systemPrefersDark(): boolean {
+  return typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function cssFontFamily(fontName: string | null): string {
+  const trimmed = fontName?.trim();
+
+  if (!trimmed) {
+    return systemFontStack;
+  }
+
+  return `"${trimmed.replace(/[\\"]/g, "\\$&")}", ${systemFontStack}`;
+}
+
+function cssMonoFontFamily(fontName: string | null): string {
+  const trimmed = fontName?.trim();
+
+  if (!trimmed) {
+    return monoFontStack;
+  }
+
+  return cssFontFamily(trimmed);
+}
+
+function textSizeVariables(baseSize: number): Record<string, string> {
+  const clamped = Math.min(24, Math.max(9, baseSize));
+  const scale = clamped / 13;
+  const px = (value: number): string => `${Math.round(value * scale * 100) / 100}px`;
+
+  return {
+    "--text-xs": px(11),
+    "--text-sm": px(12),
+    "--text-base": px(13),
+    "--text-md": px(14),
+    "--text-lg": px(16),
+    "--text-xl": px(20),
+    "--text-2xl": px(24)
+  };
+}
+
+function surfaceTextSize(settings: SettingsSnapshot, surface: keyof SettingsSnapshot["perSurfaceFontOverrides"]): string {
+  return `${settings.perSurfaceFontOverrides[surface]?.uiTextSizePoints ?? settings.uiTextSizePoints}px`;
+}
+
+function surfaceFontFamily(settings: SettingsSnapshot, surface: keyof SettingsSnapshot["perSurfaceFontOverrides"]): string {
+  return cssFontFamily(settings.perSurfaceFontOverrides[surface]?.uiFontName ?? settings.uiFontName);
+}
+
+function shellBackgroundValue(settings: SettingsSnapshot): string {
+  if (!settings.appBackgroundTranslucencyEnabled) {
+    return "var(--color-bg-primary)";
+  }
+
+  const opacity = Math.round(Math.min(1, Math.max(0.35, settings.appBackgroundOpacity)) * 100);
+  return `color-mix(in srgb, var(--color-bg-primary) ${opacity}%, transparent)`;
+}
+
+export function useAppliedTheme(settings: SettingsSnapshot): void {
+  const [prefersDark, setPrefersDark] = useState(systemPrefersDark);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const listener = (event: MediaQueryListEvent): void => setPrefersDark(event.matches);
+    setPrefersDark(media.matches);
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", listener);
+      return () => media.removeEventListener("change", listener);
+    }
+
+    media.addListener(listener);
+    return () => media.removeListener(listener);
+  }, []);
+
+  useEffect(() => {
+    const mode = resolveAppThemeMode(settings.theme, prefersDark);
+    const colorTheme = resolveAppColorTheme(settings.colorTheme, mode);
+    const root = document.documentElement;
+
+    root.dataset.theme = mode;
+    root.dataset.colorTheme = colorTheme.id;
+    root.dataset.performanceMode = settings.performanceMode;
+    root.dataset.animations = settings.disableAnimations ? "disabled" : "enabled";
+    root.lang = settings.appLanguage === "system" ? navigator.language || "en" : settings.appLanguage;
+    root.style.setProperty("--font-family", cssFontFamily(settings.uiFontName));
+    root.style.setProperty("--font-family-mono", cssMonoFontFamily(settings.uiFontName));
+    root.style.setProperty("--font-family-sidebar", surfaceFontFamily(settings, "sidebar"));
+    root.style.setProperty("--text-sidebar", surfaceTextSize(settings, "sidebar"));
+    root.style.setProperty("--font-family-menu-bar", surfaceFontFamily(settings, "menuBar"));
+    root.style.setProperty("--text-menu-bar", surfaceTextSize(settings, "menuBar"));
+    root.style.setProperty("--app-shell-background", shellBackgroundValue(settings));
+    root.style.fontSize = `${Math.round(Math.min(1.5, Math.max(0.8, settings.uiLayoutScale)) * 16 * 100) / 100}px`;
+
+    for (const [name, value] of Object.entries(semanticThemeVariables(colorTheme))) {
+      root.style.setProperty(name, value);
+    }
+
+    for (const [name, value] of Object.entries(textSizeVariables(settings.uiTextSizePoints))) {
+      root.style.setProperty(name, value);
+    }
+  }, [
+    prefersDark,
+    settings.appLanguage,
+    settings.colorTheme,
+    settings.appBackgroundOpacity,
+    settings.appBackgroundTranslucencyEnabled,
+    settings.disableAnimations,
+    settings.performanceMode,
+    settings.theme,
+    settings.uiFontName,
+    settings.uiLayoutScale,
+    settings.perSurfaceFontOverrides,
+    settings.uiTextSizePoints
+  ]);
+}
