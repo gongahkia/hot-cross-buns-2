@@ -169,12 +169,10 @@ export function AdvancedSettingsTab({
     <div className="grid gap-5">
       <SettingsGroup title="Calendars">
         <SettingsSwitch
-          checked={settings.hiddenCalendarViewModes.length < 5}
+          checked={settings.showCompletedInCalendarViews}
           icon={CalendarDays}
           label="Show completed tasks and dismissed events in calendar views"
-          onChange={(checked) =>
-            updateSettings({ hiddenCalendarViewModes: checked ? [] : settings.hiddenCalendarViewModes })
-          }
+          onChange={(checked) => updateSettings({ showCompletedInCalendarViews: checked })}
         />
         {calendarSources.length === 0 ? (
           <EmptyState description="No calendars are cached yet." title="No calendars" />
