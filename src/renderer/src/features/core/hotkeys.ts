@@ -21,6 +21,7 @@ export const hotkeyDefinitions: HotkeyDefinition[] = [
   { id: "navigation.notes", label: "Go to Notes", group: "Navigation" },
   { id: "navigation.search", label: "Go to Search", group: "Navigation" },
   { id: "navigation.settings", label: "Open Settings", group: "Navigation" },
+  { id: "navigation.diagnostics.toggle", label: "Diagnostics", group: "Navigation" },
   { id: "navigation.sidebar.toggle", label: "Toggle Sidebar", group: "Navigation" },
   { id: "navigation.notifications.toggle", label: "Notifications", group: "Navigation" },
   { id: "calendar.view.agenda", label: "Agenda View", group: "Calendar" },

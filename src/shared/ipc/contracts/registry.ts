@@ -27,12 +27,30 @@ import {
 } from "./calendar";
 import {
   diagnosticsCachedDataRenderedRequestSchema,
+  diagnosticsClearLogsRequestSchema,
+  diagnosticsClearLogsResponseSchema,
+  diagnosticsCopyableSummaryRequestSchema,
+  diagnosticsCopyableSummaryResponseSchema,
+  diagnosticsExportBundleRequestSchema,
+  diagnosticsExportBundleResponseSchema,
   diagnosticsHealthRequestSchema,
   diagnosticsHealthResponseSchema,
+  diagnosticsHistoryRequestSchema,
+  diagnosticsHistoryResponseSchema,
   diagnosticsIpcMetricsRequestSchema,
   diagnosticsIpcMetricsResponseSchema,
+  diagnosticsLogsRequestSchema,
+  diagnosticsLogsResponseSchema,
   diagnosticsPerformanceRequestSchema,
   diagnosticsPerformanceResponseSchema,
+  diagnosticsPendingMutationActionRequestSchema,
+  diagnosticsPendingMutationActionResponseSchema,
+  diagnosticsPendingMutationsRequestSchema,
+  diagnosticsPendingMutationsResponseSchema,
+  diagnosticsRescheduleNotificationsRequestSchema,
+  diagnosticsRescheduleNotificationsResponseSchema,
+  diagnosticsRevealLogsFolderRequestSchema,
+  diagnosticsRevealLogsFolderResponseSchema,
   diagnosticsShellVisibleRequestSchema,
   diagnosticsSummaryRequestSchema,
   diagnosticsSummaryResponseSchema,
@@ -344,6 +362,66 @@ export const ipcContracts = {
       "summary",
       diagnosticsSummaryRequestSchema,
       diagnosticsSummaryResponseSchema
+    ),
+    logs: defineIpcContract(
+      "diagnostics",
+      "logs",
+      diagnosticsLogsRequestSchema,
+      diagnosticsLogsResponseSchema
+    ),
+    clearLogs: defineIpcContract(
+      "diagnostics",
+      "clearLogs",
+      diagnosticsClearLogsRequestSchema,
+      diagnosticsClearLogsResponseSchema
+    ),
+    revealLogsFolder: defineIpcContract(
+      "diagnostics",
+      "revealLogsFolder",
+      diagnosticsRevealLogsFolderRequestSchema,
+      diagnosticsRevealLogsFolderResponseSchema
+    ),
+    history: defineIpcContract(
+      "diagnostics",
+      "history",
+      diagnosticsHistoryRequestSchema,
+      diagnosticsHistoryResponseSchema
+    ),
+    pendingMutations: defineIpcContract(
+      "diagnostics",
+      "pendingMutations",
+      diagnosticsPendingMutationsRequestSchema,
+      diagnosticsPendingMutationsResponseSchema
+    ),
+    retryPendingMutation: defineIpcContract(
+      "diagnostics",
+      "retryPendingMutation",
+      diagnosticsPendingMutationActionRequestSchema,
+      diagnosticsPendingMutationActionResponseSchema
+    ),
+    cancelPendingMutation: defineIpcContract(
+      "diagnostics",
+      "cancelPendingMutation",
+      diagnosticsPendingMutationActionRequestSchema,
+      diagnosticsPendingMutationActionResponseSchema
+    ),
+    copyableSummary: defineIpcContract(
+      "diagnostics",
+      "copyableSummary",
+      diagnosticsCopyableSummaryRequestSchema,
+      diagnosticsCopyableSummaryResponseSchema
+    ),
+    exportBundle: defineIpcContract(
+      "diagnostics",
+      "exportBundle",
+      diagnosticsExportBundleRequestSchema,
+      diagnosticsExportBundleResponseSchema
+    ),
+    rescheduleNotifications: defineIpcContract(
+      "diagnostics",
+      "rescheduleNotifications",
+      diagnosticsRescheduleNotificationsRequestSchema,
+      diagnosticsRescheduleNotificationsResponseSchema
     )
   }
 } as const;

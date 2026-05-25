@@ -360,6 +360,76 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           ipcContracts.diagnostics.summary,
           {},
           "Diagnostics summary request failed"
+        ),
+      logs: (request = {}) =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.logs,
+          request,
+          "Diagnostics logs request failed"
+        ),
+      clearLogs: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.clearLogs,
+          {},
+          "Diagnostics log clear request failed"
+        ),
+      revealLogsFolder: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.revealLogsFolder,
+          {},
+          "Diagnostics log folder request failed"
+        ),
+      history: (request = {}) =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.history,
+          request,
+          "Diagnostics history request failed"
+        ),
+      pendingMutations: (request = {}) =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.pendingMutations,
+          request,
+          "Diagnostics pending mutation request failed"
+        ),
+      retryPendingMutation: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.retryPendingMutation,
+          request,
+          "Diagnostics pending mutation retry failed"
+        ),
+      cancelPendingMutation: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.cancelPendingMutation,
+          request,
+          "Diagnostics pending mutation cancel failed"
+        ),
+      copyableSummary: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.copyableSummary,
+          {},
+          "Diagnostics summary copy request failed"
+        ),
+      exportBundle: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.exportBundle,
+          {},
+          "Diagnostics bundle export failed"
+        ),
+      rescheduleNotifications: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.rescheduleNotifications,
+          {},
+          "Diagnostics notification rebuild failed"
         )
     }
   });

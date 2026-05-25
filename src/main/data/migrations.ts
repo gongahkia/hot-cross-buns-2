@@ -209,6 +209,23 @@ CREATE INDEX IF NOT EXISTS idx_local_note_properties_note
             }
           ];
     }
+  },
+  {
+    version: 6,
+    name: "diagnostic history entries",
+    sql: `
+CREATE TABLE IF NOT EXISTS local_history_entries (
+  id TEXT PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  resource_id TEXT,
+  summary TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_history_entries_recent
+  ON local_history_entries(timestamp DESC, id DESC);
+`
   }
 ];
 

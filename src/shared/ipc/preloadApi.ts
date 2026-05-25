@@ -12,10 +12,23 @@ import type {
   CalendarListRequest,
   CalendarListResponse,
   DiagnosticsCachedDataRenderedRequest,
+  DiagnosticsClearLogsResponse,
+  DiagnosticsCopyableSummaryResponse,
+  DiagnosticsExportBundleResponse,
   DiagnosticsHealthResponse,
+  DiagnosticsHistoryRequest,
+  DiagnosticsHistoryResponse,
   DiagnosticsIpcMetricsResponse,
+  DiagnosticsLogsRequest,
+  DiagnosticsLogsResponse,
   DiagnosticsPerformanceRequest,
   DiagnosticsPerformanceResponse,
+  DiagnosticsPendingMutationActionRequest,
+  DiagnosticsPendingMutationActionResponse,
+  DiagnosticsPendingMutationsRequest,
+  DiagnosticsPendingMutationsResponse,
+  DiagnosticsRescheduleNotificationsResponse,
+  DiagnosticsRevealLogsFolderResponse,
   DiagnosticsSummaryResponse,
   DiagnosticsShellVisibleRequest,
   EntityByIdRequest,
@@ -171,5 +184,25 @@ export interface HcbApi {
       request?: DiagnosticsPerformanceRequest
     ) => Promise<HcbResult<DiagnosticsPerformanceResponse>>;
     summary: () => Promise<HcbResult<DiagnosticsSummaryResponse>>;
+    logs: (request?: DiagnosticsLogsRequest) => Promise<HcbResult<DiagnosticsLogsResponse>>;
+    clearLogs: () => Promise<HcbResult<DiagnosticsClearLogsResponse>>;
+    revealLogsFolder: () => Promise<HcbResult<DiagnosticsRevealLogsFolderResponse>>;
+    history: (
+      request?: DiagnosticsHistoryRequest
+    ) => Promise<HcbResult<DiagnosticsHistoryResponse>>;
+    pendingMutations: (
+      request?: DiagnosticsPendingMutationsRequest
+    ) => Promise<HcbResult<DiagnosticsPendingMutationsResponse>>;
+    retryPendingMutation: (
+      request: DiagnosticsPendingMutationActionRequest
+    ) => Promise<HcbResult<DiagnosticsPendingMutationActionResponse>>;
+    cancelPendingMutation: (
+      request: DiagnosticsPendingMutationActionRequest
+    ) => Promise<HcbResult<DiagnosticsPendingMutationActionResponse>>;
+    copyableSummary: () => Promise<HcbResult<DiagnosticsCopyableSummaryResponse>>;
+    exportBundle: () => Promise<HcbResult<DiagnosticsExportBundleResponse>>;
+    rescheduleNotifications: () => Promise<
+      HcbResult<DiagnosticsRescheduleNotificationsResponse>
+    >;
   };
 }

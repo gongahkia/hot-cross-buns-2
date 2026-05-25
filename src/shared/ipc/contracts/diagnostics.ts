@@ -2,7 +2,7 @@ import { z } from "zod";
 import { hcbErrorCodeSchema } from "../result";
 import { emptyRequestSchema, idSchema, isoDateTimeSchema } from "./core";
 import { mcpPermissionModeSchema, syncModeSchema } from "./settings";
-import { nativeCapabilityReportSchema } from "./native";
+import { nativeCapabilityReportSchema, nativeNotificationStatusSchema } from "./native";
 import { syncStatusResponseSchema } from "./sync";
 
 export const startupTimingSnapshotSchema = z
@@ -268,3 +268,195 @@ export const diagnosticsSummaryResponseSchema = z
   .strict();
 
 export type DiagnosticsSummaryResponse = z.infer<typeof diagnosticsSummaryResponseSchema>;
+
+export const diagnosticsLogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
+export type DiagnosticsLogLevel = z.infer<typeof diagnosticsLogLevelSchema>;
+
+export const diagnosticsLogsRequestSchema = z
+  .object({
+    minimumLevel: diagnosticsLogLevelSchema.default("info"),
+    limit: z.number().int().min(1).max(500).default(200)
+  })
+  .strict();
+
+export type DiagnosticsLogsRequest = z.input<typeof diagnosticsLogsRequestSchema>;
+
+export const diagnosticsLogEntrySchema = z
+  .object({
+    id: idSchema,
+    timestamp: isoDateTimeSchema,
+    level: diagnosticsLogLevelSchema,
+    category: z.string().min(1).max(80),
+    message: z.string().min(1).max(1_000),
+    metadataLine: z.string().max(2_000).optional(),
+    formattedLine: z.string().min(1).max(4_000)
+  })
+  .strict();
+
+export type DiagnosticsLogEntry = z.infer<typeof diagnosticsLogEntrySchema>;
+
+export const diagnosticsLogsResponseSchema = z
+  .object({
+    entries: z.array(diagnosticsLogEntrySchema).max(500),
+    retainedEntryCount: z.number().int().nonnegative(),
+    persistedText: z.string().max(1_000_000),
+    logsDirectory: z.string().min(1).max(1_000).optional()
+  })
+  .strict();
+
+export type DiagnosticsLogsResponse = z.infer<typeof diagnosticsLogsResponseSchema>;
+
+export const diagnosticsClearLogsRequestSchema = emptyRequestSchema;
+
+export const diagnosticsClearLogsResponseSchema = z
+  .object({
+    clearedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type DiagnosticsClearLogsResponse = z.infer<typeof diagnosticsClearLogsResponseSchema>;
+
+export const diagnosticsRevealLogsFolderRequestSchema = emptyRequestSchema;
+
+export const diagnosticsRevealLogsFolderResponseSchema = z
+  .object({
+    opened: z.boolean(),
+    path: z.string().min(1).max(1_000).optional(),
+    message: z.string().min(1).max(500)
+  })
+  .strict();
+
+export type DiagnosticsRevealLogsFolderResponse = z.infer<
+  typeof diagnosticsRevealLogsFolderResponseSchema
+>;
+
+export const diagnosticsHistoryRequestSchema = z
+  .object({
+    limit: z.number().int().min(1).max(500).default(100)
+  })
+  .strict();
+
+export type DiagnosticsHistoryRequest = z.input<typeof diagnosticsHistoryRequestSchema>;
+
+export const diagnosticsHistoryEntrySchema = z
+  .object({
+    id: idSchema,
+    timestamp: isoDateTimeSchema,
+    kind: z.string().min(1).max(120),
+    summary: z.string().min(1).max(1_000),
+    resourceId: z.string().min(1).max(300).optional(),
+    metadataLine: z.string().max(2_000).optional()
+  })
+  .strict();
+
+export type DiagnosticsHistoryEntry = z.infer<typeof diagnosticsHistoryEntrySchema>;
+
+export const diagnosticsHistoryResponseSchema = z
+  .object({
+    entries: z.array(diagnosticsHistoryEntrySchema).max(500),
+    retainedEntryCount: z.number().int().nonnegative()
+  })
+  .strict();
+
+export type DiagnosticsHistoryResponse = z.infer<typeof diagnosticsHistoryResponseSchema>;
+
+export const diagnosticsPendingMutationsRequestSchema = z
+  .object({
+    limit: z.number().int().min(1).max(200).default(100)
+  })
+  .strict();
+
+export type DiagnosticsPendingMutationsRequest = z.input<
+  typeof diagnosticsPendingMutationsRequestSchema
+>;
+
+export const diagnosticsPendingMutationSchema = z
+  .object({
+    id: idSchema,
+    accountId: idSchema.nullable(),
+    resourceType: z.enum(["task", "task_list", "event"]),
+    resourceId: idSchema,
+    operation: z.string().min(1).max(120),
+    status: z.enum(["pending", "applying", "failed"]),
+    attemptCount: z.number().int().nonnegative(),
+    nextRetryAt: isoDateTimeSchema.nullable(),
+    lastErrorCode: hcbErrorCodeSchema.nullable(),
+    lastErrorMessage: z.string().max(1_000).nullable(),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type DiagnosticsPendingMutation = z.infer<typeof diagnosticsPendingMutationSchema>;
+
+export const diagnosticsPendingMutationsResponseSchema = z
+  .object({
+    mutations: z.array(diagnosticsPendingMutationSchema).max(200)
+  })
+  .strict();
+
+export type DiagnosticsPendingMutationsResponse = z.infer<
+  typeof diagnosticsPendingMutationsResponseSchema
+>;
+
+export const diagnosticsPendingMutationActionRequestSchema = z
+  .object({
+    id: idSchema
+  })
+  .strict();
+
+export type DiagnosticsPendingMutationActionRequest = z.input<
+  typeof diagnosticsPendingMutationActionRequestSchema
+>;
+
+export const diagnosticsPendingMutationActionResponseSchema = z
+  .object({
+    id: idSchema,
+    status: z.enum(["pending", "cancelled"]),
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type DiagnosticsPendingMutationActionResponse = z.infer<
+  typeof diagnosticsPendingMutationActionResponseSchema
+>;
+
+export const diagnosticsCopyableSummaryRequestSchema = emptyRequestSchema;
+
+export const diagnosticsCopyableSummaryResponseSchema = z
+  .object({
+    text: z.string().min(1).max(1_000_000),
+    generatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type DiagnosticsCopyableSummaryResponse = z.infer<
+  typeof diagnosticsCopyableSummaryResponseSchema
+>;
+
+export const diagnosticsExportBundleRequestSchema = emptyRequestSchema;
+
+export const diagnosticsExportBundleResponseSchema = z
+  .object({
+    exported: z.boolean(),
+    path: z.string().min(1).max(1_000).optional(),
+    message: z.string().min(1).max(500)
+  })
+  .strict();
+
+export type DiagnosticsExportBundleResponse = z.infer<
+  typeof diagnosticsExportBundleResponseSchema
+>;
+
+export const diagnosticsRescheduleNotificationsRequestSchema = emptyRequestSchema;
+
+export const diagnosticsRescheduleNotificationsResponseSchema = z
+  .object({
+    status: nativeNotificationStatusSchema,
+    message: z.string().min(1).max(500)
+  })
+  .strict();
+
+export type DiagnosticsRescheduleNotificationsResponse = z.infer<
+  typeof diagnosticsRescheduleNotificationsResponseSchema
+>;
