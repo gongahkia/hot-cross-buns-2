@@ -181,6 +181,7 @@ export function createPlaceholderState(): PlaceholderState {
       navigationPlacement: "left",
       hiddenNavigationTabs: [],
       hiddenCalendarViewModes: [],
+      showCompletedInCalendarViews: true,
       monthScrollPastMonths: 0,
       monthScrollFutureMonths: 1,
       quickCreateExpandedByDefault: false,

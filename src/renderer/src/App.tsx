@@ -27,6 +27,7 @@ import {
   type CoreViewModelSource,
   useCoreViewModelSource
 } from "./features/core/coreViewModelSource";
+import { displayAccelerator, eventMatchesAccelerator } from "./features/core/hotkeys";
 import {
   RenderTimingBoundary,
   rendererNow,
@@ -422,6 +423,116 @@ function AppShell(): JSX.Element {
     [navigateToSection, openSettingsPanel, source.refresh, triggerTaskCommand]
   );
 
+  const runHotkeyAction = useCallback(
+    (actionId: keyof SettingsSnapshot["keybindings"]): void => {
+      if (actionId === "task.create") {
+        triggerTaskCommand("task.create");
+        return;
+      }
+
+      if (actionId === "task.quickCapture") {
+        triggerTaskCommand("task.quickCapture");
+        return;
+      }
+
+      if (actionId === "note.create") {
+        navigateToSection("notes");
+        window.dispatchEvent(new CustomEvent("hcb:note-command", { detail: { action: "new-note" } }));
+        return;
+      }
+
+      if (actionId === "calendar.create") {
+        navigateToSection("calendar");
+        window.dispatchEvent(new CustomEvent("hcb:calendar-command", { detail: { action: "new-event" } }));
+        return;
+      }
+
+      if (actionId === "commandPalette.open") {
+        openCommandPalette();
+        return;
+      }
+
+      if (actionId === "print.today") {
+        navigateToSection("today");
+        window.setTimeout(() => window.print(), 0);
+        return;
+      }
+
+      if (actionId === "sync.refresh") {
+        source.refresh();
+        return;
+      }
+
+      if (actionId === "sync.forceFullResync") {
+        void source.runRecoveryAction({
+          action: "forceFullResync",
+          confirmation: {
+            accepted: true,
+            phrase: "FULL RESYNC"
+          }
+        });
+        return;
+      }
+
+      if (actionId === "navigation.today") {
+        navigateToPrimarySection("today");
+        return;
+      }
+
+      if (actionId === "navigation.tasks") {
+        navigateToPrimarySection("tasks");
+        return;
+      }
+
+      if (actionId === "navigation.calendar") {
+        navigateToPrimarySection("calendar");
+        return;
+      }
+
+      if (actionId === "navigation.notes") {
+        navigateToPrimarySection("notes");
+        return;
+      }
+
+      if (actionId === "navigation.search") {
+        navigateToPrimarySection("search");
+        return;
+      }
+
+      if (actionId === "navigation.settings") {
+        openSettingsPanel();
+        return;
+      }
+
+      if (actionId === "navigation.sidebar.toggle") {
+        toggleSidebar();
+        return;
+      }
+
+      if (actionId === "navigation.notifications.toggle") {
+        toggleNotificationsPanel();
+        return;
+      }
+
+      if (actionId.startsWith("calendar.view.")) {
+        const viewId = actionId.replace("calendar.view.", "");
+        navigateToPrimarySection("calendar");
+        window.dispatchEvent(new CustomEvent("hcb:calendar-command", { detail: { action: "set-view", viewId } }));
+      }
+    },
+    [
+      navigateToPrimarySection,
+      navigateToSection,
+      openCommandPalette,
+      openSettingsPanel,
+      source.refresh,
+      source.runRecoveryAction,
+      toggleNotificationsPanel,
+      toggleSidebar,
+      triggerTaskCommand
+    ]
+  );
+
   const focusSection = useCallback(
     (sectionId: SectionId): void => {
       navigateToSection(sectionId);
@@ -510,64 +621,28 @@ function AppShell(): JSX.Element {
 
   useEffect(() => {
     function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {
-      if (event.metaKey || event.ctrlKey) {
-        const primaryShortcutIndex = Number(event.key) - 1;
-        const primaryShortcutSection = primaryPlannerSections[primaryShortcutIndex];
+      if (isEditableShortcutTarget(event.target) && !(event.metaKey || event.ctrlKey)) {
+        return;
+      }
 
-        if (
-          primaryShortcutSection &&
-          !source.settings.hiddenNavigationTabs.includes(primaryShortcutSection.id as "tasks" | "calendar" | "notes")
-        ) {
-          event.preventDefault();
-          navigateToPrimarySection(primaryShortcutSection.id);
-          return;
+      for (const [actionId, accelerator] of Object.entries(source.settings.keybindings) as Array<
+        [keyof SettingsSnapshot["keybindings"], string | null]
+      >) {
+        if (!eventMatchesAccelerator(event, accelerator)) {
+          continue;
         }
-      }
 
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
         event.preventDefault();
-        openCommandPalette();
+        runHotkeyAction(actionId);
         return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        source.refresh();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        toggleSidebar();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
-        event.preventDefault();
-        openSettingsPanel();
-        return;
-      }
-
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "n" &&
-        !isEditableShortcutTarget(event.target)
-      ) {
-        event.preventDefault();
-        toggleNotificationsPanel();
       }
     }
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [
-    navigateToPrimarySection,
-    openCommandPalette,
-    openSettingsPanel,
-    source.refresh,
-    source.settings.hiddenNavigationTabs,
-    toggleNotificationsPanel,
-    toggleSidebar
+    runHotkeyAction,
+    source.settings.keybindings
   ]);
 
   useEffect(() => {
@@ -693,7 +768,7 @@ function AppShell(): JSX.Element {
                     aria-hidden="true"
                     className="hidden shrink-0 rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted lg:inline-flex"
                   >
-                    Cmd {shortcutKey}
+                    {displayAccelerator(source.settings.keybindings[`navigation.${section.id}` as keyof SettingsSnapshot["keybindings"]])}
                   </span>
                   <span className="hidden shrink-0 text-[var(--text-xs)] text-text-muted lg:inline">
                     {sectionMetric(source, section.id)}
@@ -727,7 +802,7 @@ function AppShell(): JSX.Element {
             >
               <SidebarToggleIcon aria-hidden="true" size={15} />
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
-                Cmd S
+                {displayAccelerator(source.settings.keybindings["navigation.sidebar.toggle"])}
               </span>
             </Button>
             <div className="min-w-0">
@@ -749,7 +824,7 @@ function AppShell(): JSX.Element {
             >
               <Command aria-hidden="true" size={15} />
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
-                Cmd P
+                {displayAccelerator(source.settings.keybindings["commandPalette.open"])}
               </span>
             </Button>
             <Button
@@ -766,7 +841,7 @@ function AppShell(): JSX.Element {
                 {appNotifications.length}
               </Badge>
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
-                Cmd N
+                {displayAccelerator(source.settings.keybindings["navigation.notifications.toggle"])}
               </span>
             </Button>
             <Button
@@ -780,7 +855,7 @@ function AppShell(): JSX.Element {
             >
               <RefreshCw aria-hidden="true" size={15} />
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
-                Cmd R
+                {displayAccelerator(source.settings.keybindings["sync.refresh"])}
               </span>
             </Button>
             <Button
@@ -801,7 +876,7 @@ function AppShell(): JSX.Element {
             >
               <Settings2 aria-hidden="true" size={15} />
               <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
-                Cmd ,
+                {displayAccelerator(source.settings.keybindings["navigation.settings"])}
               </span>
             </Button>
           </div>

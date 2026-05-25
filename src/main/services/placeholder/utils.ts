@@ -194,6 +194,10 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
     patch.hiddenCalendarViewModes = [...new Set(request.hiddenCalendarViewModes)];
   }
 
+  if (request.showCompletedInCalendarViews !== undefined) {
+    patch.showCompletedInCalendarViews = request.showCompletedInCalendarViews;
+  }
+
   if (request.monthScrollPastMonths !== undefined) {
     patch.monthScrollPastMonths = request.monthScrollPastMonths;
   }

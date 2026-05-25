@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   navigationPlacement: "left",
   hiddenNavigationTabs: [],
   hiddenCalendarViewModes: [],
+  showCompletedInCalendarViews: true,
   monthScrollPastMonths: 0,
   monthScrollFutureMonths: 1,
   quickCreateExpandedByDefault: false,
@@ -144,6 +145,11 @@ export class LocalSettingsRepository {
         "appearance",
         "hiddenCalendarViewModes",
         DEFAULT_SETTINGS.hiddenCalendarViewModes
+      ),
+      showCompletedInCalendarViews: this.readSetting(
+        "calendar",
+        "showCompletedInViews",
+        DEFAULT_SETTINGS.showCompletedInCalendarViews
       ),
       monthScrollPastMonths: this.readSetting(
         "appearance",
@@ -430,6 +436,10 @@ export class LocalSettingsRepository {
 
     if (request.hiddenCalendarViewModes !== undefined) {
       this.writeSetting("appearance", "hiddenCalendarViewModes", request.hiddenCalendarViewModes, now);
+    }
+
+    if (request.showCompletedInCalendarViews !== undefined) {
+      this.writeSetting("calendar", "showCompletedInViews", request.showCompletedInCalendarViews, now);
     }
 
     if (request.monthScrollPastMonths !== undefined) {
