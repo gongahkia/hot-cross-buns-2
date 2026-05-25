@@ -300,16 +300,16 @@ export function DiagnosticsOverlay({ onClose }: DiagnosticsOverlayProps): JSX.El
         role="dialog"
         tabIndex={-1}
       >
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-bg-secondary px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-hcbMd bg-surface-0 text-accent">
-              <Gauge aria-hidden="true" size={18} />
+        <header className="flex min-h-12 items-center justify-between gap-3 border-b border-border bg-bg-primary px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-hcbSm bg-surface-0 text-accent">
+              <Gauge aria-hidden="true" size={14} strokeWidth={2} />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-[var(--text-lg)] font-semibold" id="diagnostics-overlay-title">
+              <h2 className="truncate text-[var(--text-md)] font-semibold text-text-primary" id="diagnostics-overlay-title">
                 Diagnostics
               </h2>
-              <p className="truncate text-[var(--text-sm)] text-text-muted">
+              <p className="truncate text-[var(--text-xs)] text-text-muted">
                 Runtime state, logs, sync queue, and support bundle
               </p>
             </div>
@@ -317,23 +317,26 @@ export function DiagnosticsOverlay({ onClose }: DiagnosticsOverlayProps): JSX.El
           <IconButton icon={X} label="Close diagnostics" onClick={onClose} variant="ghost" />
         </header>
 
-        <div className="grid grid-cols-5 gap-1 border-b border-border bg-bg-tertiary px-2 py-2">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto border-b border-border bg-bg-primary px-3 py-2">
           {tabs.map((entry) => {
             const Icon = entry.icon;
             const selected = tab === entry.id;
 
             return (
               <button
+                aria-pressed={selected}
                 className={cx(
-                  "flex min-h-12 items-center justify-center gap-2 rounded-hcbMd px-2 text-[var(--text-sm)] font-semibold transition-colors",
-                  selected ? "bg-surface-0 text-accent" : "text-text-muted hover:bg-surface-0 hover:text-text-primary"
+                  "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-hcbMd border px-2.5 text-[var(--text-base)] font-medium transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  selected
+                    ? "border-border bg-surface-0 text-text-primary"
+                    : "border-transparent text-text-muted hover:bg-surface-0 hover:text-text-primary"
                 )}
                 key={entry.id}
                 onClick={() => setTab(entry.id)}
                 type="button"
               >
-                <Icon aria-hidden="true" size={18} />
-                <span className="hidden sm:inline">{entry.label}</span>
+                <Icon aria-hidden="true" className="shrink-0" size={14} strokeWidth={2} />
+                <span className="truncate">{entry.label}</span>
               </button>
             );
           })}
@@ -348,7 +351,7 @@ export function DiagnosticsOverlay({ onClose }: DiagnosticsOverlayProps): JSX.El
           />
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+        <div className="min-h-0 flex-1 overflow-auto p-3">
           {tab === "overview" ? (
             <OverviewTab source={source} summary={summary} />
           ) : null}
@@ -414,7 +417,7 @@ function OverviewTab({
   const credentialStatus = summary?.native.capabilities.find((item) => item.key === "credentialStorage");
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-3">
       <DiagnosticSection title="Status">
         <DiagnosticRow label="Google" value={googleLabel} />
         <DiagnosticRow label="Sync" value={summary?.sync.state ?? source.syncStatus.state} />
@@ -489,9 +492,9 @@ function SyncTab({
   working: boolean;
 }): JSX.Element {
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-3">
       <DiagnosticSection title="Recovery">
-        <div className="flex flex-wrap gap-2 py-2">
+        <div className="flex flex-wrap gap-2 p-3">
           <Button disabled={working} onClick={() => void runRecovery("refresh")}>
             <RefreshCw aria-hidden="true" size={15} />
             Refresh now
@@ -524,7 +527,7 @@ function SyncTab({
         ) : (
           <div className="grid">
             {pendingMutations.map((mutation) => (
-              <div className="flex min-h-12 items-start gap-3 border-b border-border px-3 py-2 last:border-b-0" key={mutation.id}>
+              <div className="flex min-h-11 items-start gap-3 border-b border-border px-3 py-2 last:border-b-0" key={mutation.id}>
                 <Badge tone={mutation.status === "failed" ? "danger" : mutation.status === "applying" ? "info" : "neutral"}>
                   {mutation.status}
                 </Badge>
@@ -574,15 +577,15 @@ function LogsTab({
   setLogQuery: (query: string) => void;
 }): JSX.Element {
   return (
-    <div className="grid min-h-[55vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-hcbMd border border-border">
-      <div className="grid gap-3 border-b border-border bg-bg-secondary p-3">
+    <div className="grid min-h-[55vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-hcbMd border border-border bg-bg-secondary">
+      <div className="grid gap-2 border-b border-border p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[var(--text-sm)] font-semibold">Level</span>
           <div className="flex overflow-hidden rounded-hcbMd border border-border bg-surface-0">
             {logLevels.map((level) => (
               <button
                 className={cx(
-                  "h-8 px-3 text-[var(--text-sm)] font-semibold",
+                  "h-7 px-2.5 text-[var(--text-sm)] font-semibold transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                   logLevel === level ? "bg-accent text-bg-tertiary" : "text-text-secondary hover:bg-surface-1"
                 )}
                 key={level}
@@ -602,7 +605,7 @@ function LogsTab({
         <SearchInput label="Search logs" value={logQuery} onChange={setLogQuery} />
       </div>
 
-      <div className="min-h-0 overflow-auto bg-bg-primary">
+      <div className="min-h-0 overflow-auto bg-bg-secondary">
         {filteredLogs.length === 0 ? (
           <p className="p-4 text-[var(--text-sm)] text-text-muted">No log entries match this view.</p>
         ) : (
@@ -610,7 +613,7 @@ function LogsTab({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border bg-bg-secondary px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
         <span className="text-[var(--text-sm)] text-text-muted">
           {filteredLogs.length} of {logs?.entries.length ?? 0} shown
         </span>
@@ -646,8 +649,8 @@ function HistoryTab({
   setHistoryQuery: (query: string) => void;
 }): JSX.Element {
   return (
-    <div className="grid min-h-[55vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-hcbMd border border-border">
-      <div className="grid gap-3 border-b border-border bg-bg-secondary p-3">
+    <div className="grid min-h-[55vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-hcbMd border border-border bg-bg-secondary">
+      <div className="grid gap-2 border-b border-border p-3">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-[var(--text-md)] font-semibold">Mutation history</h3>
           <span className="text-[var(--text-sm)] text-text-muted">{historyEntries.length} retained</span>
@@ -661,7 +664,7 @@ function HistoryTab({
           filteredHistory.map((entry) => <HistoryRow entry={entry} key={entry.id} />)
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-2 border-t border-border bg-bg-secondary px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
         <span className="text-[var(--text-sm)] text-text-muted">
           {filteredHistory.length} of {historyEntries.length} shown
         </span>
@@ -685,9 +688,9 @@ function SupportTab({
   summary: DiagnosticsSummaryResponse | null;
 }): JSX.Element {
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-3">
       <DiagnosticSection title="Support">
-        <div className="flex flex-wrap gap-2 py-2">
+        <div className="flex flex-wrap gap-2 p-3">
           <Button onClick={() => void copyDiagnosticSummary()}>
             <ClipboardCopy aria-hidden="true" size={15} />
             Copy diagnostic summary
@@ -720,7 +723,7 @@ function DiagnosticSection({
   return (
     <section className="overflow-hidden rounded-hcbMd border border-border bg-bg-secondary">
       <div className="flex min-h-9 items-center justify-between gap-3 border-b border-border px-3 py-2">
-        <h3 className="text-[var(--text-md)] font-semibold">{title}</h3>
+        <h3 className="text-[var(--text-md)] font-semibold text-text-primary">{title}</h3>
         {trailing}
       </div>
       <div>{children}</div>
@@ -739,8 +742,8 @@ function DiagnosticRow({
 }): JSX.Element {
   return (
     <div className="flex min-h-8 items-center justify-between gap-4 border-b border-border px-3 py-1.5 last:border-b-0">
-      <span className="min-w-0 truncate text-[var(--text-sm)] font-semibold text-text-muted">{label}</span>
-      <span className={cx("min-w-0 truncate text-right text-[var(--text-sm)] font-semibold", mono && "font-mono")}>
+      <span className="min-w-0 truncate text-[var(--text-sm)] font-medium text-text-muted">{label}</span>
+      <span className={cx("min-w-0 truncate text-right text-[var(--text-sm)] font-medium text-text-primary", mono && "font-mono")}>
         {value}
       </span>
     </div>
@@ -761,11 +764,11 @@ function SearchInput({
       <Search
         aria-hidden="true"
         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-        size={17}
+        size={15}
       />
       <Input
         aria-label={label}
-        className="h-10 pl-10 text-[var(--text-md)]"
+        className="pl-9"
         onChange={(event) => onChange(event.currentTarget.value)}
         placeholder={label}
         value={value}
