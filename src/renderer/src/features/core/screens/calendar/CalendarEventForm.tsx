@@ -41,6 +41,23 @@ function DetailItem({
   );
 }
 
+function calendarReminderSummary(value: string): string {
+  const minutes = Number.parseInt(value.trim(), 10);
+
+  if (!Number.isInteger(minutes) || minutes <= 0) {
+    return "None";
+  }
+
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"} before`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  return `${hours} hr ${remainingMinutes} min before`;
+}
+
 export function CalendarEventDetails({
   calendars,
   defaultTimeZone,
@@ -57,8 +74,9 @@ export function CalendarEventDetails({
     .map((guest) => guest.trim())
     .filter(Boolean);
   const reminderLabel = draft.reminderMinutes.trim()
-    ? `${draft.reminderMinutes.trim()} minutes before`
+    ? calendarReminderSummary(draft.reminderMinutes)
     : "None";
+  const repeats = draft.repeatFrequency !== "none";
 
   return (
     <div className="grid gap-4">
@@ -96,9 +114,11 @@ export function CalendarEventDetails({
             <span className="text-[var(--text-sm)] text-text-muted">{sourceTimeZone}</span>
           </div>
         </DetailItem>
-        <DetailItem icon={RotateCcw} label="Repeat">
-          {calendarRecurrenceSummary(draft)}
-        </DetailItem>
+        {repeats ? (
+          <DetailItem icon={RotateCcw} label="Repeat">
+            {calendarRecurrenceSummary(draft)}
+          </DetailItem>
+        ) : null}
         <DetailItem icon={MapPin} label="Location">
           {draft.location.trim() || <span className="text-text-muted">No location</span>}
         </DetailItem>

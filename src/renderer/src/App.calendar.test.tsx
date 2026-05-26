@@ -364,6 +364,8 @@ describe("App calendar", () => {
     const inspector = await screen.findByTestId("inspector-shell");
     const inspectorBody = within(inspector).getByTestId("inspector-body");
     expect(within(inspectorBody).getByRole("heading", { name: "Planner shell standup" })).toBeInTheDocument();
+    expect(within(inspectorBody).queryByText("Repeat")).not.toBeInTheDocument();
+    expect(within(inspectorBody).queryByText("Does not repeat")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Event title" })).not.toBeInTheDocument();
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
@@ -683,6 +685,7 @@ describe("App calendar", () => {
             endsAt: `${todayDate}T14:00:00.000Z`,
             allDay: false,
             updatedAt: now,
+            reminderMinutes: [420],
             recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4"
           }
         ],
@@ -698,7 +701,10 @@ describe("App calendar", () => {
     await user.click(await within(agenda).findByText("Recurring release review"));
 
     const inspector = await screen.findByTestId("inspector-shell");
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
     expect(inspector).toHaveAttribute("data-inspector-kind", "event");
+    expect(within(inspectorBody).getByText("Every 2 months, 4 times")).toBeInTheDocument();
+    expect(within(inspectorBody).getByText("7 hr 0 min before")).toBeInTheDocument();
     expect(screen.queryByLabelText("Event repeat frequency")).not.toBeInTheDocument();
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
