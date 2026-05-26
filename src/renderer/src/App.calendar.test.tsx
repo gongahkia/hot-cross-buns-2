@@ -196,6 +196,43 @@ describe("App calendar", () => {
     expect(within(monthGrid).getByRole("button", { name: "Launch freeze" })).toBeInTheDocument();
     expect(within(monthGrid).getByRole("button", { name: "Design sync" })).toBeInTheDocument();
     expect(within(monthGrid).getByText("2 more")).toBeInTheDocument();
+
+    await user.click(within(monthGrid).getByRole("button", { name: "Show 2 more calendar items" }));
+
+    const overflowDialog = screen.getByRole("dialog", { name: /More items for/ });
+    expect(within(overflowDialog).getByRole("button", { name: "11:00-11:30 Partner review" })).toBeInTheDocument();
+    expect(within(overflowDialog).getByRole("button", { name: "12:00-12:30 Release notes" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "New event" })).not.toBeInTheDocument();
+  });
+
+  it("opens all-day overflow without creating a draft in timeline views", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: Array.from({ length: 5 }, (_, index) => ({
+          id: `event-all-day-${index + 1}`,
+          calendarId: "cal-product",
+          title: `All-day ${index + 1}`,
+          startsAt: `${todayDate}T00:00:00.000Z`,
+          endsAt: `${tomorrowIso.slice(0, 10)}T00:00:00.000Z`,
+          allDay: true,
+          updatedAt: now
+        })),
+        page: { limit: 250, totalKnown: 5 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+    await user.click(screen.getByRole("button", { name: "Show 1 more calendar items" }));
+
+    const overflowDialog = screen.getByRole("dialog", { name: /More all-day items for/ });
+    expect(within(overflowDialog).getByRole("button", { name: "All day All-day 5" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "New event" })).not.toBeInTheDocument();
   });
 
   it("renders multi-day all-day events as one spanning timeline segment", async () => {

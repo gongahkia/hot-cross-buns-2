@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { cx } from "../../../../components/primitives";
 import { handleActivationKeyDown } from "../../coreScreenShared";
 import type { CalendarEventViewModel, CalendarMonthWeekViewModel } from "../../coreViewModels";
-import { CalendarEventChip, CalendarOverflowChip } from "./CalendarEventChips";
-import { calendarMonthVisibleChipCount, visibleCalendarMonthWeeks } from "./calendarGrid";
+import { CalendarEventChip, CalendarOverflowChip, CalendarOverflowPopover } from "./CalendarEventChips";
+import { calendarDateTitle, calendarMonthVisibleChipCount, visibleCalendarMonthWeeks } from "./calendarGrid";
 import type { CalendarCreateSeed, CalendarTimelineAllDaySegment } from "./types";
 
 const monthEventLaneHeight = 22;
@@ -41,6 +41,10 @@ export function MonthView({
   onOpen: (event: CalendarEventViewModel) => void;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
+  const [activeOverflow, setActiveOverflow] = useState<{
+    events: CalendarEventViewModel[];
+    title: string;
+  } | null>(null);
   const visibleWeeks = useMemo(
     () => visibleCalendarMonthWeeks(weeks, visibleCalendarIds),
     [weeks, visibleCalendarIds]
@@ -138,7 +142,7 @@ export function MonthView({
                 </div>
               ))
             )}
-            {week.days.map(({ day, overflowCount }, dayIndex) =>
+            {week.days.map(({ day, overflowCount, overflowEvents }, dayIndex) =>
               overflowCount > 0 ? (
                 <div
                   className="z-10 min-w-0 px-1.5"
@@ -146,13 +150,29 @@ export function MonthView({
                   role="presentation"
                   style={monthOverflowStyle(dayIndex)}
                 >
-                  <CalendarOverflowChip count={overflowCount} />
+                  <CalendarOverflowChip
+                    count={overflowCount}
+                    onOpen={() =>
+                      setActiveOverflow({
+                        events: overflowEvents,
+                        title: `More items for ${calendarDateTitle(day)}`
+                      })
+                    }
+                  />
                 </div>
               ) : null
             )}
           </div>
         ))}
       </div>
+      {activeOverflow ? (
+        <CalendarOverflowPopover
+          events={activeOverflow.events}
+          onClose={() => setActiveOverflow(null)}
+          onOpen={onOpen}
+          title={activeOverflow.title}
+        />
+      ) : null}
     </div>
   );
 }

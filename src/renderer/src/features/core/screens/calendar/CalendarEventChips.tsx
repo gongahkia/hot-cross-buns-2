@@ -264,7 +264,7 @@ export function CalendarOverflowPopover({
             <CalendarEventChip
               event={event}
               key={event.id}
-              labelVariant="time"
+              labelVariant="range"
               onOpen={(selectedEvent) => {
                 onClose();
                 onOpen(selectedEvent);

@@ -5,7 +5,7 @@ import { IconButton, cx } from "../../../../components/primitives";
 import { useCoreViewModelSource } from "../../coreViewModelSource";
 import { handleActivationKeyDown } from "../../coreScreenShared";
 import type { CalendarDayViewModel, CalendarEventViewModel } from "../../coreViewModels";
-import { CalendarEventChip, CalendarOverflowChip } from "./CalendarEventChips";
+import { CalendarEventChip, CalendarOverflowChip, CalendarOverflowPopover } from "./CalendarEventChips";
 import {
   addUtcMinutesIso,
   calendarBlocksOverlapHour,
@@ -150,6 +150,10 @@ function CalendarTimelineView({
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   const source = useCoreViewModelSource();
+  const [activeOverflow, setActiveOverflow] = useState<{
+    events: CalendarEventViewModel[];
+    title: string;
+  } | null>(null);
   const [dragSelection, setDragSelection] = useState<CalendarTimeBlock | null>(null);
   const timelineDragRef = useRef<{
     dayKey: string;
@@ -403,8 +407,11 @@ function CalendarTimelineView({
                     />
                   </div>
                 ))}
-                {timeline.allDayOverflowCounts.map((count, dayIndex) =>
-                  count > 0 ? (
+                {timeline.allDayOverflowCounts.map((count, dayIndex) => {
+                  const day = visibleDays[dayIndex]?.day;
+                  const overflowEvents = timeline.allDayOverflowEvents[dayIndex] ?? [];
+
+                  return count > 0 && day ? (
                     <div
                       className="min-w-0 px-2"
                       key={`${visibleDays[dayIndex]?.day.id ?? dayIndex}-overflow`}
@@ -413,10 +420,18 @@ function CalendarTimelineView({
                         gridRow: `${calendarTimelineVisibleAllDayCount + 1}`
                       }}
                     >
-                      <CalendarOverflowChip count={count} />
+                      <CalendarOverflowChip
+                        count={count}
+                        onOpen={() =>
+                          setActiveOverflow({
+                            events: overflowEvents,
+                            title: `More all-day items for ${calendarDateTitle(day)}`
+                          })
+                        }
+                      />
                     </div>
-                  ) : null
-                )}
+                  ) : null;
+                })}
               </div>
             </div>
           </div>
@@ -554,6 +569,14 @@ function CalendarTimelineView({
           </div>
         </div>
       </div>
+      {activeOverflow ? (
+        <CalendarOverflowPopover
+          events={activeOverflow.events}
+          onClose={() => setActiveOverflow(null)}
+          onOpen={onOpen}
+          title={activeOverflow.title}
+        />
+      ) : null}
     </div>
   );
 }
