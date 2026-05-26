@@ -25,16 +25,78 @@ describe("App calendar", () => {
     expect(await screen.findByText("Agenda view")).toBeInTheDocument();
     const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
     expect(within(agenda).getByText("Planner shell standup")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Share availability" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Share Availability" })).not.toBeInTheDocument();
 
     const tabs = screen.getByRole("tablist", { name: "Calendar views" });
     await user.click(within(tabs).getByRole("tab", { name: "Day" }));
     expect(screen.getByRole("grid", { name: "Calendar day view" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share availability" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Share Availability" })).toBeInTheDocument();
 
     await user.click(within(tabs).getByRole("tab", { name: "Week" }));
     expect(screen.getByRole("grid", { name: "Calendar week view" })).toBeInTheDocument();
 
     await user.click(within(tabs).getByRole("tab", { name: "Month" }));
     expect(screen.getByRole("grid", { name: "Calendar month view" })).toBeInTheDocument();
+  });
+
+  it("places timed events in their display timezone hour on timeline views", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-singapore-evening",
+            calendarId: "cal-product",
+            title: "Singapore evening",
+            startsAt: `${todayDate}T11:30:00.000Z`,
+            endsAt: `${todayDate}T12:00:00.000Z`,
+            allDay: false,
+            timeZone: "Asia/Singapore",
+            updatedAt: now
+          },
+          {
+            id: "event-singapore-evening-2",
+            calendarId: "cal-product",
+            title: "Same time call",
+            startsAt: `${todayDate}T11:30:00.000Z`,
+            endsAt: `${todayDate}T12:00:00.000Z`,
+            allDay: false,
+            timeZone: "Asia/Singapore",
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 2 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+
+    await screen.findByRole("row", { name: "19:00 Open slot" });
+
+    expect(screen.getByRole("button", { name: "19:30-20:00 Singapore evening" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "19:30-20:00 Same time call" })).toBeInTheDocument();
+
+    const firstLayout = document.querySelector(
+      '[data-calendar-event-layout="event-singapore-evening"]'
+    ) as HTMLElement;
+    const secondLayout = document.querySelector(
+      '[data-calendar-event-layout="event-singapore-evening-2"]'
+    ) as HTMLElement;
+
+    expect(firstLayout).toHaveAttribute("data-start-minute", "1170");
+    expect(firstLayout).toHaveAttribute("data-duration-minutes", "30");
+    expect(firstLayout).toHaveAttribute("data-lane-count", "2");
+    expect(firstLayout).toHaveAttribute("data-lane-index", "0");
+    expect(firstLayout).toHaveStyle({ top: "1872px", height: "48px" });
+    expect(secondLayout).toHaveAttribute("data-lane-count", "2");
+    expect(secondLayout).toHaveAttribute("data-lane-index", "1");
   });
 
   it("separates all-day calendar events and summarizes dense month cells", async () => {
@@ -534,6 +596,9 @@ describe("App calendar", () => {
     render(<App />);
 
     await goToSection("Calendar");
+    expect(await screen.findByText("Agenda view")).toBeInTheDocument();
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
     expect(await screen.findByText("Share availability")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Availability start"), {

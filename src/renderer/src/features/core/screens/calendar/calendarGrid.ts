@@ -9,6 +9,7 @@ import type {
 import type {
   CalendarDaySlot,
   CalendarEventDayIndex,
+  CalendarTimelineEventLayout,
   CalendarTimeBlock,
   VisibleCalendarDay,
   VisibleCalendarMonthWeek,
@@ -24,10 +25,15 @@ export const calendarMonthVisibleChipCount = 3;
 export const calendarWeekVisibleTimedCount = 4;
 export const calendarWeekVisibleAllDayCount = 2;
 export const calendarTimelineVisibleAllDayCount = 4;
-export const calendarTimelineVisibleHourlyCount = 4;
+export const calendarTimelineHourRowHeight = 96;
 
-export function hourSlotIso(day: string, hour: number): string {
-  return `${day}T${String(hour).padStart(2, "0")}:00:00.000Z`;
+interface CalendarLocalPoint {
+  dayKey: string;
+  minutes: number;
+}
+
+export function hourSlotIso(day: string, hour: number, timeZone = "UTC"): string {
+  return zonedDateTimeIso(day, hour, 0, timeZone);
 }
 
 export function addUtcMinutesIso(value: string, minutes: number): string {
@@ -167,7 +173,34 @@ function calendarWeekdayLabel(date: Date, style: "long" | "short" = "short"): st
   }).format(date);
 }
 
-function calendarEventRangeDayKeys(startsAt: string, endsAt: string): string[] {
+function calendarEventRangeDayKeys(event: CalendarEventViewModel): string[] {
+  if (event.allDay) {
+    return calendarUtcRangeDayKeys(event.startsAt, event.endsAt);
+  }
+
+  const startMs = Date.parse(event.startsAt);
+  const endMs = Date.parse(event.endsAt);
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return [];
+  }
+
+  const timeZone = event.timeZone || "UTC";
+  const start = calendarLocalPoint(event.startsAt, timeZone);
+  const end = calendarLocalPoint(new Date(endMs - 1).toISOString(), timeZone);
+  const keys: string[] = [];
+  const cursor = calendarDateFromIsoDate(start.dayKey);
+  const lastDay = calendarDateFromIsoDate(end.dayKey);
+
+  while (cursor.getTime() <= lastDay.getTime()) {
+    keys.push(calendarIsoDate(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return keys;
+}
+
+function calendarUtcRangeDayKeys(startsAt: string, endsAt: string): string[] {
   const startMs = Date.parse(startsAt);
   const endMs = Date.parse(endsAt);
 
@@ -191,7 +224,7 @@ export function buildCalendarEventDayIndex(events: CalendarEventViewModel[]): Ca
   const eventsByDay = new Map<string, CalendarEventViewModel[]>();
 
   for (const event of events) {
-    for (const day of calendarEventRangeDayKeys(event.startsAt, event.endsAt)) {
+    for (const day of calendarEventRangeDayKeys(event)) {
       const dayEvents = eventsByDay.get(day) ?? [];
       dayEvents.push(event);
       eventsByDay.set(day, dayEvents);
@@ -278,17 +311,18 @@ export function calendarMonthWeeksForDate(
 export function calendarPointerTimeIso(
   dayKey: string,
   hour: number,
-  event: PointerEvent<HTMLElement>
+  event: PointerEvent<HTMLElement>,
+  timeZone = "UTC"
 ): string {
   const rect = event.currentTarget.getBoundingClientRect();
   const offset = Math.min(Math.max(event.clientY - rect.top, 0), Math.max(1, rect.height) - 1);
   const quarter = Math.min(3, Math.max(0, Math.floor((offset / Math.max(1, rect.height)) * 4)));
   const minutes = quarter * 15;
 
-  return `${dayKey}T${String(hour).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00.000Z`;
+  return zonedDateTimeIso(dayKey, hour, minutes, timeZone);
 }
 
-export function calendarTimeBlock(startsAt: string, pointerAt: string): CalendarTimeBlock {
+export function calendarTimeBlock(startsAt: string, pointerAt: string, timeZone = "UTC"): CalendarTimeBlock {
   const startMs = Date.parse(startsAt);
   const pointerMs = Date.parse(pointerAt);
   const pointerEnd = addUtcMinutesIso(pointerAt, 15);
@@ -297,15 +331,20 @@ export function calendarTimeBlock(startsAt: string, pointerAt: string): Calendar
 
   return {
     id: `${starts}-${ends}`,
-    dayKey: starts.slice(0, 10),
+    dayKey: calendarLocalPoint(starts, timeZone).dayKey,
     startsAt: starts,
     endsAt: ends
   };
 }
 
-export function calendarBlocksOverlapHour(blocks: CalendarTimeBlock[], dayKey: string, hour: number): boolean {
-  const startsAt = Date.parse(hourSlotIso(dayKey, hour));
-  const endsAt = Date.parse(hourSlotIso(dayKey, hour + 1));
+export function calendarBlocksOverlapHour(
+  blocks: CalendarTimeBlock[],
+  dayKey: string,
+  hour: number,
+  timeZone = "UTC"
+): boolean {
+  const startsAt = Date.parse(hourSlotIso(dayKey, hour, timeZone));
+  const endsAt = Date.parse(hourSlotIso(dayKey, hour + 1, timeZone));
 
   return blocks.some(
     (block) =>
@@ -324,17 +363,17 @@ export function sortedCalendarTimeBlocks(blocks: CalendarTimeBlock[]): CalendarT
   );
 }
 
-export function calendarTimeBlockLabel(block: CalendarTimeBlock): string {
+export function calendarTimeBlockLabel(block: CalendarTimeBlock, timeZone = "UTC"): string {
   const day = new Intl.DateTimeFormat(undefined, {
     day: "numeric",
     month: "short",
-    timeZone: "UTC",
+    timeZone,
     weekday: "short"
   }).format(new Date(block.startsAt));
   const timeFormatter = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "UTC"
+    timeZone
   });
 
   return `${day} ${timeFormatter.format(new Date(block.startsAt))}-${timeFormatter.format(new Date(block.endsAt))}`;
@@ -351,7 +390,7 @@ export function calendarAvailabilitySnippet({
   timeZone: string;
   title: string;
 }): string {
-  const lines = sortedCalendarTimeBlocks(slots).map((slot) => `- ${calendarTimeBlockLabel(slot)}`);
+  const lines = sortedCalendarTimeBlocks(slots).map((slot) => `- ${calendarTimeBlockLabel(slot, timeZone)}`);
 
   return [
     title.trim() || "Meeting",
@@ -361,10 +400,16 @@ export function calendarAvailabilitySnippet({
 }
 
 function eventOverlapsHour(event: CalendarEventViewModel, day: string, hour: number): boolean {
-  const startsAt = Date.parse(hourSlotIso(day, hour));
-  const endsAt = Date.parse(hourSlotIso(day, hour + 1));
+  const timeZone = event.timeZone || "UTC";
+  const startsAt = calendarLocalPoint(event.startsAt, timeZone);
+  const endsAt = calendarLocalPoint(event.endsAt, timeZone);
+  const hourStart: CalendarLocalPoint = { dayKey: day, minutes: hour * 60 };
+  const hourEnd: CalendarLocalPoint =
+    hour >= 23
+      ? { dayKey: calendarAddUtcDays(day, 1), minutes: 0 }
+      : { dayKey: day, minutes: (hour + 1) * 60 };
 
-  return Date.parse(event.startsAt) < endsAt && Date.parse(event.endsAt) > startsAt;
+  return compareCalendarLocalPoints(startsAt, hourEnd) < 0 && compareCalendarLocalPoints(endsAt, hourStart) > 0;
 }
 
 function visibleCalendarDay(
@@ -389,25 +434,109 @@ export function visibleCalendarTimelineDays(
   return days.map((day) => {
     const visibleDay = visibleCalendarDay(day, visibleCalendarIds);
     const dayKey = calendarDayKey(day);
-    const timedEventsByHour = new Map<number, CalendarEventViewModel[]>();
-
-    for (const event of visibleDay.timedEvents) {
-      for (const hour of calendarTimelineHours) {
-        if (!eventOverlapsHour(event, dayKey, hour)) {
-          continue;
-        }
-
-        const hourEvents = timedEventsByHour.get(hour) ?? [];
-        hourEvents.push(event);
-        timedEventsByHour.set(hour, hourEvents);
-      }
-    }
 
     return {
       ...visibleDay,
-      timedEventsByHour
+      timedEventLayouts: calendarTimelineEventLayouts(visibleDay.timedEvents, dayKey)
     };
   });
+}
+
+function calendarTimelineEventLayouts(
+  events: CalendarEventViewModel[],
+  dayKey: string
+): CalendarTimelineEventLayout[] {
+  const candidates = events
+    .map((event) => {
+      const range = calendarEventLocalMinuteRange(event, dayKey);
+
+      return range ? { event, ...range } : null;
+    })
+    .filter((candidate): candidate is {
+      event: CalendarEventViewModel;
+      startMinute: number;
+      endMinute: number;
+    } => candidate !== null)
+    .sort(
+      (left, right) =>
+        left.startMinute - right.startMinute ||
+        left.endMinute - right.endMinute ||
+        left.event.id.localeCompare(right.event.id)
+    );
+  const layouts: CalendarTimelineEventLayout[] = [];
+  let cluster: typeof candidates = [];
+  let clusterEnd = -1;
+
+  function flushCluster(): void {
+    if (cluster.length === 0) {
+      return;
+    }
+
+    const laneEnds: number[] = [];
+    const pending: CalendarTimelineEventLayout[] = [];
+
+    for (const item of cluster) {
+      let laneIndex = laneEnds.findIndex((endMinute) => endMinute <= item.startMinute);
+
+      if (laneIndex < 0) {
+        laneIndex = laneEnds.length;
+        laneEnds.push(item.endMinute);
+      } else {
+        laneEnds[laneIndex] = item.endMinute;
+      }
+
+      const durationMinutes = Math.max(5, item.endMinute - item.startMinute);
+
+      pending.push({
+        event: item.event,
+        startMinute: item.startMinute,
+        durationMinutes,
+        top: (item.startMinute / 60) * calendarTimelineHourRowHeight,
+        height: (durationMinutes / 60) * calendarTimelineHourRowHeight,
+        laneIndex,
+        laneCount: 1
+      });
+    }
+
+    const laneCount = Math.max(1, laneEnds.length);
+    layouts.push(...pending.map((layout) => ({ ...layout, laneCount })));
+    cluster = [];
+    clusterEnd = -1;
+  }
+
+  for (const item of candidates) {
+    if (cluster.length > 0 && item.startMinute >= clusterEnd) {
+      flushCluster();
+    }
+
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.endMinute);
+  }
+
+  flushCluster();
+  return layouts;
+}
+
+function calendarEventLocalMinuteRange(
+  event: CalendarEventViewModel,
+  dayKey: string
+): { startMinute: number; endMinute: number } | null {
+  const timeZone = event.timeZone || "UTC";
+  const start = calendarLocalPoint(event.startsAt, timeZone);
+  const end = calendarLocalPoint(event.endsAt, timeZone);
+  const startMinute = start.dayKey < dayKey ? 0 : start.dayKey > dayKey ? 1_440 : start.minutes;
+  const endMinute = end.dayKey > dayKey ? 1_440 : end.dayKey < dayKey ? 0 : end.minutes;
+  const clampedStart = Math.max(0, Math.min(1_440, startMinute));
+  const clampedEnd = Math.max(0, Math.min(1_440, endMinute));
+
+  if (clampedEnd <= clampedStart) {
+    return null;
+  }
+
+  return {
+    startMinute: clampedStart,
+    endMinute: clampedEnd
+  };
 }
 
 export function calendarDaySlots(day: string, timedEvents: CalendarEventViewModel[]): CalendarDaySlot[] {
@@ -481,12 +610,102 @@ export function visibleCalendarEvent(
   return visibleCalendarIds.has(event.calendarId);
 }
 
-export function calendarEventTimeOfDayIso(sourceIso: string, dayKey: string): string {
+export function calendarEventTimeOfDayIso(sourceIso: string, dayKey: string, timeZone = "UTC"): string {
   const parsed = new Date(sourceIso);
 
   if (!Number.isFinite(parsed.getTime())) {
-    return `${dayKey}T00:00:00.000Z`;
+    return zonedDateTimeIso(dayKey, 0, 0, timeZone);
   }
 
-  return `${dayKey}T${String(parsed.getUTCHours()).padStart(2, "0")}:${String(parsed.getUTCMinutes()).padStart(2, "0")}:00.000Z`;
+  const point = calendarLocalPoint(sourceIso, timeZone);
+
+  return zonedDateTimeIso(dayKey, Math.floor(point.minutes / 60), point.minutes % 60, timeZone);
+}
+
+function calendarLocalPoint(value: string, timeZone: string): CalendarLocalPoint {
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) {
+    return { dayKey: value.slice(0, 10), minutes: 0 };
+  }
+
+  const parts = calendarLocalDateTimeParts(date, timeZone);
+
+  return {
+    dayKey: `${parts.year}-${parts.month}-${parts.day}`,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute)
+  };
+}
+
+function calendarLocalDateTimeParts(
+  date: Date,
+  timeZone: string
+): { year: string; month: string; day: string; hour: string; minute: string } {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      month: "2-digit",
+      timeZone,
+      year: "numeric"
+    });
+    const parts = Object.fromEntries(
+      formatter.formatToParts(date).map((part) => [part.type, part.value])
+    );
+
+    return {
+      year: parts.year ?? "1970",
+      month: parts.month ?? "01",
+      day: parts.day ?? "01",
+      hour: parts.hour ?? "00",
+      minute: parts.minute ?? "00"
+    };
+  } catch {
+    return calendarLocalDateTimeParts(date, "UTC");
+  }
+}
+
+function zonedDateTimeIso(dayKey: string, hour: number, minute: number, timeZone: string): string {
+  const [year = 1970, month = 1, day = 1] = dayKey.split("-").map(Number);
+  const baseDate = new Date(Date.UTC(year, month - 1, day));
+  const normalizedMinute = Math.max(0, Math.min(59, minute));
+  const dayOffset = Math.floor(hour / 24);
+  const normalizedHour = ((hour % 24) + 24) % 24;
+
+  baseDate.setUTCDate(baseDate.getUTCDate() + dayOffset);
+
+  const target: CalendarLocalPoint = {
+    dayKey: calendarIsoDate(baseDate),
+    minutes: normalizedHour * 60 + normalizedMinute
+  };
+  let utcMs = Date.UTC(
+    baseDate.getUTCFullYear(),
+    baseDate.getUTCMonth(),
+    baseDate.getUTCDate(),
+    Math.floor(target.minutes / 60),
+    target.minutes % 60
+  );
+
+  for (let index = 0; index < 4; index += 1) {
+    const actual = calendarLocalPoint(new Date(utcMs).toISOString(), timeZone);
+    const deltaMinutes = calendarLocalPointSerial(target) - calendarLocalPointSerial(actual);
+
+    if (deltaMinutes === 0) {
+      break;
+    }
+
+    utcMs += deltaMinutes * 60_000;
+  }
+
+  return new Date(utcMs).toISOString();
+}
+
+function compareCalendarLocalPoints(left: CalendarLocalPoint, right: CalendarLocalPoint): number {
+  return left.dayKey.localeCompare(right.dayKey) || left.minutes - right.minutes;
+}
+
+function calendarLocalPointSerial(point: CalendarLocalPoint): number {
+  return Date.parse(`${point.dayKey}T00:00:00.000Z`) / 60_000 + point.minutes;
 }

@@ -39,7 +39,17 @@ export interface VisibleCalendarDay {
 }
 
 export interface VisibleCalendarTimelineDay extends VisibleCalendarDay {
-  timedEventsByHour: Map<number, CalendarEventViewModel[]>;
+  timedEventLayouts: CalendarTimelineEventLayout[];
+}
+
+export interface CalendarTimelineEventLayout {
+  event: CalendarEventViewModel;
+  startMinute: number;
+  durationMinutes: number;
+  top: number;
+  height: number;
+  laneIndex: number;
+  laneCount: number;
 }
 
 export interface CalendarTimeBlock {

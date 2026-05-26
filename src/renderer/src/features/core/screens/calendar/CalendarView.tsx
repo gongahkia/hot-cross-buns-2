@@ -203,6 +203,7 @@ export function CalendarView(): JSX.Element {
     availabilityRange !== null &&
     Date.parse(availabilityRange.end) > Date.parse(availabilityRange.start) &&
     !availabilityPending;
+  const shareAvailabilityVisible = activeViewId !== "agenda";
   const calendarRangeLabel =
     activeViewId === "month"
       ? calendarMonthTitle(calendarAnchorDate)
@@ -895,15 +896,17 @@ export function CalendarView(): JSX.Element {
             <CalendarPlus aria-hidden="true" size={14} />
             New event
           </Button>
-          <Button
-            aria-expanded={shareAvailabilityOpen}
-            onClick={() => setShareAvailabilityOpen((open) => !open)}
-            size="sm"
-            variant={shareAvailabilityOpen ? "secondary" : "ghost"}
-          >
-            <CalendarPlus aria-hidden="true" size={14} />
-            Share availability
-          </Button>
+          {shareAvailabilityVisible ? (
+            <Button
+              aria-expanded={shareAvailabilityOpen}
+              onClick={() => setShareAvailabilityOpen((open) => !open)}
+              size="sm"
+              variant={shareAvailabilityOpen ? "secondary" : "ghost"}
+            >
+              <CalendarPlus aria-hidden="true" size={14} />
+              Share availability
+            </Button>
+          ) : null}
           <CalendarStatusStrip
             source={source}
             visibleCalendarCount={visibleCalendarIdSet.size}
@@ -954,7 +957,7 @@ export function CalendarView(): JSX.Element {
               event={visibleUpcomingEvent}
               onOpen={openEdit}
             />
-            {shareAvailabilityOpen ? (
+            {shareAvailabilityVisible && shareAvailabilityOpen ? (
               <ShareAvailabilityPanel
                 calendarId={availabilityCalendarId}
                 calendars={source.calendarSources}

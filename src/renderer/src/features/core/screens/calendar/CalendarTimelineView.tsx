@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import type { DragEvent, PointerEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
 import { IconButton, cx } from "../../../../components/primitives";
 import { useCoreViewModelSource } from "../../coreViewModelSource";
@@ -16,9 +16,9 @@ import {
   calendarPointerTimeIso,
   calendarRangeTitle,
   calendarTimeBlock,
+  calendarTimelineHourRowHeight,
   calendarTimelineHours,
   calendarTimelineVisibleAllDayCount,
-  calendarTimelineVisibleHourlyCount,
   calendarTodayKey,
   hourSlotIso,
   hourSlotLabel,
@@ -34,20 +34,22 @@ import {
 import type { CalendarCreateSeed, CalendarTimeBlock } from "./types";
 
 function CalendarTimelineEventChip({
+  className,
   event,
   labelVariant,
   onMoveEvent,
   onOpen
 }: {
+  className?: string;
   event: CalendarEventViewModel;
   labelVariant: "range" | "time" | "title";
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_10px] items-stretch gap-1">
+    <div className={cx("grid h-full grid-cols-[minmax(0,1fr)_10px] items-stretch gap-1", className)}>
       <CalendarEventChip
-        className="min-h-5 px-1.5 py-0.5 text-[11px]"
+        className="h-full min-h-0 px-1.5 py-0.5 text-[11px]"
         draggable
         event={event}
         labelVariant={labelVariant}
@@ -84,6 +86,27 @@ function CalendarTimelineEventChip({
       ) : null}
     </div>
   );
+}
+
+function timelineEventStyle({
+  height,
+  laneCount,
+  laneIndex,
+  top
+}: {
+  height: number;
+  laneCount: number;
+  laneIndex: number;
+  top: number;
+}): CSSProperties {
+  const laneWidth = 100 / Math.max(1, laneCount);
+
+  return {
+    height: `${Math.max(22, height)}px`,
+    left: `calc(${laneIndex * laneWidth}% + 4px)`,
+    top: `${top}px`,
+    width: `calc(${laneWidth}% - 8px)`
+  };
 }
 
 function CalendarTimelineView({
@@ -162,7 +185,11 @@ function CalendarTimelineView({
     }
 
     if (allDay && !draggedEvent.allDay) {
-      const nextStartsAt = calendarEventTimeOfDayIso(draggedEvent.startsAt, dayKey);
+      const nextStartsAt = calendarEventTimeOfDayIso(
+        draggedEvent.startsAt,
+        dayKey,
+        draggedEvent.timeZone || source.settings.defaultTimeZone
+      );
       onMoveEvent(draggedEvent.id, nextStartsAt, false);
       return;
     }
@@ -185,8 +212,8 @@ function CalendarTimelineView({
       return null;
     }
 
-    const pointerAt = calendarPointerTimeIso(dayKey, hour, pointerEvent);
-    const nextSelection = calendarTimeBlock(drag.startsAt, pointerAt);
+    const pointerAt = calendarPointerTimeIso(dayKey, hour, pointerEvent, source.settings.defaultTimeZone);
+    const nextSelection = calendarTimeBlock(drag.startsAt, pointerAt, source.settings.defaultTimeZone);
 
     if (
       Math.abs(pointerEvent.clientY - drag.startClientY) > 4 ||
@@ -209,8 +236,8 @@ function CalendarTimelineView({
       return;
     }
 
-    const startsAt = calendarPointerTimeIso(dayKey, hour, pointerEvent);
-    const initialSelection = calendarTimeBlock(startsAt, startsAt);
+    const startsAt = calendarPointerTimeIso(dayKey, hour, pointerEvent, source.settings.defaultTimeZone);
+    const initialSelection = calendarTimeBlock(startsAt, startsAt, source.settings.defaultTimeZone);
 
     timelineDragRef.current = {
       dayKey,
@@ -336,113 +363,138 @@ function CalendarTimelineView({
               })}
             </div>
           </div>
-          {calendarTimelineHours.map((hour) => (
-            <div
-              aria-label={`${hourSlotLabel(hour)} Open slot`}
-              className="grid min-h-14 grid-cols-[64px_minmax(0,1fr)] border-b border-border last:border-b-0"
-              key={hour}
-              onDragOver={allowCalendarDrop}
-              onDrop={(dragEvent) =>
-                handleDrop(dragEvent, firstVisibleDayKey, hourSlotIso(firstVisibleDayKey, hour), false)
-              }
-              role="row"
-            >
-              <div className="border-r border-border px-2 py-2 text-right text-[var(--text-xs)] font-semibold text-text-muted">
-                {calendarDisplayHourLabel(hour)}
-              </div>
-              <div className="grid" style={{ gridTemplateColumns }}>
-                {visibleDays.map(({ day, timedEventsByHour }) => {
-                  const dayKey = calendarDayKey(day);
-                  const startsAt = hourSlotIso(dayKey, hour);
-                  const events = timedEventsByHour.get(hour) ?? [];
-                  const visibleEvents = events.slice(0, calendarTimelineVisibleHourlyCount);
-                  const overflowCount = Math.max(0, events.length - visibleEvents.length);
-                  const isTimeBlockSelected = calendarBlocksOverlapHour(
-                    [
-                      ...availabilitySlots,
-                      ...(dragSelection ? [dragSelection] : [])
-                    ],
-                    dayKey,
-                    hour
-                  );
+          <div className="relative">
+            {calendarTimelineHours.map((hour) => (
+              <div
+                aria-label={`${hourSlotLabel(hour)} Open slot`}
+                className="grid grid-cols-[64px_minmax(0,1fr)] border-b border-border last:border-b-0"
+                key={hour}
+                onDragOver={allowCalendarDrop}
+                onDrop={(dragEvent) =>
+                  handleDrop(
+                    dragEvent,
+                    firstVisibleDayKey,
+                    hourSlotIso(firstVisibleDayKey, hour, source.settings.defaultTimeZone),
+                    false
+                  )
+                }
+                role="row"
+                style={{ height: calendarTimelineHourRowHeight }}
+              >
+                <div className="border-r border-border px-2 py-2 text-right text-[var(--text-xs)] font-semibold text-text-muted">
+                  {calendarDisplayHourLabel(hour)}
+                </div>
+                <div className="grid" style={{ gridTemplateColumns }}>
+                  {visibleDays.map(({ day }) => {
+                    const dayKey = calendarDayKey(day);
+                    const startsAt = hourSlotIso(dayKey, hour, source.settings.defaultTimeZone);
+                    const isTimeBlockSelected = calendarBlocksOverlapHour(
+                      [
+                        ...availabilitySlots,
+                        ...(dragSelection ? [dragSelection] : [])
+                      ],
+                      dayKey,
+                      hour,
+                      source.settings.defaultTimeZone
+                    );
 
-                  return (
-                    <div
-                      aria-label={`${calendarDateTitle(day)} ${calendarDisplayHourLabel(hour)}`}
-                      className={cx(
-                        "grid min-h-14 content-start gap-1 border-r border-border bg-bg-tertiary px-2 py-1.5 last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                        isTimeBlockSelected && "bg-info/15 ring-1 ring-inset ring-info"
-                      )}
-                      key={`${day.id}-${hour}`}
-                      onClick={() => {
-                        if (suppressNextClickRef.current) {
-                          suppressNextClickRef.current = false;
-                          return;
-                        }
+                    return (
+                      <div
+                        aria-label={`${calendarDateTitle(day)} ${calendarDisplayHourLabel(hour)}`}
+                        className={cx(
+                          "border-r border-border bg-bg-tertiary px-2 py-1.5 last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                          isTimeBlockSelected && "bg-info/15 ring-1 ring-inset ring-info"
+                        )}
+                        key={`${day.id}-${hour}`}
+                        onClick={() => {
+                          if (suppressNextClickRef.current) {
+                            suppressNextClickRef.current = false;
+                            return;
+                          }
 
-                        if (!availabilityMode) {
-                          onCreate({
-                            allDay: false,
-                            startsAt,
-                            endsAt: addUtcMinutesIso(startsAt, 60)
-                          });
+                          if (!availabilityMode) {
+                            onCreate({
+                              allDay: false,
+                              startsAt,
+                              endsAt: addUtcMinutesIso(startsAt, 60)
+                            });
+                          }
+                        }}
+                        onDragOver={allowCalendarDrop}
+                        onDrop={(dragEvent) => handleDrop(dragEvent, dayKey, startsAt, false)}
+                        onPointerDown={(pointerEvent) => handleTimePointerDown(pointerEvent, dayKey, hour)}
+                        onPointerEnter={(pointerEvent) => {
+                          if (timelineDragRef.current) {
+                            updateTimeDrag(pointerEvent, dayKey, hour);
+                          }
+                        }}
+                        onPointerMove={(pointerEvent) => updateTimeDrag(pointerEvent, dayKey, hour)}
+                        onPointerUp={(pointerEvent) => handleTimePointerUp(pointerEvent, dayKey, hour)}
+                        onKeyDown={(event) =>
+                          !availabilityMode
+                            ? handleActivationKeyDown(event, () =>
+                                onCreate({
+                                  allDay: false,
+                                  startsAt,
+                                  endsAt: addUtcMinutesIso(startsAt, 60)
+                                })
+                              )
+                            : undefined
                         }
-                      }}
-                      onDragOver={allowCalendarDrop}
-                      onDrop={(dragEvent) => handleDrop(dragEvent, dayKey, startsAt, false)}
-                      onPointerDown={(pointerEvent) => handleTimePointerDown(pointerEvent, dayKey, hour)}
-                      onPointerEnter={(pointerEvent) => {
-                        if (timelineDragRef.current) {
-                          updateTimeDrag(pointerEvent, dayKey, hour);
-                        }
-                      }}
-                      onPointerMove={(pointerEvent) => updateTimeDrag(pointerEvent, dayKey, hour)}
-                      onPointerUp={(pointerEvent) => handleTimePointerUp(pointerEvent, dayKey, hour)}
-                      onKeyDown={(event) =>
-                        !availabilityMode
-                          ? handleActivationKeyDown(event, () =>
+                        role="gridcell"
+                        tabIndex={0}
+                      >
+                        {!availabilityMode ? (
+                          <button
+                            aria-label={`Create event at ${hourSlotLabel(hour)}`}
+                            className="sr-only"
+                            onClick={(buttonEvent) => {
+                              buttonEvent.stopPropagation();
                               onCreate({
                                 allDay: false,
                                 startsAt,
                                 endsAt: addUtcMinutesIso(startsAt, 60)
-                              })
-                            )
-                          : undefined
-                      }
-                      role="gridcell"
-                      tabIndex={0}
+                              });
+                            }}
+                            type="button"
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div
+              className="pointer-events-none absolute bottom-0 left-16 right-0 top-0 grid"
+              style={{ gridTemplateColumns }}
+            >
+              {visibleDays.map(({ day, timedEventLayouts }) => (
+                <div className="relative min-w-0 border-r border-transparent last:border-r-0" key={`${day.id}-events`}>
+                  {timedEventLayouts.map((layout) => (
+                    <div
+                      className="pointer-events-auto absolute min-w-0"
+                      data-calendar-event-layout={layout.event.id}
+                      data-duration-minutes={layout.durationMinutes}
+                      data-lane-count={layout.laneCount}
+                      data-lane-index={layout.laneIndex}
+                      data-start-minute={layout.startMinute}
+                      key={layout.event.id}
+                      style={timelineEventStyle(layout)}
                     >
-                    {visibleEvents.map((calendarEvent) => (
                       <CalendarTimelineEventChip
-                        event={calendarEvent}
-                        key={calendarEvent.id}
+                        className="min-w-0"
+                        event={layout.event}
                         labelVariant={timedLabelVariant}
                         onMoveEvent={onMoveEvent}
                         onOpen={onOpen}
                       />
-                    ))}
-                    {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}
-                    {!availabilityMode && visibleEvents.length === 0 ? (
-                      <button
-                        aria-label={`Create event at ${hourSlotLabel(hour)}`}
-                        className="sr-only"
-                        onClick={(buttonEvent) => {
-                          buttonEvent.stopPropagation();
-                          onCreate({
-                            allDay: false,
-                            startsAt,
-                            endsAt: addUtcMinutesIso(startsAt, 60)
-                          });
-                        }}
-                        type="button"
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
-              </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       </div>
     </div>
