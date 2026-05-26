@@ -171,6 +171,7 @@ export class GoogleTasksHttpAdapter implements GoogleTasksTransport {
       const response = await this.transport.getJsonWithMetadata<GoogleTasksResponse>({
         path: `/tasks/v1/lists/${encodeGooglePathComponent(request.taskListId)}/tasks`,
         query: {
+          showAssigned: "true",
           showCompleted: "true",
           showDeleted: "true",
           showHidden: "true",

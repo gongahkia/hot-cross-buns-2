@@ -300,7 +300,7 @@ export function ShareAvailabilityPanel({
         </div>
         <IconButton icon={X} label="Close share availability" onClick={onClose} size="sm" variant="ghost" />
       </div>
-      <div className="grid min-h-0 flex-1 gap-3 overflow-auto p-3">
+      <div className="grid min-h-0 flex-1 auto-rows-max content-start gap-3 overflow-auto p-3">
         <Input
           aria-label="Availability title"
           onChange={(event) => onTitleChange(event.target.value)}

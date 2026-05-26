@@ -36,6 +36,7 @@ interface MutableRunCounters {
 
 const DEFAULT_RESOURCES: readonly ReadSyncResource[] = ["tasks", "calendar"];
 const TASKS_WATERMARK_SLACK_MS = 5 * 60 * 1000;
+const TASKS_WATERMARK_CHECKPOINT_TYPE = "watermark:v2-show-assigned";
 
 export class GoogleReadSyncService {
   private readonly repository: GoogleSyncRepository;
@@ -232,7 +233,7 @@ export class GoogleReadSyncService {
             accountId: options.account.accountId,
             resourceType: "task_list",
             resourceId: taskList.id,
-            checkpointType: "watermark"
+            checkpointType: TASKS_WATERMARK_CHECKPOINT_TYPE
           });
       const didFullSync = checkpoint === null;
       const page = await this.tasks.listTasks({
@@ -254,7 +255,7 @@ export class GoogleReadSyncService {
         accountId: options.account.accountId,
         resourceType: "task_list",
         resourceId: taskList.id,
-        checkpointType: "watermark",
+        checkpointType: TASKS_WATERMARK_CHECKPOINT_TYPE,
         checkpointValue: nextWatermark,
         metadata: {
           source: page.serverDate === undefined || page.serverDate === null ? "local-clock-slack" : "google-server-date"

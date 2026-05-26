@@ -153,7 +153,7 @@ describe("Google read sync service", () => {
           accountId: "google:account-1",
           resourceType: "task_list",
           resourceId: "list-1",
-          checkpointType: "watermark"
+          checkpointType: "watermark:v2-show-assigned"
         })
       ).toBe("2026-05-22T02:00:00.000Z");
       expect(

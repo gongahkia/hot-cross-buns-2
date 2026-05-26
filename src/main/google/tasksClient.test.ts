@@ -4,11 +4,13 @@ import type { GoogleApiRequest, GoogleApiTransport } from "./transport";
 
 interface RecordedTaskTransport extends GoogleApiTransport {
   getJsonCalls: GoogleApiRequest[];
+  getJsonWithMetadataCalls: GoogleApiRequest[];
   sendCalls: GoogleApiRequest[];
 }
 
 function taskTransport(): RecordedTaskTransport {
   const getJsonCalls: GoogleApiRequest[] = [];
+  const getJsonWithMetadataCalls: GoogleApiRequest[] = [];
   const sendCalls: GoogleApiRequest[] = [];
 
   return {
@@ -38,19 +40,74 @@ function taskTransport(): RecordedTaskTransport {
         etag: "etag-task"
       } as T;
     },
-    getJsonWithMetadata: async <T,>(): Promise<{ data: T; metadata: { status: number } }> => ({
-      data: {} as T,
-      metadata: { status: 200 }
-    }),
+    getJsonWithMetadata: async <T,>(
+      request: GoogleApiRequest
+    ): Promise<{ data: T; metadata: { status: number; serverDate?: string } }> => {
+      getJsonWithMetadataCalls.push(request);
+
+      return {
+        data: {
+          items: [
+            {
+              id: "assigned-task",
+              title: "Assigned follow-up",
+              status: "needsAction",
+              hidden: false,
+              deleted: false,
+              updated: "2026-05-22T00:00:00.000Z"
+            }
+          ]
+        } as T,
+        metadata: {
+          status: 200,
+          serverDate: "Fri, 22 May 2026 02:00:00 GMT"
+        }
+      };
+    },
     send: async (request: GoogleApiRequest): Promise<void> => {
       sendCalls.push(request);
     },
     getJsonCalls,
+    getJsonWithMetadataCalls,
     sendCalls
   };
 }
 
 describe("Google Tasks write mapping", () => {
+  it("requests assigned tasks when reading task lists", async () => {
+    const transport = taskTransport();
+    const adapter = new GoogleTasksHttpAdapter(transport);
+
+    const page = await adapter.listTasks({
+      taskListId: "list/1",
+      completedMin: "2026-01-01T00:00:00.000Z"
+    });
+
+    expect(page).toMatchObject({
+      serverDate: "Fri, 22 May 2026 02:00:00 GMT",
+      tasks: [
+        {
+          id: "assigned-task",
+          taskListId: "list/1",
+          title: "Assigned follow-up",
+          status: "needsAction"
+        }
+      ]
+    });
+    expect(transport.getJsonWithMetadataCalls).toContainEqual(
+      expect.objectContaining({
+        path: "/tasks/v1/lists/list%2F1/tasks",
+        query: expect.objectContaining({
+          showAssigned: "true",
+          showCompleted: "true",
+          showDeleted: "true",
+          showHidden: "true",
+          completedMin: "2026-01-01T00:00:00.000Z"
+        })
+      })
+    );
+  });
+
   it("uses date-only due fields and move query parameters for task writes", async () => {
     const transport = taskTransport();
     const adapter = new GoogleTasksHttpAdapter(transport);
