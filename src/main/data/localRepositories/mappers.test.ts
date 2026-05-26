@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calendarEventSummarySchema } from "@shared/ipc/contracts";
-import { calendarEventSummary } from "./mappers";
+import { calendarEventDetailSchema, calendarEventSummarySchema } from "@shared/ipc/contracts";
+import { calendarEventDetail, calendarEventSummary } from "./mappers";
 import type { CalendarEventRow } from "./types";
 
 describe("local repository mappers", () => {
@@ -10,7 +10,7 @@ describe("local repository mappers", () => {
       eventId: "acct-1:event:event-1",
       accountId: "acct-1",
       calendarId: "acct-1:calendar:primary",
-      calendarTitle: "Primary",
+      calendarTitle: "Primary calendar ".repeat(40),
       title: "Long synced event ".repeat(40),
       startsAt: "2026-05-22T09:00:00.000Z",
       endsAt: "2026-05-22T09:30:00.000Z",
@@ -40,5 +40,9 @@ describe("local repository mappers", () => {
     expect(summary.guestEmails).toHaveLength(50);
     expect(summary.reminderMinutes).toEqual([0, 15, 40_320]);
     expect(summary.recurrenceRule).toHaveLength(1_000);
+
+    const detail = calendarEventDetail(row);
+    expect(calendarEventDetailSchema.safeParse(detail).success).toBe(true);
+    expect(detail.calendarTitle).toHaveLength(500);
   });
 });
