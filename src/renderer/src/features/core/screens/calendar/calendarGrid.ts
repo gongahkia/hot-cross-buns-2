@@ -463,6 +463,7 @@ export function visibleCalendarTimeline(
 
   return {
     allDayOverflowCounts: allDayLayout.overflowCounts,
+    allDayOverflowEvents: allDayLayout.overflowEvents,
     allDaySegments: allDayLayout.segments,
     days: visibleDays
   };
@@ -472,14 +473,14 @@ function calendarAllDayLayout(
   days: CalendarDayViewModel[],
   visibleCalendarIds: ReadonlySet<string>,
   visibleLaneCount: number
-): { overflowCounts: number[]; segments: CalendarTimelineAllDaySegment[] } {
+): { overflowCounts: number[]; overflowEvents: CalendarEventViewModel[][]; segments: CalendarTimelineAllDaySegment[] } {
   const dayKeys = days.map(calendarDayKey);
   const firstDayKey = dayKeys[0];
   const lastDayKey = dayKeys.at(-1);
   const uniqueEvents = new Map<string, CalendarEventViewModel>();
 
   if (!firstDayKey || !lastDayKey) {
-    return { overflowCounts: [], segments: [] };
+    return { overflowCounts: [], overflowEvents: [], segments: [] };
   }
 
   for (const day of days) {
@@ -529,6 +530,7 @@ function calendarAllDayLayout(
     );
   const laneEnds: number[] = [];
   const overflowCounts = Array.from({ length: days.length }, () => 0);
+  const overflowEvents = Array.from({ length: days.length }, () => [] as CalendarEventViewModel[]);
   const segments: CalendarTimelineAllDaySegment[] = [];
 
   for (const candidate of candidates) {
@@ -544,6 +546,7 @@ function calendarAllDayLayout(
     if (laneIndex >= visibleLaneCount) {
       for (let dayIndex = candidate.startDayIndex; dayIndex <= candidate.endDayIndex; dayIndex += 1) {
         overflowCounts[dayIndex] += 1;
+        overflowEvents[dayIndex]?.push(candidate.event);
       }
       continue;
     }
@@ -558,7 +561,7 @@ function calendarAllDayLayout(
     });
   }
 
-  return { overflowCounts, segments };
+  return { overflowCounts, overflowEvents, segments };
 }
 
 function calendarTimelineEventLayouts(
@@ -704,6 +707,10 @@ export function visibleCalendarMonthWeeks(
           (_, laneIndex) => laneIndex
         ).filter((laneIndex) => !occupiedAllDayLanes.has(laneIndex));
         const visibleTimedEvents = timedEvents.slice(0, availableLaneIndexes.length);
+        const overflowEvents = [
+          ...(allDayLayout.overflowEvents[dayIndex] ?? []),
+          ...timedEvents.slice(visibleTimedEvents.length)
+        ];
         const visibleEventChips = visibleTimedEvents.map((event, index) => ({
           event,
           laneIndex: availableLaneIndexes[index] ?? 0
@@ -711,9 +718,8 @@ export function visibleCalendarMonthWeeks(
 
         return {
           day,
-          overflowCount:
-            (allDayLayout.overflowCounts[dayIndex] ?? 0) +
-            Math.max(0, timedEvents.length - visibleTimedEvents.length),
+          overflowCount: overflowEvents.length,
+          overflowEvents,
           visibleEventChips
         };
       })

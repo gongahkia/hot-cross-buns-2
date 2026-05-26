@@ -181,11 +181,99 @@ export function CalendarEventChip({
   );
 }
 
-export function CalendarOverflowChip({ count }: { count: number }): JSX.Element {
+export function CalendarOverflowChip({
+  count,
+  onOpen
+}: {
+  count: number;
+  onOpen?: () => void;
+}): JSX.Element {
+  const className =
+    "inline-flex min-h-5 max-w-full items-center truncate rounded-hcbSm border border-dashed border-border px-2 text-[var(--text-xs)] text-text-muted";
+
+  if (onOpen) {
+    return (
+      <button
+        aria-label={`Show ${count} more calendar items`}
+        className={cx(className, "hover:bg-surface-0 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent")}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen();
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        type="button"
+      >
+        {count} more
+      </button>
+    );
+  }
+
   return (
-    <span className="inline-flex min-h-5 max-w-full items-center truncate rounded-hcbSm border border-dashed border-border px-2 text-[var(--text-xs)] text-text-muted">
+    <span className={className}>
       {count} more
     </span>
+  );
+}
+
+export function CalendarOverflowPopover({
+  events,
+  onClose,
+  onOpen,
+  title
+}: {
+  events: CalendarEventViewModel[];
+  onClose: () => void;
+  onOpen: (event: CalendarEventViewModel) => void;
+  title: string;
+}): JSX.Element {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-bg-tertiary/45 p-3 backdrop-blur-sm"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+      role="presentation"
+    >
+      <section
+        aria-label={title}
+        aria-modal="true"
+        className="w-full max-w-md overflow-hidden rounded-hcbLg border border-border bg-bg-primary shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+          <h2 className="min-w-0 truncate text-[var(--text-sm)] font-semibold text-text-primary">{title}</h2>
+          <button
+            aria-label="Close overflow events"
+            className="rounded-hcbSm px-2 py-1 text-[var(--text-xs)] font-semibold text-text-muted hover:bg-surface-0 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onClick={onClose}
+            type="button"
+          >
+            X
+          </button>
+        </div>
+        <div className="grid max-h-[60vh] gap-1 overflow-auto p-2">
+          {events.map((event) => (
+            <CalendarEventChip
+              event={event}
+              key={event.id}
+              labelVariant="time"
+              onOpen={(selectedEvent) => {
+                onClose();
+                onOpen(selectedEvent);
+              }}
+            />
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 
