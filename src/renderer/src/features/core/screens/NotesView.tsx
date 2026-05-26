@@ -704,6 +704,7 @@ function NoteBoardRow({
     >
       <button
         aria-current={selected ? "true" : undefined}
+        aria-label={`Open note ${note.title}`}
         className="min-w-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         onClick={() => onOpenNote(note.id)}
         type="button"

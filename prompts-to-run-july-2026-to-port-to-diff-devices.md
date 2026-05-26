@@ -8,9 +8,52 @@ Run these before the platform port prompts. Each visual prompt should be run wit
 
 Use Apple Calendar and Notion Calendar as reference products only. Extract layout, density, navigation, interaction, and performance lessons. Do not copy protected branding, exact icons, exact copy, product names in UI, or proprietary artwork. Do not add other reference products unless they are explicitly re-added later.
 
+## P0 User-Facing Customization DSL
+
+Run alone before any Linux or Windows port work. This establishes a scriptable shell language and theming/customization DSL that lets end users reconfigure the look, layout, and behavior of the app, similar in spirit to Discord's BetterDiscord/Vencord-style theme and plugin model (without copying their branding, code, or APIs).
+
+```text
+You are Codex 5.5 running with extra-high reasoning in /Users/gongahkia/Desktop/coding/projects/hot-cross-buns-2.
+
+Goal: design and implement a user-facing customization DSL and scriptable shell language that allows end users to reconfigure how the entire app looks and behaves (themes, layout density, panel arrangement, keybindings, and scriptable hooks), inspired by the customization surface area exposed by Discord-style clients but without reusing their branding, copy, APIs, or proprietary assets.
+
+Read first:
+- docs/README.md
+- docs/agents/workflow.md
+- docs/specs/platforms.md
+- docs/security/privacy-and-threat-model.md
+- docs/performance/performance-strategy.md
+- docs/testing/qa-plan.md
+- docs/improvements/01-user-facing-feature-parity.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
+
+Implement:
+- A declarative theme DSL (tokens, palettes, typography, spacing, radii, density) loadable from a user config file with hot-reload in dev and explicit reload in production.
+- A layout/config DSL covering panel visibility, ordering, default views, sidebar contents, and keybinding overrides.
+- A sandboxed scripting surface (no arbitrary Node/Electron access) with a narrow, documented API for: registering commands, observing app events, transforming visible data structures, and contributing UI affordances through approved extension points.
+- A user config directory under the platform-appropriate app data path, with example starter configs and a schema (JSON Schema or equivalent) for editor tooling.
+- Settings UI entry points for enabling/disabling user themes and scripts, viewing load errors, and resetting to defaults.
+- Capability gating so user scripts cannot read credentials, exfiltrate data, or bypass MCP local-only guarantees.
+- Automated tests for: DSL parsing, schema validation, theme token resolution, sandbox isolation, and reload behavior.
+- Documentation under docs/customization/ describing the DSL surface, stability guarantees, and security model.
+
+Do not:
+- Expose Node, Electron, fs, net, or child_process to user scripts.
+- Allow user themes/scripts to silently override security-relevant UI (permission prompts, credential dialogs, update prompts).
+- Copy Discord (or any other product's) branding, copy, icons, API shapes, or proprietary asset names into the DSL.
+- Ship a plugin marketplace, remote fetch of scripts, or auto-update of user scripts in this prompt.
+- Break existing default look and feel for users who do not opt in.
+
+Acceptance checks:
+- Run typecheck/build.
+- Run unit tests for DSL parser, schema validation, and sandbox.
+- Manually load a sample theme and a sample script; confirm hot-reload, error surfacing, and reset-to-default all work.
+- Summarize the DSL surface, extension points exposed, sandbox boundaries, and follow-up work deferred to later prompts.
+```
+
 ## Future Platform Prompts
 
-Run these only after Mac v1 is stable. Do not run Linux and Windows port work in parallel for the first pass. Linux is the first non-Mac port; Windows follows after the Linux adapter lessons are incorporated.
+Run these only after Mac v1 is stable and after P0 has landed. Do not run Linux and Windows port work in parallel for the first pass. Linux is the first non-Mac port; Windows follows after the Linux adapter lessons are incorporated.
 
 ### P8A Cross-Platform Adapter Audit
 

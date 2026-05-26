@@ -119,7 +119,7 @@ describe("App notes", () => {
     await user.click(await screen.findByText("Cache-first startup"));
     await user.type(await screen.findByRole("textbox", { name: "Note body" }), " Switch flush.");
     const notesList = screen.getByRole("list", { name: "Local notes" });
-    await user.click(within(notesList).getByRole("button", { name: /Daily note/ }));
+    await user.click(within(notesList).getByRole("button", { name: "Open note Daily note" }));
 
     await waitFor(() => {
       expect(api.notes.update).toHaveBeenCalledWith({

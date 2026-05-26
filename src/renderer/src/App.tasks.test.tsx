@@ -22,20 +22,20 @@ describe("App tasks", () => {
 
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Planning" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "All tasks" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: /All tasks/ })).toHaveAttribute("aria-current", "page");
 
     const inboxTasks = screen.getByRole("list", { name: "Inbox tasks" });
     expect(within(inboxTasks).getByText("Draft inbox triage rules")).toBeInTheDocument();
     expect(within(inboxTasks).getByText("Today")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Complete Draft inbox triage rules" }));
-    expect(api.tasks.complete).toHaveBeenCalledWith({ id: "task-inbox-rules" });
-
     await user.click(screen.getByRole("button", { name: "Star Draft inbox triage rules" }));
-    await user.click(screen.getByRole("button", { name: "Starred" }));
+    await user.click(screen.getByRole("button", { name: /Starred/ }));
 
     expect(await screen.findByRole("heading", { name: "Starred tasks" })).toBeInTheDocument();
     expect(screen.getByText("Draft inbox triage rules")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Complete Draft inbox triage rules" }));
+    expect(api.tasks.complete).toHaveBeenCalledWith({ id: "task-inbox-rules" });
   });
 
   it("opens task and list action menus for move, delete, sorting, rename, and list creation", async () => {
