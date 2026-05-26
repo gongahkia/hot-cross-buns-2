@@ -14,7 +14,7 @@ import {
   duplicateAccelerators,
   hotkeyDefinitions
 } from "../../hotkeys";
-import { SettingsControlRow, SettingsGroup } from "./SettingsPrimitives";
+import { SettingsControlRow, SettingsGroup, settingsSearchMatches } from "./SettingsPrimitives";
 
 interface HotkeysSettingsTabProps {
   query: string;
@@ -28,7 +28,7 @@ export function HotkeysSettingsTab({
   updateSettings
 }: HotkeysSettingsTabProps): JSX.Element {
   const [recordingActionId, setRecordingActionId] = useState<HotkeyActionId | null>(null);
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = query.trim();
   const duplicateMap = duplicateAccelerators(settings.keybindings);
   const duplicateActionIds = new Set([...duplicateMap.values()].flat());
   const groups = ["App", "Navigation", "Calendar"] as const;
@@ -76,9 +76,10 @@ export function HotkeysSettingsTab({
             return true;
           }
 
-          return `${definition.label} ${definition.group} ${settings.keybindings[definition.id] ?? ""}`
-            .toLowerCase()
-            .includes(normalizedQuery);
+          return settingsSearchMatches(
+            `${definition.label} ${definition.group} ${settings.keybindings[definition.id] ?? ""}`,
+            normalizedQuery
+          );
         });
 
         if (definitions.length === 0) {

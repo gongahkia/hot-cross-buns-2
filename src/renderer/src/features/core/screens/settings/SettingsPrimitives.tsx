@@ -1,9 +1,99 @@
-import type { ReactNode } from "react";
+import { createContext, isValidElement, useContext, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cx } from "../../../../components/primitives";
 
 export const settingsSelectClass =
   "h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+interface SettingsSearchContextValue {
+  groupTitleMatches: boolean;
+  query: string;
+}
+
+interface SearchableElementProps {
+  "aria-label"?: unknown;
+  children?: ReactNode;
+  description?: unknown;
+  label?: unknown;
+  title?: unknown;
+}
+
+const SettingsSearchContext = createContext<SettingsSearchContextValue>({
+  groupTitleMatches: false,
+  query: ""
+});
+
+function normalizedSettingsSearchText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function compactSettingsSearchText(value: string): string {
+  return normalizedSettingsSearchText(value).replace(/[^a-z0-9]+/g, "");
+}
+
+function searchableValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+function collectSearchableText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") {
+    return "";
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(collectSearchableText).join(" ");
+  }
+
+  if (isValidElement<SearchableElementProps>(node)) {
+    return [
+      searchableValue(node.props.label),
+      searchableValue(node.props.description),
+      searchableValue(node.props.title),
+      searchableValue(node.props["aria-label"]),
+      collectSearchableText(node.props.children)
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return "";
+}
+
+export function settingsSearchMatches(text: string, query: string): boolean {
+  const normalizedQuery = normalizedSettingsSearchText(query);
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const normalizedText = normalizedSettingsSearchText(text);
+
+  if (normalizedText.includes(normalizedQuery)) {
+    return true;
+  }
+
+  const compactQuery = compactSettingsSearchText(query);
+
+  return compactQuery.length > 0 && compactSettingsSearchText(text).includes(compactQuery);
+}
+
+export function SettingsSearchProvider({
+  children,
+  query
+}: {
+  children: ReactNode;
+  query: string;
+}): JSX.Element {
+  return (
+    <SettingsSearchContext.Provider value={{ groupTitleMatches: false, query }}>
+      {children}
+    </SettingsSearchContext.Provider>
+  );
+}
 
 export function SettingsTabButton({
   active,
@@ -36,18 +126,32 @@ export function SettingsTabButton({
 
 export function SettingsGroup({
   children,
+  searchText = "",
   title
 }: {
   children: ReactNode;
+  searchText?: string;
   title: string;
-}): JSX.Element {
+}): JSX.Element | null {
+  const search = useContext(SettingsSearchContext);
+  const hasQuery = search.query.trim().length > 0;
+  const groupTitleMatches = settingsSearchMatches(title, search.query);
+  const groupContentMatches =
+    groupTitleMatches || settingsSearchMatches(`${searchText} ${collectSearchableText(children)}`, search.query);
+
+  if (hasQuery && !groupContentMatches) {
+    return null;
+  }
+
   return (
-    <section className="grid gap-1.5">
-      <h2 className="px-1 text-[var(--text-md)] font-semibold text-text-primary">{title}</h2>
-      <div className="overflow-hidden rounded-hcbMd border border-border bg-bg-secondary">
-        {children}
-      </div>
-    </section>
+    <SettingsSearchContext.Provider value={{ groupTitleMatches, query: search.query }}>
+      <section className="grid gap-1.5">
+        <h2 className="px-1 text-[var(--text-md)] font-semibold text-text-primary">{title}</h2>
+        <div className="overflow-hidden rounded-hcbMd border border-border bg-bg-secondary">
+          {children}
+        </div>
+      </section>
+    </SettingsSearchContext.Provider>
   );
 }
 
@@ -61,7 +165,15 @@ export function SettingsControlRow({
   description?: string;
   icon?: LucideIcon;
   label: string;
-}): JSX.Element {
+}): JSX.Element | null {
+  const search = useContext(SettingsSearchContext);
+  const hasQuery = search.query.trim().length > 0;
+  const rowMatches = settingsSearchMatches(`${label} ${description ?? ""} ${collectSearchableText(children)}`, search.query);
+
+  if (hasQuery && !search.groupTitleMatches && !rowMatches) {
+    return null;
+  }
+
   return (
     <div className="grid min-h-11 gap-2 border-b border-border px-3 py-2 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 items-start gap-2.5">
@@ -96,7 +208,7 @@ export function SettingsSwitch({
   label: string;
   onChange: (checked: boolean) => void;
   trailing?: ReactNode;
-}): JSX.Element {
+}): JSX.Element | null {
   return (
     <SettingsControlRow description={description} icon={icon} label={label}>
       <div className="flex items-center gap-3">

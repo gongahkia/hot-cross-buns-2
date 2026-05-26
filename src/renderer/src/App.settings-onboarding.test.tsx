@@ -42,6 +42,45 @@ describe("App settings and onboarding", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Layout" })).toBeInTheDocument();
   });
 
+  it("filters settings results and switches to the matching tab", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+
+    const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    const search = within(dialog).getByRole("textbox", { name: "Search settings" });
+
+    await user.type(search, "menubar");
+
+    // eslint-disable-next-line no-console
+    console.log(
+      within(dialog)
+        .getAllByRole("button")
+        .filter((button) => button.hasAttribute("aria-pressed"))
+        .map((button) => `${button.textContent}:${button.getAttribute("aria-pressed")}`)
+    );
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "Alerts" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(within(dialog).getByRole("heading", { level: 2, name: "Menu bar" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "Menu bar extra" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("heading", { level: 2, name: "Notifications" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("heading", { level: 2, name: "Language" })).not.toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, "performance");
+
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "General" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(within(dialog).getByRole("heading", { level: 2, name: "Diagnostics" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "Include performance diagnostics" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("checkbox", { name: "Include field-redacted Google payloads in local logs" })).not.toBeInTheDocument();
+  });
+
   it("applies base theme and color theme settings", async () => {
     const api = seededHcb();
     let settings = testSettings({

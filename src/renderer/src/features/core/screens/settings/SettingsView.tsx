@@ -19,6 +19,7 @@ import {
   fontFamilyOptions,
   sanitizedJson
 } from "../../coreScreenShared";
+import { hotkeyDefinitions } from "../../hotkeys";
 import { AppearanceSettingsTab } from "./AppearanceSettingsTab";
 import { AboutSettingsTab } from "./AboutSettingsTab";
 import { AdvancedSettingsTab } from "./AdvancedSettingsTab";
@@ -26,10 +27,160 @@ import { AlertsSettingsTab } from "./AlertsSettingsTab";
 import { GeneralSettingsTab } from "./GeneralSettingsTab";
 import { HotkeysSettingsTab } from "./HotkeysSettingsTab";
 import { ProfileSettingsTab } from "./ProfileSettingsTab";
-import { SettingsTabButton } from "./SettingsPrimitives";
+import {
+  SettingsSearchProvider,
+  SettingsTabButton,
+  settingsSearchMatches
+} from "./SettingsPrimitives";
 import { recoveryPhrase } from "./settingsUtils";
 
 type SettingsTabId = "general" | "profile" | "appearance" | "hotkeys" | "alerts" | "advanced" | "about";
+
+const settingsSearchTextByTab: Record<SettingsTabId, string> = {
+  about: [
+    "About",
+    "Updates",
+    "Automatically check for updates",
+    "Update channel",
+    "Last checked",
+    "App",
+    "Version",
+    "Build",
+    "Bundle ID",
+    "Copy version info"
+  ].join(" "),
+  advanced: [
+    "Advanced",
+    "Calendars",
+    "Read calendars",
+    "Show hidden calendars",
+    "Task lists",
+    "Read tasks",
+    "Per-tab list filters",
+    "Tasks tab",
+    "Notes tab",
+    "Calendar tab",
+    "Data control",
+    "Mutation history",
+    "Sync queue",
+    "Portable export",
+    "Portable archive",
+    "Include attachments metadata",
+    "Include diagnostics summary",
+    "Include local settings",
+    "Import portable archive",
+    "Local backups",
+    "Automatic local backups",
+    "Keep backups",
+    "Backup folder",
+    "History",
+    "Visible entries",
+    "Storage cap",
+    "History categories",
+    "Duplicate detection",
+    "Title similarity threshold",
+    "Custom filters",
+    "Task templates",
+    "Event templates"
+  ].join(" "),
+  alerts: [
+    "Alerts",
+    "Notifications",
+    "Local reminders",
+    "Reminder lead time",
+    "Completion sounds",
+    "Task completion",
+    "Task sound",
+    "Event completion",
+    "Event sound",
+    "Imported sounds",
+    "Menu bar",
+    "Menu bar extra",
+    "Menu bar panel",
+    "Menu bar icon",
+    "Menu bar badge for overdue tasks",
+    "Dock",
+    "Dock badge for overdue tasks",
+    "Global hotkey",
+    "Global quick-add hotkey",
+    "Shortcut"
+  ].join(" "),
+  appearance: [
+    "Appearance",
+    "Theme",
+    "Color theme",
+    "Color preview",
+    "Translucent background",
+    "App surface opacity",
+    "Reduce motion",
+    "Layout scale",
+    "Text size",
+    "UI font",
+    "Per-surface fonts",
+    "Tasks font",
+    "Calendar font",
+    "Notes font",
+    "Menu bar font",
+    "Settings font",
+    "Layout",
+    "Default section",
+    "Sidebar labels",
+    "Menu bar compact mode",
+    "Calendar default view",
+    "Calendar day start",
+    "Calendar day end"
+  ].join(" "),
+  general: [
+    "General",
+    "Language",
+    "App language",
+    "System Default follows your macOS language order",
+    "Startup",
+    "Open Hot Cross Buns at login",
+    "Diagnostics",
+    "Inspect logs mutation history sync queues support bundles",
+    "Include performance diagnostics",
+    "Include field-redacted Google payloads in local logs",
+    "Agent access",
+    "Local MCP server",
+    "Permission mode",
+    "MCP clients must follow this write policy before changes apply",
+    "Port",
+    "Running",
+    "Stopped",
+    "Reset token",
+    "Sync",
+    "Mode",
+    "Refresh cadence for launch foreground periodic app activity",
+    "Keep past events",
+    "Keep completed tasks",
+    "Custom",
+    "Refresh",
+    "Force full resync",
+    "Setup",
+    "Setup assistant",
+    "Run setup again"
+  ].join(" "),
+  hotkeys: [
+    "Hotkeys",
+    "Shortcuts",
+    "Keyboard",
+    "Command palette",
+    ...hotkeyDefinitions.map((definition) => `${definition.group} ${definition.label} ${definition.id}`)
+  ].join(" "),
+  profile: [
+    "Profile",
+    "Google OAuth client",
+    "Google Cloud OAuth client",
+    "Desktop OAuth client ID",
+    "Client secret optional",
+    "Google accounts",
+    "Add Google Account",
+    "Disconnect",
+    "Task lists",
+    "Calendars"
+  ].join(" ")
+};
 
 export function SettingsView({
   onOpenDiagnostics
@@ -64,10 +215,49 @@ export function SettingsView({
     () => fontFamilyOptions(systemFontFamilies, settings.uiFontName),
     [settings.uiFontName, systemFontFamilies]
   );
+  const settingsSearchTexts = useMemo<Record<SettingsTabId, string>>(
+    () => ({
+      ...settingsSearchTextByTab,
+      advanced: [
+        settingsSearchTextByTab.advanced,
+        source.taskLists.map((taskList) => taskList.title).join(" "),
+        source.calendarSources.map((calendar) => `${calendar.title} ${calendar.timeZone ?? ""}`).join(" ")
+      ].join(" "),
+      profile: [
+        settingsSearchTextByTab.profile,
+        googleStatus.account?.displayName ?? "",
+        googleStatus.account?.email ?? "",
+        googleStatus.account?.timeZone ?? "",
+        source.taskLists.map((taskList) => taskList.title).join(" "),
+        source.calendarSources.map((calendar) => `${calendar.title} ${calendar.timeZone ?? ""}`).join(" ")
+      ].join(" ")
+    }),
+    [googleStatus.account, source.calendarSources, source.taskLists]
+  );
+  const normalizedSettingsQuery = settingsQuery.trim();
+  const matchingSettingsTabs = useMemo<SettingsTabId[]>(() => {
+    if (!normalizedSettingsQuery) {
+      return [];
+    }
+
+    return (Object.entries(settingsSearchTexts) as Array<[SettingsTabId, string]>)
+      .filter(([, text]) => settingsSearchMatches(text, normalizedSettingsQuery))
+      .map(([id]) => id);
+  }, [normalizedSettingsQuery, settingsSearchTexts]);
 
   useEffect(() => {
     setGoogleClientId(googleStatus.clientId ?? "");
   }, [googleStatus.clientId]);
+
+  useEffect(() => {
+    if (normalizedSettingsQuery.length < 2 || matchingSettingsTabs.length === 0) {
+      return;
+    }
+
+    if (selectedSettingsTab !== matchingSettingsTabs[0]) {
+      setSelectedSettingsTab(matchingSettingsTabs[0]);
+    }
+  }, [matchingSettingsTabs, normalizedSettingsQuery, selectedSettingsTab]);
 
   useEffect(() => {
     if (selectedSettingsTab !== "appearance" || systemFontFamiliesRequested.current || !window.hcb) {
@@ -353,82 +543,84 @@ export function SettingsView({
         </Panel>
       ) : null}
 
-      {selectedSettingsTab === "general" ? (
-        <GeneralSettingsTab
-          beginRecoveryAction={beginRecoveryAction}
-          customRetentionAmount={customRetentionAmount}
-          customRetentionUnit={customRetentionUnit}
-          openDiagnosticsDetails={openDiagnosticsDetails}
-          setCustomRetentionAmount={setCustomRetentionAmount}
-          setCustomRetentionUnit={setCustomRetentionUnit}
-          settings={settings}
-          settingsMutationPending={source.settingsMutationPending}
-          updateSettings={updateSettings}
-        />
-      ) : null}
+      <SettingsSearchProvider query={settingsQuery}>
+        {selectedSettingsTab === "general" ? (
+          <GeneralSettingsTab
+            beginRecoveryAction={beginRecoveryAction}
+            customRetentionAmount={customRetentionAmount}
+            customRetentionUnit={customRetentionUnit}
+            openDiagnosticsDetails={openDiagnosticsDetails}
+            setCustomRetentionAmount={setCustomRetentionAmount}
+            setCustomRetentionUnit={setCustomRetentionUnit}
+            settings={settings}
+            settingsMutationPending={source.settingsMutationPending}
+            updateSettings={updateSettings}
+          />
+        ) : null}
 
-      {selectedSettingsTab === "profile" ? (
-        <ProfileSettingsTab
-          beginGoogleOAuth={beginGoogleOAuth}
-          calendarSources={source.calendarSources}
-          disconnectGoogle={disconnectGoogle}
-          googleClientId={googleClientId}
-          googleClientSecret={googleClientSecret}
-          googleStatus={googleStatus}
-          saveGoogleOAuthClient={saveGoogleOAuthClient}
-          setGoogleClientId={setGoogleClientId}
-          setGoogleClientSecret={setGoogleClientSecret}
-          settings={settings}
-          settingsMutationPending={source.settingsMutationPending}
-          taskLists={source.taskLists}
-          updateSelectedCalendar={updateSelectedCalendar}
-          updateSelectedTaskList={updateSelectedTaskList}
-        />
-      ) : null}
+        {selectedSettingsTab === "profile" ? (
+          <ProfileSettingsTab
+            beginGoogleOAuth={beginGoogleOAuth}
+            calendarSources={source.calendarSources}
+            disconnectGoogle={disconnectGoogle}
+            googleClientId={googleClientId}
+            googleClientSecret={googleClientSecret}
+            googleStatus={googleStatus}
+            saveGoogleOAuthClient={saveGoogleOAuthClient}
+            setGoogleClientId={setGoogleClientId}
+            setGoogleClientSecret={setGoogleClientSecret}
+            settings={settings}
+            settingsMutationPending={source.settingsMutationPending}
+            taskLists={source.taskLists}
+            updateSelectedCalendar={updateSelectedCalendar}
+            updateSelectedTaskList={updateSelectedTaskList}
+          />
+        ) : null}
 
-      {selectedSettingsTab === "appearance" ? (
-        <AppearanceSettingsTab
-          activeColorTheme={activeColorTheme}
-          availableFontFamilies={availableFontFamilies}
-          matchingColorThemes={matchingColorThemes}
-          settings={settings}
-          updateBaseTheme={updateBaseTheme}
-          updateSettings={updateSettings}
-        />
-      ) : null}
+        {selectedSettingsTab === "appearance" ? (
+          <AppearanceSettingsTab
+            activeColorTheme={activeColorTheme}
+            availableFontFamilies={availableFontFamilies}
+            matchingColorThemes={matchingColorThemes}
+            settings={settings}
+            updateBaseTheme={updateBaseTheme}
+            updateSettings={updateSettings}
+          />
+        ) : null}
 
-      {selectedSettingsTab === "hotkeys" ? (
-        <HotkeysSettingsTab
-          query={settingsQuery}
-          settings={settings}
-          updateSettings={updateSettings}
-        />
-      ) : null}
+        {selectedSettingsTab === "hotkeys" ? (
+          <HotkeysSettingsTab
+            query={settingsQuery}
+            settings={settings}
+            updateSettings={updateSettings}
+          />
+        ) : null}
 
-      {selectedSettingsTab === "alerts" ? (
-        <AlertsSettingsTab settings={settings} updateSettings={updateSettings} />
-      ) : null}
+        {selectedSettingsTab === "alerts" ? (
+          <AlertsSettingsTab settings={settings} updateSettings={updateSettings} />
+        ) : null}
 
-      {selectedSettingsTab === "advanced" ? (
-        <AdvancedSettingsTab
-          beginRecoveryAction={beginRecoveryAction}
-          calendarSources={source.calendarSources}
-          settings={settings}
-          taskLists={source.taskLists}
-          updateSelectedCalendar={updateSelectedCalendar}
-          updateSelectedTaskList={updateSelectedTaskList}
-          updateSettings={updateSettings}
-        />
-      ) : null}
+        {selectedSettingsTab === "advanced" ? (
+          <AdvancedSettingsTab
+            beginRecoveryAction={beginRecoveryAction}
+            calendarSources={source.calendarSources}
+            settings={settings}
+            taskLists={source.taskLists}
+            updateSelectedCalendar={updateSelectedCalendar}
+            updateSelectedTaskList={updateSelectedTaskList}
+            updateSettings={updateSettings}
+          />
+        ) : null}
 
-      {selectedSettingsTab === "about" ? (
-        <AboutSettingsTab
-          beginRecoveryAction={beginRecoveryAction}
-          diagnostics={diagnostics}
-          settings={settings}
-          updateSettings={updateSettings}
-        />
-      ) : null}
+        {selectedSettingsTab === "about" ? (
+          <AboutSettingsTab
+            beginRecoveryAction={beginRecoveryAction}
+            diagnostics={diagnostics}
+            settings={settings}
+            updateSettings={updateSettings}
+          />
+        ) : null}
+      </SettingsSearchProvider>
     </div>
   );
 }
