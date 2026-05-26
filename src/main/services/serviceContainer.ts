@@ -106,6 +106,7 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const settingsRepository = new LocalSettingsRepository(connection);
   const syncRepository = new GoogleSyncRepository(connection, { defaultTimeZone });
   const runtimeGoogleEnabled = options.enableRuntimeGoogle ?? options.nativeAdapter !== undefined;
+  // Temporary live-account QA guard: final product sync must support Google CRUD by default.
   const runtimeGoogleWritesEnabled =
     options.enableRuntimeGoogleWrites ?? process.env.HCB_GOOGLE_WRITES_ENABLED === "1";
   const secretStore = options.secretStore ?? defaultSecretStore();
