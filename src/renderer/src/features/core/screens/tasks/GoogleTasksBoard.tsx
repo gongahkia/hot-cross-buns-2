@@ -276,7 +276,7 @@ function TaskBoardSidebar({
       </Button>
       <div className="mt-5 grid gap-1">
         <TaskSidebarButton
-          count={activeRootTasks(source).length}
+          count={source.resourceCounts.tasks}
           icon="all"
           label="All tasks"
           onClick={selectAllLists}
@@ -296,7 +296,7 @@ function TaskBoardSidebar({
           {source.taskLists.map((list) => (
             <TaskListCheckbox
               checked={visibleListIdSet.has(list.id)}
-              count={visibleListTasks(source, list.id).length}
+              count={list.taskCount ?? visibleListTasks(source, list.id).length}
               key={list.id}
               label={list.title}
               onClick={() => toggleList(list.id)}

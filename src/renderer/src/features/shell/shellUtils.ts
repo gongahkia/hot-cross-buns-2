@@ -34,15 +34,15 @@ export function isEditableShortcutTarget(target: EventTarget | null): boolean {
 
 export function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): string {
   if (sectionId === "tasks") {
-    return source.taskFilterViewModels.find((filter) => filter.id === "open")?.countLabel ?? "0";
+    return String(source.resourceCounts.tasks);
   }
 
   if (sectionId === "calendar") {
-    return String(source.calendarAgendaEvents.length);
+    return String(source.resourceCounts.calendarEvents);
   }
 
   if (sectionId === "notes") {
-    return String(source.largeTaskWindow.filter((task) => task.status === "open" && !task.dueDate && !task.plannedStart).length);
+    return String(source.resourceCounts.notes);
   }
 
   if (sectionId === "settings") {

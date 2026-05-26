@@ -129,6 +129,11 @@ export function buildCoreViewModelSource(
     deletedTasks,
     snapshot.taskLists
   );
+  const resourceCounts = {
+    calendarEvents: snapshot.diagnosticsSummary?.cache.eventCount ?? snapshot.resourceCounts.calendarEvents,
+    notes: snapshot.diagnosticsSummary?.cache.noteCount ?? snapshot.resourceCounts.notes,
+    tasks: snapshot.diagnosticsSummary?.cache.taskCount ?? snapshot.resourceCounts.tasks
+  };
   const todayTimedRows = [
     ...todayEvents.map((event) => ({
       kind: "event" as const,
@@ -171,6 +176,7 @@ export function buildCoreViewModelSource(
     largeTaskWindow: tasks,
     refresh: options.refresh,
     refreshGoogleStatus: options.refreshGoogleStatus,
+    resourceCounts,
     setGoogleStatus: options.setGoogleStatus,
     settings: snapshot.settings,
     diagnosticsSummary: snapshot.diagnosticsSummary,

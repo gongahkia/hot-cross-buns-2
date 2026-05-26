@@ -5,6 +5,10 @@ import { unwrap } from "./result";
 import { uniqueTasks } from "./taskViewModels";
 import type { CoreDataSnapshot } from "./types";
 
+function knownTotal(pageTotal: number | undefined, itemCount: number): number {
+  return pageTotal ?? itemCount;
+}
+
 export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>): Promise<CoreDataSnapshot> {
   if (!window.hcb) {
     throw new Error("Preload bridge is unavailable.");
@@ -71,6 +75,17 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
     settings,
     syncStatus,
     googleStatus: emptyGoogleStatus,
-    native
+    native,
+    resourceCounts: {
+      calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)
+        ? calendars.items.reduce((count, calendar) => count + (calendar.eventCount ?? 0), 0)
+        : knownTotal(events.page.totalKnown, events.items.length),
+      notes: knownTotal(notes.page.totalKnown, notes.items.length),
+      tasks: taskLists.items.every((taskList) => taskList.taskCount !== undefined)
+        ? taskLists.items.reduce((count, taskList) => count + (taskList.taskCount ?? 0), 0)
+        : knownTotal(tasks.page.totalKnown, tasks.items.length) +
+          knownTotal(hiddenTasks.page.totalKnown, hiddenTasks.items.length) +
+          knownTotal(deletedTasks.page.totalKnown, deletedTasks.items.length)
+    }
   };
 }

@@ -58,6 +58,7 @@ export interface CoreViewModelSource {
   largeTaskWindow: TaskViewModel[];
   refresh: () => void;
   refreshGoogleStatus: () => void;
+  resourceCounts: CoreResourceCounts;
   setGoogleStatus: (status: GoogleStatusResponse) => void;
   settings: SettingsSnapshot;
   diagnosticsSummary?: DiagnosticsSummaryResponse;
@@ -122,6 +123,13 @@ export interface CoreDataSnapshot {
   health?: DiagnosticsHealthResponse;
   native: NativeCapabilitiesResponse;
   diagnosticsSummary?: DiagnosticsSummaryResponse;
+  resourceCounts: CoreResourceCounts;
+}
+
+export interface CoreResourceCounts {
+  calendarEvents: number;
+  notes: number;
+  tasks: number;
 }
 
 export interface CoreDataLoadState {

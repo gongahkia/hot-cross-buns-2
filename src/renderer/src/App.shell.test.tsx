@@ -1,15 +1,18 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { ok } from "@shared/ipc/result";
 import App from "./App";
 import {
   goToSection,
   installHcb,
   loadingHcb,
+  now,
   originalHcb,
   primaryNavigation,
   runPaletteCommand,
   seededHcb,
+  todayDate,
   settingsLoadingHcb
 } from "./test/appTestHelpers";
 
@@ -137,6 +140,77 @@ describe("App shell", () => {
 
     await user.keyboard("{Meta>}3{/Meta}");
     expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
+  });
+
+  it("uses total resource counts in primary navigation badges", async () => {
+    const api = seededHcb();
+
+    api.tasks.listTaskLists = async () =>
+      ok({
+        items: [
+          {
+            id: "list-inbox",
+            title: "Inbox",
+            updatedAt: now,
+            taskCount: 1200,
+            activeTaskCount: 900
+          }
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      });
+    api.calendar.listCalendars = async () =>
+      ok({
+        items: [
+          {
+            id: "cal-product",
+            title: "Product",
+            selected: true,
+            timeZone: "UTC",
+            backgroundColor: "#34a853",
+            foregroundColor: "#ffffff",
+            updatedAt: now,
+            eventCount: 18000
+          }
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      });
+    api.calendar.listEvents = async () =>
+      ok({
+        items: [
+          {
+            id: "event-visible",
+            calendarId: "cal-product",
+            title: "Visible window event",
+            startsAt: `${todayDate}T09:00:00.000Z`,
+            endsAt: `${todayDate}T09:30:00.000Z`,
+            allDay: false,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 250 }
+      });
+    api.notes.list = async () =>
+      ok({
+        items: [
+          {
+            id: "note-cache-first",
+            title: "Cache-first startup",
+            preview: "Renderer paints from SQLite.",
+            updatedAt: now
+          }
+        ],
+        page: { limit: 50, totalKnown: 321 }
+      });
+    installHcb(api);
+    render(<App />);
+
+    const navigation = primaryNavigation();
+
+    await waitFor(() => {
+      expect(within(within(navigation).getByRole("button", { name: "Tasks" })).getByText("1200")).toBeInTheDocument();
+      expect(within(within(navigation).getByRole("button", { name: "Calendar" })).getByText("18000")).toBeInTheDocument();
+      expect(within(within(navigation).getByRole("button", { name: "Notes" })).getByText("321")).toBeInTheDocument();
+    });
   });
 
   it("opens notifications as a toolbar overlay instead of a primary navigation section", async () => {

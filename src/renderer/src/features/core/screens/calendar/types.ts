@@ -1,7 +1,9 @@
 import type { CalendarEventRecurrence } from "@shared/ipc/contracts";
 import type { CalendarDayViewModel, CalendarEventViewModel } from "../../coreViewModels";
 
-export type CalendarRepeatFrequency = "none" | CalendarEventRecurrence["frequency"];
+export type CalendarRepeatFrequency = "none" | CalendarEventRecurrence["frequency"] | "custom";
+export type CalendarRepeatEndMode = "never" | "on" | "after";
+export type CalendarRepeatWeekday = NonNullable<CalendarEventRecurrence["byDay"]>[number];
 export type CalendarCreateMode = "event" | "task" | "birthday";
 export type CalendarCreateSeed = { startsAt?: string; endsAt?: string; allDay?: boolean };
 
@@ -19,9 +21,12 @@ export interface CalendarEventDraft {
   guests: string;
   reminderMinutes: string;
   repeatFrequency: CalendarRepeatFrequency;
+  repeatCustomFrequency: CalendarEventRecurrence["frequency"];
+  repeatEndMode: CalendarRepeatEndMode;
   repeatInterval: string;
   repeatEndsOn: string;
   repeatCount: string;
+  repeatWeekdays: CalendarRepeatWeekday[];
 }
 
 export interface CalendarDaySlot {

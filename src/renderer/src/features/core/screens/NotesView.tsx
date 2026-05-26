@@ -172,6 +172,7 @@ export function NotesView(): JSX.Element {
   const noteInspectorBodyRef = useRef<NoteInspectorBodyHandle | null>(null);
   const noteInspectorModeRef = useRef<"view" | "edit">("edit");
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null;
+  const allNoteCount = Math.max(source.resourceCounts.notes, notes.length);
   const starredNotes = useMemo(
     () =>
       notes
@@ -666,7 +667,7 @@ export function NotesView(): JSX.Element {
         <div className="mt-5 grid gap-1">
           <NoteSidebarCheckbox
             checked={selectedNoteViews.includes("all")}
-            count={notes.length}
+            count={allNoteCount}
             label="All notes"
             onClick={() => toggleNoteView("all")}
           />
@@ -697,7 +698,7 @@ export function NotesView(): JSX.Element {
           {noteViewColumns.length > 0 ? (
             noteViewColumns.map((column) => (
               <Panel
-                action={<Badge tone="neutral">{column.notes.length}</Badge>}
+                action={<Badge tone="neutral">{column.id === "all" ? allNoteCount : column.notes.length}</Badge>}
                 className="flex max-h-full w-[min(520px,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden bg-bg-primary"
                 description={column.description}
                 key={column.id}

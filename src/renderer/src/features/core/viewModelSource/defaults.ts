@@ -186,5 +186,10 @@ export const emptySnapshot: CoreDataSnapshot = {
   settings: emptySettings,
   syncStatus: emptySyncStatus,
   googleStatus: emptyGoogleStatus,
-  native: emptyNativeCapabilities
+  native: emptyNativeCapabilities,
+  resourceCounts: {
+    calendarEvents: 0,
+    notes: 0,
+    tasks: 0
+  }
 };

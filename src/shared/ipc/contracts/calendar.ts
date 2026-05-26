@@ -120,7 +120,8 @@ export const calendarEventRecurrenceSchema = z
     frequency: z.enum(["daily", "weekly", "monthly", "yearly"]),
     interval: z.number().int().min(1).max(366),
     endsOn: dateOnlySchema.nullable().optional(),
-    count: z.number().int().min(1).max(366).nullable().optional()
+    count: z.number().int().min(1).max(366).nullable().optional(),
+    byDay: z.array(z.enum(["SU", "MO", "TU", "WE", "TH", "FR", "SA"])).max(7).optional()
   })
   .strict();
 
