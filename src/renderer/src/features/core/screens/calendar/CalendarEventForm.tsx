@@ -241,7 +241,7 @@ export function CalendarEventForm({
         role="group"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <CalendarSourceSwatch calendarId={draft.calendarId} />
+          <CalendarSourceSwatch calendarId={draft.calendarId} color={selectedCalendar?.backgroundColor} />
           <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-primary">
             {selectedCalendar?.title ?? "Calendar"}
           </span>

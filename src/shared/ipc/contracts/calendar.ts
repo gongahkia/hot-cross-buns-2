@@ -60,12 +60,16 @@ export const calendarListRequestSchema = z
 
 export type CalendarListRequest = z.input<typeof calendarListRequestSchema>;
 
+const calendarColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
+
 export const calendarListSummarySchema = z
   .object({
     id: idSchema,
     title: z.string().min(1).max(500),
     selected: z.boolean(),
     timeZone: z.string().min(1).max(120).nullable().optional(),
+    backgroundColor: calendarColorSchema.nullable().optional(),
+    foregroundColor: calendarColorSchema.nullable().optional(),
     updatedAt: isoDateTimeSchema,
     eventCount: z.number().int().nonnegative().optional()
   })

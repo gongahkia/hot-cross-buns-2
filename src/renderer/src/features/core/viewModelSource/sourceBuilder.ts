@@ -52,11 +52,19 @@ export function buildCoreViewModelSource(
   const calendarTimeZoneById = Object.fromEntries(
     snapshot.calendars.map((calendar) => [calendar.id, calendar.timeZone])
   );
+  const calendarBackgroundColorById = Object.fromEntries(
+    snapshot.calendars.map((calendar) => [calendar.id, calendar.backgroundColor ?? null])
+  );
+  const calendarForegroundColorById = Object.fromEntries(
+    snapshot.calendars.map((calendar) => [calendar.id, calendar.foregroundColor ?? null])
+  );
   const events = snapshot.events.map((event) =>
     stableCalendarEventViewModel(
       event,
       calendarTitleById[event.calendarId],
       calendarTimeZoneById[event.calendarId] ?? null,
+      calendarBackgroundColorById[event.calendarId] ?? null,
+      calendarForegroundColorById[event.calendarId] ?? null,
       snapshot.settings.defaultTimeZone,
       options.calendarEventViewModelCache
     )

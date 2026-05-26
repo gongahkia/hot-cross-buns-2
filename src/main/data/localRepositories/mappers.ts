@@ -14,6 +14,7 @@ import { parseNumberArray, parseStringArray } from "./shared";
 
 const textLimits = {
   calendarTitle: 500,
+  calendarColor: 32,
   eventTitle: 500,
   eventLocation: 1_000,
   eventNotes: 20_000,
@@ -82,6 +83,8 @@ export function calendarListSummary(row: CalendarListRow): CalendarListSummary {
     title: truncateText(row.title, textLimits.calendarTitle),
     selected: row.selected === 1,
     timeZone: truncateNullableText(row.timeZone, textLimits.timeZone),
+    backgroundColor: googleColor(row.backgroundColor),
+    foregroundColor: googleColor(row.foregroundColor),
     updatedAt: row.updatedAt,
     eventCount: row.eventCount
   };
@@ -210,6 +213,16 @@ function truncateNullableText(value: string | null | undefined, maxLength: numbe
   }
 
   return truncateText(value, maxLength);
+}
+
+function googleColor(value: string | null | undefined): string | null {
+  const color = truncateNullableText(value, textLimits.calendarColor)?.trim() ?? null;
+
+  if (!color || !/^#[0-9A-Fa-f]{6}$/.test(color)) {
+    return null;
+  }
+
+  return color;
 }
 
 function truncateText(value: string, maxLength: number): string {

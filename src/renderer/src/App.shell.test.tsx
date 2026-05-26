@@ -206,7 +206,7 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Quick capture" })).toBeInTheDocument();
 
     await runPaletteCommand(user, "refresh", /Refresh/);
-    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
 
     await runPaletteCommand(user, "force", /Force full resync/);
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();

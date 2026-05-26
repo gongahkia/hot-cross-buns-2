@@ -1,4 +1,4 @@
-import type { DragEvent, KeyboardEvent } from "react";
+import type { CSSProperties, DragEvent, KeyboardEvent } from "react";
 import { cx } from "../../../../components/primitives";
 import type { CalendarEventViewModel } from "../../coreViewModels";
 
@@ -45,6 +45,47 @@ export function calendarSourceTone(calendarId: string): (typeof calendarSourceTo
   return tone;
 }
 
+export function normalizeCalendarColor(color: string | null | undefined): string | null {
+  const normalized = color?.trim() ?? "";
+
+  if (!/^#[0-9A-Fa-f]{6}$/.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+export function calendarSourceColorStyle(color: string | null | undefined): CSSProperties | undefined {
+  const normalized = normalizeCalendarColor(color);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  return { backgroundColor: normalized };
+}
+
+function calendarEventAccentStyle(color: string | null | undefined): CSSProperties | undefined {
+  const normalized = normalizeCalendarColor(color);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  return {
+    backgroundImage: `linear-gradient(90deg, ${hexToRgba(normalized, 0.1)} 0%, transparent 56%)`,
+    borderLeftColor: normalized
+  };
+}
+
+function hexToRgba(color: string, alpha: number): string {
+  const red = Number.parseInt(color.slice(1, 3), 16);
+  const green = Number.parseInt(color.slice(3, 5), 16);
+  const blue = Number.parseInt(color.slice(5, 7), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 function calendarEventLabel(
   event: CalendarEventViewModel,
   variant: "range" | "time" | "title"
@@ -62,17 +103,21 @@ function calendarEventLabel(
 
 export function CalendarSourceSwatch({
   calendarId,
+  color,
   className
 }: {
   calendarId: string;
+  color?: string | null;
   className?: string;
 }): JSX.Element {
   const tone = calendarSourceTone(calendarId);
+  const colorStyle = calendarSourceColorStyle(color);
 
   return (
     <span
       aria-hidden="true"
-      className={cx("size-2.5 shrink-0 rounded-full", tone.swatch, className)}
+      className={cx("size-2.5 shrink-0 rounded-full", colorStyle ? undefined : tone.swatch, className)}
+      style={colorStyle}
     />
   );
 }
@@ -95,6 +140,7 @@ export function CalendarEventChip({
   onOpen?: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   const tone = calendarSourceTone(event.calendarId);
+  const accentStyle = calendarEventAccentStyle(event.calendarBackgroundColor);
   const label = calendarEventLabel(event, labelVariant);
 
   return (
@@ -104,7 +150,7 @@ export function CalendarEventChip({
         "group flex min-h-6 w-full min-w-0 cursor-default items-center gap-1.5 rounded-hcbSm border border-border border-l-4 bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary shadow-sm transition-colors duration-fast ease-hcb hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         draggable && "cursor-grab active:cursor-grabbing",
         event.allDay && "bg-bg-secondary font-medium",
-        tone.border,
+        accentStyle ? undefined : tone.border,
         className
       )}
       draggable={draggable}
@@ -115,6 +161,7 @@ export function CalendarEventChip({
       onDragStart={onDragStart}
       onKeyDown={onKeyDown}
       onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
+      style={accentStyle}
       title={`${label} - ${event.calendar}`}
       type="button"
     >

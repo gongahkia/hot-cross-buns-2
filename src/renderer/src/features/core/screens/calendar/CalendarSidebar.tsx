@@ -115,7 +115,11 @@ function CalendarSourceRow({
         onChange={(event) => onToggle(calendar.id, event.target.checked)}
         type="checkbox"
       />
-      <CalendarSourceSwatch calendarId={calendar.id} className={visible ? undefined : "opacity-50"} />
+      <CalendarSourceSwatch
+        calendarId={calendar.id}
+        className={visible ? undefined : "opacity-50"}
+        color={calendar.backgroundColor}
+      />
       <span className="min-w-0 truncate">{calendar.title}</span>
       <span className="flex shrink-0 items-center gap-1">
         <VisibilityIcon aria-hidden="true" className="text-text-muted" size={13} />
@@ -205,7 +209,7 @@ export function CalendarContextPanel({
             type="button"
           >
             <span className="flex min-w-0 items-center gap-2">
-              <CalendarSourceSwatch calendarId={event.calendarId} />
+              <CalendarSourceSwatch calendarId={event.calendarId} color={event.calendarBackgroundColor} />
               <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-primary">
                 {event.title}
               </span>

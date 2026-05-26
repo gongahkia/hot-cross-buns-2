@@ -45,6 +45,8 @@ export class CalendarLocalRepository extends TaskLocalRepository {
            calendars.summary AS title,
            calendars.is_selected AS selected,
            calendars.time_zone AS timeZone,
+           calendars.background_color AS backgroundColor,
+           calendars.foreground_color AS foregroundColor,
            calendars.updated_at AS updatedAt,
            COUNT(events.id) AS eventCount
          FROM google_calendar_lists calendars

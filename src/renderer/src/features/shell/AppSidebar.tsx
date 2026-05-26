@@ -76,7 +76,11 @@ function SidebarCalendarDropdown({
                   onChange={(event) => onToggle(calendar.id, event.target.checked)}
                   type="checkbox"
                 />
-                <CalendarSourceSwatch calendarId={calendar.id} className={visible ? undefined : "opacity-45"} />
+                <CalendarSourceSwatch
+                  calendarId={calendar.id}
+                  className={visible ? undefined : "opacity-45"}
+                  color={calendar.backgroundColor}
+                />
                 <span className="min-w-0 truncate">{calendar.title}</span>
               </label>
             );

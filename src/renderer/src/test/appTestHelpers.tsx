@@ -65,7 +65,7 @@ export async function goToSection(label: string): Promise<void> {
     return;
   }
 
-  await user.click(within(primaryNavigation()).getByRole("button", { name: new RegExp(label) }));
+  await user.click(within(primaryNavigation()).getByRole("button", { name: label }));
 }
 
 export function testDataTransfer(): DataTransfer {

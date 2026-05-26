@@ -55,6 +55,8 @@ export interface CalendarListRow extends Record<string, unknown> {
   title: string;
   selected: number;
   timeZone: string | null;
+  backgroundColor: string | null;
+  foregroundColor: string | null;
   updatedAt: string;
   eventCount: number;
 }

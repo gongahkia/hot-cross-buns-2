@@ -2,7 +2,7 @@ import { Badge, cx } from "../../../../components/primitives";
 import { EmptyState } from "../../../../components/states";
 import { VirtualizedList } from "../../../../components/VirtualizedList";
 import type { CalendarEventViewModel } from "../../coreViewModels";
-import { CalendarSourceSwatch, calendarSourceTone } from "./CalendarEventChips";
+import { CalendarSourceSwatch, calendarSourceColorStyle, calendarSourceTone } from "./CalendarEventChips";
 import { calendarDateTitleFromIso } from "./calendarGrid";
 
 function CalendarAgendaEventRow({
@@ -13,6 +13,7 @@ function CalendarAgendaEventRow({
   onOpen: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   const tone = calendarSourceTone(event.calendarId);
+  const colorStyle = calendarSourceColorStyle(event.calendarBackgroundColor);
   const whenLabel = event.allDay
     ? `${calendarDateTitleFromIso(event.startsAt.slice(0, 10))} - All day`
     : event.rangeLabel;
@@ -24,7 +25,11 @@ function CalendarAgendaEventRow({
       role="listitem"
       type="button"
     >
-      <span aria-hidden="true" className={cx("h-full rounded-full", tone.swatch)} />
+      <span
+        aria-hidden="true"
+        className={cx("h-full rounded-full", colorStyle ? undefined : tone.swatch)}
+        style={colorStyle}
+      />
       <span className="min-w-0">
         <span className="block truncate text-[var(--text-md)] font-semibold text-text-primary">
           {event.title}
@@ -38,7 +43,7 @@ function CalendarAgendaEventRow({
         ) : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">
-        <CalendarSourceSwatch calendarId={event.calendarId} />
+        <CalendarSourceSwatch calendarId={event.calendarId} color={event.calendarBackgroundColor} />
         {event.mutationState && event.mutationState !== "synced" ? (
           <Badge tone={event.mutationState === "failed" ? "danger" : "warning"}>
             {event.mutationState === "failed" ? "Failed" : "Queued"}

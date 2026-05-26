@@ -23,6 +23,8 @@ export function stableCalendarEventViewModel(
   event: CalendarEventSummary,
   calendarTitle: string | undefined,
   calendarTimeZone: string | null | undefined,
+  calendarBackgroundColor: string | null | undefined,
+  calendarForegroundColor: string | null | undefined,
   defaultTimeZone: string,
   cache: Map<string, { signature: string; viewModel: CalendarEventViewModel }>
 ): CalendarEventViewModel {
@@ -42,7 +44,9 @@ export function stableCalendarEventViewModel(
     (event.reminderMinutes ?? []).join("\u001f"),
     event.mutationState ?? "",
     event.recurrenceRule ?? "",
-    calendarTitle ?? ""
+    calendarTitle ?? "",
+    calendarBackgroundColor ?? "",
+    calendarForegroundColor ?? ""
   ].join("\u001c");
   const cached = cache.get(event.id);
 
@@ -56,6 +60,8 @@ export function stableCalendarEventViewModel(
     calendarId: event.calendarId,
     title: event.title,
     calendar: calendarTitle ?? event.calendarId,
+    calendarBackgroundColor: calendarBackgroundColor ?? null,
+    calendarForegroundColor: calendarForegroundColor ?? null,
     timeLabel: event.allDay ? "All day" : timeLabel(event.startsAt, timeZone),
     rangeLabel: event.allDay
       ? allDayRangeLabel(event.startsAt, event.endsAt)
