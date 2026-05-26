@@ -8,14 +8,30 @@ Run these before the platform port prompts. Each visual prompt should be run wit
 
 Use Apple Calendar and Notion Calendar as reference products only. Extract layout, density, navigation, interaction, and performance lessons. Do not copy protected branding, exact icons, exact copy, product names in UI, or proprietary artwork. Do not add other reference products unless they are explicitly re-added later.
 
-## P0 User-Facing Customization DSL
+## P0 User-Facing Customization Layer
 
-Run alone before any Linux or Windows port work. This establishes a scriptable shell language and theming/customization DSL that lets end users reconfigure the look, layout, and behavior of the app, similar in spirit to Discord's BetterDiscord/Vencord-style theme and plugin model (without copying their branding, code, or APIs).
+Run these three prompts (P0A, P0B, P0C) sequentially before any cross-platform adapter or port work. They establish a layered customization surface that lets end users reconfigure look, layout, and behavior of the app.
+
+### Approach decision and rationale
+
+Researched analogues: VS Code (JSON theme files + `workbench.colorCustomizations` + CSS variables in webviews), Obsidian (CSS snippets folder with hot-reload + CSS variables + TS plugin API), Discord mods BetterDiscord/Vencord (raw `*.theme.css` files + documented CSS variables like `--background-tertiary`, with explicitly unsandboxed JS plugins), Zed (layered JSON `settings.json`/`keymap.json` with context predicates), Neovim (full Lua + declarative `setup()` DSL pattern), Emacs (full elisp; the `setup`/`use-package` DSL retrospective explicitly warns that bespoke DSLs grow into ~3500 LOC of hard-to-extend code).
+
+Decision: do not invent a new DSL. Use the dominant industry pattern, layered:
+
+1. Theming: documented CSS custom properties (design tokens) + user-authored CSS snippets with hot-reload (Obsidian/BetterDiscord model). CSS already has IDE tooling, hot-reload, scoping, and a huge skill base.
+2. Layout, density, panel order, keybindings: JSON config with JSON Schema validation and layered precedence (VS Code/Zed model). Declarative, diffable, machine-editable.
+3. Behavior: a narrow sandboxed JS extension API with explicit extension points (VS Code/Obsidian plugin model, BUT with a real sandbox — BetterDiscord's lack of sandbox is the failure mode we explicitly reject).
+
+Rejected alternatives: inventing a new theme DSL (extra surface area, no tooling, Emacs `setup` retrospective lesson), Lua/Wren/Rhai embedded interpreter (extra runtime weight, no clear user demand), unsandboxed JS like BetterDiscord (security model incompatible with credential storage and MCP local-only guarantees).
+
+### P0A Theming Tokens And User CSS Snippets
+
+Run alone first.
 
 ```text
 You are Codex 5.5 running with extra-high reasoning in /Users/gongahkia/Desktop/coding/projects/hot-cross-buns-2.
 
-Goal: design and implement a user-facing customization DSL and scriptable shell language that allows end users to reconfigure how the entire app looks and behaves (themes, layout density, panel arrangement, keybindings, and scriptable hooks), inspired by the customization surface area exposed by Discord-style clients but without reusing their branding, copy, APIs, or proprietary assets.
+Goal: ship the visual theming surface as documented CSS custom properties (design tokens) plus a user CSS snippets folder with hot-reload. Model: Obsidian CSS snippets + BetterDiscord-style documented CSS variables. Do not invent a new theme DSL.
 
 Read first:
 - docs/README.md
@@ -28,27 +44,110 @@ Read first:
 - docs/improvements/06-frontend-ux-ui-competitive-improvements.md
 
 Implement:
-- A declarative theme DSL (tokens, palettes, typography, spacing, radii, density) loadable from a user config file with hot-reload in dev and explicit reload in production.
-- A layout/config DSL covering panel visibility, ordering, default views, sidebar contents, and keybinding overrides.
-- A sandboxed scripting surface (no arbitrary Node/Electron access) with a narrow, documented API for: registering commands, observing app events, transforming visible data structures, and contributing UI affordances through approved extension points.
-- A user config directory under the platform-appropriate app data path, with example starter configs and a schema (JSON Schema or equivalent) for editor tooling.
-- Settings UI entry points for enabling/disabling user themes and scripts, viewing load errors, and resetting to defaults.
-- Capability gating so user scripts cannot read credentials, exfiltrate data, or bypass MCP local-only guarantees.
-- Automated tests for: DSL parsing, schema validation, theme token resolution, sandbox isolation, and reload behavior.
-- Documentation under docs/customization/ describing the DSL surface, stability guarantees, and security model.
+- Audit current renderer styles and lift all colors, typography, spacing, radii, shadow, and motion values into CSS custom properties on :root (and a [data-theme="dark"] variant if dark mode exists). Name them with a stable, documented prefix (e.g., --hcb-color-bg, --hcb-color-fg, --hcb-radius-sm) — this is the public theming contract.
+- A user snippets directory under the platform-appropriate app data path (e.g., <userData>/snippets/*.css). Loader watches the directory and applies/removes <style> tags live. Production builds require explicit reload-on-change toggle in Settings; dev builds can hot-reload by default.
+- Settings UI surface: list of detected snippets with enable/disable toggles, load-error display, "Open snippets folder" button, "Reset to defaults" button.
+- A docs/customization/theming.md page that documents every public CSS custom property, scoping rules, and stability guarantees. Include 2-3 starter example snippets (e.g., compact density, high-contrast, alt accent color).
+- Tests: token-presence test (no hard-coded colors remain in tracked component styles for the audited surfaces), snippet loader unit tests (enable/disable/reload/error surfacing), and a CSP regression test confirming user snippets load under the existing Content Security Policy.
 
 Do not:
-- Expose Node, Electron, fs, net, or child_process to user scripts.
-- Allow user themes/scripts to silently override security-relevant UI (permission prompts, credential dialogs, update prompts).
-- Copy Discord (or any other product's) branding, copy, icons, API shapes, or proprietary asset names into the DSL.
-- Ship a plugin marketplace, remote fetch of scripts, or auto-update of user scripts in this prompt.
-- Break existing default look and feel for users who do not opt in.
+- Invent a new theme DSL, theme JSON format, or theme transpiler.
+- Allow user CSS to escape its <style> scope to run script (verify CSP disallows inline JS and that loaded snippets are treated as text/css only).
+- Break the existing default look and feel for users who add no snippets.
+- Copy Discord, Obsidian, or any other product's variable names, branding, asset names, or copy verbatim. The prefix and token names must be original to this project.
+- Ship remote-fetched themes, a theme marketplace, or auto-update of snippets in this prompt.
 
 Acceptance checks:
 - Run typecheck/build.
-- Run unit tests for DSL parser, schema validation, and sandbox.
-- Manually load a sample theme and a sample script; confirm hot-reload, error surfacing, and reset-to-default all work.
-- Summarize the DSL surface, extension points exposed, sandbox boundaries, and follow-up work deferred to later prompts.
+- Run unit tests for snippet loader and CSP regression.
+- Manually drop a sample snippet in the folder; confirm live apply, disable via Settings, and reset-to-defaults.
+- Summarize the public token list, snippet loader behavior, and any tokens still missing from the audit.
+```
+
+### P0B Declarative Config For Layout And Keybindings
+
+Run alone after P0A.
+
+```text
+You are Codex 5.5 running with extra-high reasoning in /Users/gongahkia/Desktop/coding/projects/hot-cross-buns-2.
+
+Goal: ship a JSON-based user config layer for layout, density, panel arrangement, and keybindings, with JSON Schema validation and layered precedence. Model: VS Code settings.json/keymap.json + Zed's context-aware keymap and settings layering. Do not invent a new DSL.
+
+Read first:
+- docs/README.md
+- docs/agents/workflow.md
+- docs/specs/platforms.md
+- docs/security/privacy-and-threat-model.md
+- docs/performance/performance-strategy.md
+- docs/testing/qa-plan.md
+- docs/improvements/01-user-facing-feature-parity.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
+- docs/customization/theming.md (produced by P0A)
+
+Implement:
+- A settings.json file under the platform app data path covering: density preset, panel visibility, panel ordering, default view, sidebar contents, and feature toggles that are safe to expose. Defaults live in code; user file overrides via deep merge.
+- A keymap.json file with an array of bindings ({ "keys": "...", "command": "...", "when": "..." }). The "when" predicate is a small, documented boolean expression over a fixed set of context atoms (e.g., focus.editor, view.calendar). Use a parser, not eval.
+- JSON Schemas for both files, published under docs/customization/schemas/ and pointed to via $schema for editor IntelliSense.
+- A SettingsStore that merges defaults <- settings.json with clear precedence, exposes typed accessors, and emits change events.
+- Settings UI surface: open settings.json / keymap.json, view validation errors inline, reset-to-defaults per section.
+- Command palette wired to the keymap so users can discover command IDs.
+- Tests: schema validation (valid + invalid fixtures), precedence/merge behavior, "when" predicate parser unit tests, keybinding conflict detection.
+
+Do not:
+- Use eval() or new Function() for the "when" predicate — write a tiny tokenizer/parser limited to identifiers, &&, ||, !, parentheses.
+- Expose settings that compromise security posture (credential paths, CSP, MCP local-only guarantees, updater feed URL) through user config.
+- Allow user config to silently override permission prompts, credential dialogs, or updater prompts.
+- Invent a YAML/TOML/custom syntax — JSON only, to match VS Code/Zed conventions and existing tooling.
+
+Acceptance checks:
+- Run typecheck/build.
+- Run unit tests for schema, merge, predicate parser, and conflict detection.
+- Manually edit settings.json and keymap.json; confirm live reload (or explicit reload prompt), validation error surfacing, and reset.
+- Summarize the public setting and command IDs exposed, plus any settings deliberately withheld for security.
+```
+
+### P0C Sandboxed Extension API For Behavior
+
+Run alone after P0B.
+
+```text
+You are Codex 5.5 running with extra-high reasoning in /Users/gongahkia/Desktop/coding/projects/hot-cross-buns-2.
+
+Goal: ship a narrow, sandboxed JS extension API for user-authored behavior (commands, event hooks, view contributions). Model: VS Code/Obsidian extension API shape, BUT with a real sandbox — BetterDiscord/Vencord's unsandboxed model is explicitly rejected because it is incompatible with credential storage and MCP local-only guarantees.
+
+Read first:
+- docs/README.md
+- docs/agents/workflow.md
+- docs/specs/platforms.md
+- docs/security/privacy-and-threat-model.md
+- docs/performance/performance-strategy.md
+- docs/testing/qa-plan.md
+- docs/improvements/01-user-facing-feature-parity.md
+- docs/improvements/06-frontend-ux-ui-competitive-improvements.md
+- docs/customization/theming.md (P0A)
+- docs/customization/schemas/ (P0B)
+
+Implement:
+- A user extensions directory (<userData>/extensions/<id>/{manifest.json,main.js}). Manifest declares id, name, version, requested capabilities, and entrypoint.
+- A sandbox: extensions run in a dedicated isolated context (Electron utility process or sandboxed BrowserWindow with contextIsolation: true, nodeIntegration: false, no preload exposing Node). No fs, net, child_process, electron, or remote module access. All host calls go through a versioned, capability-gated message bridge.
+- A minimal host API exposed via the bridge: registerCommand(id, handler), onEvent(name, handler) for a fixed event set, contributeView(extensionPoint, descriptor), getSetting(key) for whitelisted keys only. No setSetting in v1.
+- Capability declaration in manifest gated by user consent in Settings on first load. Deny by default. Per-extension enable/disable, view logs, view requested capabilities.
+- A "safe mode" launch flag that disables all user extensions and snippets, surfaced both in Settings and as a CLI flag, for recovery.
+- Tests: sandbox escape tests (attempt to access window.require, process, fs, electron — must fail), bridge contract tests, capability gating tests, safe-mode tests.
+- docs/customization/extensions.md covering the API surface, stability tier (experimental), security model, and a "hello-command" sample extension.
+
+Do not:
+- Expose Node, Electron, fs, net, child_process, or any IPC channel beyond the documented bridge.
+- Allow extensions to read credentials, exfiltrate data, modify the updater feed, weaken CSP, or bypass MCP local-only guarantees.
+- Ship a plugin marketplace, remote install, or auto-update of extensions in this prompt.
+- Permit extensions to override security-relevant UI (permission prompts, credential dialogs, update prompts, MCP consent).
+- Copy VS Code, Obsidian, or BetterDiscord API shapes verbatim — design the host API minimally for this app's actual extension points.
+
+Acceptance checks:
+- Run typecheck/build.
+- Run sandbox escape tests, bridge contract tests, capability tests.
+- Manually load the hello-command sample; confirm command palette registration, capability consent prompt, disable/enable, and safe-mode flag behavior.
+- Summarize the host API surface, sandbox boundaries, capabilities defined, and which extension points are deferred to a later prompt.
 ```
 
 ## Future Platform Prompts
