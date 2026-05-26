@@ -111,30 +111,11 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
   }, [source.taskLists]);
 
   useEffect(() => {
-    const listId = defaultTaskListId(source);
-
-    if (!listId || bulkMoveListId) {
-      return;
-    }
-
-    setBulkMoveListId(listId);
-  }, [bulkMoveListId, source.taskLists]);
-
-  useEffect(() => {
-    setBulkSelectedTaskIds((current) => {
-      const next = current.filter((taskId) => taskIdsInWindow.has(taskId));
-
-      return next.length === current.length ? current : next;
-    });
-  }, [source.largeTaskWindow]);
-
-  useEffect(() => {
     if (!command || handledCommandNonce.current === command.nonce) {
       return;
     }
 
     handledCommandNonce.current = command.nonce;
-    setActiveFilterId("open");
     setSelectedBoardView({ kind: "all" });
 
     if (command.id === "task.quickCapture") {
@@ -147,11 +128,11 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
   }, [command, source]);
 
   useEffect(() => {
-    window.localStorage.setItem(starredTasksStorageKey, JSON.stringify([...starredTaskIds]));
+    writeLocalStorageJSON(starredTasksStorageKey, [...starredTaskIds]);
   }, [starredTaskIds]);
 
   useEffect(() => {
-    window.localStorage.setItem(starredTasksAtStorageKey, JSON.stringify(starredTaskAt));
+    writeLocalStorageJSON(starredTasksAtStorageKey, starredTaskAt);
   }, [starredTaskAt]);
 
   useEffect(() => {
@@ -273,7 +254,6 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
 
     setSelectedTaskId(null);
     openTaskInspector(newTaskDraft(source, listId ? { listId } : {}));
-    setActiveFilterId("open");
     setQuickCaptureOpen(false);
   }
 
@@ -368,101 +348,6 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     await closeInspector();
   }
 
-  function setTaskBulkSelected(taskId: string, selected: boolean): void {
-    setBulkSelectedTaskIds((current) => {
-      if (selected) {
-        return current.includes(taskId) ? current : [...current, taskId];
-      }
-
-      return current.filter((id) => id !== taskId);
-    });
-  }
-
-  function toggleVisibleTaskSelection(): void {
-    setBulkSelectedTaskIds((current) => {
-      if (allVisibleTasksSelected) {
-        const visible = new Set(visibleTaskIds);
-        return current.filter((taskId) => !visible.has(taskId));
-      }
-
-      return Array.from(new Set([...current, ...visibleTaskIds]));
-    });
-  }
-
-  async function completeBulkSelectedTasks(): Promise<void> {
-    const changedTaskIds: string[] = [];
-
-    for (const task of bulkSelectedTasks) {
-      const saved =
-        task.status === "completed"
-          ? await source.reopenTask(task.id)
-          : await source.completeTask(task.id);
-
-      if (saved) {
-        if (task.status !== "completed" && source.settings.taskCompletionSoundEnabled) {
-          playCompletionSound(source.settings.taskCompletionSoundId);
-        }
-        changedTaskIds.push(task.id);
-      }
-    }
-
-    if (changedTaskIds.length > 0) {
-      setBulkSelectedTaskIds((current) => current.filter((taskId) => !changedTaskIds.includes(taskId)));
-    }
-  }
-
-  async function moveBulkSelectedTasks(): Promise<void> {
-    if (!bulkMoveTargetListId) {
-      return;
-    }
-
-    const movedTaskIds: string[] = [];
-
-    for (const task of bulkSelectedTasks) {
-      const moved = await source.moveTask({
-        id: task.id,
-        listId: bulkMoveTargetListId,
-        parentId: null
-      });
-
-      if (moved) {
-        movedTaskIds.push(task.id);
-      }
-    }
-
-    if (movedTaskIds.length > 0) {
-      setBulkSelectedTaskIds((current) => current.filter((taskId) => !movedTaskIds.includes(taskId)));
-    }
-  }
-
-  async function deleteBulkSelectedTasks(): Promise<void> {
-    const deletedTaskIds: string[] = [];
-
-    for (const taskId of bulkSelectedTaskIdsInWindow) {
-      const deleted = await source.deleteTask(taskId);
-
-      if (deleted) {
-        deletedTaskIds.push(taskId);
-      }
-    }
-
-    if (deletedTaskIds.length === 0) {
-      return;
-    }
-
-    setBulkSelectedTaskIds((current) => current.filter((taskId) => !deletedTaskIds.includes(taskId)));
-
-    if (selectedTaskId && deletedTaskIds.includes(selectedTaskId)) {
-      const nextDraft = newTaskDraft(source);
-      taskDraftBaselineRef.current = nextDraft;
-      taskDraftRef.current = nextDraft;
-      taskInspectorDirtyRef.current = false;
-      setSelectedTaskId(null);
-      setDraft(nextDraft);
-      await closeInspector();
-    }
-  }
-
   async function captureQuickTask(): Promise<void> {
     if (!canCaptureTask) {
       return;
@@ -485,38 +370,6 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     if (created) {
       setQuickCaptureInput("");
       setQuickCaptureOpen(false);
-    }
-  }
-
-  async function createTaskList(): Promise<void> {
-    const title = newListTitle.trim();
-
-    if (!title || source.taskMutationPending) {
-      return;
-    }
-
-    const created = await source.createTaskList({ title });
-
-    if (created) {
-      setNewListTitle("");
-    }
-  }
-
-  async function renameTaskList(taskListId: string, currentTitle: string): Promise<void> {
-    const title = (listTitleDrafts[taskListId] ?? currentTitle).trim();
-
-    if (!title || title === currentTitle || source.taskMutationPending) {
-      return;
-    }
-
-    const renamed = await source.renameTaskList({ id: taskListId, title });
-
-    if (renamed) {
-      setListTitleDrafts((current) => {
-        const next = { ...current };
-        delete next[taskListId];
-        return next;
-      });
     }
   }
 
@@ -607,45 +460,8 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     void source.moveTask({ id: taskId, listId, parentId: null });
   }
 
-  function deleteSavedTaskView(viewId: string): void {
-    void source.updateSettings({
-      savedTaskViews: source.settings.savedTaskViews.filter((view) => view.id !== viewId)
-    });
-
-    if (activeSavedTaskViewId === viewId) {
-      setActiveSavedTaskViewId(null);
-    }
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <TaskHeader
-        onCreateTask={openNewTask}
-        onDeleteSelectedTask={() => selectedTask ? void deleteTask(selectedTask.id) : undefined}
-        onToggleQuickCapture={toggleQuickCapture}
-        onToggleSelectedTask={() => selectedTask ? void toggleTask(selectedTask.id) : undefined}
-        selectedTask={selectedTask}
-        source={source}
-      />
-
-      <TaskPerspectiveTabs
-        activePerspective={activeTaskPerspective}
-        activePerspectiveId={activePerspectiveId}
-        activeSavedTaskViewId={activeSavedTaskViewId}
-        onSelectPerspective={setActivePerspectiveId}
-        onSelectSavedTaskView={setActiveSavedTaskViewId}
-        savedTaskViews={source.settings.savedTaskViews}
-      />
-
-      <TaskFilterToolbar
-        activeFilterId={activeFilterId}
-        allVisibleTasksSelected={allVisibleTasksSelected}
-        onSelectFilter={setActiveFilterId}
-        onToggleVisibleTaskSelection={toggleVisibleTaskSelection}
-        source={source}
-        visibleTaskCount={visibleTaskIds.length}
-      />
-
       <TaskMutationErrorBanner source={source} />
 
       <div className="grid min-h-0 flex-1 gap-3">
