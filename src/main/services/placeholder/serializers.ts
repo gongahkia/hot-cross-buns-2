@@ -67,6 +67,10 @@ export function recurrenceRuleFromRequest(recurrence: CalendarEventRecurrence | 
     `INTERVAL=${recurrence.interval}`
   ];
 
+  if (recurrence.frequency === "weekly" && recurrence.byDay?.length) {
+    parts.push(`BYDAY=${recurrence.byDay.join(",")}`);
+  }
+
   if (recurrence.endsOn) {
     parts.push(`UNTIL=${recurrence.endsOn.replace(/-/g, "")}`);
   }

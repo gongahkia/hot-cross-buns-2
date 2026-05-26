@@ -50,6 +50,7 @@ export function normalizeCalendarWrite(input: NormalizedCalendarWrite): Normaliz
 export interface ParsedLocalRRule {
   freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
+  byDay?: CalendarEventRecurrence["byDay"];
   count?: number;
   until?: Date;
 }
@@ -70,6 +71,10 @@ export function recurrenceRuleFromRequest(recurrence: CalendarEventRecurrence | 
     `FREQ=${recurrence.frequency.toUpperCase()}`,
     `INTERVAL=${recurrence.interval}`
   ];
+
+  if (recurrence.frequency === "weekly" && recurrence.byDay?.length) {
+    parts.push(`BYDAY=${recurrence.byDay.join(",")}`);
+  }
 
   if (recurrence.endsOn) {
     parts.push(`UNTIL=${recurrence.endsOn.replace(/-/g, "")}`);
@@ -92,6 +97,7 @@ export function recurrenceFromRule(rule: string | null): CalendarEventRecurrence
   return {
     frequency: parsed.freq.toLowerCase() as CalendarEventRecurrence["frequency"],
     interval: parsed.interval,
+    ...(parsed.byDay === undefined ? {} : { byDay: parsed.byDay }),
     endsOn: parsed.until ? parsed.until.toISOString().slice(0, 10) : null,
     count: parsed.count ?? null
   };
@@ -174,11 +180,20 @@ export function parseLocalRRule(value: string | null | undefined): ParsedLocalRR
   return {
     freq,
     interval: Math.min(366, Math.max(1, Number.parseInt(parts.INTERVAL ?? "1", 10) || 1)),
+    ...(parts.BYDAY === undefined ? {} : { byDay: parseRRuleByDay(parts.BYDAY) }),
     ...(parts.COUNT === undefined
       ? {}
       : { count: Math.min(366, Math.max(1, Number.parseInt(parts.COUNT, 10) || 1)) }),
     ...(parts.UNTIL === undefined ? {} : { until: parseLocalRRuleUntil(parts.UNTIL) })
   };
+}
+
+function parseRRuleByDay(value: string): CalendarEventRecurrence["byDay"] {
+  return value
+    .split(",")
+    .filter((day): day is NonNullable<CalendarEventRecurrence["byDay"]>[number] =>
+      day === "SU" || day === "MO" || day === "TU" || day === "WE" || day === "TH" || day === "FR" || day === "SA"
+    );
 }
 
 export function parseLocalRRuleUntil(value: string): Date | undefined {
