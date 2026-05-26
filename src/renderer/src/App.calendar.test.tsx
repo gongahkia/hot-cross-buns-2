@@ -618,10 +618,12 @@ describe("App calendar", () => {
     await user.type(screen.getByRole("textbox", { name: "Event location" }), "Room 3");
     await user.type(screen.getByRole("textbox", { name: "Event guests" }), "ada@example.com");
     await user.selectOptions(screen.getByLabelText("Event reminder"), "15");
-    await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "weekly");
+    await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "custom");
+    await user.selectOptions(screen.getByLabelText("Repeat unit"), "weekly");
     fireEvent.change(screen.getByLabelText("Repeat interval"), { target: { value: "2" } });
+    await user.click(screen.getByLabelText("Repeat on date"));
     fireEvent.change(screen.getByLabelText("Repeat end date"), { target: { value: "2026-12-31" } });
-    expect(screen.getByText("Every 2 weeks, until 2026-12-31")).toBeInTheDocument();
+    expect(screen.getByText(/Every 2 weeks/)).toBeInTheDocument();
     await user.type(screen.getByRole("textbox", { name: "Event notes" }), "Bring mocks.");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -640,6 +642,7 @@ describe("App calendar", () => {
           recurrence: {
             frequency: "weekly",
             interval: 2,
+            byDay: expect.any(Array),
             endsOn: "2026-12-31",
             count: null
           }
@@ -746,13 +749,14 @@ describe("App calendar", () => {
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
-    expect(screen.getByLabelText("Event repeat frequency")).toHaveValue("monthly");
+    expect(screen.getByLabelText("Event repeat frequency")).toHaveValue("custom");
+    expect(screen.getByLabelText("Repeat unit")).toHaveValue("monthly");
     expect(screen.getByLabelText("Repeat interval")).toHaveValue(2);
     expect(screen.getByLabelText("Repeat count")).toHaveValue(4);
     expect(screen.getByText("Every 2 months, 4 times")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "none");
-    expect(screen.getByLabelText("Repeat interval")).toBeDisabled();
+    expect(screen.queryByLabelText("Repeat interval")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {

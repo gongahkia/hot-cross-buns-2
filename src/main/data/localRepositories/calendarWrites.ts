@@ -133,7 +133,7 @@ export function materializedLocalEventInstances(input: {
   const hardLimit = Math.min(rrule.count ?? 366, 366);
   const boundedUntil = rrule.until ?? addUtcDaysDate(start, 366);
   const instances: LocalCalendarEventInstance[] = [];
-  let cursor = start;
+  let cursor = firstLocalRecurrenceDate(start, rrule);
 
   for (let index = 0; index < hardLimit; index += 1) {
     if (cursor.getTime() > boundedUntil.getTime()) {
@@ -148,7 +148,7 @@ export function materializedLocalEventInstances(input: {
       endsAt: instanceEnd.toISOString(),
       originalStartAt: instanceStart.toISOString()
     });
-    cursor = nextLocalRecurrenceDate(cursor, rrule);
+    cursor = nextLocalRecurrenceDate(cursor, rrule, start);
   }
 
   return instances.length > 0 ? instances : [singleInstance];
@@ -220,7 +220,19 @@ export function parseLocalRRuleUntil(value: string): Date | undefined {
   return Number.isFinite(date.getTime()) ? date : undefined;
 }
 
-export function nextLocalRecurrenceDate(date: Date, rrule: ParsedLocalRRule): Date {
+function firstLocalRecurrenceDate(start: Date, rrule: ParsedLocalRRule): Date {
+  if (rrule.freq !== "WEEKLY" || !rrule.byDay?.length || rrule.byDay.includes(weekdayCode(start))) {
+    return start;
+  }
+
+  return nextLocalRecurrenceDate(addUtcDaysDate(start, -1), rrule, start);
+}
+
+export function nextLocalRecurrenceDate(date: Date, rrule: ParsedLocalRRule, seriesStart = date): Date {
+  if (rrule.freq === "WEEKLY" && rrule.byDay?.length) {
+    return nextWeeklyByDayDate(date, rrule, seriesStart);
+  }
+
   const next = new Date(date.getTime());
 
   if (rrule.freq === "DAILY") {
@@ -234,6 +246,41 @@ export function nextLocalRecurrenceDate(date: Date, rrule: ParsedLocalRRule): Da
   }
 
   return next;
+}
+
+function nextWeeklyByDayDate(date: Date, rrule: ParsedLocalRRule, seriesStart: Date): Date {
+  const selected = new Set(rrule.byDay ?? []);
+  const next = new Date(date.getTime());
+
+  for (let offset = 1; offset <= rrule.interval * 7 + 7; offset += 1) {
+    next.setUTCDate(next.getUTCDate() + 1);
+
+    if (selected.has(weekdayCode(next)) && recurrenceWeekMatches(seriesStart, next, rrule.interval)) {
+      return next;
+    }
+  }
+
+  const fallback = new Date(date.getTime());
+  fallback.setUTCDate(fallback.getUTCDate() + rrule.interval * 7);
+  return fallback;
+}
+
+function recurrenceWeekMatches(seriesStart: Date, date: Date, interval: number): boolean {
+  const start = startOfUtcWeek(seriesStart).getTime();
+  const current = startOfUtcWeek(date).getTime();
+  const weeks = Math.floor((current - start) / (7 * 24 * 60 * 60 * 1000));
+
+  return weeks >= 0 && weeks % interval === 0;
+}
+
+function startOfUtcWeek(date: Date): Date {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+  return start;
+}
+
+function weekdayCode(date: Date): NonNullable<CalendarEventRecurrence["byDay"]>[number] {
+  return (["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const)[date.getUTCDay()];
 }
 
 export function addUtcDaysDate(date: Date, days: number): Date {

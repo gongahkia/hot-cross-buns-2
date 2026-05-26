@@ -329,6 +329,10 @@ export function CalendarEventForm({
     const current = new Set(draft.repeatWeekdays);
 
     if (current.has(day)) {
+      if (current.size === 1) {
+        return;
+      }
+
       current.delete(day);
     } else {
       current.add(day);
@@ -661,6 +665,7 @@ export function CalendarEventForm({
               <legend className="text-[var(--text-sm)] text-text-secondary">Ends</legend>
               <label className="grid min-h-8 grid-cols-[24px_72px_minmax(0,1fr)] items-center gap-2 text-[var(--text-sm)] text-text-secondary">
                 <input
+                  aria-label="Repeat never"
                   checked={draft.repeatEndMode === "never"}
                   className="accent-[var(--color-accent)]"
                   onChange={() => setDraft({ ...draft, repeatEndMode: "never", repeatEndsOn: "", repeatCount: "" })}
@@ -670,6 +675,7 @@ export function CalendarEventForm({
               </label>
               <label className="grid min-h-8 grid-cols-[24px_72px_minmax(0,1fr)] items-center gap-2 text-[var(--text-sm)] text-text-secondary">
                 <input
+                  aria-label="Repeat on date"
                   checked={draft.repeatEndMode === "on"}
                   className="accent-[var(--color-accent)]"
                   onChange={() => setDraft({ ...draft, repeatEndMode: "on", repeatCount: "" })}
@@ -686,6 +692,7 @@ export function CalendarEventForm({
               </label>
               <label className="grid min-h-8 grid-cols-[24px_72px_minmax(0,1fr)] items-center gap-2 text-[var(--text-sm)] text-text-secondary">
                 <input
+                  aria-label="Repeat after count"
                   checked={draft.repeatEndMode === "after"}
                   className="accent-[var(--color-accent)]"
                   onChange={() => setDraft({ ...draft, repeatEndMode: "after", repeatEndsOn: "" })}

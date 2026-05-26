@@ -122,6 +122,7 @@ describe("shared IPC contracts", () => {
         recurrence: {
           frequency: "weekly",
           interval: 2,
+          byDay: ["MO", "WE"],
           endsOn: "2026-12-31",
           count: null
         }
@@ -133,6 +134,7 @@ describe("shared IPC contracts", () => {
       recurrence: {
         frequency: "weekly",
         interval: 2,
+        byDay: ["MO", "WE"],
         endsOn: "2026-12-31"
       }
     });

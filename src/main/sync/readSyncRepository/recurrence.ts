@@ -13,6 +13,7 @@ interface CalendarEventInstanceInput {
 interface ParsedRRule {
   freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
+  byDay?: Array<"SU" | "MO" | "TU" | "WE" | "TH" | "FR" | "SA">;
   count?: number;
   until?: Date;
 }
@@ -110,7 +111,7 @@ function materializedCalendarEventInstances(
   const hardLimit = Math.min(rrule.count ?? 730, 730);
   const boundedUntil = rrule.until ?? addUtcDays(start, 730);
   const instances: CalendarEventInstanceInput[] = [];
-  let cursor = start;
+  let cursor = firstRecurrenceDate(start, rrule);
 
   for (let index = 0; index < hardLimit; index += 1) {
     if (cursor.getTime() > boundedUntil.getTime()) {
@@ -125,7 +126,7 @@ function materializedCalendarEventInstances(
       endAt: instanceEnd.toISOString(),
       originalStartAt: instanceStart.toISOString()
     });
-    cursor = nextRecurrenceDate(cursor, rrule);
+    cursor = nextRecurrenceDate(cursor, rrule, start);
   }
 
   return instances.length > 0 ? instances : [singleInstance];
@@ -161,11 +162,20 @@ function parseRRule(value: string | null | undefined): ParsedRRule | null {
   return {
     freq,
     interval: Math.max(1, Number.parseInt(parts.INTERVAL ?? "1", 10) || 1),
+    ...(parts.BYDAY === undefined ? {} : { byDay: parseRRuleByDay(parts.BYDAY) }),
     ...(parts.COUNT === undefined
       ? {}
       : { count: Math.max(1, Number.parseInt(parts.COUNT, 10) || 1) }),
     ...(parts.UNTIL === undefined ? {} : { until: parseRRuleUntil(parts.UNTIL) })
   };
+}
+
+function parseRRuleByDay(value: string): ParsedRRule["byDay"] {
+  return value
+    .split(",")
+    .filter((day): day is NonNullable<ParsedRRule["byDay"]>[number] =>
+      day === "SU" || day === "MO" || day === "TU" || day === "WE" || day === "TH" || day === "FR" || day === "SA"
+    );
 }
 
 function parseRRuleUntil(value: string): Date | undefined {
@@ -192,7 +202,21 @@ function parseRRuleUntil(value: string): Date | undefined {
   return Number.isFinite(date.getTime()) ? date : undefined;
 }
 
-function nextRecurrenceDate(date: Date, rrule: ParsedRRule): Date {
+function firstRecurrenceDate(start: Date, rrule: ParsedRRule): Date {
+  if (rrule.freq !== "WEEKLY" || !rrule.byDay?.length || rrule.byDay.includes(weekdayCode(start))) {
+    return start;
+  }
+
+  const previous = new Date(start.getTime());
+  previous.setUTCDate(previous.getUTCDate() - 1);
+  return nextRecurrenceDate(previous, rrule, start);
+}
+
+function nextRecurrenceDate(date: Date, rrule: ParsedRRule, seriesStart = date): Date {
+  if (rrule.freq === "WEEKLY" && rrule.byDay?.length) {
+    return nextWeeklyByDayDate(date, rrule, seriesStart);
+  }
+
   const next = new Date(date.getTime());
 
   if (rrule.freq === "DAILY") {
@@ -206,6 +230,41 @@ function nextRecurrenceDate(date: Date, rrule: ParsedRRule): Date {
   }
 
   return next;
+}
+
+function nextWeeklyByDayDate(date: Date, rrule: ParsedRRule, seriesStart: Date): Date {
+  const selected = new Set(rrule.byDay ?? []);
+  const next = new Date(date.getTime());
+
+  for (let offset = 1; offset <= rrule.interval * 7 + 7; offset += 1) {
+    next.setUTCDate(next.getUTCDate() + 1);
+
+    if (selected.has(weekdayCode(next)) && recurrenceWeekMatches(seriesStart, next, rrule.interval)) {
+      return next;
+    }
+  }
+
+  const fallback = new Date(date.getTime());
+  fallback.setUTCDate(fallback.getUTCDate() + rrule.interval * 7);
+  return fallback;
+}
+
+function recurrenceWeekMatches(seriesStart: Date, date: Date, interval: number): boolean {
+  const start = startOfUtcWeek(seriesStart).getTime();
+  const current = startOfUtcWeek(date).getTime();
+  const weeks = Math.floor((current - start) / (7 * 24 * 60 * 60 * 1000));
+
+  return weeks >= 0 && weeks % interval === 0;
+}
+
+function startOfUtcWeek(date: Date): Date {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+  return start;
+}
+
+function weekdayCode(date: Date): NonNullable<ParsedRRule["byDay"]>[number] {
+  return (["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const)[date.getUTCDay()];
 }
 
 function instanceSuffix(startAt: Date, allDay: boolean): string {

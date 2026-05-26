@@ -256,6 +256,10 @@ export function CalendarView({
           startsAt,
           endsAt: addUtcDaysIso(startsAt, 1),
           repeatFrequency: "yearly",
+          repeatCustomFrequency: "yearly",
+          repeatEndMode: "never",
+          repeatCount: "",
+          repeatEndsOn: "",
           repeatInterval: "1"
         };
       });
