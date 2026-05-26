@@ -450,12 +450,127 @@ function normalizeDescription(value: string | undefined): string | null {
     return null;
   }
 
-  return value
-    .replace(/\r\n/g, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
+  const normalizedLineEndings = value.replace(/\r\n?/g, "\n");
+  const markdown = /<\/?[a-z][\s\S]*>/i.test(normalizedLineEndings)
+    ? htmlDescriptionToMarkdown(normalizedLineEndings)
+    : decodeHtmlEntities(normalizedLineEndings);
+  const trimmed = markdown
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+function htmlDescriptionToMarkdown(value: string): string {
+  let markdown = value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
+
+  markdown = markdown.replace(/<ol\b[^>]*>([\s\S]*?)<\/ol>/gi, (_match, content: string) =>
+    markdownList(content, true)
+  );
+  markdown = markdown.replace(/<ul\b[^>]*>([\s\S]*?)<\/ul>/gi, (_match, content: string) =>
+    markdownList(content, false)
+  );
+  markdown = markdown
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|section|article|header|footer|h[1-6]|tr|table)>/gi, "\n\n")
+    .replace(/<li\b[^>]*>/gi, "\n- ")
+    .replace(/<\/li>/gi, "\n");
+  markdown = markdownInlineHtml(markdown);
+  markdown = markdown.replace(/<[^>]+>/g, "");
+
+  return decodeHtmlEntities(markdown);
+}
+
+function markdownList(content: string, ordered: boolean): string {
+  const items: string[] = [];
+  let index = 1;
+
+  content.replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, (_match, item: string) => {
+    const marker = ordered ? `${index}.` : "-";
+    const text = markdownInlineHtml(item)
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s*\n+\s*/g, " ")
+      .trim();
+
+    if (text.length > 0) {
+      items.push(`${marker} ${decodeHtmlEntities(text)}`);
+      index += 1;
+    }
+
+    return "";
+  });
+
+  return items.length === 0 ? "\n" : `\n\n${items.join("\n")}\n\n`;
+}
+
+function markdownInlineHtml(value: string): string {
+  let markdown = value;
+
+  markdown = markdown.replace(
+    /<a\b[^>]*href=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi,
+    (_match, _quote: string, href: string, label: string) => {
+      const normalizedLabel = markdownInlineHtml(label).replace(/<[^>]+>/g, "").trim();
+      const normalizedHref = decodeHtmlEntities(href).trim();
+
+      if (!normalizedLabel || !normalizedHref) {
+        return normalizedLabel;
+      }
+
+      return `[${normalizedLabel.replace(/([\]\\])/g, "\\$1")}](${normalizedHref.replace(/\)/g, "%29")})`;
+    }
+  );
+  markdown = markdown.replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_match, _tag: string, content: string) =>
+    `**${markdownInlineHtml(content).replace(/<[^>]+>/g, "").trim()}**`
+  );
+  markdown = markdown.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_match, _tag: string, content: string) =>
+    `_${markdownInlineHtml(content).replace(/<[^>]+>/g, "").trim()}_`
+  );
+  markdown = markdown.replace(/<(s|strike|del)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_match, _tag: string, content: string) =>
+    `~~${markdownInlineHtml(content).replace(/<[^>]+>/g, "").trim()}~~`
+  );
+  markdown = markdown.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_match, content: string) =>
+    `\`${markdownInlineHtml(content).replace(/<[^>]+>/g, "").trim().replace(/`/g, "\\`")}\``
+  );
+
+  return markdown;
+}
+
+function decodeHtmlEntities(value: string): string {
+  const entities: Record<string, string> = {
+    amp: "&",
+    apos: "'",
+    gt: ">",
+    lt: "<",
+    nbsp: " ",
+    quot: "\""
+  };
+
+  return value.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity, body: string) => {
+    const key = body.toLowerCase();
+
+    if (key.startsWith("#x")) {
+      const codePoint = Number.parseInt(key.slice(2), 16);
+
+      return isValidCodePoint(codePoint) ? String.fromCodePoint(codePoint) : entity;
+    }
+
+    if (key.startsWith("#")) {
+      const codePoint = Number.parseInt(key.slice(1), 10);
+
+      return isValidCodePoint(codePoint) ? String.fromCodePoint(codePoint) : entity;
+    }
+
+    return entities[key] ?? entity;
+  });
+}
+
+function isValidCodePoint(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 0x10ffff;
 }
 
 function encodeGooglePathComponent(value: string): string {

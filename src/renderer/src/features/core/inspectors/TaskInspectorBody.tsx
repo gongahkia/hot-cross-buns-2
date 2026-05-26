@@ -6,6 +6,7 @@ import { useDirtyState, useInspector } from "../../../components/Inspector";
 import { Badge, Button, Input } from "../../../components/primitives";
 import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { CorePriority, TaskViewModel } from "../coreViewModels";
+import { MarkdownPreview } from "../MarkdownPreview";
 
 export interface TaskDraft {
   mode: "create" | "edit";
@@ -110,7 +111,13 @@ export function TaskInspectorDetails({
 
       <TaskDetailItem icon={FileText} label="Notes">
         {draft.notes.trim() ? (
-          <div className="whitespace-pre-wrap leading-relaxed text-text-secondary">{draft.notes}</div>
+          <MarkdownPreview
+            ariaLabel="Task notes preview"
+            body={draft.notes}
+            emptyDescription="No notes"
+            emptyTitle="No notes"
+            variant="plain"
+          />
         ) : (
           <span className="text-text-muted">No notes</span>
         )}
