@@ -397,7 +397,11 @@ function TaskListColumn({
         <CheckCircle2 aria-hidden="true" size={18} />
         {list ? "Add a task" : "Add a starred task"}
       </button>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto pb-3"
+        role="list"
+        aria-label={`${title} tasks`}
+      >
         {tasks.length > 0 ? (
           tasks.map((task) => (
             <GoogleTaskRow
@@ -471,6 +475,7 @@ function ListActionMenu({
 }
 
 function GoogleTaskRow({
+  onCreateList,
   onDeleteTask,
   onMoveTask,
   onOpenTask,
@@ -483,6 +488,7 @@ function GoogleTaskRow({
   starred,
   task
 }: {
+  onCreateList: () => void;
   onDeleteTask: (taskId: string) => void;
   onMoveTask: (taskId: string, listId: string) => void;
   onOpenTask: (taskId: string) => void;
@@ -550,6 +556,7 @@ function GoogleTaskRow({
         {menuOpen ? (
           <TaskActionMenu
             onAddSubtask={() => { onAddSubtask(task); setMenuOpen(false); }}
+            onCreateList={() => { onCreateList(); setMenuOpen(false); }}
             onDelete={() => { onDeleteTask(task.id); setMenuOpen(false); }}
             onMoveTask={(listId) => { onMoveTask(task.id, listId); setMenuOpen(false); }}
             onOpen={() => { onOpenTask(task.id); setMenuOpen(false); }}
@@ -564,6 +571,7 @@ function GoogleTaskRow({
 
 function TaskActionMenu({
   onAddSubtask,
+  onCreateList,
   onDelete,
   onMoveTask,
   onOpen,
@@ -571,6 +579,7 @@ function TaskActionMenu({
   task
 }: {
   onAddSubtask: () => void;
+  onCreateList: () => void;
   onDelete: () => void;
   onMoveTask: (listId: string) => void;
   onOpen: () => void;
@@ -606,6 +615,10 @@ function TaskActionMenu({
           {list.title}
         </MenuButton>
       ))}
+      <MenuButton onClick={onCreateList}>
+        <ListPlus aria-hidden="true" size={18} />
+        New list
+      </MenuButton>
     </div>
   );
 }
