@@ -199,8 +199,8 @@ describe("App notes", () => {
     const preview = await screen.findByRole("region", { name: "Note preview" });
     expect(within(preview).getByText("Plan")).toBeInTheDocument();
     expect(within(preview).getByText("Kickoff")).toBeInTheDocument();
-    const dailyLink = within(preview).getByRole("button", { name: "Daily note" });
-    expect(dailyLink).toBeInTheDocument();
+    expect(within(preview).getByText("See [[Daily note]]")).toBeInTheDocument();
+    const dailyLink = screen.getByRole("button", { name: "Open linked note Daily note" });
 
     dailyLink.focus();
     await user.keyboard("{Enter}");

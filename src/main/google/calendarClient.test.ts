@@ -114,6 +114,33 @@ describe("Google Calendar mapping", () => {
     expect(JSON.stringify(page.events)).not.toContain("<br>");
   });
 
+  it("preserves Google HTML description blocks and lists as markdown", async () => {
+    const adapter = new GoogleCalendarHttpAdapter(
+      transportWithEvents([
+        {
+          id: "formatted-1",
+          summary: "Formatted notes",
+          description:
+            "<p>If I can do either of the below</p><ol><li><b>Full-time</b> @ MHA from 17 Aug</li><li><b>Part-time</b> @ MHA 3-4 days</li></ol><p>See <a href=\"https://example.com/a?x=1&amp;y=2\">docs</a></p>",
+          start: { date: "2026-05-23" },
+          end: { date: "2026-05-24" },
+          updated: "2026-05-22T00:00:00.000Z"
+        }
+      ])
+    );
+
+    const page = await adapter.listEvents({
+      calendarId: "primary",
+      defaultTimeZone: "UTC"
+    });
+
+    expect(page.events[0]).toMatchObject({
+      description:
+        "If I can do either of the below\n\n1. **Full-time** @ MHA from 17 Aug\n2. **Part-time** @ MHA 3-4 days\n\nSee [docs](https://example.com/a?x=1&y=2)"
+    });
+    expect(JSON.stringify(page.events)).not.toContain("<ol>");
+  });
+
   it("preserves recurring instance metadata from Google mirrors", async () => {
     const adapter = new GoogleCalendarHttpAdapter(
       transportWithEvents([
