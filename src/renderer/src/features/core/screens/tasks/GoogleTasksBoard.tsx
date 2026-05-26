@@ -321,6 +321,7 @@ function TaskSidebarButton({
 function TaskListColumn({
   list,
   listSort,
+  onCreateList,
   onCreateTask,
   onDeleteList,
   onDeleteTask,
@@ -340,6 +341,7 @@ function TaskListColumn({
 }: {
   list: TaskListSummary | null;
   listSort: TaskListSort;
+  onCreateList: () => void;
   onCreateTask: (listId?: string) => void;
   onDeleteList: (listId: string) => void;
   onDeleteTask: (taskId: string) => void;
@@ -400,6 +402,7 @@ function TaskListColumn({
           tasks.map((task) => (
             <GoogleTaskRow
               key={task.id}
+              onCreateList={onCreateList}
               onDeleteTask={onDeleteTask}
               onMoveTask={onMoveTask}
               onOpenTask={onOpenTask}
