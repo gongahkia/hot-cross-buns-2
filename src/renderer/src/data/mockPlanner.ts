@@ -1,13 +1,12 @@
 import {
   CalendarDays,
   ListTodo,
-  Search,
   Settings,
   StickyNote
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type SectionId = "today" | "tasks" | "calendar" | "notes" | "search" | "settings";
+export type SectionId = "today" | "tasks" | "calendar" | "notes" | "settings";
 export type Priority = "none" | "low" | "medium" | "high";
 
 export interface PlannerSection {
@@ -74,14 +73,6 @@ export const plannerSections: PlannerSection[] = [
     subtitle: "Local-only notes and planning scratchpads",
     metric: "3 notes",
     icon: StickyNote
-  },
-  {
-    id: "search",
-    label: "Search",
-    title: "Search",
-    subtitle: "Local-first search",
-    metric: "local",
-    icon: Search
   },
   {
     id: "settings",

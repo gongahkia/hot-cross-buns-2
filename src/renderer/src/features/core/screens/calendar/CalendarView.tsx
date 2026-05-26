@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { CalendarEventUpdateRequest } from "@shared/ipc/contracts";
-import { AlertTriangle, CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Save, Trash2, X } from "lucide-react";
 import type { PlannerActionId } from "../../../../actions/plannerActions";
 import { useInspector } from "../../../../components/Inspector";
 import { Button, IconButton, StatusBanner } from "../../../../components/primitives";
@@ -196,7 +196,7 @@ export function CalendarView({
     availabilityRange !== null &&
     Date.parse(availabilityRange.end) > Date.parse(availabilityRange.start) &&
     !availabilityPending;
-  const shareAvailabilityVisible = activeViewId !== "agenda";
+  const shareAvailabilityVisible = activeViewId === "day" || activeViewId === "multiDay" || activeViewId === "week";
   const calendarRangeLabel =
     activeViewId === "month"
       ? calendarMonthTitle(calendarAnchorDate)
@@ -792,10 +792,6 @@ export function CalendarView({
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1">
-          <span className="inline-flex shrink-0 items-center gap-2 text-[var(--text-sm)] font-semibold text-text-secondary">
-            <CalendarClock aria-hidden="true" size={15} />
-            View
-          </span>
           <div className="flex min-w-0 items-center gap-1 rounded-hcbMd border border-border bg-bg-secondary p-1" role="tablist" aria-label="Calendar views">
             {visibleCalendarViewIds.map((viewId) => (
               <CalendarTabButton

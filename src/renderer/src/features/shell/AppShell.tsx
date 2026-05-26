@@ -50,7 +50,7 @@ export function AppShell(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [healthLabel, setHealthLabel] = useState("Starting");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState("");
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
   const shellVisibleReported = useRef(false);
@@ -161,8 +161,9 @@ export function AppShell(): JSX.Element {
     [navigateToSection, openSettingsPanel]
   );
 
-  const openCommandPalette = useCallback((): void => {
+  const openCommandPalette = useCallback((initialQuery = ""): void => {
     commandPaletteOpenStartedAt.current = rendererNow();
+    setCommandPaletteInitialQuery(initialQuery);
     setNotificationsOpen(false);
     setDiagnosticsOpen(false);
     setSettingsOpen(false);
@@ -223,8 +224,7 @@ export function AppShell(): JSX.Element {
       }
 
       if (action.route.kind === "search") {
-        setSearchQuery(action.route.query ?? "");
-        navigateToSection("search");
+        openCommandPalette(action.route.query ?? "");
         return;
       }
 
@@ -250,7 +250,7 @@ export function AppShell(): JSX.Element {
 
       navigateToSection("calendar");
     },
-    [navigateToSection, openSettingsPanel, source.refresh, triggerTaskCommand]
+    [navigateToSection, openCommandPalette, openSettingsPanel, source.refresh, triggerTaskCommand]
   );
 
   const handlePaletteCommand = useCallback(
@@ -270,12 +270,6 @@ export function AppShell(): JSX.Element {
         return true;
       }
 
-      if (command.searchQuery !== undefined) {
-        setSearchQuery(command.searchQuery);
-        navigateToSection("search");
-        return true;
-      }
-
       if (command.taskCommand === undefined) {
         return false;
       }
@@ -283,7 +277,7 @@ export function AppShell(): JSX.Element {
       triggerTaskCommand(command.taskCommand as TaskSurfaceCommand["id"]);
       return true;
     },
-    [navigateToSection, openDiagnosticsPanel, openSettingsPanel, source.refresh, triggerTaskCommand]
+    [openDiagnosticsPanel, openSettingsPanel, source.refresh, triggerTaskCommand]
   );
 
   const runHotkeyAction = useCallback(
@@ -358,7 +352,7 @@ export function AppShell(): JSX.Element {
       }
 
       if (actionId === "navigation.search") {
-        navigateToPrimarySection("search");
+        openCommandPalette();
         return;
       }
 
@@ -637,8 +631,6 @@ export function AppShell(): JSX.Element {
           <RenderTimingBoundary id={`section:${activeSectionId}`}>
             <SectionContent
               activeSectionId={activeSectionId}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
               taskCommand={taskCommand}
               visibleCalendarIds={visibleCalendarIdSet}
             />
@@ -656,6 +648,7 @@ export function AppShell(): JSX.Element {
               canWriteTasks: !source.taskMutationPending,
               canWriteEvents: true
             }}
+            initialQuery={commandPaletteInitialQuery}
             onCommand={handlePaletteCommand}
             onNavigate={navigateOrOpenSettings}
             onOpenChange={setCommandPaletteOpen}

@@ -1,7 +1,6 @@
 import type { SectionId } from "../../data/mockPlanner";
 import { CalendarView } from "./screens/CalendarView";
 import { NotesView } from "./screens/NotesView";
-import { SearchView } from "./screens/SearchView";
 import { SettingsView } from "./screens/SettingsView";
 import { TasksView, type TaskSurfaceCommand } from "./screens/TasksView";
 
@@ -10,14 +9,10 @@ export type { TaskSurfaceCommand };
 
 export function SectionContent({
   activeSectionId,
-  searchQuery,
-  setSearchQuery,
   taskCommand,
   visibleCalendarIds
 }: {
   activeSectionId: SectionId;
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
   taskCommand?: TaskSurfaceCommand | null;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
@@ -31,10 +26,6 @@ export function SectionContent({
 
   if (activeSectionId === "notes") {
     return <NotesView />;
-  }
-
-  if (activeSectionId === "search") {
-    return <SearchView query={searchQuery} setQuery={setSearchQuery} />;
   }
 
   if (activeSectionId === "settings") {

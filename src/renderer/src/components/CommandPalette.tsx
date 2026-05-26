@@ -8,10 +8,13 @@ import {
   type PlannerActionContext
 } from "../actions/plannerActions";
 import type { SectionId } from "../data/mockPlanner";
-import { Badge, Button, IconButton, Input, cx } from "./primitives";
+import { useLocalSearch } from "../features/core/coreViewModelSource";
+import type { SearchResultViewModel, SearchSource } from "../features/core/coreViewModels";
+import { Badge, IconButton, Input, cx } from "./primitives";
 
 interface CommandPaletteProps {
   actionContext: PlannerActionContext;
+  initialQuery?: string;
   onCommand?: (command: PlannerAction) => boolean | void;
   onNavigate: (sectionId: SectionId) => void;
   onOpenChange: (open: boolean) => void;
@@ -29,6 +32,30 @@ function commandMatches(command: PlannerAction, query: string): boolean {
     .join(" ")
     .toLowerCase()
     .includes(normalizedQuery);
+}
+
+function searchResultSection(source: SearchSource): SectionId {
+  if (source === "event") {
+    return "calendar";
+  }
+
+  if (source === "note") {
+    return "notes";
+  }
+
+  return "tasks";
+}
+
+function searchResultTone(source: SearchSource): "accent" | "success" | "info" {
+  if (source === "event") {
+    return "accent";
+  }
+
+  if (source === "note") {
+    return "info";
+  }
+
+  return "success";
 }
 
 function dispatchCalendarCommand(command: PlannerAction): void {
@@ -64,6 +91,7 @@ function dispatchNoteCommand(command: PlannerAction): void {
 
 export function CommandPalette({
   actionContext,
+  initialQuery = "",
   onCommand,
   onNavigate,
   onOpenChange,
@@ -72,29 +100,43 @@ export function CommandPalette({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const trimmedQuery = query.trim();
 
   const filteredCommands = useMemo(
     () => plannerActions.filter((command) => commandMatches(command, query)),
     [query]
   );
+  const searchEnabled = trimmedQuery.length > 0 && filteredCommands.length === 0;
+  const search = useLocalSearch(searchEnabled ? query : "");
+  const searchResults = searchEnabled && search.viewModel.state === "results" ? search.viewModel.results : [];
+  const activeOptionCount = filteredCommands.length > 0 ? filteredCommands.length : searchResults.length;
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    setQuery("");
+    setQuery(initialQuery);
     setHighlightedIndex(0);
     if (typeof window.requestAnimationFrame === "function") {
       window.requestAnimationFrame(() => inputRef.current?.focus());
     } else {
       window.setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [open]);
+  }, [initialQuery, open]);
 
   useEffect(() => {
     setHighlightedIndex(0);
   }, [query]);
+
+  useEffect(() => {
+    if (activeOptionCount === 0) {
+      setHighlightedIndex(0);
+      return;
+    }
+
+    setHighlightedIndex((current) => Math.min(current, activeOptionCount - 1));
+  }, [activeOptionCount]);
 
   if (!open) {
     return null;
@@ -130,6 +172,15 @@ export function CommandPalette({
     closePalette();
   }
 
+  function runSearchResult(result: SearchResultViewModel | undefined): void {
+    if (!result) {
+      return;
+    }
+
+    onNavigate(searchResultSection(result.source));
+    closePalette();
+  }
+
   function handleDialogKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -140,7 +191,7 @@ export function CommandPalette({
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setHighlightedIndex((current) => Math.min(current + 1, filteredCommands.length - 1));
+      setHighlightedIndex((current) => Math.min(current + 1, Math.max(0, activeOptionCount - 1)));
     }
 
     if (event.key === "ArrowUp") {
@@ -150,13 +201,20 @@ export function CommandPalette({
 
     if (event.key === "Enter") {
       event.preventDefault();
-      runCommand(filteredCommands[highlightedIndex]);
+      if (filteredCommands.length > 0) {
+        runCommand(filteredCommands[highlightedIndex]);
+        return;
+      }
+
+      runSearchResult(searchResults[highlightedIndex]);
     }
   }
 
-  const activeOptionId = filteredCommands[highlightedIndex]
+  const activeOptionId = filteredCommands.length > 0 && filteredCommands[highlightedIndex]
     ? `command-option-${filteredCommands[highlightedIndex].id}`
-    : undefined;
+    : searchResults[highlightedIndex]
+      ? `search-option-${searchResults[highlightedIndex].id}`
+      : undefined;
 
   return (
     <div
@@ -192,7 +250,7 @@ export function CommandPalette({
               className="pl-9"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Run a command or jump to a section"
+              placeholder="Run a command or search local data"
               ref={inputRef}
               role="searchbox"
               value={query}
@@ -236,6 +294,52 @@ export function CommandPalette({
                 </button>
               );
             })
+          ) : search.parsed.errors.length > 0 ? (
+            <div
+              aria-live="polite"
+              className="rounded-hcbMd border border-warning bg-bg-tertiary px-3 py-2 text-[var(--text-sm)] text-warning"
+              role="alert"
+            >
+              {search.parsed.errors[0]?.message ?? "Invalid search query."}
+            </div>
+          ) : search.state === "loading" || search.state === "stale" ? (
+            <div className="grid min-h-28 place-items-center text-center">
+              <div>
+                <p className="text-[var(--text-md)] font-semibold text-text-primary">Searching local cache</p>
+                <p className="mt-1 text-[var(--text-sm)] text-text-muted">Tasks, events, notes, birthdays, and cached calendar text.</p>
+              </div>
+            </div>
+          ) : searchResults.length > 0 ? (
+            searchResults.map((result, index) => (
+              <button
+                aria-selected={index === highlightedIndex}
+                className={cx(
+                  "flex min-h-12 w-full items-center gap-3 rounded-hcbMd px-3 py-2 text-left transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  index === highlightedIndex
+                    ? "bg-surface-0 text-text-primary"
+                    : "text-text-secondary hover:bg-surface-0 hover:text-text-primary"
+                )}
+                id={`search-option-${result.id}`}
+                key={result.id}
+                onClick={() => runSearchResult(result)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                role="option"
+                type="button"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[var(--text-md)] font-medium">{result.title}</div>
+                  <div className="truncate text-[var(--text-xs)] text-text-muted">{result.detail}</div>
+                </div>
+                <Badge tone={searchResultTone(result.source)}>{result.source}</Badge>
+              </button>
+            ))
+          ) : trimmedQuery ? (
+            <div className="grid min-h-28 place-items-center text-center">
+              <div>
+                <p className="text-[var(--text-md)] font-semibold text-text-primary">No local results</p>
+                <p className="mt-1 text-[var(--text-sm)] text-text-muted">No commands or cached items matched this query.</p>
+              </div>
+            </div>
           ) : (
             <div className="grid min-h-28 place-items-center text-center">
               <div>
@@ -247,7 +351,7 @@ export function CommandPalette({
         </div>
 
         <div className="flex h-9 items-center justify-between border-t border-border px-3 text-[var(--text-xs)] text-text-muted">
-          <span>Enter runs selected command</span>
+          <span>Enter opens selected command or result</span>
           <span>Esc closes</span>
         </div>
       </div>

@@ -12,8 +12,6 @@ export type PlannerActionId =
   | "calendar.view.week"
   | "calendar.view.month"
   | "note.create"
-  | "search.open"
-  | "search.syntax"
   | "navigation.tasks"
   | "navigation.calendar"
   | "navigation.notes"
@@ -28,7 +26,6 @@ export type PlannerActionCategory =
   | "Navigate"
   | "Task"
   | "Calendar"
-  | "Search"
   | "Sync"
   | "Agent"
   | "Diagnostics";
@@ -42,7 +39,6 @@ export interface PlannerAction {
   sectionId?: SectionId;
   calendarAction?: "new-event" | "agenda" | "day" | "multiDay" | "week" | "month";
   noteAction?: "new-note";
-  searchQuery?: string;
   taskCommand?: "task.create" | "task.quickCapture";
 }
 
@@ -181,36 +177,6 @@ export const plannerActions: PlannerAction[] = [
     category: "Navigate",
     keywords: ["notes", "tasks", "undated"],
     sectionId: "notes"
-  },
-  {
-    id: "search.open",
-    label: "Go to Search",
-    description: "Search the local cache",
-    category: "Navigate",
-    keywords: ["search", "find", "local", "cache"],
-    sectionId: "search"
-  },
-  {
-    id: "search.syntax",
-    label: "Search filter syntax",
-    description: "Open Search with local filter examples",
-    category: "Search",
-    keywords: [
-      "search",
-      "filter",
-      "source:tasks",
-      "domain:calendar",
-      "status:active",
-      "due:today",
-      "start:today",
-      "priority:high",
-      "list",
-      "calendar",
-      "notes:yes",
-      "body:no"
-    ],
-    sectionId: "search",
-    searchQuery: "source:tasks status:active due:today"
   },
   {
     id: "navigation.settings",

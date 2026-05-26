@@ -43,7 +43,7 @@ export async function runPaletteCommand(user: ReturnType<typeof userEvent.setup>
   const input = within(dialog).getByRole("searchbox", { name: "Filter commands" });
 
   await user.type(input, query);
-  await user.click(within(dialog).getByRole("option", { name: label }));
+  await user.click(await within(dialog).findByRole("option", { name: label }));
 }
 
 export async function goToSection(label: string): Promise<void> {
@@ -52,11 +52,6 @@ export async function goToSection(label: string): Promise<void> {
   if (label === "Settings") {
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await screen.findByRole("dialog", { name: "Settings" });
-    return;
-  }
-
-  if (label === "Search") {
-    await runPaletteCommand(user, "go to search", /Go to Search/);
     return;
   }
 

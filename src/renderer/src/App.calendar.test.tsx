@@ -50,11 +50,18 @@ describe("App calendar", () => {
     expect(screen.getByRole("button", { name: "Share availability" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Share Availability" })).toBeInTheDocument();
 
+    await user.click(within(tabs).getByRole("tab", { name: "Multi-Day" }));
+    expect(screen.getByRole("grid", { name: "Calendar multi-day view" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share availability" })).toBeInTheDocument();
+
     await user.click(within(tabs).getByRole("tab", { name: "Week" }));
     expect(screen.getByRole("grid", { name: "Calendar week view" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share availability" })).toBeInTheDocument();
 
     await user.click(within(tabs).getByRole("tab", { name: "Month" }));
     expect(screen.getByRole("grid", { name: "Calendar month view" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Share availability" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Share Availability" })).not.toBeInTheDocument();
   });
 
   it("places timed events in their display timezone hour on timeline views", async () => {

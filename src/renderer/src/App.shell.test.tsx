@@ -269,9 +269,12 @@ describe("App shell", () => {
     expect(screen.getByText("Agenda view")).toBeInTheDocument();
     expect(screen.getAllByText("Product").length).toBeGreaterThan(0);
 
-    await goToSection("Search");
-    await userEvent.setup().type(screen.getByRole("textbox", { name: "Search local cache" }), "triage");
-    expect(await screen.findByText(/Task in Inbox/)).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.keyboard("{Meta>}p{/Meta}");
+    const dialog = await screen.findByRole("dialog", { name: "Command palette" });
+    await user.type(within(dialog).getByRole("searchbox", { name: "Filter commands" }), "triage");
+
+    expect(await within(dialog).findByText(/Task in Inbox/)).toBeInTheDocument();
     expect(api.search.query).toHaveBeenCalledWith({ query: "triage", limit: 30 });
   });
 

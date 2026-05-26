@@ -45,10 +45,6 @@ export function sectionMetric(source: CoreViewModelSource, sectionId: SectionId)
     return String(source.largeTaskWindow.filter((task) => task.status === "open" && !task.dueDate && !task.plannedStart).length);
   }
 
-  if (sectionId === "search") {
-    return "local";
-  }
-
   if (sectionId === "settings") {
     return source.syncStatus.state;
   }
