@@ -18,6 +18,13 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
+    expect(screen.getByRole("checkbox", { name: "All notes" })).toHaveAttribute("aria-checked", "true");
+    const starredToggle = screen.getByRole("checkbox", { name: "Starred" });
+    expect(starredToggle).toHaveAttribute("aria-checked", "false");
+    await user.click(starredToggle);
+    expect(starredToggle).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("heading", { name: "Starred notes" })).toBeInTheDocument();
+    await user.click(starredToggle);
     expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New note/ }));
