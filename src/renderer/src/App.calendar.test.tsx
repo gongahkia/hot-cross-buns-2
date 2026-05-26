@@ -636,6 +636,40 @@ describe("App calendar", () => {
     expect(api.calendar.delete).toHaveBeenCalledWith({ id: "event-standup" });
   });
 
+  it("renders existing event notes as markdown in read-only details", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-markdown",
+            calendarId: "cal-product",
+            title: "Markdown planning event",
+            startsAt: `${todayDate}T09:30:00.000Z`,
+            endsAt: `${todayDate}T10:00:00.000Z`,
+            allDay: false,
+            notes: "# Plan\n\n1. **Full-time** option\n2. [Docs](https://example.com)",
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(within(agenda).getByText("Markdown planning event"));
+
+    const inspector = await screen.findByTestId("inspector-shell");
+    const preview = within(inspector).getByRole("region", { name: "Event notes preview" });
+    expect(within(preview).getByRole("heading", { name: "Plan" })).toBeInTheDocument();
+    expect(within(preview).getByText("Full-time")).toBeInTheDocument();
+    expect(within(preview).getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com");
+  });
+
   it("loads existing event recurrence into the inspector and persists recurrence changes", async () => {
     const api = seededHcb();
     api.calendar.listEvents = vi.fn(async () =>
