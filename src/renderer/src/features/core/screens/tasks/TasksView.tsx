@@ -59,25 +59,18 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     open: openInspector,
     update: updateInspector
   } = useInspector();
-  const [activeFilterId, setActiveFilterId] = useState<TaskFilterId>("open");
-  const [activePerspectiveId, setActivePerspectiveId] = useState<TaskPerspectiveId>("projects");
-  const [activeSavedTaskViewId, setActiveSavedTaskViewId] = useState<string | null>(null);
   const [selectedBoardView, setSelectedBoardView] = useState<TaskBoardSelection>({ kind: "all" });
   const [starredTaskIds, setStarredTaskIds] = useState<Set<string>>(
-    () => new Set(readStoredStringArray(starredTasksStorageKey))
+    () => new Set(readLocalStorageStringArray(starredTasksStorageKey))
   );
   const [starredTaskAt, setStarredTaskAt] = useState<Record<string, number>>(
-    () => readStoredNumberRecord(starredTasksAtStorageKey)
+    () => readLocalStorageNumberRecord(starredTasksAtStorageKey)
   );
   const [listSorts, setListSorts] = useState<Record<string, TaskListSort>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draft, setDraftState] = useState<TaskDraft>(() => newTaskDraft(source));
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [quickCaptureInput, setQuickCaptureInput] = useState("");
-  const [newListTitle, setNewListTitle] = useState("");
-  const [listTitleDrafts, setListTitleDrafts] = useState<Record<string, string>>({});
-  const [bulkSelectedTaskIds, setBulkSelectedTaskIds] = useState<string[]>([]);
-  const [bulkMoveListId, setBulkMoveListId] = useState("");
   const taskDraftRef = useRef<TaskDraft>(draft);
   const taskDraftBaselineRef = useRef<TaskDraft>(draft);
   const taskInspectorDirtyRef = useRef(false);
@@ -93,43 +86,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
       return resolved;
     });
   }, []);
-  const activeSavedTaskView =
-    source.settings.savedTaskViews.find((view) => view.id === activeSavedTaskViewId) ??
-    source.settings.savedTaskViews[0] ??
-    null;
-  const activeTaskPerspective = useMemo(
-    () =>
-      buildTaskPerspective(
-        activePerspectiveId,
-        source.largeTaskWindow,
-        source.taskLists,
-        activeFilterId,
-        activeSavedTaskView,
-        new Date()
-      ),
-    [
-      activeFilterId,
-      activePerspectiveId,
-      activeSavedTaskView,
-      source.largeTaskWindow,
-      source.taskLists
-    ]
-  );
   const selectedTask = selectedTaskId ? source.getTaskById(selectedTaskId) : null;
-  const taskIdsInWindow = new Set(source.largeTaskWindow.map((task) => task.id));
-  const visibleTaskIds = Array.from(
-    new Set(activeTaskPerspective.groups.flatMap((group) => group.tasks.map((task) => task.id)))
-  );
-  const shouldRenderPerspectiveGroups = activePerspectiveId !== "saved" || activeSavedTaskView !== null;
-  const bulkSelectedTaskIdsInWindow = bulkSelectedTaskIds.filter((taskId) => taskIdsInWindow.has(taskId));
-  const bulkSelectedTasks = bulkSelectedTaskIdsInWindow.map((taskId) => source.getTaskById(taskId));
-  const allVisibleTasksSelected =
-    visibleTaskIds.length > 0 && visibleTaskIds.every((taskId) => bulkSelectedTaskIdsInWindow.includes(taskId));
-  const bulkCompletionLabel =
-    bulkSelectedTasks.length > 0 && bulkSelectedTasks.every((task) => task.status === "completed")
-      ? "Reopen selected"
-      : "Complete selected";
-  const bulkMoveTargetListId = bulkMoveListId || defaultTaskListId(source);
   const parentOptions = useMemo(
     () => taskParentOptions(source.largeTaskWindow, draft),
     [draft.id, source.largeTaskWindow]
