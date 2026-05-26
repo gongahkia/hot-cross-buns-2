@@ -6,7 +6,9 @@ import {
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_TASKS_SCOPE,
   sanitizeGoogleAccountConnectionStatus,
+  type GoogleCalendarReadTransport,
   type GoogleCalendarWriteTransport,
+  type GoogleTasksReadTransport,
   type GoogleTasksWriteTransport
 } from "../google";
 import { createServiceContainer } from "./serviceContainer";
@@ -54,6 +56,95 @@ describe("service container integration", () => {
     } finally {
       services.close();
       rmSync(appSupportDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps runtime Google writes disabled unless explicitly enabled", async () => {
+    const priorWriteFlag = process.env.HCB_GOOGLE_WRITES_ENABLED;
+    delete process.env.HCB_GOOGLE_WRITES_ENABLED;
+
+    const appSupportDirectory = mkdtempSync(join(tmpdir(), "hcb2-service-runtime-readonly-"));
+    let createdTaskId: string | undefined;
+    const tasksRead: GoogleTasksReadTransport = {
+      listTaskLists: vi.fn(async () => [
+        {
+          id: "inbox",
+          title: "Inbox",
+          updatedAt: "2026-05-22T00:00:00.000Z"
+        }
+      ]),
+      listTasks: vi.fn(async () => ({
+        tasks: createdTaskId
+          ? [
+              {
+                id: createdTaskId,
+                taskListId: "inbox",
+                title: "Queued but not pushed",
+                notes: "",
+                status: "needsAction" as const,
+                dueAt: null,
+                completedAt: null,
+                deleted: false,
+                hidden: false,
+                updatedAt: "2026-05-22T00:00:00.000Z"
+              }
+            ]
+          : [],
+        serverDate: "2026-05-22T00:00:00.000Z"
+      }))
+    };
+    const calendarRead: GoogleCalendarReadTransport = {
+      listCalendarLists: vi.fn(async () => []),
+      listEvents: vi.fn(async () => ({ events: [], nextSyncToken: null }))
+    };
+    const services = createServiceContainer({
+      appSupportDirectory,
+      enableRuntimeGoogle: true,
+      syncTasksTransport: tasksRead,
+      syncCalendarTransport: calendarRead
+    });
+
+    try {
+      services.localData.syncRepository.upsertAccountStatus(
+        sanitizeGoogleAccountConnectionStatus({
+          accountId: "acct-1",
+          googleAccountId: "acct-1",
+          email: "planner@example.com",
+          connectionState: "connected",
+          grantedScopes: [GOOGLE_TASKS_SCOPE, GOOGLE_CALENDAR_SCOPE],
+          lastAuthenticatedAt: "2026-05-22T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z"
+        })
+      );
+      services.localData.syncRepository.writeTaskLists(
+        "acct-1",
+        [{ id: "inbox", title: "Inbox", updatedAt: "2026-05-22T00:00:00.000Z" }],
+        "2026-05-22T00:00:00.000Z"
+      );
+
+      const created = await services.domain.planner.createTask({
+        title: "Queued but not pushed",
+        listId: "acct-1:task-list:inbox"
+      });
+      createdTaskId = created.id;
+
+      await services.domain.sync.runNow({ resources: ["tasks"] });
+
+      expect(
+        services.localData.connection.get<{ status: string }>(
+          "SELECT status FROM google_pending_mutations WHERE resource_id = ?;",
+          [created.id]
+        )
+      ).toEqual({ status: "pending" });
+    } finally {
+      services.close();
+      rmSync(appSupportDirectory, { recursive: true, force: true });
+
+      if (priorWriteFlag === undefined) {
+        delete process.env.HCB_GOOGLE_WRITES_ENABLED;
+      } else {
+        process.env.HCB_GOOGLE_WRITES_ENABLED = priorWriteFlag;
+      }
     }
   });
 

@@ -73,6 +73,7 @@ export interface ServiceContainerOptions {
   syncCalendarWriteTransport?: GoogleCalendarWriteTransport;
   secretStore?: SecretStore;
   enableRuntimeGoogle?: boolean;
+  enableRuntimeGoogleWrites?: boolean;
 }
 
 const noopWindowActions: NativeShellWindowActions = {
@@ -105,6 +106,8 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const settingsRepository = new LocalSettingsRepository(connection);
   const syncRepository = new GoogleSyncRepository(connection, { defaultTimeZone });
   const runtimeGoogleEnabled = options.enableRuntimeGoogle ?? options.nativeAdapter !== undefined;
+  const runtimeGoogleWritesEnabled =
+    options.enableRuntimeGoogleWrites ?? process.env.HCB_GOOGLE_WRITES_ENABLED === "1";
   const secretStore = options.secretStore ?? defaultSecretStore();
   const googleCredentialAdapter = new KeychainGoogleCredentialAdapter(secretStore);
   const googleClientSecretStore = new KeychainGoogleOAuthClientSecretStore(secretStore);
@@ -125,6 +128,10 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const runtimeCalendarTransport = runtimeGoogleEnabled
     ? new GoogleCalendarHttpAdapter(googleApiTransport)
     : undefined;
+  const runtimeTasksWriteTransport =
+    runtimeGoogleEnabled && runtimeGoogleWritesEnabled ? runtimeTasksTransport : undefined;
+  const runtimeCalendarWriteTransport =
+    runtimeGoogleEnabled && runtimeGoogleWritesEnabled ? runtimeCalendarTransport : undefined;
   const sqliteDomain = createSqliteDomainServices({
     plannerRepository,
     settingsRepository,
@@ -132,8 +139,8 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     historyRepository,
     syncTasksTransport: options.syncTasksTransport ?? runtimeTasksTransport,
     syncCalendarTransport: options.syncCalendarTransport ?? runtimeCalendarTransport,
-    syncTasksWriteTransport: options.syncTasksWriteTransport ?? runtimeTasksTransport,
-    syncCalendarWriteTransport: options.syncCalendarWriteTransport ?? runtimeCalendarTransport
+    syncTasksWriteTransport: options.syncTasksWriteTransport ?? runtimeTasksWriteTransport,
+    syncCalendarWriteTransport: options.syncCalendarWriteTransport ?? runtimeCalendarWriteTransport
   });
   let syncScheduler: SyncScheduler | undefined;
   const googleLoopback = new GoogleOAuthLoopbackController({
