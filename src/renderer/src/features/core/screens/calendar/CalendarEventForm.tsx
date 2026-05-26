@@ -1,4 +1,5 @@
-import { Bell, CalendarPlus, Clock3, FileText, Gift, ListPlus, MapPin, RotateCcw, Users } from "lucide-react";
+import type { ReactNode } from "react";
+import { Bell, CalendarPlus, Clock3, FileText, Gift, ListPlus, MapPin, RotateCcw, Users, type LucideIcon } from "lucide-react";
 import { Badge, Input, cx } from "../../../../components/primitives";
 import { ErrorState } from "../../../../components/states";
 import type { useCoreViewModelSource } from "../../coreViewModelSource";
@@ -18,6 +19,117 @@ import {
   calendarRecurrenceSummary
 } from "./drafts";
 import type { CalendarCreateMode, CalendarEventDraft, CalendarRepeatFrequency } from "./types";
+
+function DetailItem({
+  children,
+  icon: Icon,
+  label
+}: {
+  children: ReactNode;
+  icon?: LucideIcon;
+  label: string;
+}): JSX.Element {
+  return (
+    <div className="grid gap-1 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+      <div className="inline-flex items-center gap-1 text-[var(--text-xs)] font-semibold uppercase text-text-muted">
+        {Icon ? <Icon aria-hidden="true" size={13} /> : null}
+        {label}
+      </div>
+      <div className="min-w-0 text-[var(--text-base)] text-text-primary">{children}</div>
+    </div>
+  );
+}
+
+export function CalendarEventDetails({
+  calendars,
+  defaultTimeZone,
+  draft
+}: {
+  calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
+  defaultTimeZone: string;
+  draft: CalendarEventDraft;
+}): JSX.Element {
+  const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
+  const sourceTimeZone = selectedCalendar?.timeZone ?? defaultTimeZone;
+  const guests = draft.guests
+    .split(",")
+    .map((guest) => guest.trim())
+    .filter(Boolean);
+  const reminderLabel = draft.reminderMinutes.trim()
+    ? `${draft.reminderMinutes.trim()} minutes before`
+    : "None";
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 rounded-hcbLg border border-border bg-bg-tertiary p-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <CalendarSourceSwatch calendarId={draft.calendarId} color={selectedCalendar?.backgroundColor} />
+          <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-secondary">
+            {selectedCalendar?.title ?? "Calendar"}
+          </span>
+          {draft.mutationState && draft.mutationState !== "synced" ? (
+            <Badge tone={draft.mutationState === "failed" ? "danger" : "warning"}>
+              {draft.mutationState === "failed" ? "Failed" : "Queued"}
+            </Badge>
+          ) : (
+            <Badge tone="success">Synced</Badge>
+          )}
+        </div>
+        <h3 className="text-[var(--text-xl)] font-semibold leading-snug text-text-primary">
+          {draft.title || "Untitled event"}
+        </h3>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <Clock3 aria-hidden="true" size={13} />
+            <span className="truncate">{calendarDraftRangeLabel(draft)}</span>
+          </span>
+          <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge>
+          <Badge tone="neutral">{sourceTimeZone}</Badge>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <DetailItem icon={Clock3} label="Time">
+          <div className="grid gap-1">
+            <span>{calendarDraftRangeLabel(draft)}</span>
+            <span className="text-[var(--text-sm)] text-text-muted">{sourceTimeZone}</span>
+          </div>
+        </DetailItem>
+        <DetailItem icon={RotateCcw} label="Repeat">
+          {calendarRecurrenceSummary(draft)}
+        </DetailItem>
+        <DetailItem icon={MapPin} label="Location">
+          {draft.location.trim() || <span className="text-text-muted">No location</span>}
+        </DetailItem>
+        <DetailItem icon={Bell} label="Reminder">
+          {reminderLabel}
+        </DetailItem>
+      </div>
+
+      <DetailItem icon={Users} label="Guests">
+        {guests.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {guests.map((guest) => (
+              <Badge key={guest} tone="neutral">
+                {guest}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-text-muted">No guests</span>
+        )}
+      </DetailItem>
+
+      <DetailItem icon={FileText} label="Notes">
+        {draft.notes.trim() ? (
+          <div className="whitespace-pre-wrap leading-relaxed text-text-secondary">{draft.notes}</div>
+        ) : (
+          <span className="text-text-muted">No notes</span>
+        )}
+      </DetailItem>
+    </div>
+  );
+}
 
 function CalendarCreateModeTabs({
   mode,

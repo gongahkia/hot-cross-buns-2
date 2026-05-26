@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { CalendarEventUpdateRequest } from "@shared/ipc/contracts";
-import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Save, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Pencil, Save, Trash2, X } from "lucide-react";
 import type { PlannerActionId } from "../../../../actions/plannerActions";
 import { useInspector } from "../../../../components/Inspector";
 import { Button, IconButton, StatusBanner } from "../../../../components/primitives";
@@ -19,7 +19,7 @@ import {
   startOfUtcDayIso
 } from "../../coreScreenShared";
 import { CalendarAgendaView } from "./CalendarAgendaView";
-import { CalendarEventForm } from "./CalendarEventForm";
+import { CalendarEventDetails, CalendarEventForm } from "./CalendarEventForm";
 import {
   CalendarStatusStrip,
   ShareAvailabilityPanel
@@ -109,6 +109,7 @@ export function CalendarView({
   const [createMode, setCreateModeState] = useState<CalendarCreateMode>("event");
   const [createTaskListId, setCreateTaskListIdState] = useState(() => defaultTaskListId(source));
   const [formError, setFormError] = useState<string | undefined>();
+  const [calendarInspectorMode, setCalendarInspectorModeState] = useState<"view" | "edit">("edit");
   const [calendarActionError, setCalendarActionError] = useState<string | undefined>();
   const [availabilityStartDate, setAvailabilityStartDate] = useState(() =>
     dateInputValue(startOfUtcDayIso(new Date()))
@@ -126,6 +127,7 @@ export function CalendarView({
   const calendarDraftBaselineRef = useRef<CalendarEventDraft | null>(draft);
   const calendarInspectorDirtyRef = useRef(false);
   const calendarInspectorInstanceRef = useRef(0);
+  const calendarInspectorModeRef = useRef<"view" | "edit">("edit");
   const createModeRef = useRef<CalendarCreateMode>("event");
   const createTaskListIdRef = useRef(createTaskListId);
   const setDraft = useCallback<Dispatch<SetStateAction<CalendarEventDraft | null>>>((next) => {
@@ -231,6 +233,11 @@ export function CalendarView({
       }),
     [availabilityDurationMinutes, availabilitySlots, availabilityTitle, source.settings.defaultTimeZone]
   );
+
+  function setCalendarInspectorMode(mode: "view" | "edit"): void {
+    calendarInspectorModeRef.current = mode;
+    setCalendarInspectorModeState(mode);
+  }
 
   function setCreateMode(mode: CalendarCreateMode): void {
     createModeRef.current = mode;
@@ -371,11 +378,13 @@ export function CalendarView({
       return;
     }
 
-    const dirty = !calendarEventDraftsEqual(draft, calendarDraftBaselineRef.current);
+    const dirty =
+      calendarInspectorMode === "edit" &&
+      !calendarEventDraftsEqual(draft, calendarDraftBaselineRef.current);
     calendarInspectorDirtyRef.current = dirty;
     updateInspector({
-      actions: eventInspectorActions(draft),
-      body: eventInspectorBody(draft),
+      actions: eventInspectorActions(draft, calendarInspectorMode),
+      body: eventInspectorBody(draft, calendarInspectorMode),
       dirty,
       subtitle: eventInspectorSubtitle(draft),
       title: eventInspectorTitle(draft)
@@ -384,6 +393,7 @@ export function CalendarView({
     currentInspector?.kind,
     draft,
     formError,
+    calendarInspectorMode,
     source.calendarSources,
     source.taskLists,
     createMode,
@@ -410,7 +420,11 @@ export function CalendarView({
   }
 
   function canReplaceEventInspector(): boolean {
-    return currentInspector?.kind !== "event" || !calendarInspectorDirtyRef.current;
+    return (
+      currentInspector?.kind !== "event" ||
+      calendarInspectorModeRef.current !== "edit" ||
+      !calendarInspectorDirtyRef.current
+    );
   }
 
   function eventInspectorTitle(nextDraft: CalendarEventDraft): string {
@@ -432,7 +446,21 @@ export function CalendarView({
     return `${calendar?.title ?? "Calendar"} · ${calendarDraftRangeLabel(nextDraft)}`;
   }
 
-  function eventInspectorBody(nextDraft: CalendarEventDraft): ReactNode {
+  function eventInspectorBody(
+    nextDraft: CalendarEventDraft,
+    mode = calendarInspectorModeRef.current
+  ): ReactNode {
+    if (nextDraft.mode === "edit" && mode === "view") {
+      return (
+        <CalendarEventDetails
+          calendars={source.calendarSources}
+          defaultTimeZone={source.settings.defaultTimeZone}
+          draft={nextDraft}
+          key={`view-${calendarInspectorInstanceRef.current}`}
+        />
+      );
+    }
+
     return (
       <CalendarEventForm
         calendars={source.calendarSources}
@@ -450,7 +478,31 @@ export function CalendarView({
     );
   }
 
-  function eventInspectorActions(nextDraft: CalendarEventDraft): ReactNode {
+  function eventInspectorActions(
+    nextDraft: CalendarEventDraft,
+    mode = calendarInspectorModeRef.current
+  ): ReactNode {
+    if (nextDraft.mode === "edit" && mode === "view") {
+      return (
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Button onClick={() => void deleteDraft()} size="sm" variant="danger">
+              <Trash2 aria-hidden="true" size={14} />
+              Delete event
+            </Button>
+            <Button onClick={() => setCalendarInspectorMode("edit")} size="sm" variant="secondary">
+              <Pencil aria-hidden="true" size={14} />
+              Edit
+            </Button>
+          </div>
+          <Button onClick={() => void cancelEventInspector()} size="sm" variant="ghost">
+            <X aria-hidden="true" size={14} />
+            Close
+          </Button>
+        </div>
+      );
+    }
+
     return (
       <>
         {nextDraft.mode === "edit" ? (
@@ -471,20 +523,25 @@ export function CalendarView({
     );
   }
 
-  function openEventInspector(nextDraft: CalendarEventDraft): void {
+  function openEventInspector(
+    nextDraft: CalendarEventDraft,
+    mode: "view" | "edit" = nextDraft.mode === "edit" ? "view" : "edit"
+  ): void {
     calendarInspectorInstanceRef.current += 1;
     calendarDraftBaselineRef.current = nextDraft;
     calendarDraftRef.current = nextDraft;
     calendarInspectorDirtyRef.current = false;
+    setCalendarInspectorMode(mode);
     setFormError(undefined);
     setDraft(nextDraft);
     openInspector({
-      actions: eventInspectorActions(nextDraft),
-      body: eventInspectorBody(nextDraft),
+      actions: eventInspectorActions(nextDraft, mode),
+      body: eventInspectorBody(nextDraft, mode),
       dirty: false,
       id: nextDraft.id ?? "new",
       kind: "event",
-      onConfirmClose: () => !calendarInspectorDirtyRef.current,
+      onConfirmClose: () =>
+        calendarInspectorModeRef.current !== "edit" || !calendarInspectorDirtyRef.current,
       subtitle: eventInspectorSubtitle(nextDraft),
       title: eventInspectorTitle(nextDraft)
     });
@@ -497,7 +554,7 @@ export function CalendarView({
 
     setCreateMode("event");
     setCreateTaskListId(defaultTaskListId(source));
-    openEventInspector(newCalendarDraft(source, seed));
+    openEventInspector(newCalendarDraft(source, seed), "edit");
   }
 
   function openEdit(event: CalendarEventViewModel): void {
@@ -506,13 +563,14 @@ export function CalendarView({
     }
 
     setCreateMode("event");
-    openEventInspector(editCalendarDraft(event));
+    openEventInspector(editCalendarDraft(event), "view");
   }
 
   async function closeEventInspectorAfterMutation(): Promise<void> {
     calendarDraftBaselineRef.current = null;
     calendarDraftRef.current = null;
     calendarInspectorDirtyRef.current = false;
+    setCalendarInspectorMode("edit");
     setDraft(null);
     setCreateMode("event");
     setFormError(undefined);
@@ -623,6 +681,7 @@ export function CalendarView({
     calendarDraftBaselineRef.current = null;
     calendarDraftRef.current = null;
     calendarInspectorDirtyRef.current = false;
+    setCalendarInspectorMode("edit");
     setDraft(null);
     setCreateMode("event");
     setFormError(undefined);

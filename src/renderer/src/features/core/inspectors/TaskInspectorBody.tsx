@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import type { Dispatch, KeyboardEvent, SetStateAction } from "react";
-import { ListPlus } from "lucide-react";
+import type { Dispatch, KeyboardEvent, ReactNode, SetStateAction } from "react";
+import { CalendarClock, FileText, Flag, List, ListPlus } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useDirtyState, useInspector } from "../../../components/Inspector";
-import { Button, Input } from "../../../components/primitives";
+import { Badge, Button, Input } from "../../../components/primitives";
 import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { CorePriority, TaskViewModel } from "../coreViewModels";
 
@@ -27,6 +28,110 @@ export function taskDraftsEqual(left: TaskDraft, right: TaskDraft): boolean {
     left.listId === right.listId &&
     left.parentId === right.parentId &&
     left.priority === right.priority
+  );
+}
+
+function taskPriorityLabel(priority: CorePriority): string {
+  return priority === "none" ? "None" : `${priority[0].toUpperCase()}${priority.slice(1)}`;
+}
+
+function TaskDetailItem({
+  children,
+  icon: Icon,
+  label
+}: {
+  children: ReactNode;
+  icon?: LucideIcon;
+  label: string;
+}): JSX.Element {
+  return (
+    <div className="grid gap-1 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+      <div className="inline-flex items-center gap-1 text-[var(--text-xs)] font-semibold uppercase text-text-muted">
+        {Icon ? <Icon aria-hidden="true" size={13} /> : null}
+        {label}
+      </div>
+      <div className="min-w-0 text-[var(--text-base)] text-text-primary">{children}</div>
+    </div>
+  );
+}
+
+export function TaskInspectorDetails({
+  draft,
+  parentOptions,
+  source,
+  task
+}: {
+  draft: TaskDraft;
+  parentOptions: TaskViewModel[];
+  source: ReturnType<typeof useCoreViewModelSource>;
+  task?: TaskViewModel | null;
+}): JSX.Element {
+  const listTitle = source.taskLists.find((list) => list.id === draft.listId)?.title ?? "Task list";
+  const parentTitle =
+    parentOptions.find((candidate) => candidate.id === draft.parentId)?.title ??
+    (draft.parentId ? "Parent task" : "No parent");
+  const statusLabel = task?.status === "completed" ? "Completed" : "Open";
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 rounded-hcbLg border border-border bg-bg-tertiary p-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge tone={task?.mutationState === "failed" ? "danger" : task?.mutationState === "queued" ? "warning" : "success"}>
+            {task?.mutationState === "failed" ? "Failed" : task?.mutationState === "queued" ? "Queued" : "Synced"}
+          </Badge>
+          <Badge tone={task?.status === "completed" ? "success" : "neutral"}>{statusLabel}</Badge>
+        </div>
+        <h3 className="text-[var(--text-xl)] font-semibold leading-snug text-text-primary">
+          {draft.title || "Untitled task"}
+        </h3>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
+          <Badge tone="neutral">{listTitle}</Badge>
+          <Badge tone={draft.priority === "high" ? "danger" : draft.priority === "medium" ? "warning" : draft.priority === "low" ? "accent" : "neutral"}>
+            {taskPriorityLabel(draft.priority)}
+          </Badge>
+          {draft.dueDate ? <Badge tone="neutral">{draft.dueDate}</Badge> : null}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TaskDetailItem icon={List} label="List">
+          {listTitle}
+        </TaskDetailItem>
+        <TaskDetailItem icon={CalendarClock} label="Due date">
+          {draft.dueDate || <span className="text-text-muted">No due date</span>}
+        </TaskDetailItem>
+        <TaskDetailItem icon={Flag} label="Priority">
+          {taskPriorityLabel(draft.priority)}
+        </TaskDetailItem>
+        <TaskDetailItem icon={ListPlus} label="Parent">
+          {draft.parentId ? parentTitle : <span className="text-text-muted">No parent</span>}
+        </TaskDetailItem>
+      </div>
+
+      <TaskDetailItem icon={FileText} label="Notes">
+        {draft.notes.trim() ? (
+          <div className="whitespace-pre-wrap leading-relaxed text-text-secondary">{draft.notes}</div>
+        ) : (
+          <span className="text-text-muted">No notes</span>
+        )}
+      </TaskDetailItem>
+
+      {task?.subtasks.length ? (
+        <TaskDetailItem icon={ListPlus} label="Subtasks">
+          <div className="grid gap-2">
+            {task.subtasks.map((subtask) => (
+              <div className="flex items-center gap-2 text-text-secondary" key={subtask.id}>
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full bg-accent"
+                />
+                <span className={subtask.completed ? "line-through" : undefined}>{subtask.title}</span>
+              </div>
+            ))}
+          </div>
+        </TaskDetailItem>
+      ) : null}
+    </div>
   );
 }
 
