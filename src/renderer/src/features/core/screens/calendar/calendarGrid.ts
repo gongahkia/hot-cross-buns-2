@@ -455,7 +455,11 @@ export function visibleCalendarTimeline(
   visibleCalendarIds: ReadonlySet<string>
 ): VisibleCalendarTimeline {
   const visibleDays = visibleCalendarTimelineDays(days, visibleCalendarIds);
-  const allDayLayout = calendarTimelineAllDayLayout(visibleDays.map(({ day }) => day), visibleCalendarIds);
+  const allDayLayout = calendarAllDayLayout(
+    visibleDays.map(({ day }) => day),
+    visibleCalendarIds,
+    calendarTimelineVisibleAllDayCount
+  );
 
   return {
     allDayOverflowCounts: allDayLayout.overflowCounts,
@@ -464,9 +468,10 @@ export function visibleCalendarTimeline(
   };
 }
 
-function calendarTimelineAllDayLayout(
+function calendarAllDayLayout(
   days: CalendarDayViewModel[],
-  visibleCalendarIds: ReadonlySet<string>
+  visibleCalendarIds: ReadonlySet<string>,
+  visibleLaneCount: number
 ): { overflowCounts: number[]; segments: CalendarTimelineAllDaySegment[] } {
   const dayKeys = days.map(calendarDayKey);
   const firstDayKey = dayKeys[0];
@@ -536,7 +541,7 @@ function calendarTimelineAllDayLayout(
       laneEnds[laneIndex] = candidate.endDayIndex;
     }
 
-    if (laneIndex >= calendarTimelineVisibleAllDayCount) {
+    if (laneIndex >= visibleLaneCount) {
       for (let dayIndex = candidate.startDayIndex; dayIndex <= candidate.endDayIndex; dayIndex += 1) {
         overflowCounts[dayIndex] += 1;
       }
@@ -680,19 +685,57 @@ export function visibleCalendarMonthWeeks(
   weeks: CalendarMonthWeekViewModel[],
   visibleCalendarIds: ReadonlySet<string>
 ): VisibleCalendarMonthWeek[] {
-  return weeks.map((week) => ({
-    id: week.id,
-    days: week.days.map((day) => {
-      const visibleEvents = day.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds));
-      const visibleEventChips = visibleEvents.slice(0, calendarMonthVisibleChipCount);
+  return weeks.map((week) => {
+    const allDayLayout = calendarAllDayLayout(
+      week.days,
+      visibleCalendarIds,
+      calendarMonthVisibleChipCount
+    );
 
-      return {
-        day,
-        overflowCount: Math.max(0, visibleEvents.length - visibleEventChips.length),
-        visibleEventChips
-      };
-    })
-  }));
+    return {
+      allDaySegments: allDayLayout.segments,
+      id: week.id,
+      days: week.days.map((day, dayIndex) => {
+        const visibleEvents = day.events.filter((event) => visibleCalendarEvent(event, visibleCalendarIds));
+        const timedEvents = visibleEvents.filter((event) => !event.allDay);
+        const occupiedAllDayLanes = monthAllDayLaneIndexesForDay(allDayLayout.segments, dayIndex);
+        const availableLaneIndexes = Array.from(
+          { length: calendarMonthVisibleChipCount },
+          (_, laneIndex) => laneIndex
+        ).filter((laneIndex) => !occupiedAllDayLanes.has(laneIndex));
+        const visibleTimedEvents = timedEvents.slice(0, availableLaneIndexes.length);
+        const visibleEventChips = visibleTimedEvents.map((event, index) => ({
+          event,
+          laneIndex: availableLaneIndexes[index] ?? 0
+        }));
+
+        return {
+          day,
+          overflowCount:
+            (allDayLayout.overflowCounts[dayIndex] ?? 0) +
+            Math.max(0, timedEvents.length - visibleTimedEvents.length),
+          visibleEventChips
+        };
+      })
+    };
+  });
+}
+
+function monthAllDayLaneIndexesForDay(
+  segments: CalendarTimelineAllDaySegment[],
+  dayIndex: number
+): Set<number> {
+  const laneIndexes = new Set<number>();
+
+  for (const segment of segments) {
+    const segmentEndDayIndex = segment.startDayIndex + segment.daySpan - 1;
+
+    if (dayIndex >= segment.startDayIndex && dayIndex <= segmentEndDayIndex) {
+      laneIndexes.add(segment.laneIndex);
+    }
+  }
+
+  return laneIndexes;
 }
 
 function splitAllDayEvents(events: CalendarEventViewModel[]): {

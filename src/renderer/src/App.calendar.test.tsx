@@ -232,6 +232,19 @@ describe("App calendar", () => {
     expect(segment).toHaveAttribute("data-start-day-index", "0");
     expect(segment).toHaveAttribute("data-day-span", "3");
     expect(segment).toHaveAttribute("data-lane-index", "0");
+
+    await user.click(within(tabs).getByRole("tab", { name: "Month" }));
+
+    const monthGrid = await screen.findByRole("grid", { name: "Calendar month view" });
+
+    expect(within(monthGrid).getAllByRole("button", { name: "Sleepover" })).toHaveLength(1);
+
+    const monthSegment = document.querySelector(
+      '[data-calendar-month-all-day-segment="event-sleepover"]'
+    ) as HTMLElement;
+
+    expect(monthSegment).toHaveAttribute("data-day-span", "3");
+    expect(monthSegment).toHaveAttribute("data-lane-index", "0");
   });
 
   it("opens calendar creation from keyboard-focused grid cells", async () => {

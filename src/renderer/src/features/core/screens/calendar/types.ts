@@ -76,11 +76,15 @@ export interface CalendarTimeBlock {
 
 export interface VisibleCalendarMonthDay {
   day: CalendarDayViewModel;
-  visibleEventChips: CalendarEventViewModel[];
+  visibleEventChips: Array<{
+    event: CalendarEventViewModel;
+    laneIndex: number;
+  }>;
   overflowCount: number;
 }
 
 export interface VisibleCalendarMonthWeek {
+  allDaySegments: CalendarTimelineAllDaySegment[];
   id: string;
   days: VisibleCalendarMonthDay[];
 }

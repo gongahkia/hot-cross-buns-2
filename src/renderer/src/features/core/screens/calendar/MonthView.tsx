@@ -1,10 +1,34 @@
 import { useMemo } from "react";
+import type { CSSProperties } from "react";
 import { cx } from "../../../../components/primitives";
 import { handleActivationKeyDown } from "../../coreScreenShared";
 import type { CalendarEventViewModel, CalendarMonthWeekViewModel } from "../../coreViewModels";
 import { CalendarEventChip, CalendarOverflowChip } from "./CalendarEventChips";
-import { visibleCalendarMonthWeeks } from "./calendarGrid";
-import type { CalendarCreateSeed } from "./types";
+import { calendarMonthVisibleChipCount, visibleCalendarMonthWeeks } from "./calendarGrid";
+import type { CalendarCreateSeed, CalendarTimelineAllDaySegment } from "./types";
+
+const monthEventLaneHeight = 22;
+
+function monthAllDaySegmentStyle(segment: CalendarTimelineAllDaySegment): CSSProperties {
+  return {
+    gridColumn: `${segment.startDayIndex + 1} / span ${segment.daySpan}`,
+    gridRow: `${segment.laneIndex + 2}`
+  };
+}
+
+function monthEventChipStyle(dayIndex: number, laneIndex: number): CSSProperties {
+  return {
+    gridColumn: `${dayIndex + 1}`,
+    gridRow: `${laneIndex + 2}`
+  };
+}
+
+function monthOverflowStyle(dayIndex: number): CSSProperties {
+  return {
+    gridColumn: `${dayIndex + 1}`,
+    gridRow: `${calendarMonthVisibleChipCount + 2}`
+  };
+}
 
 export function MonthView({
   weeks,
@@ -33,14 +57,22 @@ export function MonthView({
       </div>
       <div className="grid flex-1 grid-rows-6" role="rowgroup">
         {visibleWeeks.map((week) => (
-          <div className="grid grid-cols-7 border-b border-border last:border-b-0" key={week.id} role="row">
-            {week.days.map(({ day, overflowCount, visibleEventChips }) => {
+          <div
+            className="grid border-b border-border last:border-b-0"
+            key={week.id}
+            role="row"
+            style={{
+              gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+              gridTemplateRows: `28px repeat(${calendarMonthVisibleChipCount}, ${monthEventLaneHeight}px) ${monthEventLaneHeight}px minmax(0, 1fr)`
+            }}
+          >
+            {week.days.map(({ day, overflowCount, visibleEventChips }, dayIndex) => {
               const dayKey = day.id.slice("month-".length);
 
               return (
                 <div
                   className={cx(
-                    "grid min-h-[104px] grid-rows-[auto_minmax(0,1fr)] border-r border-border bg-bg-tertiary p-2 text-left transition-colors duration-fast ease-hcb last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    "relative z-0 min-h-[126px] border-r border-border bg-bg-tertiary px-2 py-1.5 text-left transition-colors duration-fast ease-hcb last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                     day.isToday && "bg-surface-0 ring-1 ring-inset ring-accent",
                     day.isOutsideMonth && "opacity-50"
                   )}
@@ -52,31 +84,72 @@ export function MonthView({
                     )
                   }
                   role="gridcell"
+                  style={{ gridColumn: `${dayIndex + 1}`, gridRow: "1 / -1" }}
                   tabIndex={0}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="sr-only">{day.weekday}</span>
-                    <span className="text-[var(--text-sm)] font-semibold text-text-primary">{day.dateLabel}</span>
-                  </div>
-                  <div className="mt-2 grid min-h-0 content-start gap-1 overflow-hidden">
-                    {visibleEventChips.map((calendarEvent) => (
-                      <CalendarEventChip
-                        className="min-h-5 px-1.5 py-0.5 text-[11px]"
-                        event={calendarEvent}
-                        key={calendarEvent.id}
-                        labelVariant="title"
-                        onKeyDown={(keyEvent) => {
-                          keyEvent.stopPropagation();
-                          handleActivationKeyDown(keyEvent, () => onOpen(calendarEvent));
-                        }}
-                        onOpen={onOpen}
-                      />
-                    ))}
-                    {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}
-                  </div>
+                  <span className="sr-only">{day.weekday}</span>
+                  <span className="text-[var(--text-sm)] font-semibold text-text-primary">{day.dateLabel}</span>
                 </div>
               );
             })}
+            {week.allDaySegments.map((segment) => (
+              <div
+                className="z-10 min-w-0 px-1.5"
+                data-calendar-month-all-day-segment={segment.event.id}
+                data-day-span={segment.daySpan}
+                data-ends-after-range={segment.endsAfterRange}
+                data-lane-index={segment.laneIndex}
+                data-start-day-index={segment.startDayIndex}
+                data-starts-before-range={segment.startsBeforeRange}
+                key={segment.event.id}
+                role="presentation"
+                style={monthAllDaySegmentStyle(segment)}
+              >
+                <CalendarEventChip
+                  className="h-full min-h-5 px-1.5 py-0.5 text-[11px]"
+                  event={segment.event}
+                  labelVariant="title"
+                  onKeyDown={(keyEvent) => {
+                    keyEvent.stopPropagation();
+                    handleActivationKeyDown(keyEvent, () => onOpen(segment.event));
+                  }}
+                  onOpen={onOpen}
+                />
+              </div>
+            ))}
+            {week.days.flatMap(({ day, visibleEventChips }, dayIndex) =>
+              visibleEventChips.map(({ event, laneIndex }) => (
+                <div
+                  className="z-10 min-w-0 px-1.5"
+                  key={`${day.id}-${event.id}`}
+                  role="presentation"
+                  style={monthEventChipStyle(dayIndex, laneIndex)}
+                >
+                  <CalendarEventChip
+                    className="h-full min-h-5 px-1.5 py-0.5 text-[11px]"
+                    event={event}
+                    labelVariant="title"
+                    onKeyDown={(keyEvent) => {
+                      keyEvent.stopPropagation();
+                      handleActivationKeyDown(keyEvent, () => onOpen(event));
+                    }}
+                    onOpen={onOpen}
+                  />
+                </div>
+              ))
+            )}
+            {week.days.map(({ day, overflowCount }, dayIndex) =>
+              overflowCount > 0 ? (
+                <div
+                  className="z-10 min-w-0 px-1.5"
+                  key={`${day.id}-overflow`}
+                  role="presentation"
+                  style={monthOverflowStyle(dayIndex)}
+                >
+                  <CalendarOverflowChip count={overflowCount} />
+                </div>
+              ) : null
+            )}
           </div>
         ))}
       </div>
