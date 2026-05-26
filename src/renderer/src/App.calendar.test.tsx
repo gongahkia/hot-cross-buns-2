@@ -291,10 +291,18 @@ describe("App calendar", () => {
     expect(inspector).toHaveAttribute("data-inspector-kind", "event");
     expect(inspector).toHaveAttribute("data-inspector-id", "event-standup");
 
-    const context = within(inspector).getByRole("group", { name: "Event context" });
-    expect(within(context).getByText("Product")).toBeInTheDocument();
-    expect(within(context).getByText(new RegExp(`${todayDate}.*09:30-09:50`))).toBeInTheDocument();
-    expect(within(context).getByText("UTC")).toBeInTheDocument();
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
+    expect(within(inspectorBody).getByRole("heading", { name: "Planner shell standup" })).toBeInTheDocument();
+    expect(within(inspectorBody).getByText("Product")).toBeInTheDocument();
+    expect(within(inspectorBody).getAllByText(new RegExp(`${todayDate}.*09:30-09:50`)).length).toBeGreaterThan(0);
+    expect(within(inspectorBody).getByText("20 min")).toBeInTheDocument();
+    expect(within(inspectorBody).getAllByText("UTC").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("textbox", { name: "Event title" })).not.toBeInTheDocument();
+
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
+    expect(await screen.findByRole("textbox", { name: "Event title" })).toHaveValue("Planner shell standup");
   });
 
   it("shows event pending mutation badges in rows and inspector", async () => {
@@ -340,6 +348,13 @@ describe("App calendar", () => {
     const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
     await user.click(within(agenda).getByText("Planner shell standup"));
 
+    const inspector = await screen.findByTestId("inspector-shell");
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
+    expect(within(inspectorBody).getByRole("heading", { name: "Planner shell standup" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event title" })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     const titleInput = await screen.findByRole("textbox", { name: "Event title" });
     await user.clear(titleInput);
     await user.type(titleInput, "Planner shell sync");
@@ -582,6 +597,13 @@ describe("App calendar", () => {
 
     const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
     await user.click(within(agenda).getByText("Planner shell standup"));
+    const inspector = await screen.findByTestId("inspector-shell");
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
+    expect(within(inspectorBody).getByRole("heading", { name: "Planner shell standup" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event title" })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     const titleInput = screen.getByRole("textbox", { name: "Event title" });
     await user.clear(titleInput);
     await user.type(titleInput, "Planner shell sync");
@@ -630,6 +652,10 @@ describe("App calendar", () => {
 
     const inspector = await screen.findByTestId("inspector-shell");
     expect(inspector).toHaveAttribute("data-inspector-kind", "event");
+    expect(screen.queryByLabelText("Event repeat frequency")).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     expect(screen.getByLabelText("Event repeat frequency")).toHaveValue("monthly");
     expect(screen.getByLabelText("Repeat interval")).toHaveValue(2);
     expect(screen.getByLabelText("Repeat count")).toHaveValue(4);

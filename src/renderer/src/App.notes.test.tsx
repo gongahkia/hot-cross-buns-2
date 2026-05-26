@@ -63,7 +63,13 @@ describe("App notes", () => {
 
     const inspector = await screen.findByTestId("inspector-shell");
     expect(inspector).toHaveAttribute("data-inspector-kind", "note");
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
+    expect(within(inspectorBody).getByRole("heading", { name: "Cache-first startup" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Note body" })).not.toBeInTheDocument();
 
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
     await user.type(bodyInput, " Pending close flush.");
     await user.click(screen.getByTestId("inspector-close"));
@@ -124,6 +130,9 @@ describe("App notes", () => {
 
     await goToSection("Notes");
     await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     await user.type(await screen.findByRole("textbox", { name: "Note body" }), " Switch flush.");
     const notesList = screen.getByRole("list", { name: "Local notes" });
     await user.click(within(notesList).getByRole("button", { name: "Open note Daily note" }));
@@ -135,7 +144,9 @@ describe("App notes", () => {
         body: expect.stringContaining("Switch flush.")
       });
     });
-    expect(await screen.findByDisplayValue("Daily note")).toBeInTheDocument();
+    const inspector = await screen.findByTestId("inspector-shell");
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
+    expect(within(inspectorBody).getByRole("heading", { name: "Daily note" })).toBeInTheDocument();
   });
 
   it("renders note markdown preview, outgoing links, and backlinks", async () => {
@@ -184,8 +195,6 @@ describe("App notes", () => {
 
     await goToSection("Notes");
     await user.click(await screen.findByText("Project plan"));
-    expect(await screen.findByDisplayValue("Project plan")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Preview" }));
 
     const preview = await screen.findByRole("region", { name: "Note preview" });
     expect(within(preview).getByText("Plan")).toBeInTheDocument();
@@ -195,7 +204,9 @@ describe("App notes", () => {
 
     dailyLink.focus();
     await user.keyboard("{Enter}");
-    expect(await screen.findByDisplayValue("Daily note")).toBeInTheDocument();
+    const inspector = await screen.findByTestId("inspector-shell");
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
+    expect(within(inspectorBody).getByRole("heading", { name: "Daily note" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Open backlink Project plan" })).toBeInTheDocument();
   });
 
@@ -207,6 +218,9 @@ describe("App notes", () => {
 
     await goToSection("Notes");
     await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
 
     await user.type(screen.getByRole("combobox", { name: "Planner link target" }), "triage");
@@ -245,6 +259,9 @@ describe("App notes", () => {
 
     await goToSection("Notes");
     await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
     const linkInput = screen.getByRole("combobox", { name: "Planner link target" });
 
@@ -282,6 +299,9 @@ describe("App notes", () => {
 
     await goToSection("Notes");
     await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
 
     await user.click(await screen.findByRole("button", { name: "Fix link Missing note" }));

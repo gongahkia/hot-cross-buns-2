@@ -125,6 +125,13 @@ describe("App tasks", () => {
     });
 
     await user.click(screen.getByRole("button", { name: /^Draft inbox triage rules / }));
+    const editInspector = await screen.findByTestId("inspector-shell");
+    const editInspectorBody = within(editInspector).getByTestId("inspector-body");
+    expect(within(editInspectorBody).getByRole("heading", { name: "Draft inbox triage rules" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Task title" })).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
     const titleInput = screen.getByRole("textbox", { name: "Task title" });
     await user.clear(titleInput);
     await user.type(titleInput, "Draft inbox triage rules v2");
@@ -179,8 +186,14 @@ describe("App tasks", () => {
     const inspector = await screen.findByTestId("inspector-shell");
     expect(inspector).toHaveAttribute("data-inspector-kind", "task");
     expect(inspector).toHaveAttribute("data-inspector-id", "task-inbox-rules");
+    const inspectorBody = within(inspector).getByTestId("inspector-body");
+    expect(within(inspectorBody).getByRole("heading", { name: "Draft inbox triage rules" })).toBeInTheDocument();
+    expect(within(inspector).queryByRole("textbox", { name: "Task title" })).not.toBeInTheDocument();
 
-    const titleInput = within(inspector).getByRole("textbox", { name: "Task title" });
+    await user.click(
+      within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
+    );
+    const titleInput = await within(inspector).findByRole("textbox", { name: "Task title" });
     await user.clear(titleInput);
     await user.type(titleInput, "Draft inbox triage rules v2");
     await waitFor(() => expect(within(inspector).getByText("Unsaved")).toBeInTheDocument());

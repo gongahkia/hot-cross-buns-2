@@ -40,9 +40,6 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     uiFontName: null,
     uiTextSizePoints: 13,
     perSurfaceFontOverrides: {},
-    performanceMode: "snappy",
-    appBackgroundTranslucencyEnabled: false,
-    appBackgroundOpacity: 1,
     disableAnimations: false,
     uiLayoutScale: 1,
     navigationPlacement: "left",
@@ -488,7 +485,7 @@ describe("native shell service", () => {
 
   it("builds a calendar-style menu bar snapshot with month and selected day data", async () => {
     const { adapter, service } = createService({
-      settings: defaultSettings({ menuBarPanelStyle: "calendar" }),
+      settings: defaultSettings({ menuBarPanelStyle: "calendar", menuBarIconName: "bolt" }),
       tasks: [
         {
           id: "task-today",
@@ -521,6 +518,7 @@ describe("native shell service", () => {
 
     expect(snapshot).toMatchObject({
       panelStyle: "calendar",
+      iconName: "bolt",
       title: "Calendar",
       syncLabel: "Local",
       calendar: {

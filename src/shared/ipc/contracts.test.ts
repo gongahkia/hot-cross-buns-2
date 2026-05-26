@@ -341,9 +341,6 @@ describe("shared IPC contracts", () => {
         uiFontName: null,
         uiTextSizePoints: 13,
         perSurfaceFontOverrides: {},
-        performanceMode: "snappy",
-        appBackgroundTranslucencyEnabled: false,
-        appBackgroundOpacity: 1,
         disableAnimations: false,
         uiLayoutScale: 1,
         navigationPlacement: "left",
@@ -424,6 +421,11 @@ describe("shared IPC contracts", () => {
     expect(settingsUpdateRequestSchema.safeParse({ uiFontName: "" }).success).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ uiTextSizePoints: 8 }).success).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ uiTextSizePoints: 25 }).success).toBe(false);
+    expect(settingsUpdateRequestSchema.safeParse({ menuBarIconName: "bolt" }).success).toBe(true);
+    expect(settingsUpdateRequestSchema.safeParse({ taskCompletionSoundId: "coin" }).success).toBe(true);
+    expect(settingsUpdateRequestSchema.safeParse({ eventCompletionSoundId: "sparkle" }).success).toBe(
+      true
+    );
     expect(
       ipcContracts.native.listFontFamilies.responseSchema.parse({
         platform: "darwin",

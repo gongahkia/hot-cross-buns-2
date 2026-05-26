@@ -17,9 +17,6 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   uiFontName: null,
   uiTextSizePoints: 13,
   perSurfaceFontOverrides: {},
-  performanceMode: "snappy",
-  appBackgroundTranslucencyEnabled: false,
-  appBackgroundOpacity: 1,
   disableAnimations: false,
   uiLayoutScale: 1,
   navigationPlacement: "left",
@@ -109,21 +106,6 @@ export class LocalSettingsRepository {
         "appearance",
         "perSurfaceFontOverrides",
         DEFAULT_SETTINGS.perSurfaceFontOverrides
-      ),
-      performanceMode: this.readSetting(
-        "appearance",
-        "performanceMode",
-        DEFAULT_SETTINGS.performanceMode
-      ),
-      appBackgroundTranslucencyEnabled: this.readSetting(
-        "appearance",
-        "backgroundTranslucencyEnabled",
-        DEFAULT_SETTINGS.appBackgroundTranslucencyEnabled
-      ),
-      appBackgroundOpacity: this.readSetting(
-        "appearance",
-        "backgroundOpacity",
-        DEFAULT_SETTINGS.appBackgroundOpacity
       ),
       disableAnimations: this.readSetting(
         "appearance",
@@ -399,23 +381,6 @@ export class LocalSettingsRepository {
 
     if (request.perSurfaceFontOverrides !== undefined) {
       this.writeSetting("appearance", "perSurfaceFontOverrides", request.perSurfaceFontOverrides, now);
-    }
-
-    if (request.performanceMode !== undefined) {
-      this.writeSetting("appearance", "performanceMode", request.performanceMode, now);
-    }
-
-    if (request.appBackgroundTranslucencyEnabled !== undefined) {
-      this.writeSetting(
-        "appearance",
-        "backgroundTranslucencyEnabled",
-        request.appBackgroundTranslucencyEnabled,
-        now
-      );
-    }
-
-    if (request.appBackgroundOpacity !== undefined) {
-      this.writeSetting("appearance", "backgroundOpacity", request.appBackgroundOpacity, now);
     }
 
     if (request.disableAnimations !== undefined) {

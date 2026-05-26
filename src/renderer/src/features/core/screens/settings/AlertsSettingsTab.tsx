@@ -20,7 +20,33 @@ const soundOptions: Array<{ label: string; value: SettingsSnapshot["taskCompleti
   { label: "Glass", value: "glass" },
   { label: "Pop", value: "pop" },
   { label: "Chime", value: "chime" },
-  { label: "Click", value: "click" }
+  { label: "Click", value: "click" },
+  { label: "Ding", value: "ding" },
+  { label: "Pluck", value: "pluck" },
+  { label: "Tick", value: "tick" },
+  { label: "Sparkle", value: "sparkle" },
+  { label: "Success", value: "success" },
+  { label: "Soft bell", value: "softBell" },
+  { label: "Arcade", value: "arcade" },
+  { label: "Wood", value: "wood" },
+  { label: "Coin", value: "coin" },
+  { label: "Rise", value: "rise" },
+  { label: "Pulse", value: "pulse" }
+];
+
+const menuBarIconOptions: Array<{ label: string; value: SettingsSnapshot["menuBarIconName"] }> = [
+  { label: "Pin", value: "pin" },
+  { label: "Calendar", value: "calendar" },
+  { label: "Bun", value: "bun" },
+  { label: "Checklist", value: "checklist" },
+  { label: "Target", value: "target" },
+  { label: "Bell", value: "bell" },
+  { label: "Clock", value: "clock" },
+  { label: "Star", value: "star" },
+  { label: "Bolt", value: "bolt" },
+  { label: "Spark", value: "spark" },
+  { label: "Circle", value: "circle" },
+  { label: "Diamond", value: "diamond" }
 ];
 
 export function AlertsSettingsTab({
@@ -132,10 +158,11 @@ export function AlertsSettingsTab({
             }
             value={settings.menuBarIconName}
           >
-            <option value="pin">Pin</option>
-            <option value="calendar">Calendar</option>
-            <option value="bun">Bun</option>
-            <option value="checklist">Checklist</option>
+            {menuBarIconOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </SettingsControlRow>
         <SettingsSwitch

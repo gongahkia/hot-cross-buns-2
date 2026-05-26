@@ -38,7 +38,9 @@ describe("App settings and onboarding", () => {
     await user.click(within(dialog).getByRole("button", { name: "Appearance" }));
     expect(screen.getByRole("combobox", { name: "Theme" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Color theme" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Translucent background" })).toBeInTheDocument();
+    expect(screen.queryByText("Performance")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Translucent background" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: "App surface opacity" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Layout" })).toBeInTheDocument();
   });
 

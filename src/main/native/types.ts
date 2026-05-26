@@ -97,6 +97,7 @@ export interface NativeMenuBarSection {
 
 export interface NativeMenuBarSnapshot {
   panelStyle: SettingsSnapshot["menuBarPanelStyle"];
+  iconName: SettingsSnapshot["menuBarIconName"];
   primaryClickAction: SettingsSnapshot["trayClickAction"];
   title: string;
   subtitle?: string;

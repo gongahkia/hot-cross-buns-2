@@ -218,38 +218,39 @@ describe("App shell", () => {
     expect(await screen.findByRole("dialog", { name: "Diagnostics" })).toBeInTheDocument();
   });
 
-  it("shares action IDs across task controls and command palette availability", async () => {
+  it("exposes task command action IDs through the command palette", async () => {
     const user = userEvent.setup();
     installHcb(seededHcb());
     render(<App />);
 
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
-
-    const taskToolbar = screen.getByRole("toolbar", { name: "Task actions" });
-    const newTaskButton = within(taskToolbar).getByRole("button", { name: "New task" });
-    const quickCaptureButton = within(taskToolbar).getByRole("button", { name: "Quick capture" });
-    const completeButton = within(taskToolbar).getByRole("button", { name: "Complete" });
-
-    expect(newTaskButton).toHaveAttribute("data-action-id", "task.create");
-    expect(quickCaptureButton).toHaveAttribute("data-action-id", "task.quickCapture");
-    expect(completeButton).toHaveAttribute("data-action-id", "task.completeSelected");
-    expect(completeButton).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
 
     await user.keyboard("{Meta>}p{/Meta}");
     const dialog = await screen.findByRole("dialog", { name: "Command palette" });
     const input = within(dialog).getByRole("searchbox", { name: "Filter commands" });
 
+    await user.type(input, "new task");
+    expect(within(dialog).getByRole("option", { name: /New task/ })).toHaveAttribute(
+      "data-action-id",
+      "task.create"
+    );
+
+    await user.clear(input);
+    await user.type(input, "quick capture");
+    expect(within(dialog).getByRole("option", { name: /Quick capture/ })).toHaveAttribute(
+      "data-action-id",
+      "task.quickCapture"
+    );
+
+    await user.clear(input);
     await user.type(input, "complete selected");
     const completeCommand = within(dialog).getByRole("option", { name: /Complete selected task/ });
 
     expect(completeCommand).toHaveAttribute("data-action-id", "task.completeSelected");
     expect(completeCommand).toBeDisabled();
     expect(completeCommand).toHaveTextContent("No selected task");
-
-    await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: /^Draft inbox triage rules / }));
-    expect(completeButton).not.toBeDisabled();
   });
 
   it("renders seeded SQLite-shaped data and uses local search", async () => {
@@ -263,7 +264,7 @@ describe("App shell", () => {
     await goToSection("Tasks");
     expect(screen.getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Planning" })).toBeInTheDocument();
-    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Inbox" })).toHaveAttribute("aria-checked", "true");
 
     await goToSection("Calendar");
     expect(screen.getByText("Agenda view")).toBeInTheDocument();

@@ -135,44 +135,6 @@ export function AppearanceSettingsTab({
             ))}
           </select>
         </SettingsControlRow>
-        <SettingsControlRow
-          description="Snappy uses shorter transitions; Rich uses longer app motion."
-          label="Performance"
-        >
-          <SegmentedControl
-            options={[
-              { label: "Snappy", value: "snappy" },
-              { label: "Rich", value: "rich" }
-            ]}
-            onChange={(value) =>
-              updateSettings({ performanceMode: value as SettingsSnapshot["performanceMode"] })
-            }
-            value={settings.performanceMode}
-          />
-        </SettingsControlRow>
-        <SettingsSwitch
-          checked={settings.appBackgroundTranslucencyEnabled}
-          description="Allows the app shell background to use the configured opacity."
-          label="Translucent background"
-          onChange={(checked) => updateSettings({ appBackgroundTranslucencyEnabled: checked })}
-        />
-        <SettingsControlRow label="App surface opacity">
-          <div className="flex min-w-0 items-center gap-3">
-            <input
-              aria-label="App surface opacity"
-              className="w-56 accent-[var(--color-accent)]"
-              max={1}
-              min={0.35}
-              onChange={(event) => updateSettings({ appBackgroundOpacity: Number(event.target.value) })}
-              step={0.05}
-              type="range"
-              value={settings.appBackgroundOpacity}
-            />
-            <span className="w-12 text-right font-mono text-[var(--text-xs)] text-text-muted">
-              {Math.round(settings.appBackgroundOpacity * 100)}%
-            </span>
-          </div>
-        </SettingsControlRow>
         <SettingsSwitch
           checked={settings.disableAnimations}
           description="Turns off app-driven transitions, panel motion, and animated state changes."

@@ -192,7 +192,6 @@ export {
   savedSearchViewSchema,
   savedTaskViewSchema,
   settingsGetRequestSchema,
-  settingsPerformanceModeSchema,
   settingsRecoveryActionRequestSchema,
   settingsRecoveryActionResponseSchema,
   settingsRecoveryActionSchema,

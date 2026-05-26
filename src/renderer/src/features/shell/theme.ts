@@ -58,15 +58,6 @@ function surfaceFontFamily(settings: SettingsSnapshot, surface: keyof SettingsSn
   return cssFontFamily(settings.perSurfaceFontOverrides[surface]?.uiFontName ?? settings.uiFontName);
 }
 
-function shellBackgroundValue(settings: SettingsSnapshot): string {
-  if (!settings.appBackgroundTranslucencyEnabled) {
-    return "var(--color-bg-primary)";
-  }
-
-  const opacity = Math.round(Math.min(1, Math.max(0.35, settings.appBackgroundOpacity)) * 100);
-  return `color-mix(in srgb, var(--color-bg-primary) ${opacity}%, transparent)`;
-}
-
 export function useAppliedTheme(settings: SettingsSnapshot): void {
   const [prefersDark, setPrefersDark] = useState(systemPrefersDark);
 
@@ -95,7 +86,7 @@ export function useAppliedTheme(settings: SettingsSnapshot): void {
 
     root.dataset.theme = mode;
     root.dataset.colorTheme = colorTheme.id;
-    root.dataset.performanceMode = settings.performanceMode;
+    delete root.dataset.performanceMode;
     root.dataset.animations = settings.disableAnimations ? "disabled" : "enabled";
     root.lang = settings.appLanguage === "system" ? navigator.language || "en" : settings.appLanguage;
     root.style.setProperty("--font-family", cssFontFamily(settings.uiFontName));
@@ -104,7 +95,7 @@ export function useAppliedTheme(settings: SettingsSnapshot): void {
     root.style.setProperty("--text-sidebar", surfaceTextSize(settings, "sidebar"));
     root.style.setProperty("--font-family-menu-bar", surfaceFontFamily(settings, "menuBar"));
     root.style.setProperty("--text-menu-bar", surfaceTextSize(settings, "menuBar"));
-    root.style.setProperty("--app-shell-background", shellBackgroundValue(settings));
+    root.style.setProperty("--app-shell-background", "var(--color-bg-primary)");
     root.style.fontSize = `${Math.round(Math.min(1.5, Math.max(0.8, settings.uiLayoutScale)) * 16 * 100) / 100}px`;
 
     for (const [name, value] of Object.entries(semanticThemeVariables(colorTheme))) {
@@ -118,10 +109,7 @@ export function useAppliedTheme(settings: SettingsSnapshot): void {
     prefersDark,
     settings.appLanguage,
     settings.colorTheme,
-    settings.appBackgroundOpacity,
-    settings.appBackgroundTranslucencyEnabled,
     settings.disableAnimations,
-    settings.performanceMode,
     settings.theme,
     settings.uiFontName,
     settings.uiLayoutScale,

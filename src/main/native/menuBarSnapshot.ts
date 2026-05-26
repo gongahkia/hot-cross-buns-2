@@ -102,6 +102,7 @@ export function buildNativeMenuBarSnapshot(
 
   return {
     panelStyle: settings.menuBarPanelStyle,
+    iconName: settings.menuBarIconName,
     primaryClickAction: settings.trayClickAction,
     title,
     subtitle,

@@ -16,7 +16,6 @@ export const uiTextSizePointsSchema = z.number().min(9).max(24);
 export const uiFontNameSchema = z.string().trim().min(1).max(120).nullable();
 export const syncModeSchema = z.enum(["manual", "balanced", "near-real-time"]);
 export const appLanguageSchema = z.enum(["system", "en"]);
-export const settingsPerformanceModeSchema = z.enum(["snappy", "rich"]);
 export const navigationPlacementSchema = z.enum(["left", "right"]);
 export const navigationTabSchema = z.enum(["tasks", "calendar", "notes"]);
 export const calendarViewModeSchema = z.enum(["agenda", "day", "multiDay", "week", "month"]);
@@ -36,8 +35,39 @@ export const hotkeyActionIdSchema = z.enum(hotkeyActionIds);
 export const keybindingsSchema = z
   .record(hotkeyActionIdSchema, z.string().trim().min(1).max(120).nullable())
   .default(defaultKeybindings);
-export const completionSoundIdSchema = z.enum(["glass", "pop", "chime", "click"]);
-export const menuBarIconNameSchema = z.enum(["pin", "calendar", "bun", "checklist"]);
+export const completionSoundIds = [
+  "glass",
+  "pop",
+  "chime",
+  "click",
+  "ding",
+  "pluck",
+  "tick",
+  "sparkle",
+  "success",
+  "softBell",
+  "arcade",
+  "wood",
+  "coin",
+  "rise",
+  "pulse"
+] as const;
+export const menuBarIconNames = [
+  "pin",
+  "calendar",
+  "bun",
+  "checklist",
+  "target",
+  "bell",
+  "clock",
+  "star",
+  "bolt",
+  "spark",
+  "circle",
+  "diamond"
+] as const;
+export const completionSoundIdSchema = z.enum(completionSoundIds);
+export const menuBarIconNameSchema = z.enum(menuBarIconNames);
 export const perTabListFilterSchema = z
   .object({
     useCustomFilter: z.boolean(),
@@ -156,9 +186,6 @@ export const settingsSnapshotSchema = z
     uiFontName: uiFontNameSchema,
     uiTextSizePoints: uiTextSizePointsSchema,
     perSurfaceFontOverrides: perSurfaceFontOverridesSchema,
-    performanceMode: settingsPerformanceModeSchema,
-    appBackgroundTranslucencyEnabled: z.boolean(),
-    appBackgroundOpacity: z.number().min(0.35).max(1),
     disableAnimations: z.boolean(),
     uiLayoutScale: z.number().min(0.8).max(1.5),
     navigationPlacement: navigationPlacementSchema,
@@ -232,9 +259,6 @@ export const settingsUpdateRequestSchema = z
     uiFontName: uiFontNameSchema.optional(),
     uiTextSizePoints: uiTextSizePointsSchema.optional(),
     perSurfaceFontOverrides: perSurfaceFontOverridesSchema.optional(),
-    performanceMode: settingsPerformanceModeSchema.optional(),
-    appBackgroundTranslucencyEnabled: z.boolean().optional(),
-    appBackgroundOpacity: z.number().min(0.35).max(1).optional(),
     disableAnimations: z.boolean().optional(),
     uiLayoutScale: z.number().min(0.8).max(1.5).optional(),
     navigationPlacement: navigationPlacementSchema.optional(),

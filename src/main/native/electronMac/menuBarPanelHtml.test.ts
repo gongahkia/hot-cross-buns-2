@@ -6,6 +6,7 @@ describe("menu bar panel HTML", () => {
   it("escapes snapshot text before rendering the panel", () => {
     const snapshot: NativeMenuBarSnapshot = {
       panelStyle: "adaptive",
+      iconName: "pin",
       primaryClickAction: "open-menu",
       title: "<script>&\"'",
       syncLabel: "Sync <ok>",
@@ -38,6 +39,7 @@ describe("menu bar panel HTML", () => {
   it("renders agenda rows without leading icons", () => {
     const snapshot: NativeMenuBarSnapshot = {
       panelStyle: "adaptive",
+      iconName: "pin",
       primaryClickAction: "open-menu",
       title: "Agenda",
       syncLabel: "Synced",
@@ -65,6 +67,7 @@ describe("menu bar panel HTML", () => {
   it("renders the account block without the old avatar offset", () => {
     const snapshot: NativeMenuBarSnapshot = {
       panelStyle: "adaptive",
+      iconName: "pin",
       primaryClickAction: "open-menu",
       title: "Agenda",
       syncLabel: "Synced",

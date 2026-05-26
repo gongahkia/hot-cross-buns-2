@@ -159,6 +159,7 @@ export function NotesView(): JSX.Element {
     source.initialNotes[0]?.id ?? null
   );
   const [selectedNoteViews, setSelectedNoteViews] = useState<NoteBoardSelection[]>(["all"]);
+  const [noteInspectorMode, setNoteInspectorModeState] = useState<"view" | "edit">("edit");
   const [starredNoteIds, setStarredNoteIds] = useState<Set<string>>(
     () => new Set(readLocalStorageStringArray(starredNotesStorageKey))
   );
@@ -169,6 +170,7 @@ export function NotesView(): JSX.Element {
   const requestedNoteDetails = useRef(new Set<string>());
   const lastNoteEditReportAt = useRef(0);
   const noteInspectorBodyRef = useRef<NoteInspectorBodyHandle | null>(null);
+  const noteInspectorModeRef = useRef<"view" | "edit">("edit");
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null;
   const starredNotes = useMemo(
     () =>
@@ -195,6 +197,11 @@ export function NotesView(): JSX.Element {
       })),
     [notes, selectedNoteViews, starredNotes]
   );
+
+  function setNoteInspectorMode(mode: "view" | "edit"): void {
+    noteInspectorModeRef.current = mode;
+    setNoteInspectorModeState(mode);
+  }
 
   useEffect(() => {
     writeLocalStorageJSON(starredNotesStorageKey, [...starredNoteIds]);
@@ -305,13 +312,16 @@ export function NotesView(): JSX.Element {
     updateInspector({
       actions: noteInspectorActions(selectedNote),
       body: noteInspectorBody(selectedNote),
+      dirty: noteInspectorMode === "view" ? false : currentInspector.dirty,
       subtitle: selectedNote.updatedLabel,
       title: selectedNote.title || "Untitled note"
     });
   }, [
     currentInspector?.id,
+    currentInspector?.dirty,
     currentInspector?.kind,
     notes,
+    noteInspectorMode,
     selectedNote,
     updateInspector
   ]);
@@ -325,21 +335,53 @@ export function NotesView(): JSX.Element {
     return <CacheStatePanel title="Notes" />;
   }
 
-  function noteInspectorBody(note: NoteViewModel): ReactNode {
+  function noteInspectorBody(note: NoteViewModel, mode = noteInspectorModeRef.current): ReactNode {
+    if (mode === "view") {
+      return (
+        <NoteInspectorSummary
+          key={`view-${note.id}`}
+          note={note}
+          notes={notes}
+          onOpenNote={(noteId) => selectNote(noteId, "view")}
+        />
+      );
+    }
+
     return (
       <NoteInspectorBody
         key={note.id}
         note={note}
         notes={notes}
         onDraftChange={updateNoteDraft}
-        onOpenNote={selectNote}
+        onOpenNote={(noteId) => selectNote(noteId, "view")}
         onPersist={persistNoteDraft}
         ref={noteInspectorBodyRef}
       />
     );
   }
 
-  function noteInspectorActions(note: NoteViewModel): ReactNode {
+  function noteInspectorActions(note: NoteViewModel, mode = noteInspectorModeRef.current): ReactNode {
+    if (mode === "view") {
+      return (
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Button onClick={() => void deleteNote(note.id)} size="sm" variant="danger">
+              <Trash2 aria-hidden="true" size={14} />
+              Delete selected note
+            </Button>
+            <Button onClick={() => setNoteInspectorMode("edit")} size="sm" variant="secondary">
+              <Pencil aria-hidden="true" size={14} />
+              Edit
+            </Button>
+          </div>
+          <Button onClick={() => void closeInspector()} size="sm" variant="ghost">
+            <X aria-hidden="true" size={14} />
+            Close
+          </Button>
+        </div>
+      );
+    }
+
     return (
       <>
         <Button onClick={() => void deleteNote(note.id)} size="sm" variant="danger">
@@ -354,15 +396,21 @@ export function NotesView(): JSX.Element {
     );
   }
 
-  function openNoteInspector(note: NoteViewModel): void {
+  function openNoteInspector(
+    note: NoteViewModel,
+    mode: "view" | "edit" = note.id.startsWith("note-draft-") ? "edit" : "view"
+  ): void {
+    setNoteInspectorMode(mode);
     openInspector({
-      actions: noteInspectorActions(note),
-      body: noteInspectorBody(note),
+      actions: noteInspectorActions(note, mode),
+      body: noteInspectorBody(note, mode),
       dirty: false,
       id: note.id,
       kind: "note",
       onConfirmClose: async () => {
-        await noteInspectorBodyRef.current?.flush();
+        if (noteInspectorModeRef.current === "edit") {
+          await noteInspectorBodyRef.current?.flush();
+        }
         return true;
       },
       subtitle: note.updatedLabel,
@@ -370,20 +418,24 @@ export function NotesView(): JSX.Element {
     });
   }
 
-  async function selectNote(noteId: string): Promise<void> {
+  async function selectNote(noteId: string, mode: "view" | "edit" = "view"): Promise<void> {
     const note = notes.find((candidate) => candidate.id === noteId);
 
     if (!note) {
       return;
     }
 
-    await noteInspectorBodyRef.current?.flush();
+    if (noteInspectorModeRef.current === "edit") {
+      await noteInspectorBodyRef.current?.flush();
+    }
     setSelectedNoteId(note.id);
-    openNoteInspector(note);
+    openNoteInspector(note, mode);
   }
 
   async function createNote(): Promise<void> {
-    await noteInspectorBodyRef.current?.flush();
+    if (noteInspectorModeRef.current === "edit") {
+      await noteInspectorBodyRef.current?.flush();
+    }
 
     const fallbackId = `note-draft-${draftCounter}`;
     const fallbackNote: NoteViewModel = {
@@ -397,7 +449,7 @@ export function NotesView(): JSX.Element {
     setDraftCounter((current) => current + 1);
     setNotes((current) => [fallbackNote, ...current]);
     setSelectedNoteId(fallbackId);
-    openNoteInspector(fallbackNote);
+    openNoteInspector(fallbackNote, "edit");
 
     const result = await window.hcb?.notes.create({
       title: "Untitled note",
@@ -418,12 +470,14 @@ export function NotesView(): JSX.Element {
         current.map((note) => (note.id === fallbackId ? persisted : note))
       );
       setSelectedNoteId(result.data.id);
-      openNoteInspector(persisted);
+      openNoteInspector(persisted, "edit");
     }
   }
 
   async function createNoteWithTemplate(title: string, body: string): Promise<void> {
-    await noteInspectorBodyRef.current?.flush();
+    if (noteInspectorModeRef.current === "edit") {
+      await noteInspectorBodyRef.current?.flush();
+    }
 
     const fallbackId = `note-draft-${draftCounter}`;
     const fallbackNote: NoteViewModel = {
@@ -437,7 +491,7 @@ export function NotesView(): JSX.Element {
     setDraftCounter((current) => current + 1);
     setNotes((current) => [fallbackNote, ...current]);
     setSelectedNoteId(fallbackId);
-    openNoteInspector(fallbackNote);
+    openNoteInspector(fallbackNote, "edit");
 
     const result = await window.hcb?.notes.create({ title, body });
 
@@ -455,7 +509,7 @@ export function NotesView(): JSX.Element {
         current.map((note) => (note.id === fallbackId ? persisted : note))
       );
       setSelectedNoteId(result.data.id);
-      openNoteInspector(persisted);
+      openNoteInspector(persisted, "edit");
     }
   }
 
@@ -555,7 +609,7 @@ export function NotesView(): JSX.Element {
     setSelectedNoteId(nextNote?.id ?? null);
 
     if (nextNote) {
-      openNoteInspector(nextNote);
+      openNoteInspector(nextNote, "view");
       return;
     }
 
@@ -667,7 +721,7 @@ export function NotesView(): JSX.Element {
                       key={note.id}
                       note={note}
                       onDeleteNote={(noteId) => void deleteNote(noteId)}
-                      onOpenNote={(noteId) => void selectNote(noteId)}
+                      onOpenNote={(noteId, mode = "view") => void selectNote(noteId, mode)}
                       onToggleStar={toggleNoteStar}
                       selected={note.id === selectedNoteId}
                       starred={starredNoteIds.has(note.id)}
@@ -739,7 +793,7 @@ function NoteBoardRow({
 }: {
   note: NoteViewModel;
   onDeleteNote: (noteId: string) => void;
-  onOpenNote: (noteId: string) => void;
+  onOpenNote: (noteId: string, mode?: "view" | "edit") => void;
   onToggleStar: (noteId: string) => void;
   selected: boolean;
   starred: boolean;
@@ -798,7 +852,7 @@ function NoteBoardRow({
               setMenuOpen(false);
             }}
             onEdit={() => {
-              onOpenNote(note.id);
+              onOpenNote(note.id, "edit");
               setMenuOpen(false);
             }}
           />

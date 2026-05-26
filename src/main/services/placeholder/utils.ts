@@ -162,18 +162,6 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
     patch.perSurfaceFontOverrides = request.perSurfaceFontOverrides;
   }
 
-  if (request.performanceMode !== undefined) {
-    patch.performanceMode = request.performanceMode;
-  }
-
-  if (request.appBackgroundTranslucencyEnabled !== undefined) {
-    patch.appBackgroundTranslucencyEnabled = request.appBackgroundTranslucencyEnabled;
-  }
-
-  if (request.appBackgroundOpacity !== undefined) {
-    patch.appBackgroundOpacity = request.appBackgroundOpacity;
-  }
-
   if (request.disableAnimations !== undefined) {
     patch.disableAnimations = request.disableAnimations;
   }
