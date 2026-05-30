@@ -815,6 +815,10 @@ function normalizeKeybindings(
   value: Partial<SettingsSnapshot["keybindings"]>
 ): SettingsSnapshot["keybindings"] {
   const normalized: SettingsSnapshot["keybindings"] = { ...DEFAULT_SETTINGS.keybindings };
+  const shouldMigrateDiagnosticsDefault =
+    value["navigation.diagnostics.toggle"] === "CmdOrCtrl+D" &&
+    value["pane.split.horizontal"] === undefined &&
+    value["pane.split.vertical"] === undefined;
 
   for (const actionId of hotkeyActionIds) {
     const accelerator = value[actionId];
@@ -826,6 +830,10 @@ function normalizeKeybindings(
     normalized[actionId] = typeof accelerator === "string" && accelerator.trim().length > 0
       ? accelerator.trim()
       : null;
+  }
+
+  if (shouldMigrateDiagnosticsDefault) {
+    normalized["navigation.diagnostics.toggle"] = DEFAULT_SETTINGS.keybindings["navigation.diagnostics.toggle"];
   }
 
   return normalized;

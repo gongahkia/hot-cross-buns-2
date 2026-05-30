@@ -1,4 +1,5 @@
-import type { DragEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { useState } from "react";
+import type { DragEvent, FormEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { ArrowDownToLine, ArrowRightToLine, ExternalLink, GripVertical, LayoutGrid, X } from "lucide-react";
 import { Button, cx } from "../../components/primitives";
 import { getPlannerSection, type SectionId } from "../../data/mockPlanner";
@@ -26,6 +27,7 @@ export function PaneWorkspace({
   onFocusPane,
   onMovePane,
   onOpenRecentWebPage,
+  onOpenWebPage,
   onReplacePane,
   onSetSplitRatio,
   onSplitPane,
@@ -42,6 +44,7 @@ export function PaneWorkspace({
   onFocusPane: (paneId: string) => void;
   onMovePane: (sourcePaneId: string, targetPaneId: string, dropZone: PaneDropZone) => void;
   onOpenRecentWebPage: (pageId: string, paneId: string) => void;
+  onOpenWebPage: (rawUrl: string, label: string | null, paneId: string) => boolean;
   onReplacePane: (paneId: string, content: PaneContent) => void;
   onSetSplitRatio: (splitId: string, ratio: number) => void;
   onSplitPane: (paneId: string, direction: PaneSplitDirection, content?: PaneContent) => void;
@@ -65,6 +68,7 @@ export function PaneWorkspace({
         onFocusPane={onFocusPane}
         onMovePane={onMovePane}
         onOpenRecentWebPage={onOpenRecentWebPage}
+        onOpenWebPage={onOpenWebPage}
         onReplacePane={onReplacePane}
         onSetSplitRatio={onSetSplitRatio}
         onSplitPane={onSplitPane}
@@ -87,6 +91,7 @@ function PaneNodeView({
   onFocusPane,
   onMovePane,
   onOpenRecentWebPage,
+  onOpenWebPage,
   onReplacePane,
   onSetSplitRatio,
   onSplitPane,
@@ -104,6 +109,7 @@ function PaneNodeView({
   onFocusPane: (paneId: string) => void;
   onMovePane: (sourcePaneId: string, targetPaneId: string, dropZone: PaneDropZone) => void;
   onOpenRecentWebPage: (pageId: string, paneId: string) => void;
+  onOpenWebPage: (rawUrl: string, label: string | null, paneId: string) => boolean;
   onReplacePane: (paneId: string, content: PaneContent) => void;
   onSetSplitRatio: (splitId: string, ratio: number) => void;
   onSplitPane: (paneId: string, direction: PaneSplitDirection, content?: PaneContent) => void;
@@ -124,6 +130,7 @@ function PaneNodeView({
         onFocusPane={onFocusPane}
         onMovePane={onMovePane}
         onOpenRecentWebPage={onOpenRecentWebPage}
+        onOpenWebPage={onOpenWebPage}
         onReplacePane={onReplacePane}
         onSplitPane={onSplitPane}
         recentWebPages={recentWebPages}
@@ -154,6 +161,7 @@ function PaneNodeView({
           onFocusPane={onFocusPane}
           onMovePane={onMovePane}
           onOpenRecentWebPage={onOpenRecentWebPage}
+          onOpenWebPage={onOpenWebPage}
           onReplacePane={onReplacePane}
           onSetSplitRatio={onSetSplitRatio}
           onSplitPane={onSplitPane}
@@ -178,6 +186,7 @@ function PaneNodeView({
           onFocusPane={onFocusPane}
           onMovePane={onMovePane}
           onOpenRecentWebPage={onOpenRecentWebPage}
+          onOpenWebPage={onOpenWebPage}
           onReplacePane={onReplacePane}
           onSetSplitRatio={onSetSplitRatio}
           onSplitPane={onSplitPane}
@@ -201,6 +210,7 @@ function PaneLeaf({
   onFocusPane,
   onMovePane,
   onOpenRecentWebPage,
+  onOpenWebPage,
   onReplacePane,
   onSplitPane,
   recentWebPages,
@@ -217,6 +227,7 @@ function PaneLeaf({
   onFocusPane: (paneId: string) => void;
   onMovePane: (sourcePaneId: string, targetPaneId: string, dropZone: PaneDropZone) => void;
   onOpenRecentWebPage: (pageId: string, paneId: string) => void;
+  onOpenWebPage: (rawUrl: string, label: string | null, paneId: string) => boolean;
   onReplacePane: (paneId: string, content: PaneContent) => void;
   onSplitPane: (paneId: string, direction: PaneSplitDirection, content?: PaneContent) => void;
   recentWebPages: SplitPaneWebPage[];
@@ -225,6 +236,7 @@ function PaneLeaf({
   visibleSectionIds: SectionId[];
 }): JSX.Element {
   const title = paneContentTitle(leaf.content);
+  const [dropZone, setDropZone] = useState<PaneDropZone | null>(null);
 
   function handleDragOver(event: DragEvent<HTMLElement>): void {
     if (!event.dataTransfer.types.includes(paneDragDataType)) {
@@ -233,16 +245,19 @@ function PaneLeaf({
 
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
+    setDropZone(paneDropZone(event));
   }
 
   function handleDrop(event: DragEvent<HTMLElement>): void {
     const sourcePaneId = event.dataTransfer.getData(paneDragDataType);
 
     if (!sourcePaneId || sourcePaneId === leaf.id) {
+      setDropZone(null);
       return;
     }
 
     event.preventDefault();
+    setDropZone(null);
     onMovePane(sourcePaneId, leaf.id, paneDropZone(event));
   }
 
@@ -250,12 +265,21 @@ function PaneLeaf({
     <section
       aria-label={`${title} pane`}
       className={cx(
-        "flex min-h-[240px] min-w-[320px] flex-1 flex-col overflow-hidden border border-border bg-bg-primary",
+        "relative flex min-h-[240px] min-w-[320px] flex-1 flex-col overflow-hidden border border-border bg-bg-primary",
         focused ? "ring-1 ring-inset ring-accent" : "ring-0"
       )}
       data-pane-id={leaf.id}
       data-testid="pane-leaf"
       onClick={() => onFocusPane(leaf.id)}
+      onDragLeave={(event) => {
+        const nextTarget = event.relatedTarget;
+
+        if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+          return;
+        }
+
+        setDropZone(null);
+      }}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       role="region"
@@ -325,10 +349,12 @@ function PaneLeaf({
           onReplacePane={onReplacePane}
           recentWebPages={recentWebPages}
           taskCommand={taskCommand}
+          onOpenWebPage={(rawUrl, label) => onOpenWebPage(rawUrl, label, leaf.id)}
           visibleCalendarIds={visibleCalendarIds}
           visibleSectionIds={visibleSectionIds}
         />
       </div>
+      {dropZone ? <div aria-hidden="true" className={paneDropPreviewClass(dropZone)} /> : null}
     </section>
   );
 }
@@ -337,6 +363,7 @@ function PaneLeafContent({
   activeSectionId,
   leaf,
   onOpenRecentWebPage,
+  onOpenWebPage,
   onReplacePane,
   recentWebPages,
   taskCommand,
@@ -346,6 +373,7 @@ function PaneLeafContent({
   activeSectionId: SectionId;
   leaf: PaneLeafNode;
   onOpenRecentWebPage: (pageId: string, paneId: string) => void;
+  onOpenWebPage: (rawUrl: string, label: string | null) => boolean;
   onReplacePane: (paneId: string, content: PaneContent) => void;
   recentWebPages: SplitPaneWebPage[];
   taskCommand?: TaskSurfaceCommand | null;
@@ -357,6 +385,7 @@ function PaneLeafContent({
       <PaneChooser
         activeSectionId={activeSectionId}
         onOpenRecentWebPage={(pageId) => onOpenRecentWebPage(pageId, leaf.id)}
+        onOpenWebPage={onOpenWebPage}
         onSelectSection={(sectionId) => onReplacePane(leaf.id, { kind: "section", sectionId })}
         recentWebPages={recentWebPages}
         visibleSectionIds={visibleSectionIds}
@@ -397,21 +426,59 @@ function PaneLeafContent({
 function PaneChooser({
   activeSectionId,
   onOpenRecentWebPage,
+  onOpenWebPage,
   onSelectSection,
   recentWebPages,
   visibleSectionIds
 }: {
   activeSectionId: SectionId;
   onOpenRecentWebPage: (pageId: string) => void;
+  onOpenWebPage: (rawUrl: string, label: string | null) => boolean;
   onSelectSection: (sectionId: SectionId) => void;
   recentWebPages: SplitPaneWebPage[];
   visibleSectionIds: SectionId[];
 }): JSX.Element {
   const appSections = visibleSectionIds.filter((sectionId) => sectionId !== activeSectionId);
+  const [webPageUrl, setWebPageUrl] = useState("");
+  const [webPageError, setWebPageError] = useState<string | null>(null);
+
+  function handleOpenWebPage(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const accepted = onOpenWebPage(webPageUrl, null);
+
+    if (!accepted) {
+      setWebPageError("Enter an http or https URL.");
+      return;
+    }
+
+    setWebPageError(null);
+  }
 
   return (
     <div className="h-full min-h-0 overflow-auto p-4">
       <div className="grid gap-5">
+        <PaneChooserGroup title="Open webpage">
+          <form className="grid gap-2" onSubmit={handleOpenWebPage}>
+            <div className="flex min-w-0 gap-2">
+              <input
+                aria-label="Webpage URL"
+                className="h-9 min-w-0 flex-1 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] text-text-primary placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onChange={(event) => {
+                  setWebPageUrl(event.target.value);
+                  setWebPageError(null);
+                }}
+                placeholder="https://example.com"
+                type="text"
+                value={webPageUrl}
+              />
+              <Button disabled={webPageUrl.trim().length === 0} type="submit" variant="secondary">
+                Open
+              </Button>
+            </div>
+            {webPageError ? <p className="text-[var(--text-xs)] text-danger">{webPageError}</p> : null}
+          </form>
+        </PaneChooserGroup>
+
         <PaneChooserGroup title="Recent webpages">
           {recentWebPages.length > 0 ? (
             <div className="grid gap-2">
@@ -537,21 +604,38 @@ function paneDropZone(event: DragEvent<HTMLElement>): PaneDropZone {
   const x = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5;
   const y = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5;
 
-  if (x < 0.25) {
-    return "left";
+  if (x >= 0.25 && x <= 0.75 && y >= 0.25 && y <= 0.75) {
+    return "center";
   }
 
-  if (x > 0.75) {
-    return "right";
+  const distances: Array<[Exclude<PaneDropZone, "center">, number]> = [
+    ["left", x],
+    ["right", 1 - x],
+    ["top", y],
+    ["bottom", 1 - y]
+  ];
+
+  return distances.sort((first, second) => first[1] - second[1])[0][0];
+}
+
+function paneDropPreviewClass(dropZone: PaneDropZone): string {
+  const base = "pointer-events-none absolute z-10 rounded-hcbMd border-2 border-accent bg-accent/20";
+
+  if (dropZone === "left") {
+    return cx(base, "inset-y-2 left-2 w-[calc(50%-8px)]");
   }
 
-  if (y < 0.25) {
-    return "top";
+  if (dropZone === "right") {
+    return cx(base, "inset-y-2 right-2 w-[calc(50%-8px)]");
   }
 
-  if (y > 0.75) {
-    return "bottom";
+  if (dropZone === "top") {
+    return cx(base, "inset-x-2 top-2 h-[calc(50%-8px)]");
   }
 
-  return "center";
+  if (dropZone === "bottom") {
+    return cx(base, "inset-x-2 bottom-2 h-[calc(50%-8px)]");
+  }
+
+  return cx(base, "inset-2");
 }

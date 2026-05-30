@@ -387,6 +387,26 @@ export function AppShell(): JSX.Element {
         return;
       }
 
+      if (actionId === "pane.create") {
+        paneWorkspace.openChooser();
+        return;
+      }
+
+      if (actionId === "pane.close") {
+        paneWorkspace.closePane(paneWorkspace.focusedPaneId);
+        return;
+      }
+
+      if (actionId === "pane.split.horizontal") {
+        paneWorkspace.splitPane(paneWorkspace.focusedPaneId, "row");
+        return;
+      }
+
+      if (actionId === "pane.split.vertical") {
+        paneWorkspace.splitPane(paneWorkspace.focusedPaneId, "column");
+        return;
+      }
+
       if (actionId.startsWith("calendar.view.")) {
         const viewId = actionId.replace("calendar.view.", "");
         navigateToPrimarySection("calendar");
@@ -397,6 +417,10 @@ export function AppShell(): JSX.Element {
       navigateToPrimarySection,
       navigateToSection,
       openCommandPalette,
+      paneWorkspace.closePane,
+      paneWorkspace.focusedPaneId,
+      paneWorkspace.openChooser,
+      paneWorkspace.splitPane,
       toggleDiagnosticsPanel,
       openSettingsPanel,
       source.refresh,

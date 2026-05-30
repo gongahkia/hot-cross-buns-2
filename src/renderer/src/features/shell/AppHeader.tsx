@@ -107,7 +107,7 @@ export function AppHeader({
         <Button
           aria-expanded={diagnosticsOpen}
           aria-label="Diagnostics"
-          aria-keyshortcuts="Meta+D Control+D"
+          aria-keyshortcuts="Meta+. Control+."
           className="min-w-8"
           onClick={onToggleDiagnostics}
           title="Diagnostics"
@@ -120,12 +120,16 @@ export function AppHeader({
         </Button>
         <Button
           aria-label="Split view"
+          aria-keyshortcuts="Meta+T Control+T"
           className="min-w-8"
           onClick={onOpenSplitPane}
           title="Split view"
           variant="ghost"
         >
           <PanelRightOpen aria-hidden="true" size={15} />
+          <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
+            {displayAccelerator(keybindings["pane.create"])}
+          </span>
         </Button>
         <Button
           aria-label="Reload"

@@ -60,6 +60,7 @@ export function usePaneWorkspace(): {
   openChooser: () => void;
   openRecentWebPage: (pageId: string, paneId: string) => void;
   openUrl: (url: string, label: string | null) => void;
+  openWebPageInPane: (rawUrl: string, label: string | null, paneId: string) => boolean;
   recentWebPages: SplitPaneWebPage[];
   replaceFocusedWithSection: (sectionId: SectionId) => void;
   replacePane: (paneId: string, content: PaneContent) => void;
@@ -258,6 +259,32 @@ export function usePaneWorkspace(): {
     });
   }, []);
 
+  const openWebPageInPane = useCallback((rawUrl: string, label: string | null, paneId: string): boolean => {
+    const url = splitPaneWebUrl(rawUrl, window.location.href);
+
+    if (!url) {
+      return false;
+    }
+
+    const page = addRecentWebPage(url, label);
+
+    setState((current) =>
+      findPaneLeaf(current.root, paneId)
+        ? {
+            ...current,
+            focusedPaneId: paneId,
+            root: replacePaneContent(current.root, paneId, {
+              kind: "web",
+              title: page.title,
+              url: page.url
+            })
+          }
+        : current
+    );
+
+    return true;
+  }, [addRecentWebPage]);
+
   return useMemo(
     () => ({
       activeSectionId,
@@ -271,6 +298,7 @@ export function usePaneWorkspace(): {
       openChooser,
       openRecentWebPage,
       openUrl,
+      openWebPageInPane,
       recentWebPages: state.recentWebPages,
       replaceFocusedWithSection,
       replacePane,
@@ -289,6 +317,7 @@ export function usePaneWorkspace(): {
       openChooser,
       openRecentWebPage,
       openUrl,
+      openWebPageInPane,
       replaceFocusedWithSection,
       replacePane,
       setSplitRatio,
