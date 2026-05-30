@@ -5,7 +5,12 @@ import { appLogger } from "./diagnostics/appLogger";
 import { registerHcbIpc } from "./ipc";
 import { brandAssetPath } from "./native/brandAssets";
 import { createElectronMacNativeAdapter } from "./native/electronMacAdapter";
-import { configureNavigationLockdown, configureSessionHardening } from "./security";
+import {
+  configureEmbeddedWebContentsLockdown,
+  configureEmbeddedWebviewLockdown,
+  configureNavigationLockdown,
+  configureSessionHardening
+} from "./security";
 import { createServiceContainer, type ServiceContainer } from "./services/serviceContainer";
 import { markStartupTiming } from "./startupTiming";
 
@@ -146,7 +151,7 @@ function createMainWindow(): BrowserWindow {
       sandbox: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
-      webviewTag: false
+      webviewTag: true
     }
   });
 
@@ -156,6 +161,7 @@ function createMainWindow(): BrowserWindow {
     allowedDevOrigin: rendererUrl,
     externalOpener: nativeAdapter
   });
+  configureEmbeddedWebviewLockdown(window);
 
   window.webContents.once("did-finish-load", () => {
     markStartupTiming("rendererLoadedMs");
@@ -199,6 +205,7 @@ app.whenReady().then(() => {
   appLogger.configure({ logsDirectory: nativeAdapter.appPaths().logsDirectory });
   appLogger.info("app ready", "misc");
   configureSessionHardening(session.defaultSession, { isPackaged: app.isPackaged });
+  configureEmbeddedWebContentsLockdown(app);
   services = createServiceContainer({
     appPaths: nativeAdapter.appPaths(),
     nativeAdapter,

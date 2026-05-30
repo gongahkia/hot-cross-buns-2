@@ -1,4 +1,11 @@
-import { shell, type BrowserWindow, type Session } from "electron";
+import {
+  shell,
+  type App,
+  type BrowserWindow,
+  type Session,
+  type WebContents,
+  type WebPreferences
+} from "electron";
 
 export interface ExternalUrlOpener {
   openExternalUrl: (url: string) => unknown | Promise<unknown>;
@@ -107,6 +114,12 @@ export function isApprovedExternalUrl(url: string): boolean {
   return parsed.protocol === "https:" && APPROVED_EXTERNAL_HTTPS_HOSTS.has(parsed.hostname.toLowerCase());
 }
 
+export function isAllowedEmbeddedWebUrl(url: string): boolean {
+  const parsed = parseUrl(url);
+
+  return Boolean(parsed && (parsed.protocol === "https:" || parsed.protocol === "http:"));
+}
+
 export function configureSessionHardening(
   session: Session,
   options: { isPackaged?: boolean } = {}
@@ -145,5 +158,42 @@ export function configureNavigationLockdown(
     }
 
     event.preventDefault();
+  });
+}
+
+function hardenWebviewPreferences(webPreferences: WebPreferences): void {
+  delete webPreferences.preload;
+  delete webPreferences.preloadURL;
+  webPreferences.allowRunningInsecureContent = false;
+  webPreferences.contextIsolation = true;
+  webPreferences.nodeIntegration = false;
+  webPreferences.sandbox = true;
+}
+
+export function configureEmbeddedWebviewLockdown(window: BrowserWindow): void {
+  window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+    const src = typeof params.src === "string" ? params.src : "";
+
+    if (!isAllowedEmbeddedWebUrl(src)) {
+      event.preventDefault();
+      return;
+    }
+
+    hardenWebviewPreferences(webPreferences);
+  });
+}
+
+export function configureEmbeddedWebContentsLockdown(app: Pick<App, "on">): void {
+  app.on("web-contents-created", (_event, contents: WebContents) => {
+    if (contents.getType() !== "webview") {
+      return;
+    }
+
+    contents.setWindowOpenHandler(() => ({ action: "deny" }));
+    contents.on("will-navigate", (event, url) => {
+      if (url !== "about:blank" && !isAllowedEmbeddedWebUrl(url)) {
+        event.preventDefault();
+      }
+    });
   });
 }
