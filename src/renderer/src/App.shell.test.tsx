@@ -108,6 +108,29 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
   });
 
+  it("opens a split view chooser for other app tabs", async () => {
+    const user = userEvent.setup();
+    installHcb(seededHcb());
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Split view" }));
+
+    let splitPane = await screen.findByTestId("split-pane");
+    expect(within(splitPane).getByRole("heading", { name: "Choose split view" })).toBeInTheDocument();
+    expect(within(splitPane).getByRole("button", { name: /Tasks/ })).toBeInTheDocument();
+    expect(within(splitPane).getByRole("button", { name: /Notes/ })).toBeInTheDocument();
+    expect(within(splitPane).queryByRole("button", { name: /Calendar/ })).not.toBeInTheDocument();
+
+    await user.click(within(splitPane).getByRole("button", { name: /Tasks/ }));
+
+    splitPane = await screen.findByTestId("split-pane");
+    expect(within(splitPane).getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+    expect(within(splitPane).getByRole("list", { name: "Task lists" })).toBeInTheDocument();
+
+    await user.click(within(splitPane).getByRole("button", { name: "Choose split view" }));
+    expect(within(await screen.findByTestId("split-pane")).getByText("Recent webpages")).toBeInTheDocument();
+  });
+
   it("supports command-number shortcuts for primary sidebar sections", async () => {
     const user = userEvent.setup();
     render(<App />);

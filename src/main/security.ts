@@ -163,7 +163,6 @@ export function configureNavigationLockdown(
 
 function hardenWebviewPreferences(webPreferences: WebPreferences): void {
   delete webPreferences.preload;
-  delete webPreferences.preloadURL;
   webPreferences.allowRunningInsecureContent = false;
   webPreferences.contextIsolation = true;
   webPreferences.nodeIntegration = false;

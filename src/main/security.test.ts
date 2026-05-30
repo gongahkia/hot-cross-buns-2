@@ -10,8 +10,11 @@ import { shell } from "electron";
 import {
   PRODUCTION_CONTENT_SECURITY_POLICY,
   configureNavigationLockdown,
+  configureEmbeddedWebContentsLockdown,
+  configureEmbeddedWebviewLockdown,
   configureSessionHardening,
   contentSecurityPolicy,
+  isAllowedEmbeddedWebUrl,
   isAllowedAppNavigation,
   isApprovedExternalUrl
 } from "./security";
@@ -134,5 +137,100 @@ describe("Electron security policy", () => {
     expect(newWindowHandler?.({ url: "https://example.com/phish" })).toEqual({ action: "deny" });
     expect(shell.openExternal).not.toHaveBeenCalledWith("https://example.com/phish");
     expect(preventDefault).toHaveBeenCalled();
+  });
+
+  it("allows only http web URLs for embedded split panes", () => {
+    expect(isAllowedEmbeddedWebUrl("https://example.com")).toBe(true);
+    expect(isAllowedEmbeddedWebUrl("http://localhost:5173/docs")).toBe(true);
+    expect(isAllowedEmbeddedWebUrl("mailto:a@example.com")).toBe(false);
+    expect(isAllowedEmbeddedWebUrl("file:///tmp/secret")).toBe(false);
+    expect(isAllowedEmbeddedWebUrl("javascript:alert(1)")).toBe(false);
+  });
+
+  it("hardens webview attachments for split panes", () => {
+    let attachHandler:
+      | ((
+          event: { preventDefault: () => void },
+          webPreferences: {
+            allowRunningInsecureContent?: boolean;
+            contextIsolation?: boolean;
+            nodeIntegration?: boolean;
+            preload?: string;
+            sandbox?: boolean;
+          },
+          params: { src?: string }
+        ) => void)
+      | undefined;
+    const window = {
+      webContents: {
+        on: vi.fn((eventName, listener) => {
+          if (eventName === "will-attach-webview") {
+            attachHandler = listener;
+          }
+        })
+      }
+    };
+    const preventDefault = vi.fn();
+    const webPreferences = {
+      allowRunningInsecureContent: true,
+      contextIsolation: false,
+      nodeIntegration: true,
+      preload: "/tmp/preload.js",
+      sandbox: false
+    };
+
+    configureEmbeddedWebviewLockdown(window as never);
+    attachHandler?.({ preventDefault }, webPreferences, { src: "https://example.com" });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(webPreferences).toMatchObject({
+      allowRunningInsecureContent: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    });
+    expect("preload" in webPreferences).toBe(false);
+
+    attachHandler?.({ preventDefault }, {}, { src: "file:///tmp/secret" });
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks popups and unsafe navigation inside embedded webviews", () => {
+    let createdHandler:
+      | ((_event: unknown, contents: {
+          getType: () => string;
+          on: (eventName: string, listener: (...args: never[]) => void) => void;
+          setWindowOpenHandler: (handler: (details: { url: string }) => { action: "deny" }) => void;
+        }) => void)
+      | undefined;
+    let newWindowHandler: ((details: { url: string }) => { action: "deny" }) | undefined;
+    let navigateHandler:
+      | ((event: { preventDefault: () => void }, url: string) => void)
+      | undefined;
+    const app = {
+      on: vi.fn((eventName, listener) => {
+        if (eventName === "web-contents-created") {
+          createdHandler = listener;
+        }
+      })
+    };
+    const preventDefault = vi.fn();
+
+    configureEmbeddedWebContentsLockdown(app as never);
+    createdHandler?.({}, {
+      getType: () => "webview",
+      on: (_eventName, listener) => {
+        navigateHandler = listener as typeof navigateHandler;
+      },
+      setWindowOpenHandler: (handler) => {
+        newWindowHandler = handler;
+      }
+    });
+
+    expect(newWindowHandler?.({ url: "https://example.com" })).toEqual({ action: "deny" });
+    navigateHandler?.({ preventDefault }, "https://example.com/next");
+    expect(preventDefault).not.toHaveBeenCalled();
+    navigateHandler?.({ preventDefault }, "file:///tmp/secret");
+    expect(preventDefault).toHaveBeenCalledTimes(1);
   });
 });

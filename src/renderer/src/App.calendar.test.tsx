@@ -715,7 +715,14 @@ describe("App calendar", () => {
     const preview = within(inspector).getByRole("region", { name: "Event notes preview" });
     expect(within(preview).getByRole("heading", { name: "Plan" })).toBeInTheDocument();
     expect(within(preview).getByText("Full-time")).toBeInTheDocument();
-    expect(within(preview).getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com");
+    const docsLink = within(preview).getByRole("link", { name: "Docs" });
+    expect(docsLink).toHaveAttribute("href", "https://example.com");
+
+    await user.click(docsLink);
+
+    const splitPane = await screen.findByTestId("split-pane");
+    expect(within(splitPane).getByRole("heading", { name: "Docs" })).toBeInTheDocument();
+    expect(within(splitPane).getByTestId("split-webview")).toHaveAttribute("src", "https://example.com/");
   });
 
   it("loads existing event recurrence into the inspector and persists recurrence changes", async () => {
