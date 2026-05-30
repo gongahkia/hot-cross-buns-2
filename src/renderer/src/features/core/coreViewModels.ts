@@ -64,10 +64,13 @@ export interface CalendarEventViewModel {
   id: string;
   eventId: string;
   calendarId: string;
+  colorId?: string | null;
   title: string;
   calendar: string;
   calendarBackgroundColor?: string | null;
   calendarForegroundColor?: string | null;
+  displayBackgroundColor?: string | null;
+  displayForegroundColor?: string | null;
   timeLabel: string;
   rangeLabel: string;
   startsAt: string;

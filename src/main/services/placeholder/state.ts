@@ -173,6 +173,7 @@ export function createPlaceholderState(): PlaceholderState {
       uiFontName: null,
       uiTextSizePoints: 13,
       perSurfaceFontOverrides: {},
+      calendarEventColorOverrides: {},
       disableAnimations: false,
       uiLayoutScale: 1,
       navigationPlacement: "left",

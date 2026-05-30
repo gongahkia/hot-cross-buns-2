@@ -645,6 +645,7 @@ function calendarEventWriteInput(
     endTimeZone: target.endTimeZone,
     isAllDay: booleanPayload(mutation, "allDay") ?? target.isAllDay,
     recurrenceRule: textPayload(mutation, "recurrenceRule") ?? target.recurrenceRule,
+    colorId: textPayload(mutation, "colorId") ?? target.colorId,
     attendeeEmails: stringArrayPayload(mutation, "guestEmails") ?? target.attendeeEmails,
     reminderMinutes: numberArrayPayload(mutation, "reminderMinutes") ?? target.reminderMinutes
   };

@@ -2,7 +2,12 @@ import { Badge, cx } from "../../../../components/primitives";
 import { EmptyState } from "../../../../components/states";
 import { VirtualizedList } from "../../../../components/VirtualizedList";
 import type { CalendarEventViewModel } from "../../coreViewModels";
-import { CalendarSourceSwatch, calendarSourceColorStyle, calendarSourceTone } from "./CalendarEventChips";
+import {
+  CalendarSourceSwatch,
+  calendarEventFillStyle,
+  calendarSourceColorStyle,
+  calendarSourceTone
+} from "./CalendarEventChips";
 import { calendarDateTitleFromIso } from "./calendarGrid";
 
 function CalendarAgendaEventRow({
@@ -13,7 +18,8 @@ function CalendarAgendaEventRow({
   onOpen: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   const tone = calendarSourceTone(event.calendarId);
-  const colorStyle = calendarSourceColorStyle(event.calendarBackgroundColor);
+  const colorStyle = calendarSourceColorStyle(event.displayBackgroundColor ?? event.calendarBackgroundColor);
+  const fillStyle = calendarEventFillStyle(event);
   const whenLabel = event.allDay
     ? `${calendarDateTitleFromIso(event.startsAt.slice(0, 10))} - All day`
     : event.rangeLabel;
@@ -31,7 +37,10 @@ function CalendarAgendaEventRow({
         style={colorStyle}
       />
       <span className="min-w-0">
-        <span className="block truncate text-[var(--text-md)] font-semibold text-text-primary">
+        <span
+          className="inline-block max-w-full truncate rounded-hcbSm px-2 py-0.5 text-[var(--text-md)] font-semibold text-text-primary"
+          style={fillStyle}
+        >
           {event.title}
         </span>
         <span className="block truncate text-[var(--text-sm)] text-text-secondary">{whenLabel}</span>
@@ -43,7 +52,7 @@ function CalendarAgendaEventRow({
         ) : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">
-        <CalendarSourceSwatch calendarId={event.calendarId} color={event.calendarBackgroundColor} />
+        <CalendarSourceSwatch calendarId={event.calendarId} color={event.displayBackgroundColor ?? event.calendarBackgroundColor} />
         {event.mutationState && event.mutationState !== "synced" ? (
           <Badge tone={event.mutationState === "failed" ? "danger" : "warning"}>
             {event.mutationState === "failed" ? "Failed" : "Queued"}

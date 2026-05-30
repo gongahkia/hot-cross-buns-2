@@ -57,6 +57,7 @@ export function newCalendarDraft(
     mutationState: undefined,
     title: "",
     calendarId: defaultCalendarId(source),
+    colorId: "",
     startsAt,
     endsAt: allDay ? endsAt : timedEnd,
     allDay,
@@ -83,6 +84,7 @@ export function editCalendarDraft(event: CalendarEventViewModel): CalendarEventD
     mutationState: event.mutationState,
     title: event.title,
     calendarId: event.calendarId,
+    colorId: event.colorId ?? "",
     startsAt: event.startsAt,
     endsAt: event.endsAt,
     allDay: event.allDay,
@@ -106,6 +108,7 @@ export function calendarEventPayload(draft: CalendarEventDraft): CalendarEventCr
   return {
     title: draft.title.trim(),
     calendarId: draft.calendarId,
+    colorId: draft.colorId.trim() || null,
     startsAt: draft.startsAt,
     endsAt: draft.endsAt,
     allDay: draft.allDay,
@@ -135,6 +138,7 @@ export function calendarEventDraftsEqual(
     left.mutationState === right.mutationState &&
     left.title === right.title &&
     left.calendarId === right.calendarId &&
+    left.colorId === right.colorId &&
     left.startsAt === right.startsAt &&
     left.endsAt === right.endsAt &&
     left.allDay === right.allDay &&

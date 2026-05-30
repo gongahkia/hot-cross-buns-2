@@ -162,6 +162,10 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
     patch.perSurfaceFontOverrides = request.perSurfaceFontOverrides;
   }
 
+  if (request.calendarEventColorOverrides !== undefined) {
+    patch.calendarEventColorOverrides = request.calendarEventColorOverrides;
+  }
+
   if (request.disableAnimations !== undefined) {
     patch.disableAnimations = request.disableAnimations;
   }

@@ -13,6 +13,7 @@ export interface CalendarEventDraft {
   mutationState?: CalendarEventViewModel["mutationState"];
   title: string;
   calendarId: string;
+  colorId: string;
   startsAt: string;
   endsAt: string;
   allDay: boolean;

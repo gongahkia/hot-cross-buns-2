@@ -118,6 +118,7 @@ export function testSettings(overrides: Partial<SettingsSnapshot> = {}): Setting
     uiFontName: null,
     uiTextSizePoints: 13,
     perSurfaceFontOverrides: {},
+    calendarEventColorOverrides: {},
     disableAnimations: false,
     uiLayoutScale: 1,
     navigationPlacement: "left",

@@ -1,8 +1,10 @@
 import type {
   CalendarEventSummary,
   ScheduledTaskBlockMoveRequest,
+  SettingsSnapshot,
   ScheduledTaskBlockSummary
 } from "@shared/ipc/contracts";
+import { googleCalendarEventColor } from "@shared/googleCalendarColors";
 import type {
   CalendarDayViewModel,
   CalendarEventViewModel,
@@ -25,14 +27,22 @@ export function stableCalendarEventViewModel(
   calendarTimeZone: string | null | undefined,
   calendarBackgroundColor: string | null | undefined,
   calendarForegroundColor: string | null | undefined,
+  calendarEventColorOverrides: SettingsSnapshot["calendarEventColorOverrides"],
   defaultTimeZone: string,
   cache: Map<string, { signature: string; viewModel: CalendarEventViewModel }>
 ): CalendarEventViewModel {
   const timeZone = event.timeZone?.trim() || calendarTimeZone?.trim() || defaultTimeZone || "UTC";
+  const displayColor = resolvedEventDisplayColor(
+    event.colorId,
+    calendarEventColorOverrides,
+    calendarBackgroundColor,
+    calendarForegroundColor
+  );
   const signature = [
     event.id,
     event.eventId ?? "",
     event.calendarId,
+    event.colorId ?? "",
     event.title,
     event.startsAt,
     event.endsAt,
@@ -46,7 +56,9 @@ export function stableCalendarEventViewModel(
     event.recurrenceRule ?? "",
     calendarTitle ?? "",
     calendarBackgroundColor ?? "",
-    calendarForegroundColor ?? ""
+    calendarForegroundColor ?? "",
+    displayColor.background ?? "",
+    displayColor.foreground ?? ""
   ].join("\u001c");
   const cached = cache.get(event.id);
 
@@ -58,10 +70,13 @@ export function stableCalendarEventViewModel(
     id: event.id,
     eventId: event.eventId ?? event.id,
     calendarId: event.calendarId,
+    colorId: event.colorId ?? null,
     title: event.title,
     calendar: calendarTitle ?? event.calendarId,
     calendarBackgroundColor: calendarBackgroundColor ?? null,
     calendarForegroundColor: calendarForegroundColor ?? null,
+    displayBackgroundColor: displayColor.background,
+    displayForegroundColor: displayColor.foreground,
     timeLabel: event.allDay ? "All day" : timeLabel(event.startsAt, timeZone),
     rangeLabel: event.allDay
       ? allDayRangeLabel(event.startsAt, event.endsAt)
@@ -80,6 +95,32 @@ export function stableCalendarEventViewModel(
 
   cache.set(event.id, { signature, viewModel });
   return viewModel;
+}
+
+function resolvedEventDisplayColor(
+  colorId: string | null | undefined,
+  overrides: SettingsSnapshot["calendarEventColorOverrides"],
+  calendarBackgroundColor: string | null | undefined,
+  calendarForegroundColor: string | null | undefined
+): { background: string | null; foreground: string | null } {
+  const googleColor = googleCalendarEventColor(colorId);
+  const override = googleColor ? overrides[googleColor.id] : undefined;
+
+  if (override) {
+    return override;
+  }
+
+  if (googleColor) {
+    return {
+      background: googleColor.background,
+      foreground: googleColor.foreground
+    };
+  }
+
+  return {
+    background: calendarBackgroundColor ?? null,
+    foreground: calendarForegroundColor ?? null
+  };
 }
 
 export function scheduledTaskBlockViewModel(

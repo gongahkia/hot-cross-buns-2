@@ -78,12 +78,36 @@ function calendarEventAccentStyle(color: string | null | undefined): CSSProperti
   };
 }
 
+export function calendarEventFillStyle(event: CalendarEventViewModel): CSSProperties | undefined {
+  const background = normalizeCalendarColor(event.displayBackgroundColor ?? event.calendarBackgroundColor);
+
+  if (!background) {
+    return undefined;
+  }
+
+  return {
+    backgroundColor: background,
+    borderColor: background,
+    borderLeftColor: background,
+    color: normalizeCalendarColor(event.displayForegroundColor ?? event.calendarForegroundColor) ?? readableTextColor(background)
+  };
+}
+
 function hexToRgba(color: string, alpha: number): string {
   const red = Number.parseInt(color.slice(1, 3), 16);
   const green = Number.parseInt(color.slice(3, 5), 16);
   const blue = Number.parseInt(color.slice(5, 7), 16);
 
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function readableTextColor(color: string): string {
+  const red = Number.parseInt(color.slice(1, 3), 16);
+  const green = Number.parseInt(color.slice(3, 5), 16);
+  const blue = Number.parseInt(color.slice(5, 7), 16);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+
+  return luminance > 0.55 ? "#1d1d1d" : "#ffffff";
 }
 
 function calendarEventLabel(
@@ -140,7 +164,8 @@ export function CalendarEventChip({
   onOpen?: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
   const tone = calendarSourceTone(event.calendarId);
-  const accentStyle = calendarEventAccentStyle(event.calendarBackgroundColor);
+  const fillStyle = calendarEventFillStyle(event);
+  const accentStyle = fillStyle ?? calendarEventAccentStyle(event.calendarBackgroundColor);
   const label = calendarEventLabel(event, labelVariant);
 
   return (
@@ -149,7 +174,8 @@ export function CalendarEventChip({
       className={cx(
         "group flex min-h-6 w-full min-w-0 cursor-default items-center gap-1.5 rounded-hcbSm border border-border border-l-4 bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary shadow-sm transition-colors duration-fast ease-hcb hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         draggable && "cursor-grab active:cursor-grabbing",
-        event.allDay && "bg-bg-secondary font-medium",
+        event.allDay && "font-medium",
+        fillStyle && "hover:brightness-95",
         accentStyle ? undefined : tone.border,
         className
       )}

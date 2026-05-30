@@ -65,6 +65,7 @@ export function buildCoreViewModelSource(
       calendarTimeZoneById[event.calendarId] ?? null,
       calendarBackgroundColorById[event.calendarId] ?? null,
       calendarForegroundColorById[event.calendarId] ?? null,
+      snapshot.settings.calendarEventColorOverrides,
       snapshot.settings.defaultTimeZone,
       options.calendarEventViewModelCache
     )

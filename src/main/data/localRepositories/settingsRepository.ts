@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   uiFontName: null,
   uiTextSizePoints: 13,
   perSurfaceFontOverrides: {},
+  calendarEventColorOverrides: {},
   disableAnimations: false,
   uiLayoutScale: 1,
   navigationPlacement: "left",
@@ -106,6 +107,11 @@ export class LocalSettingsRepository {
         "appearance",
         "perSurfaceFontOverrides",
         DEFAULT_SETTINGS.perSurfaceFontOverrides
+      ),
+      calendarEventColorOverrides: this.readSetting(
+        "calendar",
+        "eventColorOverrides",
+        DEFAULT_SETTINGS.calendarEventColorOverrides
       ),
       disableAnimations: this.readSetting(
         "appearance",
@@ -381,6 +387,10 @@ export class LocalSettingsRepository {
 
     if (request.perSurfaceFontOverrides !== undefined) {
       this.writeSetting("appearance", "perSurfaceFontOverrides", request.perSurfaceFontOverrides, now);
+    }
+
+    if (request.calendarEventColorOverrides !== undefined) {
+      this.writeSetting("calendar", "eventColorOverrides", request.calendarEventColorOverrides, now);
     }
 
     if (request.disableAnimations !== undefined) {
