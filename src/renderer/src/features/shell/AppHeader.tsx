@@ -5,6 +5,7 @@ import {
   Gauge,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightOpen,
   RefreshCw,
   Settings2
 } from "lucide-react";
@@ -19,6 +20,7 @@ export function AppHeader({
   keybindings,
   notificationsOpen,
   onOpenCommandPalette,
+  onOpenSplitPane,
   onRefresh,
   onToggleDiagnostics,
   onToggleNotifications,
@@ -34,6 +36,7 @@ export function AppHeader({
   keybindings: SettingsSnapshot["keybindings"];
   notificationsOpen: boolean;
   onOpenCommandPalette: () => void;
+  onOpenSplitPane: () => void;
   onRefresh: () => void;
   onToggleDiagnostics: () => void;
   onToggleNotifications: () => void;
@@ -114,6 +117,15 @@ export function AppHeader({
           <span className="hidden rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted md:inline">
             {displayAccelerator(keybindings["navigation.diagnostics.toggle"])}
           </span>
+        </Button>
+        <Button
+          aria-label="Split view"
+          className="min-w-8"
+          onClick={onOpenSplitPane}
+          title="Split view"
+          variant="ghost"
+        >
+          <PanelRightOpen aria-hidden="true" size={15} />
         </Button>
         <Button
           aria-label="Reload"
