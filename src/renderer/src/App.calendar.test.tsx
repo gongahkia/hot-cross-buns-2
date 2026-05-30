@@ -720,9 +720,9 @@ describe("App calendar", () => {
 
     await user.click(docsLink);
 
-    const splitPane = await screen.findByTestId("split-pane");
-    expect(within(splitPane).getByRole("heading", { name: "Docs" })).toBeInTheDocument();
-    expect(within(splitPane).getByTestId("split-webview")).toHaveAttribute("src", "https://example.com/");
+    const webPane = await screen.findByRole("region", { name: "Docs pane" });
+    expect(within(webPane).getByRole("heading", { name: "Docs" })).toBeInTheDocument();
+    expect(within(webPane).getByTestId("split-webview")).toHaveAttribute("src", "https://example.com/");
   });
 
   it("loads existing event recurrence into the inspector and persists recurrence changes", async () => {

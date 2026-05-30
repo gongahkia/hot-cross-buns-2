@@ -2,10 +2,10 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { NativeAction, SettingsSnapshot } from "@shared/ipc/contracts";
 import type { PlannerAction } from "../../actions/plannerActions";
 import { cx } from "../../components/primitives";
-import { getPlannerSection, primaryPlannerSections, type SectionId } from "../../data/mockPlanner";
+import { primaryPlannerSections, type SectionId } from "../../data/mockPlanner";
 import { getAppNotifications } from "../core/appNotifications";
 import { DiagnosticsOverlay } from "../core/DiagnosticsOverlay";
-import { SectionContent, type TaskSurfaceCommand } from "../core/CoreScreens";
+import type { TaskSurfaceCommand } from "../core/CoreScreens";
 import { useCoreViewModelSource } from "../core/coreViewModelSource";
 import { eventMatchesAccelerator } from "../core/hotkeys";
 import {
@@ -17,7 +17,8 @@ import {
 import { AppHeader } from "./AppHeader";
 import { AppNotificationToast, NotificationsOverlay, SettingsOverlay } from "./AppOverlays";
 import { AppSidebar } from "./AppSidebar";
-import { SplitPane, type SplitPaneSelection, type SplitPaneWebPage } from "./SplitPane";
+import { PaneWorkspace } from "./PaneWorkspace";
+import { splitPaneWebUrl } from "./paneWorkspaceModel";
 import {
   isEditableShortcutTarget,
   scheduleFrame,
@@ -25,6 +26,7 @@ import {
 } from "./shellUtils";
 import { useAppliedTheme } from "./theme";
 import type { VisiblePrimarySection } from "./types";
+import { usePaneWorkspace } from "./usePaneWorkspace";
 
 const DeferredCommandPalette = lazy(() =>
   import("../../components/CommandPalette").then((module) => ({
@@ -38,35 +40,6 @@ const DeferredFirstRunOnboarding = lazy(() =>
   }))
 );
 
-const splitPaneRecentPageLimit = 8;
-
-function splitPaneWebUrl(value: string | null, baseUrl: string): string | null {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    const url = new URL(value, baseUrl);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function splitPaneWebTitle(url: string, label: string | null): string {
-  const trimmedLabel = label?.replace(/\s+/g, " ").trim();
-
-  if (trimmedLabel) {
-    return trimmedLabel.slice(0, 120);
-  }
-
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
-}
-
 function closestAnchor(target: EventTarget | null): HTMLAnchorElement | null {
   return target instanceof Element ? target.closest<HTMLAnchorElement>("a[href]") : null;
 }
@@ -76,7 +49,7 @@ export function AppShell(): JSX.Element {
 
   const source = useCoreViewModelSource();
   useAppliedTheme(source.settings);
-  const [activeSectionId, setActiveSectionId] = useState<SectionId>("calendar");
+  const paneWorkspace = usePaneWorkspace();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -87,15 +60,11 @@ export function AppShell(): JSX.Element {
   const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState("");
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
-  const [splitPaneOpen, setSplitPaneOpen] = useState(false);
-  const [splitPaneSelection, setSplitPaneSelection] = useState<SplitPaneSelection | null>(null);
-  const [recentWebPages, setRecentWebPages] = useState<SplitPaneWebPage[]>([]);
   const shellVisibleReported = useRef(false);
   const commandPaletteOpenStartedAt = useRef<number | null>(null);
   const settingsDialogRef = useRef<HTMLElement | null>(null);
   const calendarVisibilityInitialized = useRef(false);
 
-  const activeSection = getPlannerSection(activeSectionId);
   const appNotifications = getAppNotifications(source);
   const visibleNotifications = appNotifications.filter(
     (notification) => !dismissedNotificationIds.includes(notification.id)
@@ -107,12 +76,9 @@ export function AppShell(): JSX.Element {
       .map((section, index) => ({ section, shortcutKey: String(index + 1) }))
       .filter(({ section }) => !hidden.has(section.id));
   }, [source.settings.hiddenNavigationTabs]);
-  const splitPaneSectionIds = useMemo(
-    () =>
-      visiblePrimarySections
-        .map(({ section }) => section.id)
-        .filter((sectionId) => sectionId !== activeSectionId),
-    [activeSectionId, visiblePrimarySections]
+  const visiblePaneSectionIds = useMemo(
+    () => visiblePrimarySections.map(({ section }) => section.id),
+    [visiblePrimarySections]
   );
   const availableCalendarIds = useMemo(
     () => new Set(source.calendarSources.map((calendar) => calendar.id)),
@@ -130,8 +96,8 @@ export function AppShell(): JSX.Element {
     source.dataState !== "error";
 
   const navigateToSection = useCallback((sectionId: SectionId): void => {
-    setActiveSectionId(sectionId === "today" ? "calendar" : sectionId);
-  }, []);
+    paneWorkspace.replaceFocusedWithSection(sectionId);
+  }, [paneWorkspace]);
 
   const toggleVisibleCalendar = useCallback((calendarId: string, selected: boolean): void => {
     setVisibleCalendarIds((current) => {
@@ -214,36 +180,6 @@ export function AppShell(): JSX.Element {
     setCommandPaletteOpen(true);
   }, []);
 
-  const openSplitChooser = useCallback((): void => {
-    setSplitPaneSelection(null);
-    setSplitPaneOpen(true);
-  }, []);
-
-  const selectSplitSection = useCallback((sectionId: SectionId): void => {
-    setSplitPaneSelection({ kind: "section", sectionId });
-    setSplitPaneOpen(true);
-  }, []);
-
-  const selectSplitWebPage = useCallback((pageId: string): void => {
-    setSplitPaneSelection({ kind: "web", pageId });
-    setSplitPaneOpen(true);
-  }, []);
-
-  const openUrlInSplitPane = useCallback((url: string, label: string | null): void => {
-    const page: SplitPaneWebPage = {
-      id: url,
-      title: splitPaneWebTitle(url, label),
-      url
-    };
-
-    setRecentWebPages((current) => [
-      page,
-      ...current.filter((recentPage) => recentPage.url !== url)
-    ].slice(0, splitPaneRecentPageLimit));
-    setSplitPaneSelection({ kind: "web", pageId: page.id });
-    setSplitPaneOpen(true);
-  }, []);
-
   const toggleNotificationsPanel = useCallback((): void => {
     setSettingsOpen(false);
     setDiagnosticsOpen(false);
@@ -274,10 +210,11 @@ export function AppShell(): JSX.Element {
       navigateToSection("tasks");
       setTaskCommand((current) => ({
         id,
-        nonce: (current?.nonce ?? 0) + 1
+        nonce: (current?.nonce ?? 0) + 1,
+        paneId: paneWorkspace.focusedPaneId
       }));
     },
-    [navigateToSection]
+    [navigateToSection, paneWorkspace.focusedPaneId]
   );
 
   const handleNativeAction = useCallback(
@@ -543,16 +480,16 @@ export function AppShell(): JSX.Element {
   useEffect(() => window.hcb?.native.subscribeAction(handleNativeAction), [handleNativeAction]);
 
   useEffect(() => {
-    const activePrimarySection = primaryPlannerSections.some((section) => section.id === activeSectionId);
+    const activePrimarySection = primaryPlannerSections.some((section) => section.id === paneWorkspace.activeSectionId);
 
-    if (activePrimarySection && !visiblePrimarySections.some(({ section }) => section.id === activeSectionId)) {
+    if (activePrimarySection && !visiblePrimarySections.some(({ section }) => section.id === paneWorkspace.activeSectionId)) {
       const replacement = visiblePrimarySections[0]?.section.id;
 
       if (replacement) {
         navigateToSection(replacement);
       }
     }
-  }, [activeSectionId, navigateToSection, visiblePrimarySections]);
+  }, [navigateToSection, paneWorkspace.activeSectionId, visiblePrimarySections]);
 
   useEffect(() => {
     function handleGlobalKeyDown(event: globalThis.KeyboardEvent): void {
@@ -594,12 +531,12 @@ export function AppShell(): JSX.Element {
       }
 
       event.preventDefault();
-      openUrlInSplitPane(url, anchor?.textContent ?? null);
+      paneWorkspace.openUrl(url, anchor?.textContent ?? null);
     }
 
     document.addEventListener("click", handleDocumentClick, true);
     return () => document.removeEventListener("click", handleDocumentClick, true);
-  }, [openUrlInSplitPane]);
+  }, [paneWorkspace]);
 
   useEffect(() => {
     if (!notificationsOpen) {
@@ -689,7 +626,7 @@ export function AppShell(): JSX.Element {
     >
       {sidebarOpen ? (
         <AppSidebar
-          activeSectionId={activeSectionId}
+          activeSectionId={paneWorkspace.activeSectionId}
           healthLabel={healthLabel}
           onShowAllCalendars={showAllCalendars}
           onToggleVisibleCalendar={toggleVisibleCalendar}
@@ -703,14 +640,14 @@ export function AppShell(): JSX.Element {
 
       <main className={cx("flex min-h-0 min-w-0 flex-col overflow-hidden", sidebarOnRight ? "md:order-1" : "md:order-2")}>
         <AppHeader
-          activeSectionTitle={activeSection.title}
+          activeSectionTitle={paneWorkspace.focusedTitle}
           appNotificationsCount={visibleNotifications.length}
           commandPaletteOpen={commandPaletteOpen}
           diagnosticsOpen={diagnosticsOpen}
           keybindings={source.settings.keybindings}
           notificationsOpen={notificationsOpen}
           onOpenCommandPalette={openCommandPalette}
-          onOpenSplitPane={openSplitChooser}
+          onOpenSplitPane={paneWorkspace.openChooser}
           onRefresh={source.refresh}
           onToggleDiagnostics={toggleDiagnosticsPanel}
           onToggleNotifications={toggleNotificationsPanel}
@@ -720,32 +657,25 @@ export function AppShell(): JSX.Element {
           sidebarOpen={sidebarOpen}
         />
 
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <section
-            aria-labelledby="planner-title"
-            className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-2 sm:p-3 md:p-4"
-          >
-            <RenderTimingBoundary id={`section:${activeSectionId}`}>
-              <SectionContent
-                activeSectionId={activeSectionId}
-                taskCommand={taskCommand}
-                visibleCalendarIds={visibleCalendarIdSet}
-              />
-            </RenderTimingBoundary>
-          </section>
-          {splitPaneOpen ? (
-            <SplitPane
-              availableSectionIds={splitPaneSectionIds}
-              onBack={openSplitChooser}
-              onClose={() => setSplitPaneOpen(false)}
-              onSelectSection={selectSplitSection}
-              onSelectWebPage={selectSplitWebPage}
-              recentWebPages={recentWebPages}
-              selected={splitPaneSelection}
-              visibleCalendarIds={visibleCalendarIdSet}
-            />
-          ) : null}
-        </div>
+        <RenderTimingBoundary id={`pane-workspace:${paneWorkspace.activeSectionId}`}>
+          <PaneWorkspace
+            activeSectionId={paneWorkspace.activeSectionId}
+            canSplit={paneWorkspace.canSplit}
+            focusedPaneId={paneWorkspace.focusedPaneId}
+            onClosePane={paneWorkspace.closePane}
+            onFocusPane={paneWorkspace.focusPane}
+            onMovePane={paneWorkspace.movePane}
+            onOpenRecentWebPage={paneWorkspace.openRecentWebPage}
+            onReplacePane={paneWorkspace.replacePane}
+            onSetSplitRatio={paneWorkspace.setSplitRatio}
+            onSplitPane={paneWorkspace.splitPane}
+            recentWebPages={paneWorkspace.recentWebPages}
+            root={paneWorkspace.root}
+            taskCommand={taskCommand}
+            visibleCalendarIds={visibleCalendarIdSet}
+            visibleSectionIds={visiblePaneSectionIds}
+          />
+        </RenderTimingBoundary>
       </main>
 
       <RenderTimingBoundary id="command-palette">

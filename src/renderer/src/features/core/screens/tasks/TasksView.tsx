@@ -47,6 +47,7 @@ import {
 export interface TaskSurfaceCommand {
   id: "task.create" | "task.quickCapture";
   nonce: number;
+  paneId?: string;
 }
 
 const starredTasksStorageKey = "hcb.starredTaskIds";

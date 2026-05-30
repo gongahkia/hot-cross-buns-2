@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 import type { CalendarEventDetail, TaskDetail } from "./src/shared/ipc/contracts";
 import type { HcbApi } from "./src/shared/ipc/preloadApi";
 import { ok } from "./src/shared/ipc/result";
@@ -10,6 +10,55 @@ import {
 
 const now = new Date("2026-05-22T00:00:00.000Z").toISOString();
 const later = new Date("2026-05-22T01:00:00.000Z").toISOString();
+
+function installTestLocalStorage(): Storage | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const storage = window.localStorage;
+
+  if (
+    typeof storage?.getItem === "function" &&
+    typeof storage.setItem === "function" &&
+    typeof storage.removeItem === "function"
+  ) {
+    return storage;
+  }
+
+  const values = new Map<string, string>();
+  const memoryStorage: Storage = {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    key(index: number) {
+      return Array.from(values.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    }
+  };
+
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: memoryStorage
+  });
+
+  return memoryStorage;
+}
+
+beforeEach(() => {
+  installTestLocalStorage()?.removeItem("hcb.paneWorkspace.v1");
+});
 
 function testTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
   return {

@@ -217,7 +217,8 @@ export function movePaneToEdge(
 
   const direction: PaneSplitDirection = edge === "left" || edge === "right" ? "row" : "column";
   const placement = edge === "left" || edge === "top" ? "before" : "after";
-  return splitPaneLeaf(withoutSource, targetPaneId, direction, source.content, placement);
+  const result = splitPaneLeaf(withoutSource, targetPaneId, direction, source.content, placement);
+  return { node: result.node, movedPaneId: result.newPaneId };
 }
 
 export function clampPaneRatio(value: number): number {

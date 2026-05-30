@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ok } from "@shared/ipc/result";
@@ -12,8 +12,9 @@ import {
   primaryNavigation,
   runPaletteCommand,
   seededHcb,
-  todayDate,
-  settingsLoadingHcb
+  settingsLoadingHcb,
+  testDataTransfer,
+  todayDate
 } from "./test/appTestHelpers";
 
 describe("App shell", () => {
@@ -115,7 +116,7 @@ describe("App shell", () => {
 
     await user.click(screen.getByRole("button", { name: "Split view" }));
 
-    let splitPane = await screen.findByTestId("split-pane");
+    let splitPane = await screen.findByRole("region", { name: "Choose split view pane" });
     expect(within(splitPane).getByRole("heading", { name: "Choose split view" })).toBeInTheDocument();
     expect(within(splitPane).getByRole("button", { name: /Tasks/ })).toBeInTheDocument();
     expect(within(splitPane).getByRole("button", { name: /Notes/ })).toBeInTheDocument();
@@ -123,12 +124,67 @@ describe("App shell", () => {
 
     await user.click(within(splitPane).getByRole("button", { name: /Tasks/ }));
 
-    splitPane = await screen.findByTestId("split-pane");
+    splitPane = await screen.findByRole("region", { name: "Tasks pane" });
     expect(within(splitPane).getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
     expect(within(splitPane).getByRole("list", { name: "Task lists" })).toBeInTheDocument();
 
-    await user.click(within(splitPane).getByRole("button", { name: "Choose split view" }));
-    expect(within(await screen.findByTestId("split-pane")).getByText("Recent webpages")).toBeInTheDocument();
+    await user.click(within(splitPane).getByRole("button", { name: "Choose content for Tasks" }));
+    expect(within(await screen.findByRole("region", { name: "Choose split view pane" })).getByText("Recent webpages")).toBeInTheDocument();
+  });
+
+  it("splits, closes, drags, and restores pane layouts", async () => {
+    const user = userEvent.setup();
+    installHcb(seededHcb());
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Split view" }));
+    let chooserPane = await screen.findByRole("region", { name: "Choose split view pane" });
+    await user.click(within(chooserPane).getByRole("button", { name: /Tasks/ }));
+    const tasksPane = await screen.findByRole("region", { name: "Tasks pane" });
+
+    await user.click(within(tasksPane).getByRole("button", { name: "Split Tasks bottom" }));
+    expect(await screen.findAllByTestId("pane-leaf")).toHaveLength(3);
+
+    chooserPane = await screen.findByRole("region", { name: "Choose split view pane" });
+    await user.click(within(chooserPane).getByRole("button", { name: "Close Choose split view pane" }));
+    expect(await screen.findAllByTestId("pane-leaf")).toHaveLength(2);
+
+    const calendarPane = screen.getByRole("region", { name: "Calendar pane" });
+    const transfer = testDataTransfer();
+    fireEvent.dragStart(within(tasksPane).getByRole("button", { name: "Drag pane Tasks" }), {
+      dataTransfer: transfer
+    });
+    fireEvent.drop(calendarPane, { dataTransfer: transfer });
+
+    expect(screen.getAllByTestId("pane-leaf")).toHaveLength(2);
+    expect(window.localStorage.getItem("hcb.paneWorkspace.v1")).toContain("tasks");
+  });
+
+  it("restores a persisted pane layout", async () => {
+    window.localStorage.setItem(
+      "hcb.paneWorkspace.v1",
+      JSON.stringify({
+        focusedPaneId: "pane-notes",
+        recentWebPages: [],
+        root: {
+          id: "split-root",
+          kind: "split",
+          direction: "row",
+          ratio: 0.42,
+          children: [
+            { id: "pane-calendar", kind: "leaf", content: { kind: "section", sectionId: "calendar" } },
+            { id: "pane-notes", kind: "leaf", content: { kind: "section", sectionId: "notes" } }
+          ]
+        }
+      })
+    );
+    installHcb(seededHcb());
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Calendar pane" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Notes pane" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("pane-leaf")).toHaveLength(2);
   });
 
   it("supports command-number shortcuts for primary sidebar sections", async () => {
