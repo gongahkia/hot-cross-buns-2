@@ -413,7 +413,7 @@ function CalendarTimelineView({
 
                   return count > 0 && day ? (
                     <div
-                      className="min-w-0 px-2"
+                      className="pointer-events-auto min-w-0 px-2"
                       key={`${visibleDays[dayIndex]?.day.id ?? dayIndex}-overflow`}
                       style={{
                         gridColumn: `${dayIndex + 1}`,

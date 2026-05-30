@@ -1,4 +1,5 @@
 import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contracts";
+import { googleCalendarEventColors, type GoogleCalendarEventColorId } from "@shared/googleCalendarColors";
 import type {
   AppColorThemeDefinition,
   AppColorThemeId
@@ -23,6 +24,9 @@ import {
 
 type PerSurfaceFontOverride = NonNullable<
   SettingsSnapshot["perSurfaceFontOverrides"][FontSurfaceId]
+>;
+type CalendarEventColorOverride = NonNullable<
+  SettingsSnapshot["calendarEventColorOverrides"][GoogleCalendarEventColorId]
 >;
 
 interface AppearanceSettingsTabProps {
@@ -98,6 +102,33 @@ export function AppearanceSettingsTab({
     const next = { ...settings.perSurfaceFontOverrides };
     delete next[surface];
     updateSettings({ perSurfaceFontOverrides: next });
+  }
+
+  function updateCalendarEventColorOverride(
+    colorId: GoogleCalendarEventColorId,
+    patch: Partial<CalendarEventColorOverride>
+  ): void {
+    const fallback = googleCalendarEventColors.find((color) => color.id === colorId);
+    const current = settings.calendarEventColorOverrides[colorId] ?? {
+      background: fallback?.background ?? "#5484ed",
+      foreground: fallback?.foreground ?? "#ffffff"
+    };
+
+    updateSettings({
+      calendarEventColorOverrides: {
+        ...settings.calendarEventColorOverrides,
+        [colorId]: {
+          ...current,
+          ...patch
+        }
+      }
+    });
+  }
+
+  function resetCalendarEventColorOverride(colorId: GoogleCalendarEventColorId): void {
+    const next = { ...settings.calendarEventColorOverrides };
+    delete next[colorId];
+    updateSettings({ calendarEventColorOverrides: next });
   }
 
   return (
@@ -197,6 +228,50 @@ export function AppearanceSettingsTab({
             ))}
           </select>
         </SettingsControlRow>
+      </SettingsGroup>
+
+      <SettingsGroup title="Calendar event colors">
+        {googleCalendarEventColors.map((color) => {
+          const override = settings.calendarEventColorOverrides[color.id];
+          const current = override ?? color;
+
+          return (
+            <SettingsControlRow key={color.id} label={color.label}>
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                <span
+                  aria-hidden="true"
+                  className="h-7 w-7 shrink-0 rounded-hcbSm border border-border"
+                  style={{ backgroundColor: current.background }}
+                />
+                <input
+                  aria-label={`${color.label} background`}
+                  className="h-8 w-10 rounded-hcbSm border border-border bg-surface-0 p-0.5"
+                  onChange={(event) =>
+                    updateCalendarEventColorOverride(color.id, { background: event.target.value })
+                  }
+                  type="color"
+                  value={current.background}
+                />
+                <input
+                  aria-label={`${color.label} text`}
+                  className="h-8 w-10 rounded-hcbSm border border-border bg-surface-0 p-0.5"
+                  onChange={(event) =>
+                    updateCalendarEventColorOverride(color.id, { foreground: event.target.value })
+                  }
+                  type="color"
+                  value={current.foreground}
+                />
+                <Button
+                  disabled={!override}
+                  onClick={() => resetCalendarEventColorOverride(color.id)}
+                  variant="ghost"
+                >
+                  Reset
+                </Button>
+              </div>
+            </SettingsControlRow>
+          );
+        })}
       </SettingsGroup>
 
       <SettingsGroup title="Per-surface fonts">

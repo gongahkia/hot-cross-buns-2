@@ -48,6 +48,8 @@ describe("App calendar", () => {
       "rgb(52, 168, 83)"
     );
     expect(screen.getByRole("button", { name: "Share availability" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Share Availability" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Share availability" }));
     expect(screen.getByRole("heading", { name: "Share Availability" })).toBeInTheDocument();
 
     await user.click(within(tabs).getByRole("tab", { name: "Multi-Day" }));
@@ -617,6 +619,7 @@ describe("App calendar", () => {
     fireEvent.change(screen.getByLabelText("Event ends"), { target: { value: `${todayDate}T12:00` } });
     await user.type(screen.getByRole("textbox", { name: "Event location" }), "Room 3");
     await user.type(screen.getByRole("textbox", { name: "Event guests" }), "ada@example.com");
+    await user.selectOptions(screen.getByLabelText("Event color"), "9");
     await user.selectOptions(screen.getByLabelText("Event reminder"), "15");
     await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "custom");
     await user.selectOptions(screen.getByLabelText("Repeat unit"), "weekly");
@@ -635,6 +638,7 @@ describe("App calendar", () => {
           startsAt: `${todayDate}T11:00:00.000Z`,
           endsAt: `${todayDate}T12:00:00.000Z`,
           allDay: false,
+          colorId: "9",
           location: "Room 3",
           notes: "Bring mocks.",
           guestEmails: ["ada@example.com"],
@@ -779,7 +783,8 @@ describe("App calendar", () => {
     expect(await screen.findByText("Agenda view")).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "Calendar views" });
     await user.click(within(tabs).getByRole("tab", { name: "Day" }));
-    expect(await screen.findByText("Share availability")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Share availability" }));
+    expect(await screen.findByRole("heading", { name: "Share Availability" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Availability start"), {
       target: { value: todayDate }

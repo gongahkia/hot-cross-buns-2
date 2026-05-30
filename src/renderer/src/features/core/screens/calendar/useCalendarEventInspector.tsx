@@ -129,6 +129,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
     createMode,
     createTaskListId,
     source.settings.defaultTimeZone,
+    source.settings.calendarEventColorOverrides,
     updateInspector
   ]);
 
@@ -177,6 +178,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
           calendars={source.calendarSources}
           defaultTimeZone={source.settings.defaultTimeZone}
           draft={nextDraft}
+          eventColorOverrides={source.settings.calendarEventColorOverrides}
           key={`view-${calendarInspectorInstanceRef.current}`}
         />
       );
@@ -189,6 +191,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
         defaultTimeZone={source.settings.defaultTimeZone}
         draft={nextDraft}
         error={formError}
+        eventColorOverrides={source.settings.calendarEventColorOverrides}
         key={calendarInspectorInstanceRef.current}
         onCreateModeChange={setCreateMode}
         setDraft={(next) => setDraft(next)}

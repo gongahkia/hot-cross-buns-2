@@ -40,7 +40,7 @@ export function useCalendarAvailability(source: CoreViewModelSource): {
   setShareAvailabilityOpen: Dispatch<SetStateAction<boolean>>;
   shareAvailabilityOpen: boolean;
 } {
-  const [shareAvailabilityOpen, setShareAvailabilityOpen] = useState(true);
+  const [shareAvailabilityOpen, setShareAvailabilityOpen] = useState(false);
   const [availabilityTitle, setAvailabilityTitle] = useState("Meeting");
   const [availabilityDurationMinutes, setAvailabilityDurationMinutes] = useState(30);
   const [availabilityCalendarId, setAvailabilityCalendarId] = useState(() => defaultCalendarId(source));

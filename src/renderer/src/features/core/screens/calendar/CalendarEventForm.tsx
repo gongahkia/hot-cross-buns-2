@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { googleCalendarEventColor, googleCalendarEventColors } from "@shared/googleCalendarColors";
+import type { SettingsSnapshot } from "@shared/ipc/contracts";
 import { Bell, CalendarPlus, Clock3, FileText, Gift, ListPlus, MapPin, RotateCcw, Users, type LucideIcon } from "lucide-react";
 import { Badge, Input, cx } from "../../../../components/primitives";
 import { ErrorState } from "../../../../components/states";
@@ -30,6 +32,9 @@ const repeatWeekdays: Array<{ id: CalendarRepeatWeekday; label: string }> = [
   { id: "FR", label: "F" },
   { id: "SA", label: "S" }
 ];
+
+type CalendarSource = ReturnType<typeof useCoreViewModelSource>["calendarSources"][number];
+type CalendarEventColorOverrides = SettingsSnapshot["calendarEventColorOverrides"];
 
 function repeatWeekdayForIso(value: string): CalendarRepeatWeekday {
   const date = new Date(value);
@@ -73,16 +78,84 @@ function calendarReminderSummary(value: string): string {
   return `${hours} hr ${remainingMinutes} min before`;
 }
 
+function draftDisplayColor(
+  draft: CalendarEventDraft,
+  selectedCalendar: CalendarSource | undefined,
+  eventColorOverrides: CalendarEventColorOverrides
+): { background: string | null; foreground: string | null } {
+  const googleColor = googleCalendarEventColor(draft.colorId || null);
+  const override = googleColor ? eventColorOverrides[googleColor.id] : undefined;
+
+  if (override) {
+    return override;
+  }
+
+  if (googleColor) {
+    return { background: googleColor.background, foreground: googleColor.foreground };
+  }
+
+  return {
+    background: selectedCalendar?.backgroundColor ?? null,
+    foreground: selectedCalendar?.foregroundColor ?? null
+  };
+}
+
+function EventColorSelect({
+  draft,
+  eventColorOverrides,
+  selectedCalendar,
+  setDraft
+}: {
+  draft: CalendarEventDraft;
+  eventColorOverrides: CalendarEventColorOverrides;
+  selectedCalendar: CalendarSource | undefined;
+  setDraft: (draft: CalendarEventDraft) => void;
+}): JSX.Element {
+  const displayColor = draftDisplayColor(draft, selectedCalendar, eventColorOverrides);
+
+  return (
+    <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+      <span>Color</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="h-5 w-5 shrink-0 rounded-hcbSm border border-border"
+          style={{
+            backgroundColor: displayColor.background ?? undefined,
+            borderColor: displayColor.background ?? undefined
+          }}
+        />
+        <select
+          aria-label="Event color"
+          className="h-8 min-w-0 flex-1 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onChange={(event) => setDraft({ ...draft, colorId: event.target.value })}
+          value={draft.colorId}
+        >
+          <option value="">Calendar default</option>
+          {googleCalendarEventColors.map((color) => (
+            <option key={color.id} value={color.id}>
+              {eventColorOverrides[color.id] ? `${color.label} (custom)` : color.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </label>
+  );
+}
+
 export function CalendarEventDetails({
   calendars,
   defaultTimeZone,
-  draft
+  draft,
+  eventColorOverrides
 }: {
   calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
   defaultTimeZone: string;
   draft: CalendarEventDraft;
+  eventColorOverrides: CalendarEventColorOverrides;
 }): JSX.Element {
   const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
+  const displayColor = draftDisplayColor(draft, selectedCalendar, eventColorOverrides);
   const sourceTimeZone = selectedCalendar?.timeZone ?? defaultTimeZone;
   const guests = draft.guests
     .split(",")
@@ -97,7 +170,7 @@ export function CalendarEventDetails({
     <div className="grid gap-4">
       <div className="grid gap-3 rounded-hcbLg border border-border bg-bg-tertiary p-4">
         <div className="flex min-w-0 items-center gap-2">
-          <CalendarSourceSwatch calendarId={draft.calendarId} color={selectedCalendar?.backgroundColor} />
+          <CalendarSourceSwatch calendarId={draft.calendarId} color={displayColor.background} />
           <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-secondary">
             {selectedCalendar?.title ?? "Calendar"}
           </span>
@@ -217,6 +290,7 @@ export function CalendarEventForm({
   defaultTimeZone,
   draft,
   error,
+  eventColorOverrides,
   onCreateModeChange,
   setDraft,
   setTaskListId,
@@ -228,6 +302,7 @@ export function CalendarEventForm({
   defaultTimeZone: string;
   draft: CalendarEventDraft;
   error?: string;
+  eventColorOverrides: CalendarEventColorOverrides;
   onCreateModeChange: (mode: CalendarCreateMode) => void;
   setDraft: (draft: CalendarEventDraft) => void;
   setTaskListId: (listId: string) => void;
@@ -235,6 +310,7 @@ export function CalendarEventForm({
   taskLists: ReturnType<typeof useCoreViewModelSource>["taskLists"];
 }): JSX.Element {
   const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
+  const displayColor = draftDisplayColor(draft, selectedCalendar, eventColorOverrides);
   const sourceTimeZone = selectedCalendar?.timeZone ?? defaultTimeZone;
 
   function setAllDay(allDay: boolean): void {
@@ -432,6 +508,12 @@ export function CalendarEventForm({
               ))}
             </select>
           </label>
+          <EventColorSelect
+            draft={draft}
+            eventColorOverrides={eventColorOverrides}
+            selectedCalendar={selectedCalendar}
+            setDraft={setDraft}
+          />
           <p className="text-[var(--text-xs)] text-text-muted">
             Repeats yearly as an all-day calendar event.
           </p>
@@ -452,7 +534,7 @@ export function CalendarEventForm({
         role="group"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <CalendarSourceSwatch calendarId={draft.calendarId} color={selectedCalendar?.backgroundColor} />
+          <CalendarSourceSwatch calendarId={draft.calendarId} color={displayColor.background} />
           <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-primary">
             {selectedCalendar?.title ?? "Calendar"}
           </span>
@@ -496,6 +578,12 @@ export function CalendarEventForm({
             ))}
           </select>
         </label>
+        <EventColorSelect
+          draft={draft}
+          eventColorOverrides={eventColorOverrides}
+          selectedCalendar={selectedCalendar}
+          setDraft={setDraft}
+        />
       </fieldset>
       <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
         <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Time</legend>
