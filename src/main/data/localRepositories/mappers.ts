@@ -109,6 +109,7 @@ export function calendarEventSummary(row: CalendarEventRow): CalendarEventSummar
     mutationState: mutationState(row.pendingMutationStatus),
     timeZone: truncateNullableText(row.timeZone, textLimits.timeZone),
     recurrenceRule: truncateNullableText(row.recurrenceRule, textLimits.recurrenceRule),
+    colorId: truncateNullableText(row.colorId, textLimits.calendarColor),
     recurringEventId: row.recurringEventId,
     originalStartAt: row.originalStartAt
   };

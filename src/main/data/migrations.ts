@@ -226,6 +226,30 @@ CREATE TABLE IF NOT EXISTS local_history_entries (
 CREATE INDEX IF NOT EXISTS idx_local_history_entries_recent
   ON local_history_entries(timestamp DESC, id DESC);
 `
+  },
+  {
+    version: 7,
+    name: "calendar event color id",
+    operations: (connection) => {
+      if (!tableExists(connection, "google_calendar_events")) {
+        return [];
+      }
+
+      const columns = new Set(
+        connection
+          .query<{ name: string }>("PRAGMA table_info(google_calendar_events);")
+          .map((row) => row.name)
+      );
+
+      return columns.has("color_id")
+        ? []
+        : [
+            {
+              kind: "run",
+              sql: "ALTER TABLE google_calendar_events ADD COLUMN color_id TEXT;"
+            }
+          ];
+    }
   }
 ];
 

@@ -297,6 +297,7 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
   end_time_zone TEXT,
   is_all_day INTEGER NOT NULL DEFAULT 0,
   recurrence_rule TEXT,
+  color_id TEXT,
   transparency TEXT,
   visibility TEXT,
   local_time_zone TEXT,

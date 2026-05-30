@@ -209,10 +209,10 @@ export function writeCalendarEvents(
       sql: `INSERT INTO google_calendar_events (
         id, account_id, calendar_id, google_id, recurring_event_id, original_start_at,
         status, summary, description, location, start_at, start_time_zone, end_at,
-        end_time_zone, is_all_day, recurrence_rule, transparency, visibility, etag,
+        end_time_zone, is_all_day, recurrence_rule, color_id, transparency, visibility, etag,
         sequence, local_time_zone, attendee_emails_json, reminder_minutes_json, google_updated_at,
         created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(account_id, calendar_id, google_id) DO UPDATE SET
         recurring_event_id = excluded.recurring_event_id,
         original_start_at = excluded.original_start_at,
@@ -226,6 +226,7 @@ export function writeCalendarEvents(
         end_time_zone = excluded.end_time_zone,
         is_all_day = excluded.is_all_day,
         recurrence_rule = excluded.recurrence_rule,
+        color_id = excluded.color_id,
         transparency = excluded.transparency,
         visibility = excluded.visibility,
         etag = excluded.etag,
@@ -253,6 +254,7 @@ export function writeCalendarEvents(
         event.endTimeZone ?? null,
         boolInt(event.isAllDay),
         event.recurrenceRule ?? null,
+        event.colorId ?? null,
         event.transparency ?? null,
         event.visibility ?? null,
         event.etag ?? null,
@@ -392,6 +394,7 @@ export function updateCalendarEventFromRemote(
                 end_time_zone = ?,
                 is_all_day = ?,
                 recurrence_rule = ?,
+                color_id = ?,
                 transparency = ?,
                 visibility = ?,
                 etag = ?,
@@ -418,6 +421,7 @@ export function updateCalendarEventFromRemote(
         input.remote.endTimeZone ?? null,
         boolInt(input.remote.isAllDay),
         input.remote.recurrenceRule ?? null,
+        input.remote.colorId ?? null,
         input.remote.transparency ?? null,
         input.remote.visibility ?? null,
         input.remote.etag ?? null,

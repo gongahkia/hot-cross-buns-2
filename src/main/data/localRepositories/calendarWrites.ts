@@ -18,6 +18,7 @@ export interface NormalizedCalendarWrite {
   notes: string;
   guestEmails: string[];
   reminderMinutes: number[];
+  colorId?: string | null;
   recurrenceRule: string | null;
 }
 
@@ -43,6 +44,7 @@ export function normalizeCalendarWrite(input: NormalizedCalendarWrite): Normaliz
     notes: input.notes,
     guestEmails: normalizeGuestEmails(input.guestEmails),
     reminderMinutes: normalizeReminderMinutes(input.reminderMinutes),
+    colorId: normalizeColorId(input.colorId),
     recurrenceRule: input.recurrenceRule
   };
 }
@@ -308,9 +310,9 @@ export function eventInsertOperation(input: {
     sql: `INSERT INTO google_calendar_events (
       id, account_id, calendar_id, google_id, status, summary, description, location,
       start_at, start_time_zone, end_at, end_time_zone, is_all_day, recurrence_rule, local_time_zone,
-      attendee_emails_json, reminder_minutes_json,
+      color_id, attendee_emails_json, reminder_minutes_json,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
     params: [
       input.id,
       input.accountId,
@@ -326,6 +328,7 @@ export function eventInsertOperation(input: {
       boolInt(input.allDay),
       input.recurrenceRule,
       input.timeZone,
+      input.colorId ?? null,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),
       input.now,
@@ -354,6 +357,7 @@ export function eventUpdateOperation(input: {
               is_all_day = ?,
               recurrence_rule = ?,
               local_time_zone = ?,
+              color_id = ?,
               attendee_emails_json = ?,
               reminder_minutes_json = ?,
               updated_at = ?
@@ -370,6 +374,7 @@ export function eventUpdateOperation(input: {
       boolInt(input.allDay),
       input.recurrenceRule,
       input.timeZone,
+      input.colorId ?? null,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),
       input.now,
@@ -505,7 +510,13 @@ export function mutationPayload(input: NormalizedCalendarWrite): object {
     notes: input.notes,
     guestEmails: input.guestEmails,
     reminderMinutes: input.reminderMinutes,
+    colorId: input.colorId ?? null,
     recurrence: recurrenceFromRule(input.recurrenceRule),
     recurrenceRule: input.recurrenceRule
   };
+}
+
+function normalizeColorId(value: string | null | undefined): string | null {
+  const colorId = value?.trim() ?? "";
+  return colorId.length > 0 && colorId.length <= 32 ? colorId : null;
 }

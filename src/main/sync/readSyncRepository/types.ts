@@ -119,6 +119,7 @@ export interface CalendarEventMutationTarget extends Record<string, unknown> {
   endTimeZone: string | null;
   isAllDay: boolean;
   recurrenceRule: string | null;
+  colorId: string | null;
   attendeeEmails: string[];
   reminderMinutes: number[];
   etag: string | null;

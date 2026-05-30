@@ -5,6 +5,7 @@ import {
   historyCategoryIds,
   hotkeyActionIds
 } from "../../settingsCatalog";
+import { googleCalendarEventColorIds } from "../../googleCalendarColors";
 import { appColorThemeIds } from "../themeCatalog";
 import { emptyRequestSchema, idSchema, isoDateTimeSchema } from "./core";
 import { taskStatusSchema } from "./tasks";
@@ -110,6 +111,16 @@ export const perSurfaceFontOverrideSchema = z
 export const perSurfaceFontOverridesSchema = z
   .record(perSurfaceFontKeySchema, perSurfaceFontOverrideSchema)
   .default({});
+const calendarColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
+export const calendarEventColorOverrideSchema = z
+  .object({
+    background: calendarColorSchema,
+    foreground: calendarColorSchema
+  })
+  .strict();
+export const calendarEventColorOverridesSchema = z
+  .record(z.enum(googleCalendarEventColorIds), calendarEventColorOverrideSchema)
+  .default({});
 
 export const savedSearchViewSchema = z
   .object({
@@ -186,6 +197,7 @@ export const settingsSnapshotSchema = z
     uiFontName: uiFontNameSchema,
     uiTextSizePoints: uiTextSizePointsSchema,
     perSurfaceFontOverrides: perSurfaceFontOverridesSchema,
+    calendarEventColorOverrides: calendarEventColorOverridesSchema,
     disableAnimations: z.boolean(),
     uiLayoutScale: z.number().min(0.8).max(1.5),
     navigationPlacement: navigationPlacementSchema,
@@ -259,6 +271,7 @@ export const settingsUpdateRequestSchema = z
     uiFontName: uiFontNameSchema.optional(),
     uiTextSizePoints: uiTextSizePointsSchema.optional(),
     perSurfaceFontOverrides: perSurfaceFontOverridesSchema.optional(),
+    calendarEventColorOverrides: calendarEventColorOverridesSchema.optional(),
     disableAnimations: z.boolean().optional(),
     uiLayoutScale: z.number().min(0.8).max(1.5).optional(),
     navigationPlacement: navigationPlacementSchema.optional(),

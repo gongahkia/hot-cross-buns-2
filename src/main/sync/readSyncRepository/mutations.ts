@@ -390,6 +390,7 @@ export function calendarEventMutationTarget(
     endTimeZone: string | null;
     isAllDay: number;
     recurrenceRule: string | null;
+    colorId: string | null;
     attendeeEmailsJson: string;
     reminderMinutesJson: string;
     etag: string | null;
@@ -410,6 +411,7 @@ export function calendarEventMutationTarget(
        events.end_time_zone AS endTimeZone,
        events.is_all_day AS isAllDay,
        events.recurrence_rule AS recurrenceRule,
+       events.color_id AS colorId,
        events.attendee_emails_json AS attendeeEmailsJson,
        events.reminder_minutes_json AS reminderMinutesJson,
        events.etag AS etag,
@@ -438,6 +440,7 @@ export function calendarEventMutationTarget(
         endTimeZone: row.endTimeZone,
         isAllDay: row.isAllDay === 1,
         recurrenceRule: row.recurrenceRule,
+        colorId: row.colorId,
         attendeeEmails: parseJsonStringArray(row.attendeeEmailsJson),
         reminderMinutes: parseJsonNumberArray(row.reminderMinutesJson),
         etag: row.etag,

@@ -32,6 +32,7 @@ export interface GoogleCalendarEventMirror {
   endTimeZone?: string | null;
   isAllDay: boolean;
   recurrenceRule?: string | null;
+  colorId?: string | null;
   transparency?: string | null;
   visibility?: string | null;
   attendeeEmails?: string[];
@@ -66,6 +67,7 @@ export interface GoogleCalendarEventWriteInput {
   endTimeZone?: string | null;
   isAllDay: boolean;
   recurrenceRule?: string | null;
+  colorId?: string | null;
   attendeeEmails?: readonly string[];
   reminderMinutes?: readonly number[];
 }
@@ -125,6 +127,7 @@ interface GoogleEventDto {
   start?: GoogleEventDateDto;
   end?: GoogleEventDateDto;
   recurrence?: string[];
+  colorId?: string;
   recurringEventId?: string;
   originalStartTime?: GoogleEventDateDto;
   etag?: string;
@@ -161,12 +164,13 @@ interface GoogleEventMutationDto {
     useDefault: boolean;
     overrides: Array<{ method: "popup"; minutes: number }>;
   };
+  colorId?: string | null;
 }
 
 const CALENDAR_LIST_FIELDS =
   "items(id,summary,description,timeZone,backgroundColor,foregroundColor,selected,hidden,primary,accessRole,etag)";
 const EVENTS_FIELDS =
-  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)))";
+  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)))";
 
 export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
   private readonly transport: GoogleApiTransport;
@@ -249,7 +253,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "POST",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(calendarId)}/events`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
       },
       body: eventMutationBody(input)
     });
@@ -262,7 +266,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "PATCH",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(input.calendarId)}/events/${encodeGooglePathComponent(input.eventId)}`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
       },
       body: eventMutationBody(input),
       ifMatch: input.ifMatch ?? undefined
@@ -311,6 +315,7 @@ function mapEvent(
     endTimeZone,
     isAllDay,
     recurrenceRule: item.recurrence?.join("\n") ?? null,
+    colorId: item.colorId ?? null,
     transparency: item.transparency ?? null,
     visibility: item.visibility ?? null,
     attendeeEmails: normalizeAttendeeEmails(item.attendees),
@@ -384,6 +389,7 @@ function eventMutationBody(input: GoogleCalendarEventWriteInput): GoogleEventMut
     ...(input.recurrenceRule?.trim()
       ? { recurrence: [input.recurrenceRule.trim()] }
       : {}),
+    ...(input.colorId === undefined ? {} : { colorId: input.colorId }),
     ...(attendeeEmails.length === 0
       ? {}
       : { attendees: attendeeEmails.map((email) => ({ email })) }),

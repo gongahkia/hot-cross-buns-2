@@ -271,6 +271,7 @@ export interface CalendarEventMirrorRecord {
   endTimeZone: string | null;
   isAllDay: boolean;
   recurrenceRule: string | null;
+  colorId: string | null;
   transparency: string | null;
   visibility: string | null;
   etag: string | null;
@@ -298,6 +299,7 @@ export interface UpsertCalendarEventMirrorInput {
   endTimeZone?: string | null;
   isAllDay?: boolean;
   recurrenceRule?: string | null;
+  colorId?: string | null;
   transparency?: string | null;
   visibility?: string | null;
   etag?: string | null;

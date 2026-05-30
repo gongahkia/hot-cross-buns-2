@@ -110,6 +110,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
            pending.status AS pendingMutationStatus,
            events.local_time_zone AS timeZone,
            events.recurrence_rule AS recurrenceRule,
+           events.color_id AS colorId,
            instances.recurring_event_id AS recurringEventId,
            instances.original_start_at AS originalStartAt
          FROM google_calendar_event_instances instances
@@ -169,6 +170,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
         notes: request.notes ?? "",
         guestEmails: request.guestEmails ?? [],
         reminderMinutes: request.reminderMinutes ?? [],
+        colorId: request.colorId ?? null,
         recurrenceRule: recurrenceRuleFromRequest(request.recurrence ?? null)
       });
       const mutationId = `mutation:event:${randomUUID()}`;
@@ -237,6 +239,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
         notes: request.notes ?? existing.notes ?? "",
         guestEmails: request.guestEmails ?? parseStringArray(existing.guestEmailsJson),
         reminderMinutes: request.reminderMinutes ?? parseNumberArray(existing.reminderMinutesJson),
+        colorId: request.colorId === undefined ? existing.colorId : request.colorId,
         recurrenceRule:
           request.recurrence === undefined
             ? existing.recurrenceRule
@@ -377,6 +380,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
            pending.status AS pendingMutationStatus,
            events.local_time_zone AS timeZone,
            events.recurrence_rule AS recurrenceRule,
+           events.color_id AS colorId,
            COALESCE(instances.recurring_event_id, events.recurring_event_id) AS recurringEventId,
            instances.original_start_at AS originalStartAt
          FROM google_calendar_events events

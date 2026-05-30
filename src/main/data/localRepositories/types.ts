@@ -79,6 +79,7 @@ export interface CalendarEventRow extends Record<string, unknown> {
   pendingMutationStatus?: "pending" | "applying" | "failed" | null;
   timeZone: string | null;
   recurrenceRule: string | null;
+  colorId: string | null;
   recurringEventId: string | null;
   originalStartAt: string | null;
 }

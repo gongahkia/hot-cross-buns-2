@@ -89,6 +89,7 @@ export const calendarEventSummarySchema = z
     id: idSchema,
     eventId: idSchema.optional(),
     calendarId: idSchema,
+    colorId: z.string().trim().min(1).max(32).nullable().optional(),
     title: z.string().min(1).max(500),
     startsAt: isoDateTimeSchema,
     endsAt: isoDateTimeSchema,
@@ -147,6 +148,7 @@ const calendarEventWriteFieldsSchema = z
     notes: z.string().max(20_000).default(""),
     guestEmails: z.array(guestEmailSchema).max(50).default([]),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).default([]),
+    colorId: z.string().trim().min(1).max(32).nullable().optional(),
     recurrence: calendarEventRecurrenceSchema.nullable().optional()
   })
   .strict()
@@ -186,6 +188,7 @@ export const calendarEventUpdateRequestSchema = z
     notes: z.string().max(20_000).optional(),
     guestEmails: z.array(guestEmailSchema).max(50).optional(),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
+    colorId: z.string().trim().min(1).max(32).nullable().optional(),
     recurrence: calendarEventRecurrenceSchema.nullable().optional()
   })
   .strict()
@@ -200,6 +203,7 @@ export const calendarEventUpdateRequestSchema = z
       request.notes !== undefined ||
       request.guestEmails !== undefined ||
       request.reminderMinutes !== undefined ||
+      request.colorId !== undefined ||
       request.recurrence !== undefined,
     {
       message: "At least one event field must be supplied"
