@@ -35,6 +35,47 @@ describe("Command palette search", () => {
 
     expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "task");
+    expect(inspector).toHaveAttribute("data-inspector-id", "task-inbox-rules");
+  });
+
+  it("opens event details from a palette search result", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.keyboard("{Meta>}p{/Meta}");
+    const dialog = await screen.findByRole("dialog", { name: "Command palette" });
+
+    await user.type(within(dialog).getByRole("searchbox", { name: "Filter commands" }), "review");
+    await user.click(await within(dialog).findByRole("option", { name: /Renderer acceptance review/ }));
+
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "event");
+    expect(inspector).toHaveAttribute("data-inspector-id", "event-review");
+  });
+
+  it("opens note details from a palette search result", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.keyboard("{Meta>}p{/Meta}");
+    const dialog = await screen.findByRole("dialog", { name: "Command palette" });
+
+    await user.type(within(dialog).getByRole("searchbox", { name: "Filter commands" }), "source:notes cache");
+    await user.click(await within(dialog).findByRole("option", { name: /Cache-first startup/ }));
+
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "note");
+    expect(inspector).toHaveAttribute("data-inspector-id", "note-cache-first");
   });
 
   it("keeps command matches on the command path instead of searching", async () => {

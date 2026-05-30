@@ -193,10 +193,19 @@ export function CalendarView({
 
   useEffect(() => {
     function handleCalendarCommand(event: Event): void {
-      const detail = (event as CustomEvent<{ action: string; viewId?: CalendarViewId }>).detail;
+      const detail = (event as CustomEvent<{ action: string; eventId?: string; viewId?: CalendarViewId }>).detail;
 
       if (detail?.action === "new-event") {
         openCreate();
+      }
+
+      if (detail?.action === "open-event" && detail.eventId) {
+        const calendarEvent = source.calendarEventsById[detail.eventId];
+
+        if (calendarEvent) {
+          setCalendarAnchorDate(calendarEvent.startsAt.slice(0, 10));
+          openEdit(calendarEvent);
+        }
       }
 
       if (detail?.action === "set-view" && detail.viewId) {

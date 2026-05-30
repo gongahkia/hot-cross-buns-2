@@ -128,6 +128,7 @@ export interface NoteViewModel {
 
 export interface SearchResultViewModel {
   id: string;
+  targetId: string;
   source: SearchSource;
   title: string;
   detail: string;

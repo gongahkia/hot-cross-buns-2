@@ -140,6 +140,20 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
   }, [command, source]);
 
   useEffect(() => {
+    function handleTaskCommand(event: Event): void {
+      const detail = (event as CustomEvent<{ action: string; taskId?: string }>).detail;
+
+      if (detail?.action === "open-task" && detail.taskId) {
+        setSelectedBoardView({ mode: "lists", listIds: null });
+        selectTask(detail.taskId);
+      }
+    }
+
+    window.addEventListener("hcb:task-command", handleTaskCommand);
+    return () => window.removeEventListener("hcb:task-command", handleTaskCommand);
+  }, [source]);
+
+  useEffect(() => {
     writeLocalStorageJSON(starredTasksStorageKey, [...starredTaskIds]);
   }, [starredTaskIds]);
 

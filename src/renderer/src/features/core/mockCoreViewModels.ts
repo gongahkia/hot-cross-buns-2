@@ -574,6 +574,7 @@ export const searchBuckets: SearchBucketViewModel[] = [
     results: [
       {
         id: "search-task-inbox-rules",
+        targetId: "task-inbox-rules",
         source: "task",
         title: "Draft inbox triage rules",
         detail: "Inbox task due today with two subtasks.",
@@ -581,6 +582,7 @@ export const searchBuckets: SearchBucketViewModel[] = [
       },
       {
         id: "search-task-calendar-fixtures",
+        targetId: "task-calendar-fixtures",
         source: "task",
         title: "Review calendar fixture shape",
         detail: "Planning task for stable agenda virtualization rows.",
@@ -595,6 +597,7 @@ export const searchBuckets: SearchBucketViewModel[] = [
     results: [
       {
         id: "search-event-review",
+        targetId: "event-review",
         source: "event",
         title: "Renderer acceptance review",
         detail: "QA calendar event at 15:30.",
@@ -602,6 +605,7 @@ export const searchBuckets: SearchBucketViewModel[] = [
       },
       {
         id: "search-event-sync",
+        targetId: "event-sync-review",
         source: "event",
         title: "Sync contract review",
         detail: "Engineering calendar event at 14:00.",
@@ -616,6 +620,7 @@ export const searchBuckets: SearchBucketViewModel[] = [
     results: [
       {
         id: "search-note-command",
+        targetId: "note-command-surface",
         source: "note",
         title: "Command palette surface",
         detail: "Local note updated 21m ago.",
@@ -623,6 +628,7 @@ export const searchBuckets: SearchBucketViewModel[] = [
       },
       {
         id: "search-note-cache",
+        targetId: "note-cache-first",
         source: "note",
         title: "Cache-first startup",
         detail: "Local-only note about shell visibility.",

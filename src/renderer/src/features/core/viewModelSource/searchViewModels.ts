@@ -122,6 +122,7 @@ export function searchViewModelFromResults(query: string, items: SearchResultIte
     summary: `${items.length} ${items.length === 1 ? "result" : "results"}`,
     results: items.map((item) => ({
       id: `${item.domain}-${item.id}`,
+      targetId: item.id,
       source: item.domain === "calendar" ? "event" : item.domain === "tasks" ? "task" : "note",
       title: item.title,
       detail: item.snippet ?? `Matched "${query}"`,

@@ -89,6 +89,34 @@ function dispatchNoteCommand(command: PlannerAction): void {
   }, 0);
 }
 
+function dispatchSearchResultOpen(result: SearchResultViewModel): void {
+  window.setTimeout(() => {
+    if (result.source === "event") {
+      window.dispatchEvent(
+        new CustomEvent("hcb:calendar-command", {
+          detail: { action: "open-event", eventId: result.targetId }
+        })
+      );
+      return;
+    }
+
+    if (result.source === "note") {
+      window.dispatchEvent(
+        new CustomEvent("hcb:note-command", {
+          detail: { action: "open-note", noteId: result.targetId }
+        })
+      );
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("hcb:task-command", {
+        detail: { action: "open-task", taskId: result.targetId }
+      })
+    );
+  }, 0);
+}
+
 export function CommandPalette({
   actionContext,
   initialQuery = "",
@@ -188,6 +216,7 @@ export function CommandPalette({
     }
 
     onNavigate(searchResultSection(result.source));
+    dispatchSearchResultOpen(result);
     closePalette();
   }
 

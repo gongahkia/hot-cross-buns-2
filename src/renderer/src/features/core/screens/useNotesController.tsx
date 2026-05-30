@@ -186,10 +186,14 @@ export function useNotesController(source: CoreViewModelSource): {
 
   useEffect(() => {
     function handleNoteCommand(event: Event): void {
-      const detail = (event as CustomEvent<{ action: string }>).detail;
+      const detail = (event as CustomEvent<{ action: string; noteId?: string }>).detail;
 
       if (detail?.action === "new-note") {
         void createNote();
+      }
+
+      if (detail?.action === "open-note" && detail.noteId) {
+        void selectNote(detail.noteId, "view");
       }
     }
 
