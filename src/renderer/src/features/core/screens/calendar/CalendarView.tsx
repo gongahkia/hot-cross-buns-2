@@ -251,8 +251,6 @@ export function CalendarView({
         previousRangeLabel={previousRangeLabel}
         shareAvailabilityOpen={shareAvailabilityOpen}
         shareAvailabilityVisible={shareAvailabilityVisible}
-        source={source}
-        visibleCalendarCount={visibleCalendarIds.size}
         visibleCalendarViewIds={visibleCalendarViewIds}
       />
 

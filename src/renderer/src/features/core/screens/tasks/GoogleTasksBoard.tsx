@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   CalendarClock,
   Check,
@@ -6,6 +6,8 @@ import {
   CornerDownRight,
   ListPlus,
   MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
   Paperclip,
   Plus,
   Star,
@@ -13,6 +15,7 @@ import {
   Trash2
 } from "lucide-react";
 import type { TaskListSummary } from "@shared/ipc/contracts";
+import { FloatingMenu } from "../../../../components/FloatingMenu";
 import { Badge, Button, IconButton, cx } from "../../../../components/primitives";
 import { EmptyState } from "../../../../components/states";
 import type { CoreViewModelSource } from "../../coreViewModelSource";
@@ -130,6 +133,7 @@ export function GoogleTasksBoard({
   source,
   starred
 }: GoogleTasksBoardProps): JSX.Element {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const starredVisibleCount = activeRootTasks(source).filter((task) => starred.ids.has(task.id)).length;
   const allListIds = source.taskLists.map((list) => list.id);
   const visibleListIds = selectedView.listIds ?? allListIds;
@@ -165,10 +169,17 @@ export function GoogleTasksBoard({
   }, [listSorts, selectedView.mode, source, starred, visibleListIdSet]);
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
+    <div
+      className={cx(
+        "grid min-h-0 flex-1 grid-cols-1 gap-3",
+        sidebarCollapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"
+      )}
+    >
       <TaskBoardSidebar
+        collapsed={sidebarCollapsed}
         onCreateList={onCreateList}
         onCreateTask={() => onCreateTask()}
+        onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         selectedView={selectedView}
         setSelectedView={setSelectedView}
         source={source}
@@ -225,16 +236,20 @@ export function GoogleTasksBoard({
 }
 
 function TaskBoardSidebar({
+  collapsed,
   onCreateList,
   onCreateTask,
+  onToggleCollapsed,
   selectedView,
   setSelectedView,
   source,
   starredCount,
   visibleListIds
 }: {
+  collapsed: boolean;
   onCreateList: () => void;
   onCreateTask: () => void;
+  onToggleCollapsed: () => void;
   selectedView: TaskBoardSelection;
   setSelectedView: (selection: TaskBoardSelection) => void;
   source: CoreViewModelSource;
@@ -268,12 +283,35 @@ function TaskBoardSidebar({
     });
   }
 
+  if (collapsed) {
+    return (
+      <aside className="min-h-0 rounded-hcbLg bg-bg-secondary p-2" aria-label="Task board navigation">
+        <IconButton
+          className="size-9 rounded-hcbMd"
+          icon={PanelLeftOpen}
+          label="Expand task sidebar"
+          onClick={onToggleCollapsed}
+          variant="ghost"
+        />
+      </aside>
+    );
+  }
+
   return (
     <aside className="min-h-0 rounded-hcbLg bg-bg-secondary p-3" aria-label="Task board navigation">
-      <Button className="h-12 min-w-32 justify-start rounded-hcbLg shadow-sm" onClick={onCreateTask} variant="secondary">
-        <Plus aria-hidden="true" size={18} />
-        Create
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button className="h-12 min-w-0 flex-1 justify-start rounded-hcbLg shadow-sm" onClick={onCreateTask} variant="secondary">
+          <Plus aria-hidden="true" size={18} />
+          Create
+        </Button>
+        <IconButton
+          className="size-10 rounded-hcbMd"
+          icon={PanelLeftClose}
+          label="Collapse task sidebar"
+          onClick={onToggleCollapsed}
+          variant="ghost"
+        />
+      </div>
       <div className="mt-5 grid gap-1">
         <TaskSidebarButton
           count={source.resourceCounts.tasks}
@@ -568,6 +606,7 @@ function GoogleTaskRow({
   task: TaskViewModel;
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
   const scheduleLabel = taskScheduleLabel(task, scheduledBlock);
   const preview = taskPreview(task);
 
@@ -604,7 +643,10 @@ function GoogleTaskRow({
           </div>
         ) : null}
       </button>
-      <div className="relative flex items-start gap-1 opacity-0 transition-opacity duration-fast ease-hcb group-hover:opacity-100 group-focus-within:opacity-100">
+      <div
+        className="relative flex items-start gap-1 opacity-0 transition-opacity duration-fast ease-hcb group-hover:opacity-100 group-focus-within:opacity-100"
+        ref={menuAnchorRef}
+      >
         <IconButton
           className="size-7 rounded-full"
           icon={MoreVertical}
@@ -621,6 +663,7 @@ function GoogleTaskRow({
         />
         {menuOpen ? (
           <TaskActionMenu
+            anchorRef={menuAnchorRef}
             onAddSubtask={() => { onAddSubtask(task); setMenuOpen(false); }}
             onCreateList={() => { onCreateList(); setMenuOpen(false); }}
             onDelete={() => { onDeleteTask(task.id); setMenuOpen(false); }}
@@ -636,6 +679,7 @@ function GoogleTaskRow({
 }
 
 function TaskActionMenu({
+  anchorRef,
   onAddSubtask,
   onCreateList,
   onDelete,
@@ -644,6 +688,7 @@ function TaskActionMenu({
   source,
   task
 }: {
+  anchorRef: RefObject<HTMLElement>;
   onAddSubtask: () => void;
   onCreateList: () => void;
   onDelete: () => void;
@@ -653,7 +698,7 @@ function TaskActionMenu({
   task: TaskViewModel;
 }): JSX.Element {
   return (
-    <div className="absolute right-0 top-8 z-30 w-64 overflow-hidden rounded-hcbLg border border-border bg-bg-primary py-2 shadow-xl">
+    <FloatingMenu anchorRef={anchorRef} width={320}>
       <MenuButton onClick={onOpen}>
         <Target aria-hidden="true" size={18} />
         Add deadline
@@ -685,7 +730,7 @@ function TaskActionMenu({
         <ListPlus aria-hidden="true" size={18} />
         New list
       </MenuButton>
-    </div>
+    </FloatingMenu>
   );
 }
 

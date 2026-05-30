@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
+import { FloatingMenu } from "../../../components/FloatingMenu";
 import { Badge, IconButton, Panel, cx } from "../../../components/primitives";
 import { EmptyState } from "../../../components/states";
 import { VirtualizedList } from "../../../components/VirtualizedList";
@@ -96,6 +97,7 @@ function NoteBoardRow({
   starred: boolean;
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
 
   return (
     <div
@@ -127,6 +129,7 @@ function NoteBoardRow({
           "relative flex items-center gap-1 transition-opacity duration-fast ease-hcb group-focus-within:opacity-100 group-hover:opacity-100",
           starred || menuOpen ? "opacity-100" : "opacity-0"
         )}
+        ref={menuAnchorRef}
       >
         <IconButton
           className="size-7 rounded-full"
@@ -144,6 +147,7 @@ function NoteBoardRow({
         />
         {menuOpen ? (
           <NoteActionMenu
+            anchorRef={menuAnchorRef}
             onDelete={() => {
               onDeleteNote(note.id);
               setMenuOpen(false);
@@ -160,14 +164,16 @@ function NoteBoardRow({
 }
 
 function NoteActionMenu({
+  anchorRef,
   onDelete,
   onEdit
 }: {
+  anchorRef: RefObject<HTMLElement>;
   onDelete: () => void;
   onEdit: () => void;
 }): JSX.Element {
   return (
-    <div className="absolute right-0 top-8 z-30 w-56 overflow-hidden rounded-hcbLg border border-border bg-bg-primary py-2 shadow-xl">
+    <FloatingMenu anchorRef={anchorRef} width={224}>
       <button
         className="flex min-h-9 w-full items-center gap-3 px-4 text-left text-[var(--text-base)] text-text-primary transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         onClick={onEdit}
@@ -184,6 +190,6 @@ function NoteActionMenu({
         <Trash2 aria-hidden="true" size={18} />
         Delete
       </button>
-    </div>
+    </FloatingMenu>
   );
 }

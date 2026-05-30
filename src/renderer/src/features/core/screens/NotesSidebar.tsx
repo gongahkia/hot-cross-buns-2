@@ -1,5 +1,5 @@
-import { CalendarPlus, Check, Pencil, Plus } from "lucide-react";
-import { Button, cx } from "../../../components/primitives";
+import { CalendarPlus, Check, PanelLeftClose, PanelLeftOpen, Pencil, Plus } from "lucide-react";
+import { Button, IconButton, cx } from "../../../components/primitives";
 import {
   actionDescription,
   actionLabel
@@ -8,34 +8,61 @@ import type { NoteBoardSelection } from "./notesTypes";
 
 export function NotesSidebar({
   allNoteCount,
+  collapsed,
   onCreateDailyNote,
   onCreateMeetingNote,
   onCreateNote,
+  onToggleCollapsed,
   onToggleView,
   selectedNoteViews,
   starredNoteCount
 }: {
   allNoteCount: number;
+  collapsed: boolean;
   onCreateDailyNote: () => void;
   onCreateMeetingNote: () => void;
   onCreateNote: () => void;
+  onToggleCollapsed: () => void;
   onToggleView: (view: NoteBoardSelection) => void;
   selectedNoteViews: NoteBoardSelection[];
   starredNoteCount: number;
 }): JSX.Element {
+  if (collapsed) {
+    return (
+      <aside className="min-h-0 rounded-hcbLg bg-bg-secondary p-2" aria-label="Notes navigation">
+        <IconButton
+          className="size-9 rounded-hcbMd"
+          icon={PanelLeftOpen}
+          label="Expand notes sidebar"
+          onClick={onToggleCollapsed}
+          variant="ghost"
+        />
+      </aside>
+    );
+  }
+
   return (
     <aside className="min-h-0 rounded-hcbLg bg-bg-secondary p-3" aria-label="Notes navigation">
-      <Button
-        aria-label={actionLabel("note.create")}
-        className="h-12 min-w-32 justify-start rounded-hcbLg shadow-sm"
-        data-action-id="note.create"
-        onClick={onCreateNote}
-        title={actionDescription("note.create")}
-        variant="secondary"
-      >
-        <Plus aria-hidden="true" size={18} />
-        Create
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          aria-label={actionLabel("note.create")}
+          className="h-12 min-w-0 flex-1 justify-start rounded-hcbLg shadow-sm"
+          data-action-id="note.create"
+          onClick={onCreateNote}
+          title={actionDescription("note.create")}
+          variant="secondary"
+        >
+          <Plus aria-hidden="true" size={18} />
+          Create
+        </Button>
+        <IconButton
+          className="size-10 rounded-hcbMd"
+          icon={PanelLeftClose}
+          label="Collapse notes sidebar"
+          onClick={onToggleCollapsed}
+          variant="ghost"
+        />
+      </div>
       <div className="mt-5 grid gap-1">
         <NoteSidebarCheckbox
           checked={selectedNoteViews.includes("all")}
