@@ -186,7 +186,7 @@ export function ShareAvailabilityPanel({
   title
 }: {
   calendarId: string;
-  calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
+  calendars: CalendarSourceViewModel[];
   durationMinutes: number;
   endDate: string;
   error?: string;
