@@ -2,85 +2,11 @@ import { useMemo } from "react";
 import { CalendarPlus, Copy, Eye, EyeOff, MapPin, Minus, X } from "lucide-react";
 import { Badge, Button, IconButton, Input, Panel, cx } from "../../../../components/primitives";
 import { EmptyState, ErrorState } from "../../../../components/states";
-import type { useCoreViewModelSource } from "../../coreViewModelSource";
 import type { CalendarEventViewModel } from "../../coreViewModels";
-import type { CalendarSourceViewModel, CompactTone } from "../../coreScreenShared";
+import type { CalendarSourceViewModel } from "../../coreScreenShared";
 import { CalendarSourceSwatch } from "./CalendarEventChips";
 import { calendarTimeBlockLabel, sortedCalendarTimeBlocks } from "./calendarGrid";
 import type { CalendarTimeBlock } from "./types";
-
-export function calendarStatusSummary(source: ReturnType<typeof useCoreViewModelSource>): {
-  detail: string;
-  label: string;
-  tone: CompactTone;
-} {
-  if (source.isOffline) {
-    return {
-      detail: source.errorMessage ?? "Local cache only",
-      label: "Offline",
-      tone: "warning"
-    };
-  }
-
-  if (source.dataState === "error") {
-    return {
-      detail: source.errorMessage ?? "Refresh failed",
-      label: "Cache error",
-      tone: "danger"
-    };
-  }
-
-  if (source.isStale || source.dataState === "stale" || source.syncStatus.stale) {
-    return {
-      detail: "Cached rows visible",
-      label: "Refreshing",
-      tone: "info"
-    };
-  }
-
-  if (source.syncStatus.state === "running") {
-    return {
-      detail: "Sync in progress",
-      label: "Syncing",
-      tone: "info"
-    };
-  }
-
-  if (source.syncStatus.pendingMutationCount > 0) {
-    return {
-      detail: `${source.syncStatus.pendingMutationCount} pending write${source.syncStatus.pendingMutationCount === 1 ? "" : "s"}`,
-      label: "Pending",
-      tone: "warning"
-    };
-  }
-
-  return {
-    detail: source.syncStatus.lastCompletedAt ? "Fresh local cache" : "Local cache",
-    label: "Ready",
-    tone: "success"
-  };
-}
-
-export function CalendarStatusStrip({
-  source,
-  visibleCalendarCount
-}: {
-  source: ReturnType<typeof useCoreViewModelSource>;
-  visibleCalendarCount: number;
-}): JSX.Element {
-  const status = calendarStatusSummary(source);
-
-  return (
-    <div
-      aria-label="Calendar status"
-      className="flex min-w-0 flex-wrap items-center justify-end gap-2"
-      role="status"
-    >
-      <Badge title={status.detail} tone={status.tone}>{status.label}</Badge>
-      <Badge tone="accent">Visible calendars: {visibleCalendarCount}</Badge>
-    </div>
-  );
-}
 
 function CalendarSourceRow({
   calendar,
