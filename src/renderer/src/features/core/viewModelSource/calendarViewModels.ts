@@ -1,10 +1,10 @@
-import type {
-  CalendarEventSummary,
-  ScheduledTaskBlockMoveRequest,
-  SettingsSnapshot,
-  ScheduledTaskBlockSummary
+import {
+  googleCalendarEventColor,
+  type CalendarEventSummary,
+  type ScheduledTaskBlockMoveRequest,
+  type SettingsSnapshot,
+  type ScheduledTaskBlockSummary
 } from "@shared/ipc/contracts";
-import { googleCalendarEventColor } from "@shared/googleCalendarColors";
 import type {
   CalendarDayViewModel,
   CalendarEventViewModel,

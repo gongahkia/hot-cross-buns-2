@@ -343,3 +343,12 @@ export {
   type IpcDomainName,
   type IpcMethodName
 } from "./contracts/registry";
+
+export {
+  googleCalendarEventColor,
+  googleCalendarEventColors
+} from "../googleCalendarColors";
+export type {
+  GoogleCalendarEventColor,
+  GoogleCalendarEventColorId
+} from "../googleCalendarColors";

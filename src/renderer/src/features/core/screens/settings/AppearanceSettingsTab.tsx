@@ -1,5 +1,9 @@
-import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contracts";
-import { googleCalendarEventColors, type GoogleCalendarEventColorId } from "@shared/googleCalendarColors";
+import {
+  googleCalendarEventColors,
+  type GoogleCalendarEventColorId,
+  type SettingsSnapshot,
+  type SettingsUpdateRequest
+} from "@shared/ipc/contracts";
 import type {
   AppColorThemeDefinition,
   AppColorThemeId

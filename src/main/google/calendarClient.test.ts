@@ -65,6 +65,7 @@ describe("Google Calendar mapping", () => {
           summary: "Timed review",
           description: "Line one<br>Line two",
           location: "Room 2",
+          colorId: "9",
           status: "confirmed",
           start: { dateTime: "2026-05-22T09:00:00+08:00", timeZone: "Asia/Singapore" },
           end: { dateTime: "2026-05-22T10:00:00+08:00", timeZone: "Asia/Singapore" },
@@ -98,6 +99,7 @@ describe("Google Calendar mapping", () => {
         id: "timed-1",
         summary: "Timed review",
         description: "Line one\nLine two",
+        colorId: "9",
         startAt: "2026-05-22T01:00:00.000Z",
         endAt: "2026-05-22T02:00:00.000Z",
         isAllDay: false,
@@ -169,5 +171,43 @@ describe("Google Calendar mapping", () => {
         }
       ]
     });
+  });
+
+  it("writes event color ids to Google mutations", async () => {
+    const getJsonCalls: Parameters<GoogleApiTransport["getJson"]>[0][] = [];
+    const getJson: GoogleApiTransport["getJson"] = async <T,>(
+      request: Parameters<GoogleApiTransport["getJson"]>[0]
+    ): Promise<T> => {
+      getJsonCalls.push(request);
+
+      return {
+        id: "event-1",
+        summary: "Design review",
+        colorId: "9",
+        start: { dateTime: "2026-05-22T09:00:00.000Z" },
+        end: { dateTime: "2026-05-22T10:00:00.000Z" }
+      } as T;
+    };
+    const adapter = new GoogleCalendarHttpAdapter({
+      getJson,
+      getJsonWithMetadata: vi.fn(),
+      send: vi.fn()
+    });
+
+    await expect(
+      adapter.insertEvent("primary", {
+        summary: "Design review",
+        startAt: "2026-05-22T09:00:00.000Z",
+        endAt: "2026-05-22T10:00:00.000Z",
+        isAllDay: false,
+        colorId: "9"
+      })
+    ).resolves.toMatchObject({ colorId: "9" });
+
+    expect(getJsonCalls[0]).toMatchObject({
+      method: "POST",
+      body: expect.objectContaining({ colorId: "9" })
+    });
+    expect(String(getJsonCalls[0]?.query?.fields)).toContain("colorId");
   });
 });

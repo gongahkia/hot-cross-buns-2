@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
-import { googleCalendarEventColor, googleCalendarEventColors } from "@shared/googleCalendarColors";
-import type { SettingsSnapshot } from "@shared/ipc/contracts";
+import {
+  googleCalendarEventColor,
+  googleCalendarEventColors,
+  type SettingsSnapshot
+} from "@shared/ipc/contracts";
 import { Bell, CalendarPlus, Clock3, FileText, Gift, ListPlus, MapPin, RotateCcw, Users, type LucideIcon } from "lucide-react";
 import { Badge, Input, cx } from "../../../../components/primitives";
 import { ErrorState } from "../../../../components/states";

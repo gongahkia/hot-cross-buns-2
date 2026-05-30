@@ -38,6 +38,7 @@ describe("local repository mappers", () => {
       startsAt: "2026-05-22T09:00:00.000Z",
       endsAt: "2026-05-22T09:30:00.000Z",
       allDay: 0,
+      colorId: null,
       updatedAt: "2026-05-22T00:00:00.000Z",
       location: "Location ".repeat(200),
       notes: "Notes ".repeat(4_000),

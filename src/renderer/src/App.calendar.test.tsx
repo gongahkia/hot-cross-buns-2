@@ -276,14 +276,16 @@ describe("App calendar", () => {
 
     const monthGrid = await screen.findByRole("grid", { name: "Calendar month view" });
 
-    expect(within(monthGrid).getAllByRole("button", { name: "Sleepover" })).toHaveLength(1);
-
-    const monthSegment = document.querySelector(
+    const monthButtons = within(monthGrid).getAllByRole("button", { name: "Sleepover" });
+    const monthSegments = Array.from(document.querySelectorAll(
       '[data-calendar-month-all-day-segment="event-sleepover"]'
-    ) as HTMLElement;
+    )) as HTMLElement[];
 
-    expect(monthSegment).toHaveAttribute("data-day-span", "3");
-    expect(monthSegment).toHaveAttribute("data-lane-index", "0");
+    expect(monthButtons).toHaveLength(monthSegments.length);
+    expect(
+      monthSegments.reduce((total, monthSegment) => total + Number(monthSegment.dataset.daySpan ?? 0), 0)
+    ).toBe(3);
+    expect(monthSegments.every((monthSegment) => monthSegment.dataset.laneIndex === "0")).toBe(true);
   });
 
   it("opens calendar creation from keyboard-focused grid cells", async () => {
