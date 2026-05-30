@@ -115,6 +115,7 @@ describe("shared IPC contracts", () => {
       calendarEventCreateRequestSchema.parse({
         title: "Design review",
         calendarId: "cal-1",
+        colorId: "9",
         startsAt: "2026-05-22T09:00:00.000Z",
         endsAt: "2026-05-22T10:00:00.000Z",
         guestEmails: ["ADA@example.com"],
@@ -129,6 +130,7 @@ describe("shared IPC contracts", () => {
       })
     ).toMatchObject({
       title: "Design review",
+      colorId: "9",
       guestEmails: ["ada@example.com"],
       allDay: false,
       recurrence: {
@@ -162,10 +164,12 @@ describe("shared IPC contracts", () => {
     expect(
       calendarEventUpdateRequestSchema.parse({
         id: "event-1",
+        colorId: null,
         recurrence: null
       })
     ).toEqual({
       id: "event-1",
+      colorId: null,
       recurrence: null
     });
   });
@@ -180,6 +184,7 @@ describe("shared IPC contracts", () => {
         startsAt: "2026-05-22T09:00:00.000Z",
         endsAt: "2026-05-22T10:00:00.000Z",
         allDay: false,
+        colorId: "10",
         updatedAt: "2026-05-22T08:00:00.000Z",
         calendarTitle: "Product",
         deepLink: "hotcrossbuns://calendar/event-1",
@@ -191,6 +196,7 @@ describe("shared IPC contracts", () => {
       })
     ).toMatchObject({
       mutationState: "queued",
+      colorId: "10",
       recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4",
       timeZone: "America/New_York"
     });
@@ -324,6 +330,9 @@ describe("shared IPC contracts", () => {
         uiTextSizePoints: 15,
         selectedTaskListIds: ["list-inbox"],
         selectedCalendarIds: ["cal-product"],
+        calendarEventColorOverrides: {
+          "9": { background: "#123456", foreground: "#abcdef" }
+        },
         syncMode: "manual",
         notificationsEnabled: false,
         mcpEnabled: false
@@ -333,6 +342,9 @@ describe("shared IPC contracts", () => {
       colorTheme: "dracula",
       uiFontName: "Inter",
       uiTextSizePoints: 15,
+      calendarEventColorOverrides: {
+        "9": { background: "#123456", foreground: "#abcdef" }
+      },
       syncMode: "manual"
     });
     expect(
@@ -424,6 +436,13 @@ describe("shared IPC contracts", () => {
     expect(settingsUpdateRequestSchema.safeParse({ uiFontName: "" }).success).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ uiTextSizePoints: 8 }).success).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ uiTextSizePoints: 25 }).success).toBe(false);
+    expect(
+      settingsUpdateRequestSchema.safeParse({
+        calendarEventColorOverrides: {
+          "9": { background: "blue", foreground: "#ffffff" }
+        }
+      }).success
+    ).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ menuBarIconName: "bolt" }).success).toBe(true);
     expect(settingsUpdateRequestSchema.safeParse({ taskCompletionSoundId: "coin" }).success).toBe(true);
     expect(settingsUpdateRequestSchema.safeParse({ eventCompletionSoundId: "sparkle" }).success).toBe(
