@@ -465,10 +465,43 @@ function TaskListColumn({
   title: string;
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+
+  function handleDragOver(event: DragEvent<HTMLElement>): void {
+    if (!list || !event.dataTransfer.types.includes(taskDragType)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropActive(true);
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>): void {
+    if (!list) {
+      return;
+    }
+
+    const taskId = event.dataTransfer.getData(taskDragType);
+
+    if (!taskId) {
+      return;
+    }
+
+    event.preventDefault();
+    setDropActive(false);
+    onMoveTask(taskId, list.id);
+  }
 
   return (
     <section
-      className="flex max-h-full w-[min(420px,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary"
+      className={cx(
+        "flex max-h-full w-[min(420px,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden rounded-hcbLg border border-border bg-bg-primary",
+        dropActive && "ring-2 ring-info"
+      )}
+      onDragLeave={() => setDropActive(false)}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       role="listitem"
     >
       <div className="relative flex items-center gap-2 px-4 py-3">
@@ -607,7 +640,7 @@ function GoogleTaskRow({
   task: TaskViewModel;
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuAnchorRef = useRef<HTMLDivElement>(null);
+  const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null);
   const scheduleLabel = taskScheduleLabel(task, scheduledBlock);
   const preview = taskPreview(task);
 
@@ -617,6 +650,16 @@ function GoogleTaskRow({
         "group relative grid grid-cols-[32px_minmax(0,1fr)_auto] gap-2 px-4 py-2 transition-colors duration-fast ease-hcb",
         selected ? "bg-surface-0" : "hover:bg-surface-0"
       )}
+      draggable
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setMenuPoint({ x: event.clientX, y: event.clientY });
+        setMenuOpen(true);
+      }}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData(taskDragType, task.id);
+      }}
       role="listitem"
     >
       <TaskCompletionButton completed={false} onToggle={onToggleTask} task={task} />
@@ -646,17 +689,9 @@ function GoogleTaskRow({
       </button>
       <div
         className="relative flex items-start gap-1 opacity-0 transition-opacity duration-fast ease-hcb group-hover:opacity-100 group-focus-within:opacity-100"
-        ref={menuAnchorRef}
       >
         <IconButton
-          className="size-7 rounded-full"
-          icon={MoreVertical}
-          label={`Open actions for ${task.title}`}
-          onClick={() => setMenuOpen((open) => !open)}
-          variant="ghost"
-        />
-        <IconButton
-          className={cx("size-7 rounded-full", starred ? "text-accent" : undefined)}
+          className={cx("size-9 rounded-full [&_svg]:size-5", starred ? "text-accent [&_svg]:fill-current" : undefined)}
           icon={Star}
           label={starred ? `Unstar ${task.title}` : `Star ${task.title}`}
           onClick={() => onToggleStar(task.id)}
@@ -664,7 +699,7 @@ function GoogleTaskRow({
         />
         {menuOpen ? (
           <TaskActionMenu
-            anchorRef={menuAnchorRef}
+            anchorPoint={menuPoint ?? undefined}
             onAddSubtask={() => { onAddSubtask(task); setMenuOpen(false); }}
             onCreateList={() => { onCreateList(); setMenuOpen(false); }}
             onDelete={() => { onDeleteTask(task.id); setMenuOpen(false); }}
@@ -680,7 +715,7 @@ function GoogleTaskRow({
 }
 
 function TaskActionMenu({
-  anchorRef,
+  anchorPoint,
   onAddSubtask,
   onCreateList,
   onDelete,
@@ -689,7 +724,7 @@ function TaskActionMenu({
   source,
   task
 }: {
-  anchorRef: RefObject<HTMLElement>;
+  anchorPoint?: { x: number; y: number };
   onAddSubtask: () => void;
   onCreateList: () => void;
   onDelete: () => void;
@@ -699,7 +734,7 @@ function TaskActionMenu({
   task: TaskViewModel;
 }): JSX.Element {
   return (
-    <FloatingMenu anchorRef={anchorRef} width={320}>
+    <FloatingMenu anchorPoint={anchorPoint} width={320}>
       <MenuButton onClick={onOpen}>
         <Target aria-hidden="true" size={18} />
         Add deadline
