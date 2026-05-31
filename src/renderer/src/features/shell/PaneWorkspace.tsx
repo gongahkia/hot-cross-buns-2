@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, FormEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { ExternalLink, GripVertical, X } from "lucide-react";
+import { ExternalLink, GripVertical, Plus, X } from "lucide-react";
 import { Button, cx } from "../../components/primitives";
 import { getPlannerSection, type SectionId } from "../../data/mockPlanner";
 import { SectionContent, type TaskSurfaceCommand } from "../core/CoreScreens";
 import {
+  activeSplitPaneWebTab,
   clampPaneRatio,
+  createSplitPaneWebTab,
   maxPaneLeaves,
+  paneSectionIds,
   splitPaneUrlLabel,
+  splitPaneWebUrl,
   type PaneContent,
   type PaneDropZone,
   type PaneLeafNode,
   type PaneNode,
-  type PaneSplitDirection,
-  type SplitPaneWebPage
+  type PaneSplitDirection
 } from "./paneWorkspaceModel";
 
 const paneDragDataType = "application/x-hcb-pane-id";
@@ -25,12 +28,10 @@ export function PaneWorkspace({
   onClosePane,
   onFocusPane,
   onMovePane,
-  onOpenRecentWebPage,
   onOpenWebPage,
   onReplacePane,
   onSetSplitRatio,
   onSplitPane,
-  recentWebPages,
   root,
   taskCommand,
   visibleCalendarIds,
@@ -42,17 +43,17 @@ export function PaneWorkspace({
   onClosePane: (paneId: string) => void;
   onFocusPane: (paneId: string) => void;
   onMovePane: (sourcePaneId: string, targetPaneId: string, dropZone: PaneDropZone) => void;
-  onOpenRecentWebPage: (pageId: string, paneId: string) => void;
   onOpenWebPage: (rawUrl: string, label: string | null, paneId: string) => boolean;
   onReplacePane: (paneId: string, content: PaneContent) => void;
   onSetSplitRatio: (splitId: string, ratio: number) => void;
   onSplitPane: (paneId: string, direction: PaneSplitDirection, content?: PaneContent) => void;
-  recentWebPages: SplitPaneWebPage[];
   root: PaneNode;
   taskCommand?: TaskSurfaceCommand | null;
   visibleCalendarIds: ReadonlySet<string>;
   visibleSectionIds: SectionId[];
 }): JSX.Element {
+  const openSectionIds = new Set(paneSectionIds(root));
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="pane-workspace">
       <PaneNodeView
@@ -63,12 +64,11 @@ export function PaneWorkspace({
         onClosePane={onClosePane}
         onFocusPane={onFocusPane}
         onMovePane={onMovePane}
-        onOpenRecentWebPage={onOpenRecentWebPage}
         onOpenWebPage={onOpenWebPage}
         onReplacePane={onReplacePane}
         onSetSplitRatio={onSetSplitRatio}
         onSplitPane={onSplitPane}
-        recentWebPages={recentWebPages}
+        openSectionIds={openSectionIds}
         taskCommand={taskCommand}
         visibleCalendarIds={visibleCalendarIds}
         visibleSectionIds={visibleSectionIds}
@@ -85,12 +85,11 @@ function PaneNodeView({
   onClosePane,
   onFocusPane,
   onMovePane,
-  onOpenRecentWebPage,
   onOpenWebPage,
   onReplacePane,
   onSetSplitRatio,
   onSplitPane,
-  recentWebPages,
+  openSectionIds,
   taskCommand,
   visibleCalendarIds,
   visibleSectionIds
@@ -102,12 +101,11 @@ function PaneNodeView({
   onClosePane: (paneId: string) => void;
   onFocusPane: (paneId: string) => void;
   onMovePane: (sourcePaneId: string, targetPaneId: string, dropZone: PaneDropZone) => void;
-  onOpenRecentWebPage: (pageId: string, paneId: string) => void;
   onOpenWebPage: (rawUrl: string, label: string | null, paneId: string) => boolean;
   onReplacePane: (paneId: string, content: PaneContent) => void;
   onSetSplitRatio: (splitId: string, ratio: number) => void;
   onSplitPane: (paneId: string, direction: PaneSplitDirection, content?: PaneContent) => void;
-  recentWebPages: SplitPaneWebPage[];
+  openSectionIds: ReadonlySet<SectionId>;
   taskCommand?: TaskSurfaceCommand | null;
   visibleCalendarIds: ReadonlySet<string>;
   visibleSectionIds: SectionId[];
@@ -122,11 +120,10 @@ function PaneNodeView({
         onClosePane={onClosePane}
         onFocusPane={onFocusPane}
         onMovePane={onMovePane}
-        onOpenRecentWebPage={onOpenRecentWebPage}
         onOpenWebPage={onOpenWebPage}
         onReplacePane={onReplacePane}
         onSplitPane={onSplitPane}
-        recentWebPages={recentWebPages}
+        openSectionIds={openSectionIds}
         taskCommand={taskCommand}
         visibleCalendarIds={visibleCalendarIds}
         visibleSectionIds={visibleSectionIds}
@@ -152,12 +149,11 @@ function PaneNodeView({
           onClosePane={onClosePane}
           onFocusPane={onFocusPane}
           onMovePane={onMovePane}
-          onOpenRecentWebPage={onOpenRecentWebPage}
           onOpenWebPage={onOpenWebPage}
           onReplacePane={onReplacePane}
           onSetSplitRatio={onSetSplitRatio}
           onSplitPane={onSplitPane}
-          recentWebPages={recentWebPages}
+          openSectionIds={openSectionIds}
           taskCommand={taskCommand}
           visibleCalendarIds={visibleCalendarIds}
           visibleSectionIds={visibleSectionIds}
@@ -176,12 +172,11 @@ function PaneNodeView({
           onClosePane={onClosePane}
           onFocusPane={onFocusPane}
           onMovePane={onMovePane}
-          onOpenRecentWebPage={onOpenRecentWebPage}
           onOpenWebPage={onOpenWebPage}
           onReplacePane={onReplacePane}
           onSetSplitRatio={onSetSplitRatio}
           onSplitPane={onSplitPane}
-          recentWebPages={recentWebPages}
+          openSectionIds={openSectionIds}
           taskCommand={taskCommand}
           visibleCalendarIds={visibleCalendarIds}
           visibleSectionIds={visibleSectionIds}
@@ -199,11 +194,10 @@ function PaneLeaf({
   onClosePane,
   onFocusPane,
   onMovePane,
-  onOpenRecentWebPage,
   onOpenWebPage,
   onReplacePane,
   onSplitPane,
-  recentWebPages,
+  openSectionIds,
   taskCommand,
   visibleCalendarIds,
   visibleSectionIds
@@ -215,11 +209,10 @@ function PaneLeaf({
   onClosePane: (paneId: string) => void;
   onFocusPane: (paneId: string) => void;
   onMovePane: (sourcePaneId: string, targetPaneId: string, dropZone: PaneDropZone) => void;
-  onOpenRecentWebPage: (pageId: string, paneId: string) => void;
   onOpenWebPage: (rawUrl: string, label: string | null, paneId: string) => boolean;
   onReplacePane: (paneId: string, content: PaneContent) => void;
   onSplitPane: (paneId: string, direction: PaneSplitDirection, content?: PaneContent) => void;
-  recentWebPages: SplitPaneWebPage[];
+  openSectionIds: ReadonlySet<SectionId>;
   taskCommand?: TaskSurfaceCommand | null;
   visibleCalendarIds: ReadonlySet<string>;
   visibleSectionIds: SectionId[];
@@ -310,9 +303,8 @@ function PaneLeaf({
         <PaneLeafContent
           activeSectionId={activeSectionId}
           leaf={leaf}
-          onOpenRecentWebPage={onOpenRecentWebPage}
+          openSectionIds={openSectionIds}
           onReplacePane={onReplacePane}
-          recentWebPages={recentWebPages}
           taskCommand={taskCommand}
           onOpenWebPage={(rawUrl, label) => onOpenWebPage(rawUrl, label, leaf.id)}
           visibleCalendarIds={visibleCalendarIds}
@@ -333,20 +325,18 @@ function PaneLeaf({
 function PaneLeafContent({
   activeSectionId,
   leaf,
-  onOpenRecentWebPage,
   onOpenWebPage,
+  openSectionIds,
   onReplacePane,
-  recentWebPages,
   taskCommand,
   visibleCalendarIds,
   visibleSectionIds
 }: {
   activeSectionId: SectionId;
   leaf: PaneLeafNode;
-  onOpenRecentWebPage: (pageId: string, paneId: string) => void;
   onOpenWebPage: (rawUrl: string, label: string | null) => boolean;
+  openSectionIds: ReadonlySet<SectionId>;
   onReplacePane: (paneId: string, content: PaneContent) => void;
-  recentWebPages: SplitPaneWebPage[];
   taskCommand?: TaskSurfaceCommand | null;
   visibleCalendarIds: ReadonlySet<string>;
   visibleSectionIds: SectionId[];
@@ -355,10 +345,9 @@ function PaneLeafContent({
     return (
       <PaneChooser
         activeSectionId={activeSectionId}
-        onOpenRecentWebPage={(pageId) => onOpenRecentWebPage(pageId, leaf.id)}
         onOpenWebPage={onOpenWebPage}
+        openSectionIds={openSectionIds}
         onSelectSection={(sectionId) => onReplacePane(leaf.id, { kind: "section", sectionId })}
-        recentWebPages={recentWebPages}
         visibleSectionIds={visibleSectionIds}
       />
     );

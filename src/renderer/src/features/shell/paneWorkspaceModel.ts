@@ -12,9 +12,15 @@ export interface SplitPaneWebPage {
 export type PaneSplitDirection = "row" | "column";
 export type PaneDropZone = "left" | "right" | "top" | "bottom" | "center";
 
+export interface SplitPaneWebTab {
+  id: string;
+  title: string;
+  url: string;
+}
+
 export type PaneContent =
   | { kind: "section"; sectionId: SectionId }
-  | { kind: "web"; url: string; title: string }
+  | { kind: "web"; tabs: SplitPaneWebTab[]; activeTabId: string }
   | { kind: "chooser" };
 
 export interface PaneLeafNode {
@@ -35,7 +41,6 @@ export type PaneNode = PaneLeafNode | PaneSplitNode;
 
 export interface StoredPaneWorkspace {
   focusedPaneId: string;
-  recentWebPages: SplitPaneWebPage[];
   root: PaneNode;
 }
 
@@ -86,6 +91,13 @@ export function firstPaneSectionId(node: PaneNode): SectionId {
   const sectionLeaf = leaves.find((leaf) => leaf.content.kind === "section");
 
   return sectionLeaf?.content.kind === "section" ? sectionLeaf.content.sectionId : "calendar";
+}
+
+export function paneSectionIds(node: PaneNode): SectionId[] {
+  return paneLeafIds(node).flatMap((leafId) => {
+    const leaf = findPaneLeaf(node, leafId);
+    return leaf?.content.kind === "section" ? [leaf.content.sectionId] : [];
+  });
 }
 
 export function replacePaneContent(node: PaneNode, paneId: string, content: PaneContent): PaneNode {
@@ -261,6 +273,35 @@ export function splitPaneWebTitle(url: string, label: string | null): string {
   }
 }
 
+export function createSplitPaneWebTab(url: string, label: string | null): SplitPaneWebTab {
+  return {
+    id: createPaneId(),
+    title: splitPaneWebTitle(url, label),
+    url
+  };
+}
+
+export function createSplitPaneWebContent(url: string, label: string | null): Extract<PaneContent, { kind: "web" }> {
+  const tab = createSplitPaneWebTab(url, label);
+  return {
+    kind: "web",
+    activeTabId: tab.id,
+    tabs: [tab]
+  };
+}
+
+export function activeSplitPaneWebTab(content: Extract<PaneContent, { kind: "web" }>): SplitPaneWebTab {
+  return content.tabs.find((tab) => tab.id === content.activeTabId) ?? content.tabs[0] ?? {
+    id: createPaneId(),
+    title: "New tab",
+    url: ""
+  };
+}
+
+export function splitPaneWebContentTitle(content: Extract<PaneContent, { kind: "web" }>): string {
+  return activeSplitPaneWebTab(content).title;
+}
+
 export function splitPaneUrlLabel(url: string): string {
   try {
     const parsed = new URL(url);
@@ -285,9 +326,7 @@ export function sanitizeStoredPaneWorkspace(value: unknown): StoredPaneWorkspace
   const focusedPaneId = typeof record.focusedPaneId === "string" && findPaneLeaf(root, record.focusedPaneId)
     ? record.focusedPaneId
     : firstPaneLeaf(root).id;
-  const recentWebPages = sanitizeRecentWebPages(record.recentWebPages);
-
-  return { root, focusedPaneId, recentWebPages };
+  return { root, focusedPaneId };
 }
 
 function sanitizePaneNode(value: unknown, depth: number): PaneNode | null {
@@ -345,35 +384,41 @@ function sanitizePaneContent(value: unknown): PaneContent | null {
         ? splitPaneWebTitle(url, null)
         : "";
 
-    return url ? { kind: "web", url, title } : null;
+    return url ? createSplitPaneWebContent(url, title) : null;
+  }
+
+  if (record.kind === "web" && Array.isArray(record.tabs)) {
+    const tabs = record.tabs.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return [];
+      }
+
+      const tab = item as Record<string, unknown>;
+      const url = typeof tab.url === "string"
+        ? splitPaneWebUrl(tab.url, window.location.href)
+        : null;
+
+      if (!url) {
+        return [];
+      }
+
+      return [{
+        id: typeof tab.id === "string" && tab.id.trim() ? tab.id : createPaneId(),
+        title: splitPaneWebTitle(url, typeof tab.title === "string" ? tab.title : null),
+        url
+      }];
+    }).slice(0, 12);
+
+    if (tabs.length === 0) {
+      return null;
+    }
+
+    const activeTabId = typeof record.activeTabId === "string" && tabs.some((tab) => tab.id === record.activeTabId)
+      ? record.activeTabId
+      : tabs[0].id;
+
+    return { kind: "web", tabs, activeTabId };
   }
 
   return null;
-}
-
-function sanitizeRecentWebPages(value: unknown): SplitPaneWebPage[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      return [];
-    }
-
-    const record = item as Record<string, unknown>;
-    const url = typeof record.url === "string"
-      ? splitPaneWebUrl(record.url, window.location.href)
-      : null;
-
-    if (!url) {
-      return [];
-    }
-
-    return [{
-      id: typeof record.id === "string" && record.id.trim() ? record.id : url,
-      title: splitPaneWebTitle(url, typeof record.title === "string" ? record.title : null),
-      url
-    }];
-  }).slice(0, 8);
 }

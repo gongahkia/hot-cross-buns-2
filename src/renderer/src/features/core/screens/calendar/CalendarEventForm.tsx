@@ -187,7 +187,7 @@ export function CalendarEventDetails({
             <Badge tone="success">Synced</Badge>
           )}
         </div>
-        <h3 className="text-[var(--text-xl)] font-semibold leading-snug text-text-primary">
+        <h3 className="break-words text-[var(--text-xl)] font-semibold leading-snug text-text-primary">
           {draft.title || "Untitled event"}
         </h3>
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">

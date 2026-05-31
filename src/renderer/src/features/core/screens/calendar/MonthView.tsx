@@ -178,7 +178,7 @@ export function MonthView({
                 style={monthAllDaySegmentStyle(segment)}
               >
                 <CalendarEventChip
-                  className="h-5 px-1.5 py-0.5 text-[11px]"
+                  className="h-5"
                   event={segment.event}
                   labelVariant="title"
                   onKeyDown={(keyEvent) => {
@@ -186,6 +186,7 @@ export function MonthView({
                     handleActivationKeyDown(keyEvent, () => onOpen(segment.event));
                   }}
                   onOpen={onOpen}
+                  size="compact"
                 />
               </div>
             ))}
@@ -198,7 +199,7 @@ export function MonthView({
                   style={monthEventChipStyle(dayIndex, laneIndex)}
                 >
                   <CalendarEventChip
-                    className="h-5 px-1.5 py-0.5 text-[11px]"
+                    className="h-5"
                     event={event}
                     labelVariant="title"
                     onKeyDown={(keyEvent) => {
@@ -206,6 +207,7 @@ export function MonthView({
                       handleActivationKeyDown(keyEvent, () => onOpen(event));
                     }}
                     onOpen={onOpen}
+                    size="compact"
                   />
                 </div>
               ))

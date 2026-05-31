@@ -62,11 +62,11 @@ export function InspectorShell(): JSX.Element | null {
         role="dialog"
         tabIndex={-1}
       >
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4">
-          <div className="min-w-0">
+        <header className="flex min-h-14 items-start justify-between gap-3 border-b border-border px-4 py-2">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2
-                className="truncate text-[var(--text-lg)] font-semibold text-text-primary"
+                className="min-w-0 whitespace-normal break-words text-[var(--text-lg)] font-semibold leading-snug text-text-primary"
                 id={titleId}
               >
                 {current.title}
@@ -74,7 +74,7 @@ export function InspectorShell(): JSX.Element | null {
               {current.dirty ? <Badge tone="warning">Unsaved</Badge> : null}
             </div>
             {current.subtitle ? (
-              <p className="truncate text-[var(--text-xs)] text-text-muted">{current.subtitle}</p>
+              <p className="mt-0.5 whitespace-normal break-words text-[var(--text-xs)] leading-snug text-text-muted">{current.subtitle}</p>
             ) : null}
           </div>
           <IconButton

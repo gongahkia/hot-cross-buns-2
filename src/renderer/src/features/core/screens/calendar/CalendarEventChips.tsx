@@ -123,6 +123,8 @@ function calendarEventLabel(
   return event.title;
 }
 
+type CalendarEventChipSize = "default" | "compact";
+
 export function CalendarSourceSwatch({
   calendarId,
   color,
@@ -151,7 +153,8 @@ export function CalendarEventChip({
   labelVariant,
   onDragStart,
   onKeyDown,
-  onOpen
+  onOpen,
+  size = "default"
 }: {
   className?: string;
   draggable?: boolean;
@@ -160,6 +163,7 @@ export function CalendarEventChip({
   onDragStart?: (dragEvent: DragEvent<HTMLElement>) => void;
   onKeyDown?: (keyEvent: KeyboardEvent<HTMLElement>) => void;
   onOpen?: (event: CalendarEventViewModel) => void;
+  size?: CalendarEventChipSize;
 }): JSX.Element {
   const tone = calendarSourceTone(event.calendarId);
   const fillStyle = calendarEventFillStyle(event);
@@ -170,7 +174,8 @@ export function CalendarEventChip({
     <button
       aria-label={label}
       className={cx(
-        "group flex min-h-6 w-full min-w-0 cursor-default items-start gap-1.5 rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary shadow-sm transition-colors duration-fast ease-hcb hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        "group flex w-full min-w-0 cursor-default items-center gap-1.5 overflow-hidden rounded-hcbSm border border-border bg-surface-0 text-left text-text-secondary shadow-sm transition-colors duration-fast ease-hcb hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        size === "compact" ? "min-h-0 px-1.5 py-0.5 text-[11px]" : "min-h-6 px-2 py-1 text-[var(--text-xs)]",
         draggable && "cursor-grab active:cursor-grabbing",
         event.allDay && "font-medium",
         fillStyle && "hover:brightness-95",
@@ -189,7 +194,7 @@ export function CalendarEventChip({
       title={`${label} - ${event.calendar}`}
       type="button"
     >
-      <span className="min-w-0 flex-1 whitespace-normal break-words leading-tight">{label}</span>
+      <span className="min-w-0 flex-1 truncate leading-tight">{label}</span>
       {event.mutationState && event.mutationState !== "synced" ? (
         <span
           aria-hidden="true"

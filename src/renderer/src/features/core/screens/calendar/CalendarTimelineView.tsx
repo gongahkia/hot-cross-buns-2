@@ -51,7 +51,7 @@ function CalendarTimelineEventChip({
   return (
     <>
       <CalendarEventChip
-        className={cx("h-full min-h-0 px-1.5 py-0.5 text-[11px]", className)}
+        className={cx("h-full min-h-0", className)}
         draggable
         event={event}
         labelVariant={labelVariant}
@@ -75,6 +75,7 @@ function CalendarTimelineEventChip({
           );
         }}
         onOpen={onOpen}
+        size="compact"
       />
       {!event.allDay ? (
         <button

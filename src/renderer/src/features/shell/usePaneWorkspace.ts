@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SectionId } from "../../data/mockPlanner";
 import { writeLocalStorageJSON } from "../core/localStorageHelpers";
 import {
+  activeSplitPaneWebTab,
   closePaneLeaf,
   createDefaultPaneTree,
+  createSplitPaneWebContent,
+  createSplitPaneWebTab,
   findPaneLeaf,
   firstPaneLeaf,
   firstPaneSectionId,
@@ -16,19 +19,17 @@ import {
   sanitizeStoredPaneWorkspace,
   setPaneSplitRatio,
   splitPaneLeaf,
-  splitPaneWebTitle,
+  splitPaneWebContentTitle,
   splitPaneWebUrl,
   swapPaneContents,
   type PaneContent,
   type PaneDropZone,
   type PaneNode,
-  type PaneSplitDirection,
-  type SplitPaneWebPage
+  type PaneSplitDirection
 } from "./paneWorkspaceModel";
 
 interface PaneWorkspaceState {
   focusedPaneId: string;
-  recentWebPages: SplitPaneWebPage[];
   root: PaneNode;
 }
 
@@ -45,7 +46,7 @@ function readPaneWorkspaceState(): PaneWorkspaceState {
   }
 
   const root = createDefaultPaneTree("calendar");
-  return { focusedPaneId: root.id, recentWebPages: [], root };
+  return { focusedPaneId: root.id, root };
 }
 
 export function usePaneWorkspace(): {
@@ -57,12 +58,11 @@ export function usePaneWorkspace(): {
   focusedTitle: string;
   focusPane: (paneId: string) => void;
   focusPaneByDirection: (direction: "left" | "right" | "up" | "down") => void;
+  newWebTab: (paneId: string) => void;
   movePane: (sourcePaneId: string, targetPaneId: string, dropZone: PaneDropZone) => void;
   openChooser: () => void;
-  openRecentWebPage: (pageId: string, paneId: string) => void;
   openUrl: (url: string, label: string | null) => void;
   openWebPageInPane: (rawUrl: string, label: string | null, paneId: string) => boolean;
-  recentWebPages: SplitPaneWebPage[];
   replaceFocusedWithSection: (sectionId: SectionId) => void;
   replacePane: (paneId: string, content: PaneContent) => void;
   root: PaneNode;
@@ -145,11 +145,6 @@ export function usePaneWorkspace(): {
         ? {
             ...current,
             focusedPaneId: paneId,
-            recentWebPages: content.kind === "web"
-              ? current.recentWebPages.map((page) =>
-                  page.url === content.url ? { ...page, title: content.title } : page
-                )
-              : current.recentWebPages,
             root: replacePaneContent(current.root, paneId, content)
           }
         : current
@@ -264,24 +259,6 @@ export function usePaneWorkspace(): {
     });
   }, []);
 
-  const addRecentWebPage = useCallback((url: string, label: string | null): SplitPaneWebPage => {
-    const page: SplitPaneWebPage = {
-      id: url,
-      title: splitPaneWebTitle(url, label),
-      url
-    };
-
-    setState((current) => ({
-      ...current,
-      recentWebPages: [
-        page,
-        ...current.recentWebPages.filter((recentPage) => recentPage.url !== url)
-      ].slice(0, 8)
-    }));
-
-    return page;
-  }, []);
-
   const openUrl = useCallback((rawUrl: string, label: string | null): void => {
     const url = splitPaneWebUrl(rawUrl, window.location.href);
 
@@ -289,12 +266,10 @@ export function usePaneWorkspace(): {
       return;
     }
 
-    const page = addRecentWebPage(url, label);
-
     setState((current) => {
       const leafIds = paneLeafIds(current.root);
       const secondaryPaneId = leafIds.find((paneId) => paneId !== current.focusedPaneId);
-      const content: PaneContent = { kind: "web", title: page.title, url: page.url };
+      const content = createSplitPaneWebContent(url, label);
 
       if (secondaryPaneId) {
         return {
@@ -309,26 +284,6 @@ export function usePaneWorkspace(): {
         ? { ...current, focusedPaneId: result.newPaneId, root: result.node }
         : current;
     });
-  }, [addRecentWebPage]);
-
-  const openRecentWebPage = useCallback((pageId: string, paneId: string): void => {
-    setState((current) => {
-      const page = current.recentWebPages.find((recentPage) => recentPage.id === pageId);
-
-      if (!page || !findPaneLeaf(current.root, paneId)) {
-        return current;
-      }
-
-      return {
-        ...current,
-        focusedPaneId: paneId,
-        root: replacePaneContent(current.root, paneId, {
-          kind: "web",
-          title: page.title,
-          url: page.url
-        })
-      };
-    });
   }, []);
 
   const openWebPageInPane = useCallback((rawUrl: string, label: string | null, paneId: string): boolean => {
@@ -338,24 +293,39 @@ export function usePaneWorkspace(): {
       return false;
     }
 
-    const page = addRecentWebPage(url, label);
-
     setState((current) =>
       findPaneLeaf(current.root, paneId)
         ? {
             ...current,
             focusedPaneId: paneId,
-            root: replacePaneContent(current.root, paneId, {
-              kind: "web",
-              title: page.title,
-              url: page.url
-            })
+            root: replacePaneContent(current.root, paneId, createSplitPaneWebContent(url, label))
           }
         : current
     );
 
     return true;
-  }, [addRecentWebPage]);
+  }, []);
+
+  const newWebTab = useCallback((paneId: string): void => {
+    setState((current) => {
+      const leaf = findPaneLeaf(current.root, paneId);
+
+      if (leaf?.content.kind !== "web") {
+        return current;
+      }
+
+      const tab = createSplitPaneWebTab("", "New tab");
+      return {
+        ...current,
+        focusedPaneId: paneId,
+        root: replacePaneContent(current.root, paneId, {
+          ...leaf.content,
+          activeTabId: tab.id,
+          tabs: [...leaf.content.tabs, tab].slice(-12)
+        })
+      };
+    });
+  }, []);
 
   return useMemo(
     () => ({
@@ -367,12 +337,11 @@ export function usePaneWorkspace(): {
       focusedTitle,
       focusPane,
       focusPaneByDirection,
+      newWebTab,
       movePane,
       openChooser,
-      openRecentWebPage,
       openUrl,
       openWebPageInPane,
-      recentWebPages: state.recentWebPages,
       replaceFocusedWithSection,
       replacePane,
       root: state.root,
@@ -388,8 +357,8 @@ export function usePaneWorkspace(): {
       focusedSectionId,
       focusedTitle,
       movePane,
+      newWebTab,
       openChooser,
-      openRecentWebPage,
       openUrl,
       openWebPageInPane,
       replaceFocusedWithSection,
@@ -397,7 +366,6 @@ export function usePaneWorkspace(): {
       setSplitRatio,
       splitPane,
       state.focusedPaneId,
-      state.recentWebPages,
       state.root
     ]
   );
@@ -409,7 +377,7 @@ function paneContentTitle(content: PaneContent): string {
   }
 
   if (content.kind === "web") {
-    return content.title;
+    return splitPaneWebContentTitle(content);
   }
 
   return content.sectionId[0].toUpperCase() + content.sectionId.slice(1);
