@@ -61,7 +61,10 @@ describe("App tasks", () => {
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Open actions for Draft inbox triage rules" }));
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /^Draft inbox triage rules / }).closest("[role='listitem']") as HTMLElement,
+      { clientX: 120, clientY: 160 }
+    );
     expect(screen.getByRole("button", { name: "Add deadline" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add a subtask" })).toBeInTheDocument();
 
@@ -72,7 +75,10 @@ describe("App tasks", () => {
       parentId: null
     });
 
-    await user.click(screen.getByRole("button", { name: "Open actions for Review calendar fixture shape" }));
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /^Review calendar fixture shape / }).closest("[role='listitem']") as HTMLElement,
+      { clientX: 120, clientY: 220 }
+    );
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-calendar-fixtures" });
 

@@ -147,6 +147,13 @@ describe("SQLite-backed domain services", () => {
     });
     expect(await domain.planner.listNotes({ limit: 10 })).toEqual({
       items: [],
+      lists: [
+        expect.objectContaining({
+          id: "note-list:default",
+          noteCount: 0,
+          title: "Local notes"
+        })
+      ],
       page: {
         limit: 10,
         totalKnown: 0
