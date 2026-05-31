@@ -47,7 +47,6 @@ export function calendarBlocksOverlapHour(
 
   return blocks.some(
     (block) =>
-      block.dayKey === dayKey &&
       Date.parse(block.startsAt) < endsAt &&
       Date.parse(block.endsAt) > startsAt
   );

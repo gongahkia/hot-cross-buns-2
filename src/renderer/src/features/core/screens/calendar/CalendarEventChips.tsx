@@ -73,8 +73,7 @@ function calendarEventAccentStyle(color: string | null | undefined): CSSProperti
   }
 
   return {
-    backgroundImage: `linear-gradient(90deg, ${hexToRgba(normalized, 0.1)} 0%, transparent 56%)`,
-    borderLeftColor: normalized
+    backgroundImage: `linear-gradient(90deg, ${hexToRgba(normalized, 0.1)} 0%, transparent 56%)`
   };
 }
 
@@ -88,7 +87,6 @@ export function calendarEventFillStyle(event: CalendarEventViewModel): CSSProper
   return {
     backgroundColor: background,
     borderColor: background,
-    borderLeftColor: background,
     color: normalizeCalendarColor(event.displayForegroundColor ?? event.calendarForegroundColor) ?? readableTextColor(background)
   };
 }
@@ -172,7 +170,7 @@ export function CalendarEventChip({
     <button
       aria-label={label}
       className={cx(
-        "group flex min-h-6 w-full min-w-0 cursor-default items-center gap-1.5 rounded-hcbSm border border-border border-l-4 bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary shadow-sm transition-colors duration-fast ease-hcb hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        "group flex min-h-6 w-full min-w-0 cursor-default items-center gap-1.5 rounded-hcbSm border border-border bg-surface-0 px-2 py-1 text-left text-[var(--text-xs)] text-text-secondary shadow-sm transition-colors duration-fast ease-hcb hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         draggable && "cursor-grab active:cursor-grabbing",
         event.allDay && "font-medium",
         fillStyle && "hover:brightness-95",

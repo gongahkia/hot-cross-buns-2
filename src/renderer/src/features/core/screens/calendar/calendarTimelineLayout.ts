@@ -54,7 +54,8 @@ function visibleCalendarDay(
 
 export function visibleCalendarTimelineDays(
   days: CalendarDayViewModel[],
-  visibleCalendarIds: ReadonlySet<string>
+  visibleCalendarIds: ReadonlySet<string>,
+  hourRowHeight = calendarTimelineHourRowHeight
 ): VisibleCalendarTimelineDay[] {
   return days.map((day) => {
     const visibleDay = visibleCalendarDay(day, visibleCalendarIds);
@@ -62,16 +63,17 @@ export function visibleCalendarTimelineDays(
 
     return {
       ...visibleDay,
-      timedEventLayouts: calendarTimelineEventLayouts(visibleDay.timedEvents, dayKey)
+      timedEventLayouts: calendarTimelineEventLayouts(visibleDay.timedEvents, dayKey, hourRowHeight)
     };
   });
 }
 
 export function visibleCalendarTimeline(
   days: CalendarDayViewModel[],
-  visibleCalendarIds: ReadonlySet<string>
+  visibleCalendarIds: ReadonlySet<string>,
+  hourRowHeight = calendarTimelineHourRowHeight
 ): VisibleCalendarTimeline {
-  const visibleDays = visibleCalendarTimelineDays(days, visibleCalendarIds);
+  const visibleDays = visibleCalendarTimelineDays(days, visibleCalendarIds, hourRowHeight);
   const allDayLayout = calendarAllDayLayout(
     visibleDays.map(({ day }) => day),
     visibleCalendarIds,
@@ -183,7 +185,8 @@ export function calendarAllDayLayout(
 
 function calendarTimelineEventLayouts(
   events: CalendarEventViewModel[],
-  dayKey: string
+  dayKey: string,
+  hourRowHeight: number
 ): CalendarTimelineEventLayout[] {
   const candidates = events
     .map((event) => {
@@ -230,8 +233,8 @@ function calendarTimelineEventLayouts(
         event: item.event,
         startMinute: item.startMinute,
         durationMinutes,
-        top: (item.startMinute / 60) * calendarTimelineHourRowHeight,
-        height: (durationMinutes / 60) * calendarTimelineHourRowHeight,
+        top: (item.startMinute / 60) * hourRowHeight,
+        height: (durationMinutes / 60) * hourRowHeight,
         laneIndex,
         laneCount: 1
       });

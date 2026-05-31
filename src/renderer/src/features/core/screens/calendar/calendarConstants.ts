@@ -8,3 +8,14 @@ export const calendarWeekVisibleTimedCount = 4;
 export const calendarWeekVisibleAllDayCount = 2;
 export const calendarTimelineVisibleAllDayCount = 4;
 export const calendarTimelineHourRowHeight = 96;
+export const calendarTimelineHourRowHeights = {
+  compact: 64,
+  comfortable: 80,
+  spacious: 112
+} as const;
+
+export type CalendarTimelineDensity = keyof typeof calendarTimelineHourRowHeights;
+
+export function calendarTimelineHourHeight(density: string): number {
+  return calendarTimelineHourRowHeights[density as CalendarTimelineDensity] ?? calendarTimelineHourRowHeights.compact;
+}

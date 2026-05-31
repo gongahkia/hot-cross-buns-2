@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent } from "react";
 import { cx } from "../../../../components/primitives";
 import { handleActivationKeyDown } from "../../coreScreenShared";
 import type { CalendarEventViewModel, CalendarMonthWeekViewModel } from "../../coreViewModels";
 import { CalendarEventChip, CalendarOverflowChip, CalendarOverflowPopover } from "./CalendarEventChips";
-import { calendarDateTitle, calendarMonthVisibleChipCount, visibleCalendarMonthWeeks } from "./calendarGrid";
+import { calendarAddUtcDays, calendarDateTitle, calendarMonthVisibleChipCount, visibleCalendarMonthWeeks } from "./calendarGrid";
 import type { CalendarCreateSeed, CalendarTimelineAllDaySegment } from "./types";
 
 const monthEventLaneHeight = 22;
@@ -45,10 +45,67 @@ export function MonthView({
     events: CalendarEventViewModel[];
     title: string;
   } | null>(null);
+  const [rangeSelection, setRangeSelection] = useState<{ end: string; start: string } | null>(null);
+  const [suppressClick, setSuppressClick] = useState(false);
   const visibleWeeks = useMemo(
     () => visibleCalendarMonthWeeks(weeks, visibleCalendarIds),
     [weeks, visibleCalendarIds]
   );
+  const dragRangeRef = useRef<{ moved: boolean; start: string } | null>(null);
+
+  function orderedRange(start: string, end: string): { end: string; start: string } {
+    return start <= end ? { start, end } : { start: end, end: start };
+  }
+
+  function rangeContains(dayKey: string): boolean {
+    if (!rangeSelection) {
+      return false;
+    }
+
+    const range = orderedRange(rangeSelection.start, rangeSelection.end);
+    return dayKey >= range.start && dayKey <= range.end;
+  }
+
+  function handleDayPointerDown(pointerEvent: PointerEvent<HTMLDivElement>, dayKey: string): void {
+    if (pointerEvent.button !== 0) {
+      return;
+    }
+
+    dragRangeRef.current = { moved: false, start: dayKey };
+    setRangeSelection({ start: dayKey, end: dayKey });
+  }
+
+  function handleDayPointerEnter(dayKey: string): void {
+    if (!dragRangeRef.current) {
+      return;
+    }
+
+    dragRangeRef.current.moved = true;
+    setRangeSelection({ start: dragRangeRef.current.start, end: dayKey });
+  }
+
+  function handleDayPointerUp(dayKey: string): void {
+    if (!dragRangeRef.current) {
+      return;
+    }
+
+    const start = dragRangeRef.current.start;
+    const moved = dragRangeRef.current.moved || start !== dayKey;
+    const range = orderedRange(start, dayKey);
+    dragRangeRef.current = null;
+    setRangeSelection(null);
+
+    if (!moved) {
+      return;
+    }
+
+    setSuppressClick(true);
+    onCreate({
+      allDay: true,
+      startsAt: `${range.start}T00:00:00.000Z`,
+      endsAt: `${calendarAddUtcDays(range.end, 1)}T00:00:00.000Z`
+    });
+  }
 
   return (
     <div className="flex min-h-[680px] flex-col overflow-hidden rounded-hcbMd border border-border bg-bg-secondary" role="grid" aria-label="Calendar month view">
@@ -78,15 +135,26 @@ export function MonthView({
                   className={cx(
                     "relative z-0 min-h-[126px] border-r border-border bg-bg-tertiary px-2 py-1.5 text-left transition-colors duration-fast ease-hcb last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                     day.isToday && "bg-surface-0 ring-1 ring-inset ring-accent",
-                    day.isOutsideMonth && "opacity-50"
+                    day.isOutsideMonth && "opacity-50",
+                    rangeContains(dayKey) && "bg-info/15 ring-1 ring-inset ring-info"
                   )}
                   key={day.id}
-                  onClick={() => onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true })}
+                  onClick={() => {
+                    if (suppressClick) {
+                      setSuppressClick(false);
+                      return;
+                    }
+
+                    onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true });
+                  }}
                   onKeyDown={(event) =>
                     handleActivationKeyDown(event, () =>
                       onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true })
                     )
                   }
+                  onPointerDown={(event) => handleDayPointerDown(event, dayKey)}
+                  onPointerEnter={() => handleDayPointerEnter(dayKey)}
+                  onPointerUp={() => handleDayPointerUp(dayKey)}
                   role="gridcell"
                   style={{ gridColumn: `${dayIndex + 1}`, gridRow: "1 / -1" }}
                   tabIndex={0}

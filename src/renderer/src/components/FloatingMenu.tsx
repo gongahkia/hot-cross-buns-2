@@ -10,12 +10,14 @@ interface FloatingMenuPosition {
 }
 
 export function FloatingMenu({
+  anchorPoint,
   anchorRef,
   children,
   className,
   width = 256
 }: {
-  anchorRef: RefObject<HTMLElement>;
+  anchorPoint?: { x: number; y: number };
+  anchorRef?: RefObject<HTMLElement>;
   children: ReactNode;
   className?: string;
   width?: number;
@@ -24,13 +26,18 @@ export function FloatingMenu({
 
   useLayoutEffect(() => {
     function updatePosition(): void {
-      const anchor = anchorRef.current;
+      const anchor = anchorRef?.current;
 
-      if (!anchor) {
+      if (!anchor && !anchorPoint) {
         return;
       }
 
-      const rect = anchor.getBoundingClientRect();
+      const rect = anchor?.getBoundingClientRect() ?? {
+        bottom: anchorPoint?.y ?? 0,
+        left: anchorPoint?.x ?? 0,
+        right: anchorPoint?.x ?? 0,
+        top: anchorPoint?.y ?? 0
+      };
       const offset = 6;
       const margin = 8;
       const viewportWidth = window.innerWidth;
@@ -55,7 +62,7 @@ export function FloatingMenu({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [anchorRef, width]);
+  }, [anchorPoint, anchorRef, width]);
 
   if (!position) {
     return null;

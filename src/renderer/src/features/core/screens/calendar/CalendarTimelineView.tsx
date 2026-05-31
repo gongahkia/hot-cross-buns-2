@@ -16,7 +16,7 @@ import {
   calendarPointerTimeIso,
   calendarRangeTitle,
   calendarTimeBlock,
-  calendarTimelineHourRowHeight,
+  calendarTimelineHourHeight,
   calendarTimelineHours,
   calendarTimelineVisibleAllDayCount,
   calendarTodayKey,
@@ -155,6 +155,7 @@ function CalendarTimelineView({
     title: string;
   } | null>(null);
   const [dragSelection, setDragSelection] = useState<CalendarTimeBlock | null>(null);
+  const [dropPreview, setDropPreview] = useState<CalendarTimeBlock | null>(null);
   const timelineDragRef = useRef<{
     dayKey: string;
     mode: "availability" | "create";
@@ -163,9 +164,10 @@ function CalendarTimelineView({
     startsAt: string;
   } | null>(null);
   const suppressNextClickRef = useRef(false);
+  const hourRowHeight = calendarTimelineHourHeight(source.settings.calendarTimelineDensity);
   const timeline = useMemo(
-    () => visibleCalendarTimeline(days, visibleCalendarIds),
-    [days, visibleCalendarIds]
+    () => visibleCalendarTimeline(days, visibleCalendarIds, hourRowHeight),
+    [days, hourRowHeight, visibleCalendarIds]
   );
   const visibleDays = timeline.days;
   const hasAllDayOverflow = timeline.allDayOverflowCounts.some((count) => count > 0);
@@ -189,6 +191,7 @@ function CalendarTimelineView({
   ): void {
     dragEvent.preventDefault();
     dragEvent.stopPropagation();
+    setDropPreview(null);
     const resizeEventId = calendarEventResizeDragId(dragEvent);
 
     if (resizeEventId) {
@@ -220,6 +223,46 @@ function CalendarTimelineView({
     );
   }
 
+  function previewDrop(
+    dragEvent: DragEvent<HTMLElement>,
+    dayKey: string,
+    startsAt: string,
+    allDay: boolean
+  ): void {
+    allowCalendarDrop(dragEvent);
+    if (dragEvent.defaultPrevented === false) {
+      return;
+    }
+
+    const resizeEventId = calendarEventResizeDragId(dragEvent);
+
+    if (resizeEventId) {
+      const event = source.calendarEventsById[resizeEventId];
+
+      if (event) {
+        setDropPreview(calendarTimeBlock(event.startsAt, startsAt, event.timeZone || source.settings.defaultTimeZone));
+      }
+      return;
+    }
+
+    const eventId = calendarEventDragId(dragEvent);
+    const event = eventId ? source.calendarEventsById[eventId] : undefined;
+
+    if (!event) {
+      return;
+    }
+
+    const durationMs = Math.max(15 * 60 * 1000, Date.parse(event.endsAt) - Date.parse(event.startsAt));
+    const nextStartsAt = allDay
+      ? `${dayKey}T00:00:00.000Z`
+      : startsAt;
+    const nextEndsAt = allDay
+      ? addUtcMinutesIso(nextStartsAt, 24 * 60)
+      : new Date(Date.parse(nextStartsAt) + durationMs).toISOString();
+
+    setDropPreview(calendarTimeBlock(nextStartsAt, nextEndsAt, event.timeZone || source.settings.defaultTimeZone));
+  }
+
   function updateTimeDrag(
     pointerEvent: PointerEvent<HTMLElement>,
     dayKey: string,
@@ -227,7 +270,7 @@ function CalendarTimelineView({
   ): CalendarTimeBlock | null {
     const drag = timelineDragRef.current;
 
-    if (!drag || drag.dayKey !== dayKey || (pointerEvent.buttons !== 1 && pointerEvent.type !== "pointerup")) {
+    if (!drag || (pointerEvent.buttons !== 1 && pointerEvent.type !== "pointerup")) {
       return null;
     }
 
@@ -275,7 +318,7 @@ function CalendarTimelineView({
   ): void {
     const drag = timelineDragRef.current;
 
-    if (!drag || drag.dayKey !== dayKey) {
+    if (!drag) {
       return;
     }
 
@@ -360,7 +403,9 @@ function CalendarTimelineView({
                           onCreate({ startsAt: `${dayKey}T00:00:00.000Z`, allDay: true });
                         }
                       }}
-                      onDragOver={allowCalendarDrop}
+                      onDragOver={(dragEvent) =>
+                        previewDrop(dragEvent, dayKey, `${dayKey}T00:00:00.000Z`, true)
+                      }
                       onDrop={(dragEvent) =>
                         handleDrop(dragEvent, dayKey, `${dayKey}T00:00:00.000Z`, true)
                       }
@@ -441,7 +486,15 @@ function CalendarTimelineView({
                 aria-label={`${hourSlotLabel(hour)} Open slot`}
                 className="grid grid-cols-[64px_minmax(0,1fr)] border-b border-border last:border-b-0"
                 key={hour}
-                onDragOver={allowCalendarDrop}
+                onDragLeave={() => setDropPreview(null)}
+                onDragOver={(dragEvent) =>
+                  previewDrop(
+                    dragEvent,
+                    firstVisibleDayKey,
+                    hourSlotIso(firstVisibleDayKey, hour, source.settings.defaultTimeZone),
+                    false
+                  )
+                }
                 onDrop={(dragEvent) =>
                   handleDrop(
                     dragEvent,
@@ -451,7 +504,7 @@ function CalendarTimelineView({
                   )
                 }
                 role="row"
-                style={{ height: calendarTimelineHourRowHeight }}
+                style={{ height: hourRowHeight }}
               >
                 <div className="border-r border-border px-2 py-2 text-right text-[var(--text-xs)] font-semibold text-text-muted">
                   {calendarDisplayHourLabel(hour)}
@@ -463,7 +516,8 @@ function CalendarTimelineView({
                     const isTimeBlockSelected = calendarBlocksOverlapHour(
                       [
                         ...availabilitySlots,
-                        ...(dragSelection ? [dragSelection] : [])
+                        ...(dragSelection ? [dragSelection] : []),
+                        ...(dropPreview ? [dropPreview] : [])
                       ],
                       dayKey,
                       hour,
@@ -492,7 +546,7 @@ function CalendarTimelineView({
                             });
                           }
                         }}
-                        onDragOver={allowCalendarDrop}
+                        onDragOver={(dragEvent) => previewDrop(dragEvent, dayKey, startsAt, false)}
                         onDrop={(dragEvent) => handleDrop(dragEvent, dayKey, startsAt, false)}
                         onPointerDown={(pointerEvent) => handleTimePointerDown(pointerEvent, dayKey, hour)}
                         onPointerEnter={(pointerEvent) => {

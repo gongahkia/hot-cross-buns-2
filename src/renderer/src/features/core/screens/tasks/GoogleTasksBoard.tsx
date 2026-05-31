@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import {
   CalendarClock,
   Check,
@@ -66,6 +66,7 @@ const sortLabels: Record<TaskListSort, string> = {
   starred: "Starred recently",
   title: "Title"
 };
+const taskDragType = "application/x-hcb-task-id";
 
 function activeRootTasks(source: CoreViewModelSource): TaskViewModel[] {
   return source.largeTaskWindow.filter(

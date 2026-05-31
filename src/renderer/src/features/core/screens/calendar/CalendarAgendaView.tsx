@@ -1,12 +1,9 @@
-import { Badge, cx } from "../../../../components/primitives";
+import { Badge } from "../../../../components/primitives";
 import { EmptyState } from "../../../../components/states";
 import { VirtualizedList } from "../../../../components/VirtualizedList";
 import type { CalendarEventViewModel } from "../../coreViewModels";
 import {
-  CalendarSourceSwatch,
-  calendarEventFillStyle,
-  calendarSourceColorStyle,
-  calendarSourceTone
+  calendarEventFillStyle
 } from "./CalendarEventChips";
 import { calendarDateTitleFromIso } from "./calendarGrid";
 
@@ -17,8 +14,6 @@ function CalendarAgendaEventRow({
   event: CalendarEventViewModel;
   onOpen: (event: CalendarEventViewModel) => void;
 }): JSX.Element {
-  const tone = calendarSourceTone(event.calendarId);
-  const colorStyle = calendarSourceColorStyle(event.displayBackgroundColor ?? event.calendarBackgroundColor);
   const fillStyle = calendarEventFillStyle(event);
   const whenLabel = event.allDay
     ? `${calendarDateTitleFromIso(event.startsAt.slice(0, 10))} - All day`
@@ -26,16 +21,11 @@ function CalendarAgendaEventRow({
 
   return (
     <button
-      className="grid min-h-[76px] w-full grid-cols-[6px_minmax(0,1fr)_auto] gap-3 border-b border-border bg-bg-tertiary px-3 py-2 text-left last:border-b-0 transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="grid min-h-[76px] w-full grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border bg-bg-tertiary px-3 py-2 text-left last:border-b-0 transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       onClick={() => onOpen(event)}
       role="listitem"
       type="button"
     >
-      <span
-        aria-hidden="true"
-        className={cx("h-full rounded-full", colorStyle ? undefined : tone.swatch)}
-        style={colorStyle}
-      />
       <span className="min-w-0">
         <span
           className="inline-block max-w-full truncate rounded-hcbSm px-2 py-0.5 text-[var(--text-md)] font-semibold text-text-primary"
@@ -52,7 +42,6 @@ function CalendarAgendaEventRow({
         ) : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">
-        <CalendarSourceSwatch calendarId={event.calendarId} color={event.displayBackgroundColor ?? event.calendarBackgroundColor} />
         {event.mutationState && event.mutationState !== "synced" ? (
           <Badge tone={event.mutationState === "failed" ? "danger" : "warning"}>
             {event.mutationState === "failed" ? "Failed" : "Queued"}
