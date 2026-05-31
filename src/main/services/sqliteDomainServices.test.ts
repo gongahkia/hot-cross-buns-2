@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { defaultKeybindings } from "@shared/settingsCatalog";
 import { runLocalDataMigrations } from "../data/migrations";
 import {
   LocalPerformanceRepository,
@@ -240,6 +241,20 @@ describe("SQLite-backed domain services", () => {
         expect.objectContaining({ kind: "search" })
       ])
     );
+  });
+
+  it("migrates the old Cmd+T pane shortcut to web tabs", async () => {
+    const { domain } = createTestServices();
+    const migrated = await domain.settings.update({
+      keybindings: {
+        ...defaultKeybindings,
+        "pane.create": "CmdOrCtrl+T",
+        "web.tab.create": undefined
+      } as unknown as typeof defaultKeybindings
+    });
+
+    expect(migrated.keybindings["pane.create"]).toBeNull();
+    expect(migrated.keybindings["web.tab.create"]).toBe("CmdOrCtrl+T");
   });
 
   it("persists v1 settings sections in SQLite", async () => {

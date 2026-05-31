@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -86,6 +86,31 @@ function seedSmokeDatabase(appSupportDirectory: string): void {
   }
 }
 
+async function waitForAppWindow(electronApp: ElectronApplication): Promise<Page> {
+  await electronApp.firstWindow();
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (const window of electronApp.windows()) {
+      if (window.isClosed()) {
+        continue;
+      }
+
+      const shellVisible = await window
+        .getByTestId("app-shell")
+        .isVisible({ timeout: 250 })
+        .catch(() => false);
+
+      if (shellVisible) {
+        return window;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error("Main app window did not become visible");
+}
+
 test("launches, navigates, opens command palette, and creates core items", async () => {
   let electronApp: ElectronApplication | undefined;
   const tempRoot = mkdtempSync(join(tmpdir(), "hcb2-smoke-"));
@@ -102,7 +127,7 @@ test("launches, navigates, opens command palette, and creates core items", async
       }
     });
 
-    const page = await electronApp.firstWindow();
+    const page = await waitForAppWindow(electronApp);
 
     await expect(page.getByTestId("app-shell")).toBeVisible();
     await expect(page.locator("#planner-title")).toHaveText("Calendar");

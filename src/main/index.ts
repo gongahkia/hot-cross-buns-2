@@ -113,6 +113,10 @@ function dispatchNativeAction(action: NativeAction): void {
 }
 
 function showMainWindow(): void {
+  if (startupSyncInProgress) {
+    return;
+  }
+
   if (!mainWindow) {
     mainWindow = createMainWindow();
   }
@@ -161,8 +165,15 @@ async function runFullSyncWithStatusWindow(reason: "quit" | "startup", parent: B
     return;
   }
 
-  const status = await activeServices.domain.sync.status();
-  const statusWindow = showSyncStatusWindow(status.pendingMutationCount, parent);
+  let pendingMutationCount = 0;
+
+  try {
+    pendingMutationCount = (await activeServices.domain.sync.status()).pendingMutationCount;
+  } catch {
+    pendingMutationCount = 0;
+  }
+
+  const statusWindow = showSyncStatusWindow(pendingMutationCount, parent);
 
   try {
     await activeServices.domain.sync.runNow({ resources: ["tasks", "calendar"] });
@@ -278,8 +289,11 @@ app.whenReady().then(async () => {
     onShellVisible: handleRendererShellVisible
   });
   startupSyncInProgress = true;
-  await runFullSyncWithStatusWindow("startup", null);
-  startupSyncInProgress = false;
+  try {
+    await runFullSyncWithStatusWindow("startup", null);
+  } finally {
+    startupSyncInProgress = false;
+  }
   mainWindow = createMainWindow();
 
   for (const url of pendingDeepLinks.splice(0)) {

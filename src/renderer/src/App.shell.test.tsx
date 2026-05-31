@@ -20,7 +20,7 @@ import {
 function expectSyncOverlayTitle(): void {
   expect(
     screen.getAllByRole("status").some((status) =>
-      within(status).queryByText("Hot Cross Buns 2") !== null
+      within(status).queryByText("Syncing") !== null
     )
   ).toBe(true);
 }

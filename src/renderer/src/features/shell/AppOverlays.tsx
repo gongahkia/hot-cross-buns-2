@@ -182,16 +182,14 @@ export function SyncProgressOverlay({
     return null;
   }
 
-  const pendingText = status.pendingMutationCount > 0
-    ? `Queued writes: ${status.pendingMutationCount}`
-    : "Added/modified: 0 up 1 down";
+  const pendingText = `Queued writes: ${status.pendingMutationCount}`;
 
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-bg-tertiary/35 backdrop-blur-sm" role="status" aria-live="polite">
       <section className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-hcbLg border border-border bg-bg-primary shadow-2xl">
         <header className="flex min-h-10 items-center gap-2 border-b border-border bg-bg-secondary px-3 py-2">
           <RefreshCw aria-hidden="true" className="animate-spin text-accent" size={16} />
-          <h2 className="text-[var(--text-base)] font-semibold text-text-primary">Hot Cross Buns 2</h2>
+          <h2 className="text-[var(--text-base)] font-semibold text-text-primary">Syncing</h2>
         </header>
         <div className="grid gap-1 px-4 py-3 text-center text-[var(--text-sm)] font-medium text-text-secondary">
           <div>{pendingText}</div>
