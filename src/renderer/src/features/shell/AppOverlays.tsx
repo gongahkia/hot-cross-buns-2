@@ -1,6 +1,5 @@
 import type { RefObject } from "react";
-import type { SyncStatusResponse } from "@shared/ipc/contracts";
-import { Bell, RefreshCw, Settings2, X } from "lucide-react";
+import { Bell, Settings2, X } from "lucide-react";
 import { Badge, Button, IconButton } from "../../components/primitives";
 import { SettingsView } from "../core/CoreScreens";
 import type { AppNotification, AppNotificationTone } from "../core/appNotifications";
@@ -165,38 +164,6 @@ export function SettingsOverlay({
 
         <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
           <SettingsView onOpenDiagnostics={onOpenDiagnostics} />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-export function SyncProgressOverlay({
-  dataState,
-  status
-}: {
-  dataState: string;
-  status: SyncStatusResponse;
-}): JSX.Element | null {
-  if (status.state !== "running" && dataState !== "loading") {
-    return null;
-  }
-
-  const pendingText = `Queued writes: ${status.pendingMutationCount}`;
-
-  return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-bg-tertiary/35 backdrop-blur-sm" role="status" aria-live="polite">
-      <section className="w-[min(420px,calc(100vw-48px))] overflow-hidden rounded-hcbLg border border-border bg-bg-primary shadow-2xl">
-        <header className="flex min-h-10 items-center gap-2 border-b border-border bg-bg-secondary px-3 py-2">
-          <RefreshCw aria-hidden="true" className="animate-spin text-accent" size={16} />
-          <h2 className="text-[var(--text-base)] font-semibold text-text-primary">Syncing</h2>
-        </header>
-        <div className="grid gap-1 px-4 py-3 text-center text-[var(--text-sm)] font-medium text-text-secondary">
-          <div>{pendingText}</div>
-          <div>Removed: 0 up 0 down</div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-0">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-accent shadow-[0_0_16px_var(--color-accent)]" />
-          </div>
         </div>
       </section>
     </div>

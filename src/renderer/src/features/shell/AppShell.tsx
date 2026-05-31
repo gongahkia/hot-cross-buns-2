@@ -16,7 +16,7 @@ import {
   useRenderTiming
 } from "../../hooks/useRenderTiming";
 import { AppHeader } from "./AppHeader";
-import { NotificationsOverlay, SettingsOverlay, SyncProgressOverlay } from "./AppOverlays";
+import { NotificationsOverlay, SettingsOverlay } from "./AppOverlays";
 import { AppSidebar } from "./AppSidebar";
 import { PaneWorkspace } from "./PaneWorkspace";
 import { splitPaneWebUrl } from "./paneWorkspaceModel";
@@ -833,7 +833,6 @@ export function AppShell(): JSX.Element {
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
-      <SyncProgressOverlay dataState={source.dataState} status={source.syncStatus} />
     </div>
   );
 }

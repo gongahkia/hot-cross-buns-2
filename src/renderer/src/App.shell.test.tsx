@@ -17,20 +17,11 @@ import {
   todayDate
 } from "./test/appTestHelpers";
 
-function expectSyncOverlayTitle(): void {
-  expect(
-    screen.getAllByRole("status").some((status) =>
-      within(status).queryByText("Syncing") !== null
-    )
-  ).toBe(true);
-}
-
 describe("App shell", () => {
-  it("renders the syncing state while preload reads are pending", () => {
+  it("renders the loading state while preload reads are pending", () => {
     installHcb(loadingHcb());
     render(<App />);
 
-    expectSyncOverlayTitle();
     expect(screen.getByText("Reading planner data.")).toBeInTheDocument();
   });
 
@@ -53,7 +44,6 @@ describe("App shell", () => {
     render(<App />);
 
     await waitFor(() => expect(api.diagnostics.markShellVisible).toHaveBeenCalledTimes(1));
-    expectSyncOverlayTitle();
   });
 
   it("reports the shell visible after the settings theme can be applied", async () => {
