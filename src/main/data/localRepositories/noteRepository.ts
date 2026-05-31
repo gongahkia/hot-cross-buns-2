@@ -7,8 +7,10 @@ import type {
   NoteDetail,
   NoteLinkSuggestRequest,
   NoteLinkSuggestResponse,
+  NoteListCreateRequest,
   NoteListRequest,
   NoteListResponse,
+  NoteListSummary,
   NoteUpdateRequest
 } from "@shared/ipc/contracts";
 import type { SqliteWriteOperation } from "../sqliteConnection";
@@ -78,6 +80,33 @@ export class NoteLocalRepository extends ScheduledTaskBlockLocalRepository {
       }
 
       return noteDetail(row);
+    });
+  }
+
+  createNoteList(request: NoteListCreateRequest): NoteListSummary {
+    return this.measureSqlite("notes.createList", () => {
+      const now = new Date().toISOString();
+      const id = `note-list:${randomUUID()}`;
+
+      this.connection.run(
+        `INSERT INTO local_note_lists (id, title, created_at, updated_at)
+         VALUES (?, ?, ?, ?);`,
+        [id, request.title.trim(), now, now]
+      );
+
+      const row = this.connection.get<NoteListRow>(
+        `SELECT id, title, updated_at AS updatedAt, 0 AS noteCount
+         FROM local_note_lists
+         WHERE id = ?
+         LIMIT 1;`,
+        [id]
+      );
+
+      if (!row) {
+        throw notFound("Note list was not found.");
+      }
+
+      return noteListSummary(row);
     });
   }
 

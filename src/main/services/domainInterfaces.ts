@@ -28,8 +28,10 @@ import type {
   NoteDetail,
   NoteLinkSuggestRequest,
   NoteLinkSuggestResponse,
+  NoteListCreateRequest,
   NoteListRequest,
   NoteListResponse,
+  NoteListSummary,
   NoteUpdateRequest,
   SearchQueryRequest,
   SearchQueryResponse,
@@ -173,6 +175,7 @@ export interface PlannerViewDomainService {
     request: AvailabilityExportRequest
   ) => MaybePromise<AvailabilityExportResponse>;
   listNotes: (request: NoteListRequest) => MaybePromise<NoteListResponse>;
+  createNoteList: (request: NoteListCreateRequest) => MaybePromise<NoteListSummary>;
   getNote: (request: EntityByIdRequest) => MaybePromise<NoteDetail>;
   createNote: (request: NoteCreateRequest) => MaybePromise<NoteDetail>;
   updateNote: (request: NoteUpdateRequest) => MaybePromise<NoteDetail>;

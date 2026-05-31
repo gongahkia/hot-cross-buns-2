@@ -219,6 +219,8 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
     notes: {
       list: (request = {}) =>
         invokeContract(ipc, ipcContracts.notes.list, request, "Note list request failed"),
+      createList: (request) =>
+        invokeContract(ipc, ipcContracts.notes.createList, request, "Note list create request failed"),
       get: (request) =>
         invokeContract(ipc, ipcContracts.notes.get, request, "Note detail request failed"),
       create: (request) =>
