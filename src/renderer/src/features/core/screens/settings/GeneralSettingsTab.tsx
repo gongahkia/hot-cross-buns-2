@@ -236,7 +236,7 @@ export function GeneralSettingsTab({
           </select>
         </SettingsControlRow>
         <SettingsControlRow
-          description="Applies the same retention window to cached past events and completed tasks."
+          description="Applies the same retention window to past events and completed tasks."
           label="Custom"
         >
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">

@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import type { SyncStatusResponse } from "@shared/ipc/contracts";
 import { Bell, RefreshCw, Settings2, X } from "lucide-react";
-import { Badge, Button, IconButton, StatusBanner } from "../../components/primitives";
+import { Badge, Button, IconButton } from "../../components/primitives";
 import { SettingsView } from "../core/CoreScreens";
 import type { AppNotification, AppNotificationTone } from "../core/appNotifications";
 
@@ -171,26 +171,6 @@ export function SettingsOverlay({
   );
 }
 
-export function AppNotificationToast({
-  notification,
-  onDismiss
-}: {
-  notification: AppNotification;
-  onDismiss: () => void;
-}): JSX.Element {
-  return (
-    <StatusBanner
-      action={<IconButton icon={X} label="Dismiss notification" onClick={onDismiss} variant="ghost" />}
-      className="fixed bottom-3 left-3 right-3 z-40 w-auto shadow-2xl sm:left-auto sm:right-4 sm:w-[min(420px,calc(100vw-32px))]"
-      description={notification.description}
-      title={notification.title}
-      tone={notification.tone}
-      role="status"
-      aria-live="polite"
-    />
-  );
-}
-
 export function SyncProgressOverlay({
   dataState,
   status
@@ -204,7 +184,7 @@ export function SyncProgressOverlay({
 
   const pendingText = status.pendingMutationCount > 0
     ? `Queued writes: ${status.pendingMutationCount}`
-    : "Added/modified: 0↑ 1↓";
+    : "Added/modified: 0 up 1 down";
 
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-bg-tertiary/35 backdrop-blur-sm" role="status" aria-live="polite">
@@ -215,7 +195,7 @@ export function SyncProgressOverlay({
         </header>
         <div className="grid gap-1 px-4 py-3 text-center text-[var(--text-sm)] font-medium text-text-secondary">
           <div>{pendingText}</div>
-          <div>Removed: 0↑ 0↓</div>
+          <div>Removed: 0 up 0 down</div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-0">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-accent" />
           </div>

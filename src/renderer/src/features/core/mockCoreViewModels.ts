@@ -71,7 +71,7 @@ const planningTasks: TaskViewModel[] = [
     listId: "list-planning",
     parentId: null,
     title: "Tighten offline banner copy",
-    detail: "Make retry and cache state explicit without exposing service details.",
+    detail: "Make retry and planner state explicit without exposing service details.",
     list: "Planning",
     dueDate: "2026-05-23",
     dueLabel: "Tomorrow",
@@ -87,7 +87,7 @@ const planningTasks: TaskViewModel[] = [
     listId: "list-planning",
     parentId: null,
     title: "Map settings empty and error states",
-    detail: "Prepare rows for OAuth, hotkeys, diagnostics, MCP, and local data.",
+    detail: "Prepare rows for OAuth, hotkeys, diagnostics, MCP, and planner data.",
     list: "Planning",
     dueDate: "2026-05-29",
     dueLabel: "Friday",
@@ -122,7 +122,7 @@ const completedTasks: TaskViewModel[] = [
     listId: "list-performance",
     parentId: null,
     title: "Keep command palette cheap to mount",
-    detail: "Command registry stays in memory and does not wait for cache hydration.",
+    detail: "Command registry stays in memory and does not wait for data hydration.",
     list: "Performance",
     dueDate: null,
     dueLabel: "Done",
@@ -141,7 +141,7 @@ const hiddenTasks: TaskViewModel[] = [
     listId: "list-backlog",
     parentId: null,
     title: "Legacy import comparison",
-    detail: "Hidden until local data migrations exist.",
+    detail: "Hidden until planner migrations exist.",
     list: "Backlog",
     dueDate: null,
     dueLabel: "Hidden",
@@ -172,7 +172,7 @@ export const largeTaskWindow: TaskViewModel[] = Array.from({ length: 96 }, (_, i
   listId: index % 2 === 0 ? "list-inbox" : "list-planning",
   parentId: null,
   title: `Generated planning task ${String(index + 1).padStart(2, "0")}`,
-  detail: "Virtualized placeholder row for large local cache testing.",
+  detail: "Virtualized placeholder row for large planner data testing.",
   list: index % 2 === 0 ? "Inbox" : "Planning",
   dueDate: index % 3 === 0 ? "2026-05-22" : null,
   dueLabel: index % 3 === 0 ? "This week" : "Later",
@@ -211,7 +211,7 @@ export const taskFilterViewModels: TaskFilterViewModel[] = [
       {
         id: "completed-history",
         title: "Completed history",
-        description: "Finished rows from the local mock cache",
+        description: "Finished rows from the mock data",
         countLabel: "2 tasks",
         tasks: completedTasks
       }
@@ -265,8 +265,8 @@ export const todayViewModel = {
   metrics: [
     { id: "open", label: "Open tasks", value: "4" },
     { id: "events", label: "Events today", value: "5" },
-    { id: "notes", label: "Local notes", value: "3" },
-    { id: "cache", label: "Cache mode", value: "Mock" }
+    { id: "notes", label: "Notes", value: "3" },
+    { id: "cache", label: "Sync mode", value: "Mock" }
   ],
   focusTasks: [...inboxTasks, planningTasks[0]],
   timelineRows: [
@@ -546,8 +546,8 @@ export const initialNotes: NoteViewModel[] = [
   {
     id: "note-cache-first",
     listId: "note-list:default",
-    listTitle: "Local notes",
-    title: "Cache-first startup",
+    listTitle: "Notes",
+    title: "Startup data flow",
     body: "Renderer should paint a useful shell before Google, SQLite, or MCP work is wired.",
     preview: "Renderer should paint a useful shell before Google, SQLite, or MCP work is wired.",
     updatedLabel: "Updated 8m ago"
@@ -555,7 +555,7 @@ export const initialNotes: NoteViewModel[] = [
   {
     id: "note-command-surface",
     listId: "note-list:default",
-    listTitle: "Local notes",
+    listTitle: "Notes",
     title: "Command palette surface",
     body: "Commands stay in memory and execute the same future services as visible controls.",
     preview: "Commands stay in memory and execute the same future services as visible controls.",
@@ -564,7 +564,7 @@ export const initialNotes: NoteViewModel[] = [
   {
     id: "note-density",
     listId: "note-list:default",
-    listTitle: "Local notes",
+    listTitle: "Notes",
     title: "Compact density checks",
     body: "Use 13px body text, stable toolbar controls, and visible focus rings.",
     preview: "Use 13px body text, stable toolbar controls, and visible focus rings.",
@@ -629,16 +629,16 @@ export const searchBuckets: SearchBucketViewModel[] = [
         targetId: "note-command-surface",
         source: "note",
         title: "Command palette surface",
-        detail: "Local note updated 21m ago.",
-        deepLinkLabel: "Notes / Local"
+        detail: "Note updated 21m ago.",
+        deepLinkLabel: "Notes"
       },
       {
         id: "search-note-cache",
         targetId: "note-cache-first",
         source: "note",
-        title: "Cache-first startup",
-        detail: "Local-only note about shell visibility.",
-        deepLinkLabel: "Notes / Local"
+        title: "Startup data flow",
+        detail: "Note about shell visibility.",
+        deepLinkLabel: "Notes"
       }
     ]
   }
@@ -659,9 +659,9 @@ export const settingsSections: SettingsSectionViewModel[] = [
     id: "sync",
     title: "Sync",
     status: "Mock only",
-    detail: "Local cache first, with future background refresh and full-resync controls.",
+    detail: "Background refresh and full-resync controls.",
     rows: [
-      { id: "mode", label: "Mode", value: "Cache first" },
+      { id: "mode", label: "Mode", value: "Background sync" },
       { id: "queue", label: "Mutation queue", value: "Idle" }
     ]
   },

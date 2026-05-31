@@ -110,7 +110,7 @@ export const mockTasks: MockTask[] = [
   {
     id: "task-offline-copy",
     title: "Tighten offline banner copy",
-    detail: "Make retry and cache state explicit without exposing service details.",
+    detail: "Make retry and planner state explicit without exposing service details.",
     list: "Polish",
     dueLabel: "Tomorrow",
     priority: "low",
@@ -119,7 +119,7 @@ export const mockTasks: MockTask[] = [
   {
     id: "task-settings-states",
     title: "Map settings empty and error states",
-    detail: "Prepare rows for OAuth, hotkeys, diagnostics, MCP, and local data.",
+    detail: "Prepare rows for OAuth, hotkeys, diagnostics, MCP, and planner data.",
     list: "Settings",
     dueLabel: "Friday",
     priority: "none",
@@ -139,7 +139,7 @@ export const mockTasks: MockTask[] = [
 export const mockNotes: MockNote[] = [
   {
     id: "note-cache-first",
-    title: "Cache-first startup",
+    title: "Startup data flow",
     preview: "Renderer should paint a useful shell before Google, SQLite, or MCP work is wired.",
     updatedLabel: "Updated 8m ago"
   },
@@ -213,7 +213,7 @@ export const mockSearchResults: MockSearchResult[] = [
     id: "search-note-command",
     type: "note",
     title: "Command palette surface",
-    detail: "Local note updated 21m ago"
+    detail: "Note updated 21m ago"
   },
   {
     id: "search-setting-hotkeys",

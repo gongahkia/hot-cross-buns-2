@@ -68,7 +68,7 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "calendar.create",
     label: "New event",
-    description: "Create a cached Google Calendar event",
+    description: "Create a Google Calendar event",
     category: "Create",
     keywords: ["calendar", "event"],
     sectionId: "calendar",
@@ -77,9 +77,9 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "note.create",
     label: "New note",
-    description: "Start a local-only note",
+    description: "Start a note",
     category: "Create",
-    keywords: ["note", "local"],
+    keywords: ["note"],
     sectionId: "notes",
     noteAction: "new-note"
   },
@@ -103,7 +103,7 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "task.deleteSelected",
     label: "Delete selected task",
-    description: "Delete the selected task through the local mutation path",
+    description: "Delete the selected task through the mutation path",
     category: "Task",
     keywords: ["delete", "remove", "selected", "task"],
     sectionId: "tasks"
@@ -128,7 +128,7 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "calendar.view.agenda",
     label: "Calendar agenda view",
-    description: "Show the cached event agenda",
+    description: "Show the event agenda",
     category: "Calendar",
     keywords: ["calendar", "agenda", "events"],
     sectionId: "calendar",
@@ -137,7 +137,7 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "calendar.view.day",
     label: "Calendar day view",
-    description: "Show one day of cached events",
+    description: "Show one day of events",
     category: "Calendar",
     keywords: ["calendar", "day", "today"],
     sectionId: "calendar",
@@ -189,7 +189,7 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "sync.refresh",
     label: "Refresh",
-    description: "Refresh local cache and diagnostics",
+    description: "Refresh planner data and diagnostics",
     category: "Sync",
     keywords: ["sync", "refresh"],
     sectionId: "calendar"
@@ -231,7 +231,7 @@ export function plannerActionAvailability(
   if ((action.id === "task.create" || action.id === "task.quickCapture") && !context.hasTaskLists) {
     return {
       enabled: false,
-      reason: "No cached task lists"
+      reason: "No task lists"
     };
   }
 
@@ -244,7 +244,7 @@ export function plannerActionAvailability(
   if (action.id === "calendar.create" && !context.hasCalendars) {
     return {
       enabled: false,
-      reason: "No cached calendars"
+      reason: "No calendars"
     };
   }
 

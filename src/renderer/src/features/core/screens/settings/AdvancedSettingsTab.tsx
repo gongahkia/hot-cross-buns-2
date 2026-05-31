@@ -175,7 +175,7 @@ export function AdvancedSettingsTab({
           onChange={(checked) => updateSettings({ showCompletedInCalendarViews: checked })}
         />
         {calendarSources.length === 0 ? (
-          <EmptyState description="No calendars are cached yet." title="No calendars" />
+          <EmptyState description="No calendars are available yet." title="No calendars" />
         ) : calendarSources.map((calendar) => (
           <SettingsSwitch
             checked={selectedCalendars.size === 0 ? calendar.selected : selectedCalendars.has(calendar.id)}
@@ -189,7 +189,7 @@ export function AdvancedSettingsTab({
 
       <SettingsGroup title="Task lists">
         {taskLists.length === 0 ? (
-          <EmptyState description="No Google Tasks lists are cached yet." title="No task lists" />
+          <EmptyState description="No Google Tasks lists are available yet." title="No task lists" />
         ) : taskLists.map((taskList) => (
           <SettingsSwitch
             checked={selectedTaskLists.size === 0 || selectedTaskLists.has(taskList.id)}
@@ -268,7 +268,7 @@ export function AdvancedSettingsTab({
 
       <SettingsGroup title="Portable export">
         <SettingsControlRow
-          description="Exports settings and a SQLite cache copy into a folder package."
+          description="Exports settings and planner data into a folder package."
           icon={Archive}
           label="Portable archive"
         >

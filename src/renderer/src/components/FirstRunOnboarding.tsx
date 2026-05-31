@@ -110,7 +110,7 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
               First-run setup
             </h2>
             <p className="truncate text-[var(--text-sm)] text-text-muted">
-              Configure Mac v1 preferences; local notes and settings stay available without Google.
+              Configure Mac v1 preferences and connect Google-backed planner data.
             </p>
           </div>
           <Badge tone={accountState === "connected" ? "success" : "warning"}>
@@ -133,13 +133,13 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
             <SetupCard
               description={`${selectedTaskListIds.length} task list${selectedTaskListIds.length === 1 ? "" : "s"} selected`}
               icon={ListChecks}
-              status={source.taskLists.length === 0 ? "No cache" : "Selected"}
+              status={source.taskLists.length === 0 ? "None" : "Selected"}
               title="2. Task lists"
             />
             <SetupCard
               description={`${selectedCalendarIds.length} calendar${selectedCalendarIds.length === 1 ? "" : "s"} selected`}
               icon={CalendarDays}
-              status={source.calendarSources.length === 0 ? "No cache" : "Selected"}
+              status={source.calendarSources.length === 0 ? "None" : "Selected"}
               title="3. Calendars"
             />
           </div>
@@ -148,11 +148,11 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
             <section className="min-w-0 rounded-hcbMd border border-border bg-bg-secondary">
               <div className="border-b border-border px-3 py-2">
                 <h3 className="text-[var(--text-md)] font-semibold text-text-primary">Task lists</h3>
-                <p className="text-[var(--text-xs)] text-text-muted">Cached Google Tasks lists</p>
+                <p className="text-[var(--text-xs)] text-text-muted">Google Tasks lists</p>
               </div>
               <div className="grid max-h-44 gap-2 overflow-y-auto p-3">
                 {source.taskLists.length === 0 ? (
-                  <p className="text-[var(--text-sm)] text-text-muted">No cached task lists.</p>
+                  <p className="text-[var(--text-sm)] text-text-muted">No task lists.</p>
                 ) : source.taskLists.map((taskList) => (
                   <label
                     className="flex min-h-8 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary"
@@ -175,11 +175,11 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
             <section className="min-w-0 rounded-hcbMd border border-border bg-bg-secondary">
               <div className="border-b border-border px-3 py-2">
                 <h3 className="text-[var(--text-md)] font-semibold text-text-primary">Calendars</h3>
-                <p className="text-[var(--text-xs)] text-text-muted">Cached Google Calendar lists</p>
+                <p className="text-[var(--text-xs)] text-text-muted">Google Calendar lists</p>
               </div>
               <div className="grid max-h-44 gap-2 overflow-y-auto p-3">
                 {source.calendarSources.length === 0 ? (
-                  <p className="text-[var(--text-sm)] text-text-muted">No cached calendars.</p>
+                  <p className="text-[var(--text-sm)] text-text-muted">No calendars.</p>
                 ) : source.calendarSources.map((calendar) => (
                   <label
                     className="flex min-h-8 items-center gap-2 rounded-hcbMd border border-border bg-bg-tertiary px-3 text-[var(--text-sm)] text-text-secondary"
@@ -276,7 +276,7 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
             }
             variant="ghost"
           >
-            Use local-only
+            Continue without sync
           </Button>
           <Button
             disabled={submitting || source.settingsMutationPending}

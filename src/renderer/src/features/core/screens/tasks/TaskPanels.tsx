@@ -601,8 +601,8 @@ export function TasksSectionChrome({
 
 export function TaskRefreshPanel(): JSX.Element {
   return (
-    <Panel title="Refresh state" description="Cached rows remain visible">
-      <LoadingState description="Refreshing local cache." title="Refreshing" />
+    <Panel title="Refresh state" description="Current rows remain visible">
+      <LoadingState description="Refreshing planner data." title="Refreshing" />
     </Panel>
   );
 }

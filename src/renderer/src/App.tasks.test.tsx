@@ -61,12 +61,18 @@ describe("App tasks", () => {
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
 
-    fireEvent.contextMenu(
-      screen.getByRole("button", { name: /^Draft inbox triage rules / }).closest("[role='listitem']") as HTMLElement,
-      { clientX: 120, clientY: 160 }
-    );
+    const draftRow = screen.getByRole("button", { name: /^Draft inbox triage rules / }).closest("[role='listitem']") as HTMLElement;
+    const reviewRow = screen.getByRole("button", { name: /^Review calendar fixture shape / }).closest("[role='listitem']") as HTMLElement;
+
+    fireEvent.contextMenu(draftRow, { clientX: 120, clientY: 160 });
     expect(screen.getByRole("button", { name: "Add deadline" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add a subtask" })).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("button", { name: "Add deadline" })).not.toBeInTheDocument();
+    fireEvent.contextMenu(draftRow, { clientX: 120, clientY: 160 });
+    fireEvent.contextMenu(reviewRow, { clientX: 140, clientY: 220 });
+    expect(screen.getAllByRole("button", { name: "Add deadline" })).toHaveLength(1);
+    fireEvent.contextMenu(draftRow, { clientX: 120, clientY: 160 });
 
     await user.click(screen.getByRole("button", { name: "Planning" }));
     expect(api.tasks.move).toHaveBeenCalledWith({
@@ -75,10 +81,7 @@ describe("App tasks", () => {
       parentId: null
     });
 
-    fireEvent.contextMenu(
-      screen.getByRole("button", { name: /^Review calendar fixture shape / }).closest("[role='listitem']") as HTMLElement,
-      { clientX: 120, clientY: 220 }
-    );
+    fireEvent.contextMenu(reviewRow, { clientX: 120, clientY: 220 });
     await user.click(screen.getByRole("button", { name: "Delete" }));
     expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-calendar-fixtures" });
 

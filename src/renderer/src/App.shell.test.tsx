@@ -18,15 +18,15 @@ import {
 } from "./test/appTestHelpers";
 
 describe("App shell", () => {
-  it("renders the loading cache state while preload reads are pending", () => {
+  it("renders the syncing state while preload reads are pending", () => {
     installHcb(loadingHcb());
     render(<App />);
 
-    expect(screen.getByText("Loading local cache")).toBeInTheDocument();
-    expect(screen.getByText("Reading cached planner data from SQLite.")).toBeInTheDocument();
+    expect(screen.getByText("Syncing...")).toBeInTheDocument();
+    expect(screen.getByText("Reading planner data.")).toBeInTheDocument();
   });
 
-  it("waits for cached settings before reporting the shell visible", async () => {
+  it("waits for settings before reporting the shell visible", async () => {
     const api = settingsLoadingHcb();
 
     installHcb(api);
@@ -38,17 +38,17 @@ describe("App shell", () => {
     expect(api.diagnostics.markShellVisible).not.toHaveBeenCalled();
   });
 
-  it("reports the shell visible after cached settings load while other cache reads continue", async () => {
+  it("reports the shell visible after settings load while other reads continue", async () => {
     const api = loadingHcb();
 
     installHcb(api);
     render(<App />);
 
     await waitFor(() => expect(api.diagnostics.markShellVisible).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Loading local cache")).toBeInTheDocument();
+    expect(screen.getByText("Syncing...")).toBeInTheDocument();
   });
 
-  it("reports the shell visible after the cached settings theme can be applied", async () => {
+  it("reports the shell visible after the settings theme can be applied", async () => {
     const api = seededHcb();
 
     installHcb(api);
@@ -57,7 +57,7 @@ describe("App shell", () => {
     await waitFor(() => expect(api.diagnostics.markShellVisible).toHaveBeenCalledTimes(1));
   });
 
-  it("renders from an empty fresh local cache and invokes preload read APIs", async () => {
+  it("renders from empty planner data and invokes preload read APIs", async () => {
     render(<App />);
 
     expect(screen.getByTestId("app-shell")).toBeInTheDocument();
@@ -71,8 +71,7 @@ describe("App shell", () => {
     expect(within(primaryNavigation()).queryByRole("button", { name: /Notifications/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Notifications, \d+ active/ })).toBeInTheDocument();
 
-    expect(await screen.findByText("Fresh local cache")).toBeInTheDocument();
-    expect(screen.getByText("No agenda items")).toBeInTheDocument();
+    expect(await screen.findByText("No agenda items")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(originalHcb?.tasks.listTaskLists).toHaveBeenCalled();
@@ -334,13 +333,13 @@ describe("App shell", () => {
           {
             id: "note-cache-first",
             listId: "note-list:default",
-            listTitle: "Local notes",
-            title: "Cache-first startup",
+            listTitle: "Notes",
+            title: "Startup data flow",
             preview: "Renderer paints from SQLite.",
             updatedAt: now
           }
         ],
-        lists: [{ id: "note-list:default", title: "Local notes", noteCount: 1, updatedAt: now }],
+        lists: [{ id: "note-list:default", title: "Notes", noteCount: 1, updatedAt: now }],
         page: { limit: 50, totalKnown: 321 }
       });
     installHcb(api);
@@ -469,13 +468,12 @@ describe("App shell", () => {
     expect(completeCommand).toHaveTextContent("No selected task");
   });
 
-  it("renders seeded SQLite-shaped data and uses local search", async () => {
+  it("renders seeded planner data and uses search", async () => {
     const api = seededHcb();
     installHcb(api);
     render(<App />);
 
-    expect(await screen.findByText("Local cache ready")).toBeInTheDocument();
-    expect(screen.getByText("Planner shell standup")).toBeInTheDocument();
+    expect(await screen.findByText("Planner shell standup")).toBeInTheDocument();
 
     await goToSection("Tasks");
     expect(screen.getByRole("heading", { name: "Inbox" })).toBeInTheDocument();
@@ -499,7 +497,7 @@ describe("App shell", () => {
     installHcb(undefined);
     render(<App />);
 
-    expect((await screen.findAllByText("Offline cache"))[0]).toBeInTheDocument();
+    expect((await screen.findAllByText("Offline"))[0]).toBeInTheDocument();
     expect(screen.getByText("The preload bridge is unavailable in this renderer context.")).toBeInTheDocument();
   });
 });

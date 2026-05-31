@@ -230,14 +230,14 @@ describe("App settings and onboarding", () => {
     });
   });
 
-  it("lets users skip Google setup and keep local notes and settings usable", async () => {
+  it("lets users skip Google setup and keep planner data and settings usable", async () => {
     const { api } = onboardingHcb();
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);
 
     const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
-    await user.click(within(dialog).getByRole("button", { name: "Use local-only" }));
+    await user.click(within(dialog).getByRole("button", { name: "Continue without sync" }));
 
     await waitFor(() => {
       expect(api.settings.update).toHaveBeenCalledWith(
@@ -255,7 +255,7 @@ describe("App settings and onboarding", () => {
     });
 
     await goToSection("Notes");
-    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
+    expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
 
     await goToSection("Settings");
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
@@ -268,7 +268,7 @@ describe("App settings and onboarding", () => {
     render(<App />);
 
     await goToSection("Notes");
-    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
+    expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
 
     await goToSection("Settings");
     await user.click(screen.getByRole("button", { name: "Run setup again" }));

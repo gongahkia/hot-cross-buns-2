@@ -564,13 +564,13 @@ export function seededHcb(): HcbApi {
             {
               id: "note-cache-first",
               listId: "note-list:default",
-              listTitle: "Local notes",
-              title: "Cache-first startup",
+              listTitle: "Notes",
+              title: "Startup data flow",
               preview: "Renderer paints from SQLite.",
               updatedAt: now
             }
           ],
-          lists: [{ id: "note-list:default", title: "Local notes", noteCount: 1, updatedAt: now }],
+          lists: [{ id: "note-list:default", title: "Notes", noteCount: 1, updatedAt: now }],
           page: { limit: 50, totalKnown: 1 }
         })
       ),
@@ -578,8 +578,8 @@ export function seededHcb(): HcbApi {
         ok({
           id,
           listId: "note-list:default",
-          listTitle: "Local notes",
-          title: "Cache-first startup",
+          listTitle: "Notes",
+          title: "Startup data flow",
           preview: "Renderer paints from SQLite.",
           body: "Renderer paints from SQLite before fresh sync completes.",
           updatedAt: now
@@ -589,7 +589,7 @@ export function seededHcb(): HcbApi {
         ok({
           id: "note-created",
           listId: request.listId ?? "note-list:default",
-          listTitle: "Local notes",
+          listTitle: "Notes",
           title: request.title,
           preview: request.body ?? "Empty local note",
           body: request.body ?? "",
@@ -600,7 +600,7 @@ export function seededHcb(): HcbApi {
         ok({
           id: request.id,
           listId: request.listId ?? "note-list:default",
-          listTitle: "Local notes",
+          listTitle: "Notes",
           title: request.title ?? "Untitled note",
           preview: request.body ?? "",
           body: request.body ?? "",
@@ -625,7 +625,7 @@ export function seededHcb(): HcbApi {
       linkSuggest: vi.fn(async (request) => {
         const query = request.query.toLowerCase();
         const items = [
-          { kind: "note" as const, id: "note-cache-first", label: "Cache-first startup" },
+          { kind: "note" as const, id: "note-cache-first", label: "Startup data flow" },
           { kind: "task" as const, id: "task-inbox-rules", label: "Draft inbox triage rules" },
           { kind: "event" as const, id: "event-standup", label: "Planner shell standup" }
         ].filter((item) => item.label.toLowerCase().includes(query));
@@ -663,8 +663,8 @@ export function seededHcb(): HcbApi {
           items.push({
             id: "note-cache-first",
             domain: "notes" as const,
-            title: "Cache-first startup",
-            snippet: "Local note updated from cache",
+            title: "Startup data flow",
+            snippet: "Note updated from sync",
             updatedAt: now
           });
         }

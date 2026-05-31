@@ -32,6 +32,8 @@ export function FloatingMenu({
       return undefined;
     }
 
+    const close = onClose;
+
     function closeFromOutside(event: MouseEvent | PointerEvent): void {
       const target = event.target;
 
@@ -39,12 +41,12 @@ export function FloatingMenu({
         return;
       }
 
-      onClose();
+      close();
     }
 
     function closeOnEscape(event: KeyboardEvent): void {
       if (event.key === "Escape") {
-        onClose();
+        close();
       }
     }
 

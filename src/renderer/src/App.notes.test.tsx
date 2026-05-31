@@ -11,7 +11,7 @@ import {
 } from "./test/appTestHelpers";
 
 describe("App notes", () => {
-  it("creates, edits, and deletes local notes through preload", async () => {
+  it("creates, edits, and deletes notes through preload", async () => {
     const api = seededHcb();
     installHcb(api);
     const user = userEvent.setup();
@@ -25,7 +25,7 @@ describe("App notes", () => {
     expect(starredToggle).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("heading", { name: "Starred notes" })).toBeInTheDocument();
     await user.click(starredToggle);
-    expect(await screen.findByText("Cache-first startup")).toBeInTheDocument();
+    expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New note/ }));
     const titleInput = await screen.findByRole("textbox", { name: "Note title" });
@@ -33,14 +33,14 @@ describe("App notes", () => {
 
     await user.clear(titleInput);
     await user.type(titleInput, "Release note draft");
-    await user.type(bodyInput, "Document local cache flow.");
+    await user.type(bodyInput, "Document planner flow.");
 
     await waitFor(() => {
       expect(api.notes.create).toHaveBeenCalled();
       expect(api.notes.update).toHaveBeenCalledWith({
         id: "note-created",
         title: "Release note draft",
-        body: "Document local cache flow."
+        body: "Document planner flow."
       });
     });
 
@@ -49,7 +49,7 @@ describe("App notes", () => {
 
     await user.click(screen.getByRole("button", { name: "Delete selected note" }));
     expect(api.notes.delete).toHaveBeenCalledWith({ id: "note-cache-first" });
-    expect(screen.getByText("No local notes")).toBeInTheDocument();
+    expect(screen.getByText("No notes")).toBeInTheDocument();
   });
 
   it("opens selected notes in the inspector and flushes pending edits on close", async () => {
@@ -59,12 +59,12 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(await screen.findByText("Startup data flow"));
 
     const inspector = await screen.findByTestId("inspector-shell");
     expect(inspector).toHaveAttribute("data-inspector-kind", "note");
     const inspectorBody = within(inspector).getByTestId("inspector-body");
-    expect(within(inspectorBody).getByRole("heading", { name: "Cache-first startup" })).toBeInTheDocument();
+    expect(within(inspectorBody).getByRole("heading", { name: "Startup data flow" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Note body" })).not.toBeInTheDocument();
 
     await user.click(
@@ -77,7 +77,7 @@ describe("App notes", () => {
     await waitFor(() => {
       expect(api.notes.update).toHaveBeenCalledWith({
         id: "note-cache-first",
-        title: "Cache-first startup",
+        title: "Startup data flow",
         body: expect.stringContaining("Pending close flush.")
       });
     });
@@ -92,21 +92,21 @@ describe("App notes", () => {
           {
             id: "note-cache-first",
             listId: "note-list:default",
-            listTitle: "Local notes",
-            title: "Cache-first startup",
+            listTitle: "Notes",
+            title: "Startup data flow",
             preview: "Renderer paints from SQLite.",
             updatedAt: now
           },
           {
             id: "note-daily",
             listId: "note-list:default",
-            listTitle: "Local notes",
+            listTitle: "Notes",
             title: "Daily note",
             preview: "Backlink review.",
             updatedAt: now
           }
         ],
-        lists: [{ id: "note-list:default", title: "Local notes", noteCount: 2, updatedAt: now }],
+        lists: [{ id: "note-list:default", title: "Notes", noteCount: 2, updatedAt: now }],
         page: { limit: 50, totalKnown: 2 }
       })
     );
@@ -116,7 +116,7 @@ describe("App notes", () => {
           ? {
               id,
               listId: "note-list:default",
-              listTitle: "Local notes",
+              listTitle: "Notes",
               title: "Daily note",
               preview: "Backlink review.",
               body: "Review backlinks.",
@@ -125,8 +125,8 @@ describe("App notes", () => {
           : {
               id,
               listId: "note-list:default",
-              listTitle: "Local notes",
-              title: "Cache-first startup",
+              listTitle: "Notes",
+              title: "Startup data flow",
               preview: "Renderer paints from SQLite.",
               body: "Renderer paints from SQLite before fresh sync completes.",
               updatedAt: now
@@ -138,7 +138,7 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(await screen.findByText("Startup data flow"));
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
@@ -149,7 +149,7 @@ describe("App notes", () => {
     await waitFor(() => {
       expect(api.notes.update).toHaveBeenCalledWith({
         id: "note-cache-first",
-        title: "Cache-first startup",
+        title: "Startup data flow",
         body: expect.stringContaining("Switch flush.")
       });
     });
@@ -166,7 +166,7 @@ describe("App notes", () => {
           {
             id: "note-project",
             listId: "note-list:default",
-            listTitle: "Local notes",
+            listTitle: "Notes",
             title: "Project plan",
             preview: "See [[Daily note]]",
             updatedAt: now
@@ -174,13 +174,13 @@ describe("App notes", () => {
           {
             id: "note-daily",
             listId: "note-list:default",
-            listTitle: "Local notes",
+            listTitle: "Notes",
             title: "Daily note",
             preview: "Back to [[Project plan]]",
             updatedAt: now
           }
         ],
-        lists: [{ id: "note-list:default", title: "Local notes", noteCount: 2, updatedAt: now }],
+        lists: [{ id: "note-list:default", title: "Notes", noteCount: 2, updatedAt: now }],
         page: { limit: 50, totalKnown: 2 }
       })
     );
@@ -190,7 +190,7 @@ describe("App notes", () => {
           ? {
               id,
               listId: "note-list:default",
-              listTitle: "Local notes",
+              listTitle: "Notes",
               title: "Daily note",
               preview: "Back to [[Project plan]]",
               body: "Back to [[Project plan]]",
@@ -199,7 +199,7 @@ describe("App notes", () => {
           : {
               id,
               listId: "note-list:default",
-              listTitle: "Local notes",
+              listTitle: "Notes",
               title: "Project plan",
               preview: "See [[Daily note]]",
               body: "# Plan\n- [x] Kickoff\nSee [[Daily note]]",
@@ -236,7 +236,7 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(await screen.findByText("Startup data flow"));
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
@@ -277,7 +277,7 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(await screen.findByText("Startup data flow"));
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
@@ -299,8 +299,8 @@ describe("App notes", () => {
       ok({
         id,
         listId: "note-list:default",
-        listTitle: "Local notes",
-        title: "Cache-first startup",
+        listTitle: "Notes",
+        title: "Startup data flow",
         preview: "See [[Missing note]]",
         body: "See [[Missing note]]",
         updatedAt: now
@@ -319,7 +319,7 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    await user.click(await screen.findByText("Cache-first startup"));
+    await user.click(await screen.findByText("Startup data flow"));
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );

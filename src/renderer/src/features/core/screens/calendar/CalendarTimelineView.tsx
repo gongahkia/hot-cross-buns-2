@@ -8,11 +8,11 @@ import type { CalendarDayViewModel, CalendarEventViewModel } from "../../coreVie
 import { CalendarEventChip, CalendarOverflowChip, CalendarOverflowPopover } from "./CalendarEventChips";
 import {
   addUtcMinutesIso,
-  calendarBlocksOverlapHour,
   calendarDateTitle,
   calendarDayKey,
   calendarDisplayHourLabel,
   calendarEventTimeOfDayIso,
+  calendarLocalPoint,
   calendarPointerTimeIso,
   calendarRangeTitle,
   calendarTimeBlock,
@@ -118,6 +118,37 @@ function allDaySegmentStyle(segment: CalendarTimelineAllDaySegment): CSSProperti
   };
 }
 
+function timelinePreviewSegments(
+  blocks: CalendarTimeBlock[],
+  days: Array<{ day: CalendarDayViewModel }>,
+  hourRowHeight: number,
+  timeZone: string
+): Array<{ dayId: string; height: number; id: string; top: number }> {
+  return blocks.flatMap((block) => {
+    const start = calendarLocalPoint(block.startsAt, timeZone);
+    const end = calendarLocalPoint(block.endsAt, timeZone);
+
+    return days.flatMap(({ day }) => {
+      const dayKey = calendarDayKey(day);
+      const startMinute = start.dayKey < dayKey ? 0 : start.dayKey > dayKey ? 1_440 : start.minutes;
+      const endMinute = end.dayKey > dayKey ? 1_440 : end.dayKey < dayKey ? 0 : end.minutes;
+      const clampedStart = Math.max(0, Math.min(1_440, startMinute));
+      const clampedEnd = Math.max(0, Math.min(1_440, endMinute));
+
+      if (clampedEnd <= clampedStart) {
+        return [];
+      }
+
+      return [{
+        dayId: day.id,
+        height: Math.max(6, ((clampedEnd - clampedStart) / 60) * hourRowHeight),
+        id: `${block.id}-${day.id}`,
+        top: (clampedStart / 60) * hourRowHeight
+      }];
+    });
+  });
+}
+
 function CalendarTimelineView({
   availabilityMode = false,
   availabilitySlots = [],
@@ -182,6 +213,16 @@ function CalendarTimelineView({
       : calendarTodayKey();
   const dayColumnMinWidth = days.length <= 1 ? 520 : days.length <= 3 ? 220 : 160;
   const gridTemplateColumns = `repeat(${Math.max(1, days.length)}, minmax(${dayColumnMinWidth}px, 1fr))`;
+  const previewSegments = timelinePreviewSegments(
+    [
+      ...availabilitySlots,
+      ...(dragSelection ? [dragSelection] : []),
+      ...(dropPreview ? [dropPreview] : [])
+    ],
+    visibleDays,
+    hourRowHeight,
+    source.settings.defaultTimeZone
+  );
 
   function handleDrop(
     dragEvent: DragEvent<HTMLElement>,
@@ -513,24 +554,11 @@ function CalendarTimelineView({
                   {visibleDays.map(({ day }) => {
                     const dayKey = calendarDayKey(day);
                     const startsAt = hourSlotIso(dayKey, hour, source.settings.defaultTimeZone);
-                    const isTimeBlockSelected = calendarBlocksOverlapHour(
-                      [
-                        ...availabilitySlots,
-                        ...(dragSelection ? [dragSelection] : []),
-                        ...(dropPreview ? [dropPreview] : [])
-                      ],
-                      dayKey,
-                      hour,
-                      source.settings.defaultTimeZone
-                    );
 
                     return (
                       <div
                         aria-label={`${calendarDateTitle(day)} ${calendarDisplayHourLabel(hour)}`}
-                        className={cx(
-                          "border-r border-border bg-bg-tertiary px-2 py-1.5 last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                          isTimeBlockSelected && "bg-info/15 ring-1 ring-inset ring-info"
-                        )}
+                        className="border-r border-border bg-bg-tertiary px-2 py-1.5 last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                         key={`${day.id}-${hour}`}
                         onClick={() => {
                           if (suppressNextClickRef.current) {
@@ -591,6 +619,24 @@ function CalendarTimelineView({
                 </div>
               </div>
             ))}
+            <div
+              className="pointer-events-none absolute bottom-0 left-16 right-0 top-0 grid"
+              style={{ gridTemplateColumns }}
+            >
+              {visibleDays.map(({ day }) => (
+                <div className="relative min-w-0 border-r border-transparent last:border-r-0" key={`${day.id}-previews`}>
+                  {previewSegments
+                    .filter((segment) => segment.dayId === day.id)
+                    .map((segment) => (
+                      <div
+                        className="absolute left-2 right-2 rounded-hcbSm border border-info bg-info/15"
+                        key={segment.id}
+                        style={{ height: segment.height, top: segment.top }}
+                      />
+                    ))}
+                </div>
+              ))}
+            </div>
             <div
               className="pointer-events-none absolute bottom-0 left-16 right-0 top-0 grid"
               style={{ gridTemplateColumns }}

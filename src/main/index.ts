@@ -22,6 +22,8 @@ const pendingNativeActions: NativeAction[] = [];
 const rendererReadyFallbackMs = 8_000;
 let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 let deferredRuntimeStarted = false;
+let quittingAfterSync = false;
+let syncQuitWindow: BrowserWindow | null = null;
 const macAppDisplayName = "Hot Cross Buns";
 
 if (process.env.HCB_USER_DATA_DIR && !app.isPackaged) {
@@ -119,6 +121,56 @@ function showMainWindow(): void {
   }
 
   revealMainWindow(mainWindow, true);
+}
+
+function showQuitSyncWindow(): BrowserWindow {
+  if (syncQuitWindow && !syncQuitWindow.isDestroyed()) {
+    syncQuitWindow.show();
+    return syncQuitWindow;
+  }
+
+  syncQuitWindow = new BrowserWindow({
+    alwaysOnTop: true,
+    backgroundColor: "#2b2b2b",
+    height: 132,
+    maximizable: false,
+    minimizable: false,
+    modal: Boolean(mainWindow),
+    parent: mainWindow ?? undefined,
+    resizable: false,
+    show: false,
+    title: "Syncing...",
+    width: 420
+  });
+  syncQuitWindow.removeMenu();
+  syncQuitWindow.on("closed", () => {
+    syncQuitWindow = null;
+  });
+  void syncQuitWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(quitSyncHtml)}`);
+  syncQuitWindow.once("ready-to-show", () => {
+    syncQuitWindow?.show();
+  });
+  return syncQuitWindow;
+}
+
+async function syncBeforeQuit(): Promise<void> {
+  const activeServices = services;
+
+  if (!activeServices) {
+    return;
+  }
+
+  showQuitSyncWindow();
+
+  try {
+    await activeServices.domain.sync.runNow({ resources: ["tasks", "calendar"] });
+  } catch (error) {
+    appLogger.warn("quit sync failed", "sync", {
+      message: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    syncQuitWindow?.close();
+  }
 }
 
 function hideMainWindow(): void {
@@ -244,7 +296,65 @@ app.on("window-all-closed", () => {
   }
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (!quittingAfterSync && services) {
+    event.preventDefault();
+    void syncBeforeQuit().finally(() => {
+      quittingAfterSync = true;
+      app.quit();
+    });
+    return;
+  }
+
   services?.close();
   services = null;
 });
+
+const quitSyncHtml = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #2b2b2b;
+        color: #f2f0df;
+        font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .wrap {
+        display: grid;
+        gap: 8px;
+        height: 100vh;
+        place-content: center;
+        padding: 18px 22px;
+        text-align: center;
+      }
+      .title { font-size: 15px; font-weight: 700; }
+      .row { color: #ded9be; line-height: 1.35; }
+      .bar {
+        height: 8px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #525252;
+      }
+      .bar::before {
+        display: block;
+        width: 55%;
+        height: 100%;
+        border-radius: inherit;
+        background: #3b82f6;
+        content: "";
+        animation: pulse 1s ease-in-out infinite alternate;
+      }
+      @keyframes pulse { from { transform: translateX(-18%); } to { transform: translateX(90%); } }
+    </style>
+  </head>
+  <body>
+    <main class="wrap" role="status" aria-live="polite">
+      <div class="title">Syncing...</div>
+      <div class="row">Added/modified: 0 up 1 down<br>Removed: 0 up 0 down</div>
+      <div class="bar"></div>
+    </main>
+  </body>
+</html>`;

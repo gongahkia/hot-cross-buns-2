@@ -156,7 +156,7 @@ export function ProfileSettingsTab({
 
       <SettingsGroup title="Task lists">
         {taskLists.length === 0 ? (
-          <EmptyState description="No task lists are cached yet." title="No task lists" />
+          <EmptyState description="No task lists are available yet." title="No task lists" />
         ) : taskLists.map((taskList) => (
           <SettingsSwitch
             checked={selectedTaskLists.size === 0 || selectedTaskLists.has(taskList.id)}
@@ -170,7 +170,7 @@ export function ProfileSettingsTab({
 
       <SettingsGroup title="Calendars">
         {calendarSources.length === 0 ? (
-          <EmptyState description="No calendars are cached yet." title="No calendars" />
+          <EmptyState description="No calendars are available yet." title="No calendars" />
         ) : calendarSources.map((calendar) => (
           <SettingsSwitch
             checked={selectedCalendars.size === 0 ? calendar.selected : selectedCalendars.has(calendar.id)}

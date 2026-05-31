@@ -289,7 +289,7 @@ export function CommandPalette({
               className="pl-9"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Run a command or search local data"
+              placeholder="Run a command or search planner data"
               ref={inputRef}
               role="searchbox"
               value={query}

@@ -144,7 +144,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
         setLoadState((current) => ({
           ...current,
           state: hasSnapshotData(current.snapshot) ? "stale" : "error",
-          errorMessage: error instanceof Error ? error.message : "Local cache read failed."
+          errorMessage: error instanceof Error ? error.message : "Planner data read failed."
         }));
       }
     );

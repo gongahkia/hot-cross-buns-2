@@ -40,7 +40,7 @@ function StateBlock({
 }
 
 export function LoadingState({
-  description = "Reading local data.",
+  description = "Reading planner data.",
   title = "Loading"
 }: {
   title?: string;
@@ -67,8 +67,8 @@ export function EmptyState({
 }
 
 export function OfflineState({
-  description = "Google sync is disconnected. Cached local data remains available.",
-  title = "Offline cache"
+  description = "Google sync is disconnected.",
+  title = "Offline"
 }: {
   title?: string;
   description?: string;

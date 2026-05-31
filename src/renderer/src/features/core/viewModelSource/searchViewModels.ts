@@ -33,7 +33,7 @@ export function useLocalSearch(query: string): SearchHookState {
         viewModel:
           current.viewModel.state === "results"
             ? current.viewModel
-            : emptySearchViewModel("Fix the query syntax to search local data."),
+            : emptySearchViewModel("Fix the query syntax to search planner data."),
         state: "invalid",
         parsed,
         errorMessage: parsed.errors[0]?.message ?? "Invalid search query."
@@ -134,7 +134,7 @@ export function searchViewModelFromResults(query: string, items: SearchResultIte
 export function idleSearchViewModel(): SearchViewModel {
   return {
     state: "idle",
-    summary: "Local cache",
+    summary: "Planner data",
     results: []
   };
 }

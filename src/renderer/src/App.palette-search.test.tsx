@@ -5,7 +5,7 @@ import App from "./App";
 import { installHcb, seededHcb } from "./test/appTestHelpers";
 
 describe("Command palette search", () => {
-  it("falls back to local search when the query matches no commands", async () => {
+  it("falls back to planner search when the query matches no commands", async () => {
     const api = seededHcb();
     installHcb(api);
     const user = userEvent.setup();
@@ -68,8 +68,8 @@ describe("Command palette search", () => {
     await user.keyboard("{Meta>}p{/Meta}");
     const dialog = await screen.findByRole("dialog", { name: "Command palette" });
 
-    await user.type(within(dialog).getByRole("searchbox", { name: "Filter commands" }), "source:notes cache");
-    await user.click(await within(dialog).findByRole("option", { name: /Cache-first startup/ }));
+    await user.type(within(dialog).getByRole("searchbox", { name: "Filter commands" }), "source:notes startup");
+    await user.click(await within(dialog).findByRole("option", { name: /Startup data flow/ }));
 
     expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("Command palette search", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByText("Local cache ready");
+    await screen.findByText("Planner shell standup");
     vi.mocked(api.search.query).mockClear();
 
     await user.keyboard("{Meta>}p{/Meta}");
@@ -97,13 +97,13 @@ describe("Command palette search", () => {
     expect(api.search.query).not.toHaveBeenCalled();
   });
 
-  it("supports structured local search syntax inside the palette", async () => {
+  it("supports structured search syntax inside the palette", async () => {
     const api = seededHcb();
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByText("Local cache ready");
+    await screen.findByText("Planner shell standup");
     vi.mocked(api.search.query).mockClear();
 
     await user.keyboard("{Meta>}p{/Meta}");
@@ -124,7 +124,7 @@ describe("Command palette search", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByText("Local cache ready");
+    await screen.findByText("Planner shell standup");
     vi.mocked(api.search.query).mockClear();
 
     await user.keyboard("{Meta>}p{/Meta}");
