@@ -20,6 +20,7 @@ export const appLanguageSchema = z.enum(["system", "en"]);
 export const navigationPlacementSchema = z.enum(["left", "right"]);
 export const navigationTabSchema = z.enum(["tasks", "calendar", "notes"]);
 export const calendarViewModeSchema = z.enum(["agenda", "day", "multiDay", "week", "month"]);
+export const calendarTimelineDensitySchema = z.enum(["compact", "comfortable", "spacious"]);
 export const trayClickActionSchema = z.enum([
   "open-menu",
   "toggle-window",
@@ -204,6 +205,7 @@ export const settingsSnapshotSchema = z
     hiddenNavigationTabs: z.array(navigationTabSchema).max(2),
     hiddenCalendarViewModes: z.array(calendarViewModeSchema).max(4),
     showCompletedInCalendarViews: z.boolean(),
+    calendarTimelineDensity: calendarTimelineDensitySchema,
     monthScrollPastMonths: z.number().int().min(0).max(24),
     monthScrollFutureMonths: z.number().int().min(0).max(24),
     quickCreateExpandedByDefault: z.boolean(),
@@ -278,6 +280,7 @@ export const settingsUpdateRequestSchema = z
     hiddenNavigationTabs: z.array(navigationTabSchema).max(2).optional(),
     hiddenCalendarViewModes: z.array(calendarViewModeSchema).max(4).optional(),
     showCompletedInCalendarViews: z.boolean().optional(),
+    calendarTimelineDensity: calendarTimelineDensitySchema.optional(),
     monthScrollPastMonths: z.number().int().min(0).max(24).optional(),
     monthScrollFutureMonths: z.number().int().min(0).max(24).optional(),
     quickCreateExpandedByDefault: z.boolean().optional(),

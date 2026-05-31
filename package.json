@@ -26,6 +26,8 @@
     "release:mac:preview": "pnpm test && pnpm build:release:mac && pnpm release:review-bundle && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never && pnpm release:mac-artifacts && pnpm release:checksums"
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
+    "@emoji-mart/react": "^1.1.1",
     "@tanstack/react-query": "^5.59.20",
     "better-sqlite3": "^12.10.0",
     "date-fns": "^4.1.0",
