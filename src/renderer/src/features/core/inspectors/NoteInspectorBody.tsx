@@ -7,10 +7,11 @@ import {
   useRef,
   useState
 } from "react";
-import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Link2, Pencil, RotateCcw, Search } from "lucide-react";
 import type { NoteLinkSuggestResponse } from "@shared/ipc/contracts";
 import { useDirtyState, useInspector } from "../../../components/Inspector";
+import { EmojiInput, EmojiTextarea } from "../../../components/EmojiTextField";
 import { Badge, Button, Input, cx } from "../../../components/primitives";
 import type { NoteViewModel } from "../coreViewModels";
 import { MarkdownPreview } from "../MarkdownPreview";
@@ -452,9 +453,9 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
     return (
       <div className="grid gap-4">
         <div className="grid gap-3">
-          <Input
+          <EmojiInput
             aria-label="Note title"
-            onChange={(event: ChangeEvent<HTMLInputElement>) => patchDraft({ title: event.target.value })}
+            onValueChange={(title) => patchDraft({ title })}
             value={dirty.value.title}
           />
 
@@ -487,10 +488,10 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
           </div>
 
           {viewMode === "edit" ? (
-            <textarea
+            <EmojiTextarea
               aria-label="Note body"
               className="min-h-[260px] w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onChange={(event) => patchDraft({ body: event.target.value })}
+              onValueChange={(body) => patchDraft({ body })}
               ref={textareaRef}
               value={dirty.value.body}
             />

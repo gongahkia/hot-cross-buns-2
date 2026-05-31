@@ -5,6 +5,7 @@ import {
   type SettingsSnapshot
 } from "@shared/ipc/contracts";
 import { Bell, CalendarPlus, Clock3, FileText, Gift, ListPlus, MapPin, RotateCcw, Users, type LucideIcon } from "lucide-react";
+import { EmojiInput, EmojiTextarea } from "../../../../components/EmojiTextField";
 import { Badge, Input, cx } from "../../../../components/primitives";
 import { ErrorState } from "../../../../components/states";
 import type { useCoreViewModelSource } from "../../coreViewModelSource";
@@ -318,6 +319,7 @@ export function CalendarEventForm({
   const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
   const displayColor = draftDisplayColor(draft, selectedCalendar, eventColorOverrides);
   const sourceTimeZone = selectedCalendar?.timeZone ?? defaultTimeZone;
+  const showSourceTimeZone = sourceTimeZone !== defaultTimeZone;
 
   function setAllDay(allDay: boolean): void {
     if (allDay) {
@@ -431,17 +433,17 @@ export function CalendarEventForm({
       <div className="grid gap-3">
         <CalendarCreateModeTabs mode={createMode} onChange={onCreateModeChange} />
         {error ? <ErrorState description={error} title="Task not saved" /> : null}
-        <Input
+        <EmojiInput
           aria-label="Task title"
           autoFocus
-          onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+          onValueChange={(title) => setDraft({ ...draft, title })}
           placeholder="New task"
           value={draft.title}
         />
-        <textarea
+        <EmojiTextarea
           aria-label="Task notes"
           className="min-h-32 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+          onValueChange={(notes) => setDraft({ ...draft, notes })}
           placeholder="Notes"
           value={draft.notes}
         />
@@ -481,10 +483,10 @@ export function CalendarEventForm({
       <div className="grid gap-3">
         <CalendarCreateModeTabs mode={createMode} onChange={onCreateModeChange} />
         {error ? <ErrorState description={error} title="Birthday not saved" /> : null}
-        <Input
+        <EmojiInput
           aria-label="Birthday title"
           autoFocus
-          onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+          onValueChange={(title) => setDraft({ ...draft, title })}
           placeholder="Whose birthday?"
           value={draft.title}
         />
@@ -558,12 +560,12 @@ export function CalendarEventForm({
             <span className="truncate">{calendarDraftRangeLabel(draft)}</span>
           </span>
           <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge>
-          <Badge tone="neutral">{sourceTimeZone}</Badge>
+          {showSourceTimeZone ? <Badge tone="neutral">{sourceTimeZone}</Badge> : null}
         </div>
       </div>
-      <Input
+      <EmojiInput
         aria-label="Event title"
-        onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+        onValueChange={(title) => setDraft({ ...draft, title })}
         placeholder="Title"
         value={draft.title}
       />
@@ -814,10 +816,10 @@ export function CalendarEventForm({
           <FileText aria-hidden="true" size={13} />
           Notes
         </span>
-        <textarea
+        <EmojiTextarea
           aria-label="Event notes"
           className="min-h-24 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+          onValueChange={(notes) => setDraft({ ...draft, notes })}
           placeholder="Notes"
           value={draft.notes}
         />

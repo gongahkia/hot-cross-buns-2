@@ -3,6 +3,7 @@ import type { Dispatch, KeyboardEvent, ReactNode, SetStateAction } from "react";
 import { CalendarClock, FileText, Flag, List, ListPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useDirtyState, useInspector } from "../../../components/Inspector";
+import { EmojiInput, EmojiTextarea } from "../../../components/EmojiTextField";
 import { Badge, Button, Input } from "../../../components/primitives";
 import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { CorePriority, TaskViewModel } from "../coreViewModels";
@@ -195,9 +196,9 @@ export function TaskInspectorBody({
 
   return (
     <div className="grid gap-3" onKeyDown={handleKeyDown}>
-      <Input
+      <EmojiInput
         aria-label="Task title"
-        onChange={(event) => patchDraft({ title: event.target.value })}
+        onValueChange={(title) => patchDraft({ title })}
         placeholder="Task title"
         value={dirty.value.title}
       />
@@ -256,10 +257,10 @@ export function TaskInspectorBody({
           ))}
         </select>
       </label>
-      <textarea
+      <EmojiTextarea
         aria-label="Task notes"
         className="min-h-20 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        onChange={(event) => patchDraft({ notes: event.target.value })}
+        onValueChange={(notes) => patchDraft({ notes })}
         placeholder="Notes"
         value={dirty.value.notes}
       />

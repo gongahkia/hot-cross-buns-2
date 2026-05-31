@@ -128,7 +128,9 @@ describe("App shell", () => {
     expect(within(splitPane).getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
     expect(within(splitPane).getByRole("list", { name: "Task lists" })).toBeInTheDocument();
 
-    await user.click(within(splitPane).getByRole("button", { name: "Choose content for Tasks" }));
+    expect(within(splitPane).queryByRole("button", { name: /Split Tasks/ })).not.toBeInTheDocument();
+    expect(within(splitPane).queryByRole("button", { name: "Choose content for Tasks" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Split view" }));
     expect(within(await screen.findByRole("region", { name: "Choose split view pane" })).getByText("Recent webpages")).toBeInTheDocument();
   });
 
@@ -183,7 +185,7 @@ describe("App shell", () => {
     await user.click(within(chooserPane).getByRole("button", { name: /Tasks/ }));
     const tasksPane = await screen.findByRole("region", { name: "Tasks pane" });
 
-    await user.click(within(tasksPane).getByRole("button", { name: "Split Tasks bottom" }));
+    fireEvent.keyDown(window, { key: "d", metaKey: true, shiftKey: true });
     expect(await screen.findAllByTestId("pane-leaf")).toHaveLength(3);
 
     chooserPane = await screen.findByRole("region", { name: "Choose split view pane" });

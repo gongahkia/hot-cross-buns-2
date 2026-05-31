@@ -133,24 +133,28 @@ function useEmojiField(
     if (suggestions.length > 0) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
+        event.stopPropagation();
         setActiveIndex((current) => (current + 1) % suggestions.length);
         return;
       }
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
+        event.stopPropagation();
         setActiveIndex((current) => (current - 1 + suggestions.length) % suggestions.length);
         return;
       }
 
       if (event.key === "Enter" || event.key === "Tab") {
         event.preventDefault();
+        event.stopPropagation();
         pickEmoji(suggestions[activeIndex]);
         return;
       }
 
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         setQueryRange(null);
         return;
       }

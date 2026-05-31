@@ -143,7 +143,7 @@ describe("App notes", () => {
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
     await user.type(await screen.findByRole("textbox", { name: "Note body" }), " Switch flush.");
-    const notesList = screen.getByRole("list", { name: "Local notes" });
+    const notesList = screen.getByRole("list", { name: "All notes" });
     await user.click(within(notesList).getByRole("button", { name: "Open note Daily note" }));
 
     await waitFor(() => {
