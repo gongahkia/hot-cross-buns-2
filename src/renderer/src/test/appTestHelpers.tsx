@@ -139,12 +139,11 @@ export function testSettings(overrides: Partial<SettingsSnapshot> = {}): Setting
     syncCalendarEventsEnabled: true,
     eventRetentionDaysBack: 0,
     completedTaskRetentionDaysBack: 365,
-    quickCaptureShortcut: null,
     keybindings: defaultKeybindings,
     showTrayIcon: true,
     trayClickAction: "open-menu",
     menuBarPanelStyle: "adaptive",
-    menuBarIconName: "pin",
+    menuBarIconName: "bun",
     showMenuBarBadge: true,
     showDockBadge: true,
     notificationsEnabled: false,
@@ -154,7 +153,6 @@ export function testSettings(overrides: Partial<SettingsSnapshot> = {}): Setting
     eventCompletionSoundEnabled: true,
     eventCompletionSoundId: "pop",
     importedSoundCount: 0,
-    globalQuickAddHotkeyEnabled: false,
     perTabListFilters: {
       tasks: { useCustomFilter: false, selectedTaskListIds: [] },
       notes: { useCustomFilter: false, selectedTaskListIds: [] }
@@ -199,12 +197,6 @@ export function testNativeCapabilities(
     trayStatus: {
       state: "ready",
       message: "Menu bar item is ready."
-    },
-    quickCaptureShortcut: {
-      accelerator: "Ctrl+Space",
-      registered: true,
-      state: "ready",
-      message: "Quick capture shortcut is registered."
     },
     notificationsStatus: {
       permission: "prompt",

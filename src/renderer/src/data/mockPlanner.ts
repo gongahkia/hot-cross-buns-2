@@ -183,12 +183,6 @@ export const mockSettings: MockSetting[] = [
     status: "System"
   },
   {
-    id: "hotkeys",
-    title: "Hotkeys",
-    detail: "Quick capture shortcut conflict is represented as a recoverable error.",
-    status: "Needs review"
-  },
-  {
     id: "diagnostics",
     title: "Diagnostics",
     detail: "Copyable summaries will be sanitized before leaving app services.",

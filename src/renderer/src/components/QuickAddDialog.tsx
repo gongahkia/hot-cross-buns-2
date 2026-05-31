@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CalendarEventRecurrence } from "@shared/ipc/contracts";
 import { CalendarPlus, CheckSquare, FileText, Gift, Search, X, type LucideIcon } from "lucide-react";
 import type { CoreViewModelSource } from "../features/core/coreViewModelSource";
 import {
@@ -34,6 +35,7 @@ export type QuickAddSubmitPayload =
       endsAt: string;
       location: string;
       notes: string;
+      recurrence: CalendarEventRecurrence | null;
       startsAt: string;
       title: string;
     };
@@ -95,6 +97,10 @@ function tokenLabel(token: MatchedToken): string {
   }
 
   if (token.kind === "list") {
+    return token.display;
+  }
+
+  if (token.kind === "recurrence") {
     return token.display;
   }
 
@@ -213,7 +219,8 @@ export function QuickAddDialog({
       endsAt: allDay ? `${toDateInput(end)}T00:00:00.000Z` : toUtcWallClockIso(end),
       allDay,
       location: mode === "birthday" ? "" : parsedEvent.location ?? "",
-      notes: ""
+      notes: "",
+      recurrence: mode === "birthday" ? null : parsedEvent.recurrence
     });
   }
 

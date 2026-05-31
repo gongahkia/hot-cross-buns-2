@@ -1,7 +1,9 @@
+import type { CalendarEventRecurrence } from "@shared/ipc/contracts";
+
 export type QuickAddMode = "event" | "task" | "note" | "birthday";
 
 export interface MatchedToken {
-  kind: "date" | "list" | "time" | "duration" | "location" | "allDay";
+  kind: "date" | "list" | "time" | "duration" | "location" | "allDay" | "recurrence";
   display: string;
 }
 
@@ -18,6 +20,7 @@ export interface ParsedQuickAddEvent {
   endDate: Date | null;
   location: string | null;
   isAllDay: boolean;
+  recurrence: CalendarEventRecurrence | null;
   matchedTokens: MatchedToken[];
 }
 
@@ -47,6 +50,36 @@ const monthNames: Record<string, number> = {
   dec: 12,
   december: 12
 };
+
+const weekdayIndexes: Record<string, number> = {
+  sun: 0,
+  sunday: 0,
+  su: 0,
+  mon: 1,
+  monday: 1,
+  mo: 1,
+  tue: 2,
+  tues: 2,
+  tuesday: 2,
+  tu: 2,
+  wed: 3,
+  wednesday: 3,
+  we: 3,
+  thu: 4,
+  thur: 4,
+  thurs: 4,
+  thursday: 4,
+  th: 4,
+  fri: 5,
+  friday: 5,
+  fr: 5,
+  sat: 6,
+  saturday: 6,
+  sa: 6
+};
+
+const weekdayCodes = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
+type WeekdayCode = (typeof weekdayCodes)[number];
 
 function cleanSpaces(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -357,6 +390,276 @@ function firstDateHit(text: string, now: Date, allowNextWeekday: boolean): DateH
   }
 }
 
+type RecurrenceHit = {
+  recurrence: CalendarEventRecurrence;
+  display: string;
+  index: number;
+  length: number;
+  dateHint: Date | null;
+  ranges: Array<{ index: number; length: number }>;
+};
+
+function weekdayCodeForText(text: string): WeekdayCode | null {
+  const index = weekdayIndexes[text.toLowerCase()];
+  return index === undefined ? null : weekdayCodes[index] ?? null;
+}
+
+function nextDateForWeekdays(days: WeekdayCode[], now: Date): Date | null {
+  if (days.length === 0) {
+    return null;
+  }
+
+  const today = startOfLocalDay(now);
+  let best: Date | null = null;
+
+  for (const day of days) {
+    const target = weekdayCodes.indexOf(day);
+    let delta = target - today.getDay();
+
+    if (delta <= 0) {
+      delta += 7;
+    }
+
+    const candidate = addDays(today, delta);
+
+    if (!best || candidate < best) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+function extractWeekdayCodes(text: string): WeekdayCode[] {
+  const days: WeekdayCode[] = [];
+  const seen = new Set<WeekdayCode>();
+  const pattern = /\b(sundays?|mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat|su|mo|tu|we|th|fr|sa)\b/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const code = weekdayCodeForText((match[1] ?? "").replace(/s$/i, ""));
+
+    if (code && !seen.has(code)) {
+      seen.add(code);
+      days.push(code);
+    }
+  }
+
+  return days;
+}
+
+function recurrenceDisplay(recurrence: CalendarEventRecurrence): string {
+  const unit = recurrence.frequency === "daily"
+    ? "day"
+    : recurrence.frequency === "weekly"
+      ? "week"
+      : recurrence.frequency === "monthly"
+        ? "month"
+        : "year";
+  const cadence = recurrence.interval === 1 ? `Every ${unit}` : `Every ${recurrence.interval} ${unit}s`;
+  const days = recurrence.byDay?.length ? ` on ${recurrence.byDay.join(",")}` : "";
+  const end = recurrence.endsOn ? ` until ${recurrence.endsOn}` : recurrence.count ? ` for ${recurrence.count} times` : "";
+
+  return `${cadence}${days}${end}`;
+}
+
+function extractRecurrence(text: string, now: Date): RecurrenceHit | null {
+  const lower = text.toLowerCase();
+  const checks: Array<(value: string) => Omit<RecurrenceHit, "display" | "ranges"> | null> = [
+    matchEveryUnit,
+    matchEveryWeekday,
+    matchSimpleCadence,
+    matchWeekdays,
+    matchPluralWeekday
+  ];
+
+  for (const check of checks) {
+    const hit = check(lower);
+
+    if (hit) {
+      const end = extractRecurrenceEnd(text, now, hit.index + hit.length);
+      const recurrence = {
+        ...hit.recurrence,
+        ...(end?.endsOn ? { endsOn: end.endsOn } : {}),
+        ...(end?.count ? { count: end.count } : {})
+      };
+
+      return {
+        ...hit,
+        recurrence,
+        display: recurrenceDisplay(recurrence),
+        ranges: end?.ranges ?? []
+      };
+    }
+  }
+
+  return null;
+
+  function matchEveryUnit(value: string): Omit<RecurrenceHit, "display" | "ranges"> | null {
+    const match = /\b(?:every|each)\s+(\d{1,3})?\s*(day|days|week|weeks|month|months|year|years)(?:\s+on\s+([a-z,\s/&-]{2,80}))?/.exec(value);
+
+    if (!match) {
+      return null;
+    }
+
+    const unit = match[2] ?? "week";
+    const frequency = unit.startsWith("day")
+      ? "daily"
+      : unit.startsWith("week")
+        ? "weekly"
+        : unit.startsWith("month")
+          ? "monthly"
+          : "yearly";
+    const byDay = frequency === "weekly" && match[3] ? extractWeekdayCodes(match[3]) : [];
+    const recurrence: CalendarEventRecurrence = {
+      frequency,
+      interval: Math.max(1, Math.min(366, Number(match[1] ?? "1") || 1)),
+      endsOn: null,
+      count: null,
+      ...(byDay.length ? { byDay } : {})
+    };
+
+    return {
+      recurrence,
+      index: match.index,
+      length: match[0].length,
+      dateHint: nextDateForWeekdays(byDay, now)
+    };
+  }
+
+  function matchEveryWeekday(value: string): Omit<RecurrenceHit, "display" | "ranges"> | null {
+    const match = /\b(?:every|each)\s+((?:sun(?:day)?s?|mon(?:day)?s?|tue(?:s|sday)?s?|wed(?:nesday)?s?|thu(?:r|rs|rsday|rday|day)?s?|fri(?:day)?s?|sat(?:urday)?s?)(?:\s*(?:,|\/|&|and)\s*(?:sun(?:day)?s?|mon(?:day)?s?|tue(?:s|sday)?s?|wed(?:nesday)?s?|thu(?:r|rs|rsday|rday|day)?s?|fri(?:day)?s?|sat(?:urday)?s?))*)\b/.exec(value);
+    const byDay = match ? extractWeekdayCodes(match[1] ?? "") : [];
+
+    return match && byDay.length
+      ? {
+          recurrence: {
+            frequency: "weekly",
+            interval: 1,
+            endsOn: null,
+            count: null,
+            byDay
+          },
+          index: match.index,
+          length: match[0].length,
+          dateHint: nextDateForWeekdays(byDay, now)
+        }
+      : null;
+  }
+
+  function matchSimpleCadence(value: string): Omit<RecurrenceHit, "display" | "ranges"> | null {
+    const match = /\b(daily|weekly|monthly|yearly|annually)\b/.exec(value);
+
+    if (!match) {
+      return null;
+    }
+
+    const word = match[1] ?? "weekly";
+    const frequency = word === "daily"
+      ? "daily"
+      : word === "weekly"
+        ? "weekly"
+        : word === "monthly"
+          ? "monthly"
+          : "yearly";
+
+    return {
+      recurrence: {
+        frequency,
+        interval: 1,
+        endsOn: null,
+        count: null
+      },
+      index: match.index,
+      length: match[0].length,
+      dateHint: null
+    };
+  }
+
+  function matchWeekdays(value: string): Omit<RecurrenceHit, "display" | "ranges"> | null {
+    const match = /\b(weekdays|weekends)\b/.exec(value);
+
+    if (!match) {
+      return null;
+    }
+
+    const byDay: WeekdayCode[] = match[1] === "weekdays"
+      ? ["MO", "TU", "WE", "TH", "FR"]
+      : ["SA", "SU"];
+
+    return {
+      recurrence: {
+        frequency: "weekly",
+        interval: 1,
+        endsOn: null,
+        count: null,
+        byDay
+      },
+      index: match.index,
+      length: match[0].length,
+      dateHint: nextDateForWeekdays(byDay, now)
+    };
+  }
+
+  function matchPluralWeekday(value: string): Omit<RecurrenceHit, "display" | "ranges"> | null {
+    const match = /\b(sundays|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays)\b/.exec(value);
+    const byDay = match ? extractWeekdayCodes(match[1] ?? "") : [];
+
+    return match && byDay.length
+      ? {
+          recurrence: {
+            frequency: "weekly",
+            interval: 1,
+            endsOn: null,
+            count: null,
+            byDay
+          },
+          index: match.index,
+          length: match[0].length,
+          dateHint: nextDateForWeekdays(byDay, now)
+        }
+      : null;
+  }
+}
+
+function extractRecurrenceEnd(
+  text: string,
+  now: Date,
+  startIndex: number
+): { endsOn: string | null; count: number | null; ranges: Array<{ index: number; length: number }> } | null {
+  const working = text.slice(startIndex);
+  const lower = working.toLowerCase();
+  const ranges: Array<{ index: number; length: number }> = [];
+  let endsOn: string | null = null;
+  let count: number | null = null;
+  const until = /\b(?:until|through|thru|ending|ends\s+on)\b/.exec(lower);
+
+  if (until) {
+    const suffix = working.slice(until.index);
+    const dateHit = firstDateHit(suffix, now, true);
+
+    if (dateHit) {
+      endsOn = dateOnly(dateHit.date);
+      ranges.push({
+        index: startIndex + until.index,
+        length: dateHit.index + dateHit.length
+      });
+    }
+  }
+
+  const countMatch = /\b(?:for\s+)?(\d{1,3})\s+(?:times|occurrences|instances)\b|\b(\d{1,3})x\b/.exec(lower);
+
+  if (countMatch) {
+    count = Math.max(1, Math.min(366, Number(countMatch[1] ?? countMatch[2])));
+    ranges.push({
+      index: startIndex + countMatch.index,
+      length: countMatch[0].length
+    });
+  }
+
+  return endsOn || count ? { endsOn, count, ranges } : null;
+}
+
 export function parseQuickAddTask(input: string, now = new Date()): ParsedQuickAddTask {
   let working = ` ${input.trim()} `;
   const matchedTokens: MatchedToken[] = [];
@@ -548,8 +851,18 @@ function extractDuration(text: string): { minutes: number; display: string; inde
 }
 
 function extractLocation(text: string): { location: string; index: number; length: number } | null {
-  const match = /\s(?:@|at\s+)([A-Za-z][A-Za-z0-9 '&-]{1,40})(?=\s|$)/.exec(text);
-  const location = match?.[1]?.trim();
+  const quoted = /\s(?:@|at\s+)(["“])([^"”]{1,200})["”]/.exec(text);
+
+  if (quoted?.[2]?.trim()) {
+    return {
+      location: quoted[2].trim(),
+      index: quoted.index,
+      length: quoted[0].length
+    };
+  }
+
+  const match = /\s(?:@|at\s+)([A-Za-z0-9][^#\n]{1,160}?)(?=\s+(?:with|about|for|every|daily|weekly|monthly|yearly|until|through|thru)\b|\s+#|$)/i.exec(text);
+  const location = match?.[1]?.trim().replace(/[,.]$/, "");
 
   return match && location
     ? { location, index: match.index, length: match[0].length }
@@ -568,6 +881,23 @@ export function parseQuickAddEvent(input: string, now = new Date()): ParsedQuick
     matchedTokens.push({ kind: "duration", display: duration.display });
   }
 
+  const recurrenceHit = extractRecurrence(working, now);
+  let recurrence: CalendarEventRecurrence | null = null;
+
+  if (recurrenceHit) {
+    recurrence = recurrenceHit.recurrence;
+    const ranges = [
+      { index: recurrenceHit.index, length: recurrenceHit.length },
+      ...recurrenceHit.ranges
+    ].sort((left, right) => right.index - left.index);
+
+    for (const range of ranges) {
+      working = removeRange(working, range.index, range.length);
+    }
+
+    matchedTokens.push({ kind: "recurrence", display: recurrenceHit.display });
+  }
+
   const dateHit = firstDateHit(working, now, true);
   const timeHit = matchTimeExpression(working);
   let startDate: Date | null = null;
@@ -575,7 +905,7 @@ export function parseQuickAddEvent(input: string, now = new Date()): ParsedQuick
   let isAllDay = false;
 
   if (timeHit) {
-    const base = dateHit?.date ?? startOfLocalDay(now);
+    const base = dateHit?.date ?? recurrenceHit?.dateHint ?? startOfLocalDay(now);
     startDate = withTime(base, timeHit.start);
     endDate = timeHit.end ? withTime(base, timeHit.end) : null;
 
@@ -604,6 +934,12 @@ export function parseQuickAddEvent(input: string, now = new Date()): ParsedQuick
     working = removeRange(working, dateHit.index, dateHit.length);
     matchedTokens.push({ kind: "date", display: dateHit.display });
     matchedTokens.push({ kind: "allDay", display: "All-day" });
+  } else if (recurrenceHit?.dateHint) {
+    startDate = recurrenceHit.dateHint;
+    endDate = recurrenceHit.dateHint;
+    isAllDay = true;
+    matchedTokens.push({ kind: "date", display: recurrenceHit.dateHint.toLocaleDateString(undefined, { month: "short", day: "numeric" }) });
+    matchedTokens.push({ kind: "allDay", display: "All-day" });
   }
 
   const location = extractLocation(working);
@@ -621,6 +957,7 @@ export function parseQuickAddEvent(input: string, now = new Date()): ParsedQuick
     endDate,
     location: locationValue,
     isAllDay,
+    recurrence,
     matchedTokens
   };
 }

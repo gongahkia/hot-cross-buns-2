@@ -22,7 +22,8 @@ import {
   calendarTodayKey,
   hourSlotIso,
   hourSlotLabel,
-  visibleCalendarTimeline
+  visibleCalendarTimeline,
+  zonedDateTimeIso
 } from "./calendarGrid";
 import {
   allowCalendarDrop,
@@ -305,6 +306,74 @@ function CalendarTimelineView({
     setDropPreview(calendarTimeBlock(nextStartsAt, nextEndsAt, event.timeZone || source.settings.defaultTimeZone));
   }
 
+  function dayKeyForAllDayDrag(dragEvent: DragEvent<HTMLElement>): string | null {
+    const container = dragEvent.currentTarget.closest<HTMLElement>("[data-calendar-all-day-events]");
+    const rect = container?.getBoundingClientRect();
+
+    if (!rect || visibleDays.length === 0) {
+      return null;
+    }
+
+    const offset = Math.min(Math.max(dragEvent.clientX - rect.left, 0), Math.max(1, rect.width) - 1);
+    const index = Math.min(visibleDays.length - 1, Math.floor((offset / Math.max(1, rect.width)) * visibleDays.length));
+    const day = visibleDays[index]?.day;
+    return day ? calendarDayKey(day) : null;
+  }
+
+  function startIsoForTimedDrag(dragEvent: DragEvent<HTMLElement>, dayKey: string): string | null {
+    const container = dragEvent.currentTarget.closest<HTMLElement>("[data-calendar-day-events]");
+    const rect = container?.getBoundingClientRect();
+
+    if (!rect) {
+      return null;
+    }
+
+    const offset = Math.min(Math.max(dragEvent.clientY - rect.top, 0), Math.max(1, rect.height) - 1);
+    const totalMinutes = Math.min(
+      23 * 60 + 45,
+      Math.max(0, Math.floor(((offset / Math.max(1, rect.height)) * 24 * 60) / 15) * 15)
+    );
+
+    return zonedDateTimeIso(
+      dayKey,
+      Math.floor(totalMinutes / 60),
+      totalMinutes % 60,
+      source.settings.defaultTimeZone
+    );
+  }
+
+  function previewAllDayEventDrop(dragEvent: DragEvent<HTMLElement>): void {
+    const dayKey = dayKeyForAllDayDrag(dragEvent);
+
+    if (dayKey) {
+      previewDrop(dragEvent, dayKey, `${dayKey}T00:00:00.000Z`, true);
+    }
+  }
+
+  function handleAllDayEventDrop(dragEvent: DragEvent<HTMLElement>): void {
+    const dayKey = dayKeyForAllDayDrag(dragEvent);
+
+    if (dayKey) {
+      handleDrop(dragEvent, dayKey, `${dayKey}T00:00:00.000Z`, true);
+    }
+  }
+
+  function previewTimedEventDrop(dragEvent: DragEvent<HTMLElement>, dayKey: string): void {
+    const startsAt = startIsoForTimedDrag(dragEvent, dayKey);
+
+    if (startsAt) {
+      previewDrop(dragEvent, dayKey, startsAt, false);
+    }
+  }
+
+  function handleTimedEventDrop(dragEvent: DragEvent<HTMLElement>, dayKey: string): void {
+    const startsAt = startIsoForTimedDrag(dragEvent, dayKey);
+
+    if (startsAt) {
+      handleDrop(dragEvent, dayKey, startsAt, false);
+    }
+  }
+
   function updateTimeDrag(
     pointerEvent: PointerEvent<HTMLElement>,
     dayKey: string,
@@ -429,6 +498,7 @@ function CalendarTimelineView({
             <div
               aria-label={`All-day events ${label}`}
               className="relative"
+              data-calendar-all-day-events
               role="group"
               style={{ minHeight: allDayRowHeight }}
             >
@@ -484,6 +554,8 @@ function CalendarTimelineView({
                     data-start-day-index={segment.startDayIndex}
                     data-starts-before-range={segment.startsBeforeRange}
                     key={segment.event.id}
+                    onDragOver={previewAllDayEventDrop}
+                    onDrop={handleAllDayEventDrop}
                     style={allDaySegmentStyle(segment)}
                   >
                     <CalendarTimelineEventChip
@@ -643,7 +715,11 @@ function CalendarTimelineView({
               style={{ gridTemplateColumns }}
             >
               {visibleDays.map(({ day, timedEventLayouts }) => (
-                <div className="relative min-w-0 border-r border-transparent last:border-r-0" key={`${day.id}-events`}>
+                <div
+                  className="relative min-w-0 border-r border-transparent last:border-r-0"
+                  data-calendar-day-events
+                  key={`${day.id}-events`}
+                >
                   {timedEventLayouts.map((layout) => (
                     <div
                       className="pointer-events-auto absolute min-w-0"
@@ -653,6 +729,8 @@ function CalendarTimelineView({
                       data-lane-index={layout.laneIndex}
                       data-start-minute={layout.startMinute}
                       key={layout.event.id}
+                      onDragOver={(dragEvent) => previewTimedEventDrop(dragEvent, calendarDayKey(day))}
+                      onDrop={(dragEvent) => handleTimedEventDrop(dragEvent, calendarDayKey(day))}
                       style={timelineEventStyle(layout)}
                     >
                       <CalendarTimelineEventChip
