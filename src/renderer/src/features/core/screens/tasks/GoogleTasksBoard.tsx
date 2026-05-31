@@ -25,6 +25,7 @@ import {
   taskScheduleLabel,
   taskScheduleTone
 } from "../../coreScreenShared";
+import { useAutoCollapsedSidebar } from "../useAutoCollapsedSidebar";
 
 export interface TaskBoardSelection {
   mode: "lists" | "starred";
@@ -135,6 +136,8 @@ export function GoogleTasksBoard({
   starred
 }: GoogleTasksBoardProps): JSX.Element {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { autoCollapsed, containerRef } = useAutoCollapsedSidebar();
+  const effectiveSidebarCollapsed = sidebarCollapsed || autoCollapsed;
   const starredVisibleCount = activeRootTasks(source).filter((task) => starred.ids.has(task.id)).length;
   const allListIds = source.taskLists.map((list) => list.id);
   const visibleListIds = selectedView.listIds ?? allListIds;
@@ -172,12 +175,13 @@ export function GoogleTasksBoard({
   return (
     <div
       className={cx(
-        "grid min-h-0 flex-1 grid-cols-1 gap-3",
-        sidebarCollapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"
+        "grid min-h-0 flex-1 gap-3",
+        effectiveSidebarCollapsed ? "grid-cols-[56px_minmax(0,1fr)]" : "grid-cols-[260px_minmax(0,1fr)]"
       )}
+      ref={containerRef}
     >
       <TaskBoardSidebar
-        collapsed={sidebarCollapsed}
+        collapsed={effectiveSidebarCollapsed}
         onCreateList={onCreateList}
         onCreateTask={() => onCreateTask()}
         onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}

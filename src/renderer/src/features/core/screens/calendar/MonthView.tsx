@@ -7,7 +7,7 @@ import { CalendarEventChip, CalendarOverflowChip, CalendarOverflowPopover } from
 import { calendarAddUtcDays, calendarDateTitle, calendarMonthVisibleChipCount, visibleCalendarMonthWeeks } from "./calendarGrid";
 import type { CalendarCreateSeed, CalendarTimelineAllDaySegment } from "./types";
 
-const monthEventLaneHeight = 22;
+const monthEventLaneHeight = 24;
 
 function monthAllDaySegmentStyle(segment: CalendarTimelineAllDaySegment): CSSProperties {
   return {
@@ -119,7 +119,7 @@ export function MonthView({
       <div className="grid flex-1 grid-rows-6" role="rowgroup">
         {visibleWeeks.map((week) => (
           <div
-            className="grid border-b border-border last:border-b-0"
+            className="grid gap-y-1 border-b border-border last:border-b-0"
             key={week.id}
             role="row"
             style={{
@@ -178,7 +178,7 @@ export function MonthView({
                 style={monthAllDaySegmentStyle(segment)}
               >
                 <CalendarEventChip
-                  className="h-full min-h-5 px-1.5 py-0.5 text-[11px]"
+                  className="h-5 px-1.5 py-0.5 text-[11px]"
                   event={segment.event}
                   labelVariant="title"
                   onKeyDown={(keyEvent) => {
@@ -198,7 +198,7 @@ export function MonthView({
                   style={monthEventChipStyle(dayIndex, laneIndex)}
                 >
                   <CalendarEventChip
-                    className="h-full min-h-5 px-1.5 py-0.5 text-[11px]"
+                    className="h-5 px-1.5 py-0.5 text-[11px]"
                     event={event}
                     labelVariant="title"
                     onKeyDown={(keyEvent) => {

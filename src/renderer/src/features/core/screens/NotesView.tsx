@@ -3,11 +3,14 @@ import { CacheStatePanel } from "../coreScreenShared";
 import { useCoreViewModelSource } from "../coreViewModelSource";
 import { NotesBoard } from "./NotesBoard";
 import { NotesSidebar } from "./NotesSidebar";
+import { useAutoCollapsedSidebar } from "./useAutoCollapsedSidebar";
 import { useNotesController } from "./useNotesController";
 
 export function NotesView(): JSX.Element {
   const source = useCoreViewModelSource();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { autoCollapsed, containerRef } = useAutoCollapsedSidebar();
+  const effectiveSidebarCollapsed = sidebarCollapsed || autoCollapsed;
   const {
     allNoteCount,
     createDailyNote,
@@ -37,10 +40,13 @@ export function NotesView(): JSX.Element {
   }
 
   return (
-    <div className={`grid h-full min-h-0 grid-cols-1 gap-3 ${sidebarCollapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"}`}>
+    <div
+      className={`grid h-full min-h-0 gap-3 ${effectiveSidebarCollapsed ? "grid-cols-[56px_minmax(0,1fr)]" : "grid-cols-[260px_minmax(0,1fr)]"}`}
+      ref={containerRef}
+    >
       <NotesSidebar
         allNoteCount={allNoteCount}
-        collapsed={sidebarCollapsed}
+        collapsed={effectiveSidebarCollapsed}
         onCreateDailyNote={createDailyNote}
         onCreateMeetingNote={createMeetingNote}
         onCreateNote={() => void createNote()}

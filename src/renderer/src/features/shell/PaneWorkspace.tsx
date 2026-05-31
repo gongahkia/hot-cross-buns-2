@@ -7,7 +7,6 @@ import { SectionContent, type TaskSurfaceCommand } from "../core/CoreScreens";
 import {
   clampPaneRatio,
   maxPaneLeaves,
-  paneLeafCount,
   splitPaneUrlLabel,
   type PaneContent,
   type PaneDropZone,
@@ -54,13 +53,10 @@ export function PaneWorkspace({
   visibleCalendarIds: ReadonlySet<string>;
   visibleSectionIds: SectionId[];
 }): JSX.Element {
-  const leafCount = paneLeafCount(root);
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="pane-workspace">
       <PaneNodeView
         activeSectionId={activeSectionId}
-        canClose={leafCount > 1}
         canSplit={canSplit}
         focusedPaneId={focusedPaneId}
         node={root}
@@ -83,7 +79,6 @@ export function PaneWorkspace({
 
 function PaneNodeView({
   activeSectionId,
-  canClose,
   canSplit,
   focusedPaneId,
   node,
@@ -101,7 +96,6 @@ function PaneNodeView({
   visibleSectionIds
 }: {
   activeSectionId: SectionId;
-  canClose: boolean;
   canSplit: boolean;
   focusedPaneId: string;
   node: PaneNode;
@@ -122,7 +116,6 @@ function PaneNodeView({
     return (
       <PaneLeaf
         activeSectionId={activeSectionId}
-        canClose={canClose}
         canSplit={canSplit}
         focused={focusedPaneId === node.id}
         leaf={node}
@@ -153,7 +146,6 @@ function PaneNodeView({
       <div className="flex min-h-0 min-w-0" style={{ flex: `0 0 ${node.ratio * 100}%` }}>
         <PaneNodeView
           activeSectionId={activeSectionId}
-          canClose={canClose}
           canSplit={canSplit}
           focusedPaneId={focusedPaneId}
           node={node.children[0]}
@@ -178,7 +170,6 @@ function PaneNodeView({
       <div className="flex min-h-0 min-w-0 flex-1">
         <PaneNodeView
           activeSectionId={activeSectionId}
-          canClose={canClose}
           canSplit={canSplit}
           focusedPaneId={focusedPaneId}
           node={node.children[1]}
@@ -202,7 +193,6 @@ function PaneNodeView({
 
 function PaneLeaf({
   activeSectionId,
-  canClose,
   canSplit,
   focused,
   leaf,
@@ -219,7 +209,6 @@ function PaneLeaf({
   visibleSectionIds
 }: {
   activeSectionId: SectionId;
-  canClose: boolean;
   canSplit: boolean;
   focused: boolean;
   leaf: PaneLeafNode;
@@ -306,7 +295,6 @@ function PaneLeaf({
           <Button
             aria-label={`Close ${title} pane`}
             className="min-h-8 gap-2 px-2"
-            disabled={!canClose}
             onClick={() => onClosePane(leaf.id)}
             title="Close pane"
             variant="ghost"

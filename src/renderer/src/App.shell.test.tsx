@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ok } from "@shared/ipc/result";
 import App from "./App";
 import {
@@ -171,6 +171,25 @@ describe("App shell", () => {
 
     fireEvent.keyDown(window, { key: "t", metaKey: true });
     await waitFor(() => expect(screen.getAllByTestId("pane-leaf")).toHaveLength(3));
+  });
+
+  it("closes a single pane to the chooser before closing the window", async () => {
+    window.localStorage.clear();
+    const closeSpy = vi.spyOn(window, "close").mockImplementation(() => undefined);
+    installHcb(seededHcb());
+    render(<App />);
+
+    const calendarPane = await screen.findByRole("region", { name: "Calendar pane" });
+    expect(within(calendarPane).getByRole("button", { name: "Close Calendar pane" })).toBeEnabled();
+
+    fireEvent.keyDown(window, { key: "w", metaKey: true });
+    const chooserPane = await screen.findByRole("region", { name: "Choose split view pane" });
+    expect(within(chooserPane).getByRole("heading", { name: "Choose split view" })).toBeInTheDocument();
+    expect(closeSpy).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "w", metaKey: true });
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    closeSpy.mockRestore();
   });
 
   it("splits, closes, drags, and restores pane layouts", async () => {

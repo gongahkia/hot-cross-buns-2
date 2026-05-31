@@ -202,9 +202,24 @@ export function usePaneWorkspace(): {
   }, []);
 
   const closePane = useCallback((paneId: string): void => {
+    const currentLeaf = findPaneLeaf(state.root, paneId);
+
+    if (paneLeafCount(state.root) <= 1 && currentLeaf?.content.kind === "chooser") {
+      window.close();
+      return;
+    }
+
     setState((current) => {
       if (paneLeafCount(current.root) <= 1) {
-        return current;
+        const leaf = findPaneLeaf(current.root, paneId);
+
+        return leaf
+          ? {
+              ...current,
+              focusedPaneId: leaf.id,
+              root: replacePaneContent(current.root, leaf.id, { kind: "chooser" })
+            }
+          : current;
       }
 
       const nextRoot = closePaneLeaf(current.root, paneId);
@@ -219,7 +234,7 @@ export function usePaneWorkspace(): {
 
       return { ...current, focusedPaneId: nextFocusedPaneId, root: nextRoot };
     });
-  }, []);
+  }, [state.root]);
 
   const setSplitRatio = useCallback((splitId: string, ratio: number): void => {
     setState((current) => ({
