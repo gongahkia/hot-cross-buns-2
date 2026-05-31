@@ -376,7 +376,6 @@ function calendarPanelMarkup(snapshot: NativeMenuBarSnapshot): string {
             <div class="secondary">${escapeHtml(calendar.selectedMeta)}</div>
           </div>
           ${rowsMarkup(calendar.selectedItems)}
-          <a class="quick-add" href="${panelActionHref("quickCapture")}">Add a task - tmr 9am #work</a>
         </section>
         ${accountMarkup(snapshot)}
         ${quickActionsMarkup()}

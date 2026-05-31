@@ -51,12 +51,11 @@ export const emptySettings: SettingsSnapshot = {
   syncCalendarEventsEnabled: true,
   eventRetentionDaysBack: 0,
   completedTaskRetentionDaysBack: 365,
-  quickCaptureShortcut: "Ctrl+Space",
   keybindings: defaultKeybindings,
   showTrayIcon: true,
   trayClickAction: "open-menu",
   menuBarPanelStyle: "adaptive",
-  menuBarIconName: "pin",
+  menuBarIconName: "bun",
   showMenuBarBadge: true,
   showDockBadge: true,
   notificationsEnabled: false,
@@ -66,7 +65,6 @@ export const emptySettings: SettingsSnapshot = {
   eventCompletionSoundEnabled: true,
   eventCompletionSoundId: "pop",
   importedSoundCount: 0,
-  globalQuickAddHotkeyEnabled: false,
   perTabListFilters: {
     tasks: {
       useCustomFilter: false,
@@ -140,12 +138,6 @@ export const emptyNativeCapabilities: NativeCapabilitiesResponse = {
   trayStatus: {
     state: "unsupported",
     message: "Native shell is unavailable."
-  },
-  quickCaptureShortcut: {
-    accelerator: null,
-    registered: false,
-    state: "unsupported",
-    message: "Global shortcuts are unavailable."
   },
   notificationsStatus: {
     permission: "unsupported",

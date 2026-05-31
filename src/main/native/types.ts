@@ -45,7 +45,6 @@ export interface NativeTrayActions {
   primaryClick: () => void;
   openMainWindow: () => void;
   showOrHideMainWindow: () => void;
-  quickCapture: () => void;
   refresh: () => void;
   openSettings: () => void;
   openRoute: (route: NativeRoute) => void;
@@ -54,7 +53,6 @@ export interface NativeTrayActions {
 }
 
 export type NativeMenuBarAction =
-  | "quickCapture"
   | "refresh"
   | "openSettings"
   | "showWindow"

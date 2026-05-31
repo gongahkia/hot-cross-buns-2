@@ -49,7 +49,6 @@ export interface NativeShellServiceOptions {
 export class NativeShellService implements NativeDomainService {
   private readonly now: () => Date;
   private status: NativeCapabilitiesResponse;
-  private currentShortcut: string | null = null;
   private deferredStarted = false;
 
   constructor(private readonly options: NativeShellServiceOptions) {
@@ -119,25 +118,9 @@ export class NativeShellService implements NativeDomainService {
       this.applyAutostartSetting(snapshot.startOnLogin);
     }
 
-    const quickCaptureShortcut = snapshot.globalQuickAddHotkeyEnabled
-      ? snapshot.quickCaptureShortcut
-      : null;
-
     if (!this.deferredStarted) {
-      this.status = {
-        ...this.status,
-        quickCaptureShortcut: {
-          ...this.status.quickCaptureShortcut,
-          accelerator: quickCaptureShortcut,
-          state: quickCaptureShortcut ? "pending" : "disabled",
-          registered: false,
-          ...(quickCaptureShortcut ? {} : { message: "Global quick-add hotkey is disabled in Settings." })
-        }
-      };
       return;
     }
-
-    this.registerQuickCaptureShortcut(quickCaptureShortcut);
   }
 
   capabilities(): NativeCapabilitiesResponse {
@@ -215,9 +198,6 @@ export class NativeShellService implements NativeDomainService {
     try {
       this.setupTray();
       const settings = this.options.settings.get();
-      this.registerQuickCaptureShortcut(
-        settings.globalQuickAddHotkeyEnabled ? settings.quickCaptureShortcut : null
-      );
       this.registerProtocolClient();
       this.scheduleNotificationsFromCache();
       await this.checkForUpdates();
@@ -248,10 +228,6 @@ export class NativeShellService implements NativeDomainService {
       primaryClick: () => this.handleTrayPrimaryAction(),
       openMainWindow: this.options.windows.showMainWindow,
       showOrHideMainWindow: this.options.windows.showOrHideMainWindow,
-      quickCapture: () => {
-        this.options.windows.showMainWindow();
-        this.options.windows.dispatchAction({ type: "quickCapture" });
-      },
       refresh: () => {
         this.options.windows.showMainWindow();
         this.options.windows.dispatchAction({ type: "refresh" });
@@ -295,61 +271,6 @@ export class NativeShellService implements NativeDomainService {
     this.status = {
       ...this.status,
       trayStatus: statusFromResult(result, "ready", "Menu bar item is ready.")
-    };
-  }
-
-  private registerQuickCaptureShortcut(accelerator: string | null): void {
-    if (this.currentShortcut) {
-      this.options.adapter.unregisterGlobalShortcut(this.currentShortcut);
-      this.currentShortcut = null;
-    }
-
-    if (!accelerator) {
-      this.status = {
-        ...this.status,
-        quickCaptureShortcut: {
-          accelerator,
-          registered: false,
-          state: "disabled",
-          message: "Quick capture shortcut is not configured."
-        }
-      };
-      return;
-    }
-
-    if (!this.status.globalShortcuts) {
-      this.status = {
-        ...this.status,
-        quickCaptureShortcut: {
-          accelerator,
-          registered: false,
-          state: "unsupported",
-          message: "Global shortcuts are not supported by this platform adapter."
-        }
-      };
-      return;
-    }
-
-    const result = this.options.adapter.registerGlobalShortcut(accelerator, () => {
-      this.options.windows.showMainWindow();
-      this.options.windows.dispatchAction({ type: "quickCapture" });
-    });
-
-    if (result.ok) {
-      this.currentShortcut = accelerator;
-    }
-
-    this.status = {
-      ...this.status,
-      quickCaptureShortcut: {
-        accelerator,
-        registered: result.ok,
-        state: result.ok ? "ready" : result.state ?? "conflict",
-        message: sanitizedNativeMessage(
-          result.message ??
-            (result.ok ? "Quick capture shortcut is registered." : "Shortcut registration failed.")
-        )
-      }
     };
   }
 
@@ -482,12 +403,6 @@ export class NativeShellService implements NativeDomainService {
 
   private handleTrayPrimaryAction(): void {
     const action = this.options.settings.get().trayClickAction;
-
-    if (action === "quick-capture") {
-      this.options.windows.showMainWindow();
-      this.options.windows.dispatchAction({ type: "quickCapture" });
-      return;
-    }
 
     if (action === "open-today") {
       this.options.windows.showMainWindow();

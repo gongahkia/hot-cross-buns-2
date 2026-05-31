@@ -90,24 +90,6 @@ export function settingsSections(snapshot: CoreDataSnapshot): SettingsSectionVie
       ]
     },
     {
-      id: "hotkeys",
-      title: "Hotkeys",
-      status: nativeStateLabel(snapshot.native.quickCaptureShortcut.state),
-      detail: "Quick capture shortcut",
-      rows: [
-        {
-          id: "quick-capture",
-          label: "Quick capture",
-          value: snapshot.native.quickCaptureShortcut.accelerator ?? "Not configured"
-        },
-        {
-          id: "registration",
-          label: "Registration",
-          value: snapshot.native.quickCaptureShortcut.message ?? "No native status reported"
-        }
-      ]
-    },
-    {
       id: "tray",
       title: "Tray",
       status: nativeStateLabel(snapshot.native.trayStatus.state),

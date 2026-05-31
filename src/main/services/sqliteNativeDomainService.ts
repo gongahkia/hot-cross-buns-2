@@ -78,12 +78,6 @@ function nativeCapabilities(): NativeCapabilitiesResponse {
       state: "unsupported",
       message: "Tray/menu bar is unavailable through the fallback domain service."
     },
-    quickCaptureShortcut: {
-      accelerator: null,
-      registered: false,
-      state: "unsupported",
-      message: "Global shortcuts are unavailable through the fallback domain service."
-    },
     notificationsStatus: {
       permission: "unsupported",
       scheduledCount: 0,

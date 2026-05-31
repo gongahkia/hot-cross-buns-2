@@ -192,7 +192,6 @@ export function createPlaceholderState(): PlaceholderState {
       quickCreateExpandedByDefault: false,
       restoreWindowStateEnabled: true,
       startOnLogin: false,
-      quickCaptureShortcut: "Ctrl+Space",
       keybindings: defaultKeybindings,
       selectedTaskListIds: ["list-inbox", "list-planning"],
       selectedCalendarIds: ["cal-product", "cal-engineering", "cal-qa"],
@@ -205,7 +204,7 @@ export function createPlaceholderState(): PlaceholderState {
       showTrayIcon: true,
       trayClickAction: "open-menu",
       menuBarPanelStyle: "adaptive",
-      menuBarIconName: "pin",
+      menuBarIconName: "bun",
       showMenuBarBadge: true,
       showDockBadge: true,
       notificationsEnabled: false,
@@ -215,7 +214,6 @@ export function createPlaceholderState(): PlaceholderState {
       eventCompletionSoundEnabled: true,
       eventCompletionSoundId: "pop",
       importedSoundCount: 0,
-      globalQuickAddHotkeyEnabled: false,
       perTabListFilters: {
         tasks: {
           useCustomFilter: false,

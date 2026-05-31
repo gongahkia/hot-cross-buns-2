@@ -16,10 +16,6 @@ export function initialStatus(
   capabilities: NativePlatformCapabilities,
   settings: SettingsSnapshot
 ): NativeCapabilitiesResponse {
-  const quickCaptureShortcut = settings.globalQuickAddHotkeyEnabled
-    ? settings.quickCaptureShortcut
-    : null;
-
   return {
     platform: capabilities.platform,
     notifications: capabilities.notifications,
@@ -31,20 +27,6 @@ export function initialStatus(
         ? featureStatus("pending", "Tray startup is deferred until the shell is visible.")
         : featureStatus("disabled", "Menu bar icon is disabled in Settings.")
       : featureStatus("unsupported", "Tray/menu bar adapter is unavailable."),
-    quickCaptureShortcut: {
-      accelerator: quickCaptureShortcut,
-      registered: false,
-      state: capabilities.globalShortcuts
-        ? quickCaptureShortcut
-          ? "pending"
-          : "disabled"
-        : "unsupported",
-      message: capabilities.globalShortcuts
-        ? quickCaptureShortcut
-          ? "Quick capture shortcut registration is deferred until the shell is visible."
-          : "Global quick-add hotkey is disabled in Settings."
-        : "Global shortcuts are not supported by this platform adapter."
-    },
     notificationsStatus: {
       permission: capabilities.notifications ? "prompt" : "unsupported",
       scheduledCount: 0,

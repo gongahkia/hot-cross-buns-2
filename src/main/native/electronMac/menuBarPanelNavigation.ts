@@ -65,7 +65,6 @@ function parseMenuBarPanelAction(params: URLSearchParams): MenuBarPanelNavigatio
   const action = params.get("name");
 
   if (
-    action !== "quickCapture" &&
     action !== "refresh" &&
     action !== "openSettings" &&
     action !== "showWindow" &&

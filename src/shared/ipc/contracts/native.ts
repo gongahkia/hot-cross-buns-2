@@ -139,15 +139,6 @@ export const nativeCapabilityReportSchema = z
 
 export type NativeCapabilityReport = z.infer<typeof nativeCapabilityReportSchema>;
 
-export const nativeHotkeyStatusSchema = nativeFeatureStatusSchema
-  .extend({
-    accelerator: z.string().min(1).max(120).nullable(),
-    registered: z.boolean()
-  })
-  .strict();
-
-export type NativeHotkeyStatus = z.infer<typeof nativeHotkeyStatusSchema>;
-
 export const nativeNotificationStatusSchema = nativeFeatureStatusSchema
   .extend({
     permission: z.enum(["granted", "denied", "prompt", "unsupported"]),
@@ -185,7 +176,6 @@ export const nativeCapabilitiesResponseSchema = z
     tray: z.boolean(),
     deepLinks: z.boolean(),
     trayStatus: nativeFeatureStatusSchema,
-    quickCaptureShortcut: nativeHotkeyStatusSchema,
     notificationsStatus: nativeNotificationStatusSchema,
     deepLinkStatus: nativeDeepLinkStatusSchema,
     updaterStatus: nativeFeatureStatusSchema,
@@ -241,11 +231,6 @@ export const nativeRouteSchema = z
 export type NativeRoute = z.infer<typeof nativeRouteSchema>;
 
 export const nativeActionSchema = z.discriminatedUnion("type", [
-  z
-    .object({
-      type: z.literal("quickCapture")
-    })
-    .strict(),
   z
     .object({
       type: z.literal("openSettings")

@@ -30,7 +30,6 @@ const templateIconSvgBodies: Record<MenuBarIconName, string> = {
   circle: '<circle cx="9" cy="9" r="5.7"/>',
   clock: '<circle cx="9" cy="9" r="6.1"/><path d="M9 5.3V9l2.7 1.6"/>',
   diamond: '<path d="M9 2.4 15.6 9 9 15.6 2.4 9 9 2.4Z"/>',
-  pin: '<path d="M6.5 2.8h5l-.8 4.2 2.3 2.4H5l2.3-2.4-.8-4.2Z"/><path d="M9 9.4v5.5"/><path d="M7.5 15.3h3"/>',
   spark: '<path d="M9 2.3 10.6 7 15.3 9 10.6 11 9 15.7 7.4 11 2.7 9 7.4 7 9 2.3Z"/><path d="M13.8 2.8v2.5"/><path d="M12.6 4h2.5"/>',
   star: '<path d="m9 2.8 1.7 3.5 3.9.6-2.8 2.7.7 3.8L9 11.6l-3.5 1.8.7-3.8L3.4 6.9l3.9-.6L9 2.8Z"/>',
   target: '<circle cx="9" cy="9" r="6.2"/><circle cx="9" cy="9" r="2.6"/><path d="M9 1.9v2"/><path d="M9 14.1v2"/><path d="M1.9 9h2"/><path d="M14.1 9h2"/>'
@@ -183,10 +182,6 @@ function menuBarPanelMenu(actions: NativeTrayActions, snapshot: NativeMenuBarSna
   template.push(
     { type: "separator" },
     {
-      label: "Quick Capture",
-      click: actions.quickCapture
-    },
-    {
       label: "Refresh Tasks and Calendar",
       click: actions.refresh
     },
@@ -213,10 +208,6 @@ function trayUtilityMenu(actions: NativeTrayActions): Menu {
     {
       label: "Open Hot Cross Buns 2",
       click: actions.openMainWindow
-    },
-    {
-      label: "Quick Capture",
-      click: actions.quickCapture
     },
     {
       label: "Refresh Tasks and Calendar",
@@ -249,9 +240,7 @@ function menuItemFromSnapshotItem(
         return;
       }
 
-      if (item.action === "quickCapture") {
-        actions.quickCapture();
-      } else if (item.action === "refresh") {
+      if (item.action === "refresh") {
         actions.refresh();
       } else if (item.action === "openSettings") {
         actions.openSettings();

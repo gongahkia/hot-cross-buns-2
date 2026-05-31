@@ -214,13 +214,8 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
     patch.startOnLogin = request.startOnLogin;
   }
 
-  if (request.quickCaptureShortcut !== undefined) {
-    patch.quickCaptureShortcut = request.quickCaptureShortcut;
-  }
-
   if (request.keybindings !== undefined) {
     patch.keybindings = request.keybindings;
-    patch.quickCaptureShortcut = request.keybindings["task.quickCapture"];
   }
 
   if (request.selectedTaskListIds !== undefined) {
@@ -305,10 +300,6 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
 
   if (request.importedSoundCount !== undefined) {
     patch.importedSoundCount = request.importedSoundCount;
-  }
-
-  if (request.globalQuickAddHotkeyEnabled !== undefined) {
-    patch.globalQuickAddHotkeyEnabled = request.globalQuickAddHotkeyEnabled;
   }
 
   if (request.perTabListFilters !== undefined) {

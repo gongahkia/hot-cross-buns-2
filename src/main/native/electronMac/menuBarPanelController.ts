@@ -98,8 +98,6 @@ export class MenuBarPanelController {
 
     if (parsed.kind === "route") {
       actions.openRoute(parsed.route);
-    } else if (parsed.action === "quickCapture") {
-      actions.quickCapture();
     } else if (parsed.action === "refresh") {
       actions.refresh();
     } else if (parsed.action === "openSettings") {

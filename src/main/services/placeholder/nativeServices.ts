@@ -80,12 +80,6 @@ function nativeCapabilities(): NativeCapabilitiesResponse {
       state: "unsupported",
       message: "Tray/menu bar is unavailable in placeholder data."
     },
-    quickCaptureShortcut: {
-      accelerator: null,
-      registered: false,
-      state: "unsupported",
-      message: "Global shortcuts are unavailable in placeholder data."
-    },
     notificationsStatus: {
       permission: "unsupported",
       scheduledCount: 0,

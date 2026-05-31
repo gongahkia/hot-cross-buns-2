@@ -30,7 +30,6 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   quickCreateExpandedByDefault: false,
   restoreWindowStateEnabled: true,
   startOnLogin: false,
-  quickCaptureShortcut: "Ctrl+Space",
   keybindings: defaultKeybindings,
   selectedTaskListIds: [],
   selectedCalendarIds: [],
@@ -43,7 +42,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   showTrayIcon: true,
   trayClickAction: "open-menu",
   menuBarPanelStyle: "adaptive",
-  menuBarIconName: "pin",
+  menuBarIconName: "bun",
   showMenuBarBadge: true,
   showDockBadge: true,
   notificationsEnabled: false,
@@ -53,7 +52,6 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   eventCompletionSoundEnabled: true,
   eventCompletionSoundId: "pop",
   importedSoundCount: 0,
-  globalQuickAddHotkeyEnabled: false,
   perTabListFilters: {
     tasks: {
       useCustomFilter: false,
@@ -166,11 +164,6 @@ export class LocalSettingsRepository {
         DEFAULT_SETTINGS.restoreWindowStateEnabled
       ),
       startOnLogin: this.readSetting("app", "startOnLogin", DEFAULT_SETTINGS.startOnLogin),
-      quickCaptureShortcut: this.readSetting(
-        "hotkeys",
-        "quickCaptureShortcut",
-        DEFAULT_SETTINGS.quickCaptureShortcut
-      ),
       keybindings: this.readKeybindings(),
       selectedTaskListIds: this.readSetting(
         "google",
@@ -205,15 +198,15 @@ export class LocalSettingsRepository {
         DEFAULT_SETTINGS.completedTaskRetentionDaysBack
       ),
       showTrayIcon: this.readSetting("tray", "showIcon", DEFAULT_SETTINGS.showTrayIcon),
-      trayClickAction: this.readSetting(
-        "tray",
-        "clickAction",
-        DEFAULT_SETTINGS.trayClickAction
+      trayClickAction: normalizeTrayClickAction(
+        this.readSetting("tray", "clickAction", DEFAULT_SETTINGS.trayClickAction)
       ),
       menuBarPanelStyle: normalizeMenuBarPanelStyle(
         this.readSetting("tray", "panelStyle", DEFAULT_SETTINGS.menuBarPanelStyle)
       ),
-      menuBarIconName: this.readSetting("tray", "iconName", DEFAULT_SETTINGS.menuBarIconName),
+      menuBarIconName: normalizeMenuBarIconName(
+        this.readSetting("tray", "iconName", DEFAULT_SETTINGS.menuBarIconName)
+      ),
       showMenuBarBadge: this.readSetting("tray", "showBadge", DEFAULT_SETTINGS.showMenuBarBadge),
       showDockBadge: this.readSetting("dock", "showBadge", DEFAULT_SETTINGS.showDockBadge),
       notificationsEnabled: this.readSetting(
@@ -250,11 +243,6 @@ export class LocalSettingsRepository {
         "sounds",
         "importedCount",
         DEFAULT_SETTINGS.importedSoundCount
-      ),
-      globalQuickAddHotkeyEnabled: this.readSetting(
-        "hotkeys",
-        "globalQuickAddEnabled",
-        DEFAULT_SETTINGS.globalQuickAddHotkeyEnabled
       ),
       perTabListFilters: this.readSetting(
         "filters",
@@ -457,19 +445,9 @@ export class LocalSettingsRepository {
       this.writeSetting("app", "startOnLogin", request.startOnLogin, now);
     }
 
-    if (request.quickCaptureShortcut !== undefined) {
-      this.writeSetting("hotkeys", "quickCaptureShortcut", request.quickCaptureShortcut, now);
-    }
-
     if (request.keybindings !== undefined) {
       const keybindings = normalizeKeybindings(request.keybindings);
       this.writeSetting("hotkeys", "keybindings", keybindings, now);
-      this.writeSetting(
-        "hotkeys",
-        "quickCaptureShortcut",
-        keybindings["task.quickCapture"],
-        now
-      );
     }
 
     if (request.selectedTaskListIds !== undefined) {
@@ -559,10 +537,6 @@ export class LocalSettingsRepository {
 
     if (request.importedSoundCount !== undefined) {
       this.writeSetting("sounds", "importedCount", request.importedSoundCount, now);
-    }
-
-    if (request.globalQuickAddHotkeyEnabled !== undefined) {
-      this.writeSetting("hotkeys", "globalQuickAddEnabled", request.globalQuickAddHotkeyEnabled, now);
     }
 
     if (request.perTabListFilters !== undefined) {
@@ -782,16 +756,7 @@ export class LocalSettingsRepository {
       "keybindings",
       {}
     );
-    const quickCaptureShortcut = this.readSetting(
-      "hotkeys",
-      "quickCaptureShortcut",
-      DEFAULT_SETTINGS.quickCaptureShortcut
-    );
-
-    return normalizeKeybindings({
-      ...saved,
-      "task.quickCapture": saved["task.quickCapture"] ?? quickCaptureShortcut
-    });
+    return normalizeKeybindings(saved);
   }
 
   private defaultSelectedTaskListIds(): string[] {
@@ -862,4 +827,32 @@ function normalizeMenuBarPanelStyle(value: unknown): SettingsSnapshot["menuBarPa
   }
 
   return "adaptive";
+}
+
+function normalizeTrayClickAction(value: unknown): SettingsSnapshot["trayClickAction"] {
+  if (value === "toggle-window" || value === "open-today" || value === "open-menu") {
+    return value;
+  }
+
+  return "open-menu";
+}
+
+function normalizeMenuBarIconName(value: unknown): SettingsSnapshot["menuBarIconName"] {
+  if (
+    value === "calendar" ||
+    value === "bun" ||
+    value === "checklist" ||
+    value === "target" ||
+    value === "bell" ||
+    value === "clock" ||
+    value === "star" ||
+    value === "bolt" ||
+    value === "spark" ||
+    value === "circle" ||
+    value === "diamond"
+  ) {
+    return value;
+  }
+
+  return "bun";
 }

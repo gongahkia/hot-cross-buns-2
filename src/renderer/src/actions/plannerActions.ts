@@ -3,7 +3,6 @@ import type { SectionId } from "../data/mockPlanner";
 export type PlannerActionId =
   | "quickAdd.open"
   | "task.create"
-  | "task.quickCapture"
   | "task.completeSelected"
   | "task.deleteSelected"
   | "calendar.create"
@@ -40,7 +39,7 @@ export interface PlannerAction {
   sectionId?: SectionId;
   calendarAction?: "new-event" | "agenda" | "day" | "multiDay" | "week" | "month";
   noteAction?: "new-note";
-  taskCommand?: "task.create" | "task.quickCapture";
+  taskCommand?: "task.create";
 }
 
 export interface PlannerActionContext {
@@ -59,8 +58,8 @@ export interface PlannerActionAvailability {
 export const plannerActions: PlannerAction[] = [
   {
     id: "quickAdd.open",
-    label: "Quick add",
-    description: "Create from natural language",
+    label: "Quick Add",
+    description: "Create an event, task, birthday, note from natural language",
     category: "Create",
     keywords: ["quick", "add", "natural", "language", "event", "task", "note", "birthday"],
     sectionId: "calendar"
@@ -68,7 +67,7 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "task.create",
     label: "New task",
-    description: "Create a task in the selected local task list",
+    description: "Open the detailed task create view",
     category: "Create",
     keywords: ["task", "todo", "inbox"],
     sectionId: "tasks",
@@ -77,7 +76,7 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "calendar.create",
     label: "New event",
-    description: "Create a Google Calendar event",
+    description: "Open the detailed event create view",
     category: "Create",
     keywords: ["calendar", "event"],
     sectionId: "calendar",
@@ -86,20 +85,11 @@ export const plannerActions: PlannerAction[] = [
   {
     id: "note.create",
     label: "New note",
-    description: "Start a note",
+    description: "Open the detailed note create view",
     category: "Create",
     keywords: ["note"],
     sectionId: "notes",
     noteAction: "new-note"
-  },
-  {
-    id: "task.quickCapture",
-    label: "Quick capture",
-    description: "Open the task capture surface",
-    category: "Create",
-    keywords: ["capture", "inbox"],
-    sectionId: "tasks",
-    taskCommand: "task.quickCapture"
   },
   {
     id: "task.completeSelected",
@@ -244,7 +234,7 @@ export function plannerActionAvailability(
     };
   }
 
-  if ((action.id === "task.create" || action.id === "task.quickCapture") && !context.hasTaskLists) {
+  if (action.id === "task.create" && !context.hasTaskLists) {
     return {
       enabled: false,
       reason: "No task lists"

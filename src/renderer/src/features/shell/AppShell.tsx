@@ -233,11 +233,6 @@ export function AppShell(): JSX.Element {
 
   const handleNativeAction = useCallback(
     (action: NativeAction): void => {
-      if (action.type === "quickCapture") {
-        triggerTaskCommand("task.quickCapture");
-        return;
-      }
-
       if (action.type === "openSettings") {
         openSettingsPanel();
         return;
@@ -275,7 +270,7 @@ export function AppShell(): JSX.Element {
 
       navigateToSection("calendar");
     },
-    [navigateToSection, openCommandPalette, openSettingsPanel, source.refresh, triggerTaskCommand]
+    [navigateToSection, openCommandPalette, openSettingsPanel, source.refresh]
   );
 
   const handlePaletteCommand = useCallback(
@@ -373,11 +368,6 @@ export function AppShell(): JSX.Element {
     (actionId: keyof SettingsSnapshot["keybindings"]): void => {
       if (actionId === "task.create") {
         triggerTaskCommand("task.create");
-        return;
-      }
-
-      if (actionId === "task.quickCapture") {
-        triggerTaskCommand("task.quickCapture");
         return;
       }
 

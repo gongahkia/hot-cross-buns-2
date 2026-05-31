@@ -61,11 +61,6 @@ function appMenuTemplate(actions: NativeTrayActions): MenuItemConstructorOptions
       label: "File",
       submenu: [
         {
-          label: "Quick Capture",
-          accelerator: "Command+Shift+Space",
-          click: actions.quickCapture
-        },
-        {
           label: "Open Today",
           accelerator: "Command+1",
           click: () => actions.openRoute({ kind: "today" })
@@ -147,11 +142,6 @@ function appMenuTemplate(actions: NativeTrayActions): MenuItemConstructorOptions
           label: "Open Tasks",
           accelerator: "Command+2",
           click: () => actions.openRoute({ kind: "tasks" })
-        },
-        {
-          label: "Quick Capture",
-          accelerator: "Command+Shift+Space",
-          click: actions.quickCapture
         },
         {
           label: "Search Tasks",

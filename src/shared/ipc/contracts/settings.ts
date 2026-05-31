@@ -24,7 +24,6 @@ export const calendarTimelineDensitySchema = z.enum(["compact", "comfortable", "
 export const trayClickActionSchema = z.enum([
   "open-menu",
   "toggle-window",
-  "quick-capture",
   "open-today"
 ]);
 export const menuBarPanelStyleSchema = z.enum(["adaptive", "calendar"]);
@@ -55,7 +54,6 @@ export const completionSoundIds = [
   "pulse"
 ] as const;
 export const menuBarIconNames = [
-  "pin",
   "calendar",
   "bun",
   "checklist",
@@ -211,7 +209,6 @@ export const settingsSnapshotSchema = z
     quickCreateExpandedByDefault: z.boolean(),
     restoreWindowStateEnabled: z.boolean(),
     startOnLogin: z.boolean(),
-    quickCaptureShortcut: z.string().min(1).max(120).nullable(),
     keybindings: keybindingsSchema,
     selectedTaskListIds: z.array(idSchema).max(100),
     selectedCalendarIds: z.array(idSchema).max(100),
@@ -234,7 +231,6 @@ export const settingsSnapshotSchema = z
     eventCompletionSoundEnabled: z.boolean(),
     eventCompletionSoundId: completionSoundIdSchema,
     importedSoundCount: z.number().int().nonnegative().max(10_000),
-    globalQuickAddHotkeyEnabled: z.boolean(),
     perTabListFilters: perTabListFiltersSchema,
     portableExportOnlySelectedTaskLists: z.boolean(),
     portableExportOnlySelectedCalendars: z.boolean(),
@@ -286,7 +282,6 @@ export const settingsUpdateRequestSchema = z
     quickCreateExpandedByDefault: z.boolean().optional(),
     restoreWindowStateEnabled: z.boolean().optional(),
     startOnLogin: z.boolean().optional(),
-    quickCaptureShortcut: z.string().min(1).max(120).nullable().optional(),
     keybindings: keybindingsSchema.optional(),
     selectedTaskListIds: z.array(idSchema).max(100).optional(),
     selectedCalendarIds: z.array(idSchema).max(100).optional(),
@@ -309,7 +304,6 @@ export const settingsUpdateRequestSchema = z
     eventCompletionSoundEnabled: z.boolean().optional(),
     eventCompletionSoundId: completionSoundIdSchema.optional(),
     importedSoundCount: z.number().int().nonnegative().max(10_000).optional(),
-    globalQuickAddHotkeyEnabled: z.boolean().optional(),
     perTabListFilters: perTabListFiltersSchema.optional(),
     portableExportOnlySelectedTaskLists: z.boolean().optional(),
     portableExportOnlySelectedCalendars: z.boolean().optional(),

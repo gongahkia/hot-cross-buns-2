@@ -1,9 +1,7 @@
 import type { SavedTaskView } from "@shared/ipc/contracts";
-import type { Dispatch, SetStateAction } from "react";
 import {
   CheckCircle2,
   Filter,
-  ListPlus,
   Plus,
   RotateCcw,
   Save,
@@ -24,7 +22,6 @@ import {
   actionDescription,
   actionLabel
 } from "../../coreScreenShared";
-import type { QuickTaskParseResult } from "./quickTaskParser";
 import {
   savedTaskViewFilterChips,
   taskPerspectiveTabs,
@@ -37,14 +34,12 @@ type CoreViewModelSource = ReturnType<typeof useCoreViewModelSource>;
 export function TaskHeader({
   onCreateTask,
   onDeleteSelectedTask,
-  onToggleQuickCapture,
   onToggleSelectedTask,
   selectedTask,
   source
 }: {
   onCreateTask: () => void;
   onDeleteSelectedTask: () => void;
-  onToggleQuickCapture: () => void;
   onToggleSelectedTask: () => void;
   selectedTask: TaskViewModel | null;
   source: CoreViewModelSource;
@@ -60,15 +55,6 @@ export function TaskHeader({
         >
           <Plus aria-hidden="true" size={15} />
           {actionLabel("task.create")}
-        </Button>
-        <Button
-          data-action-id="task.quickCapture"
-          onClick={onToggleQuickCapture}
-          title={actionDescription("task.quickCapture")}
-          variant="secondary"
-        >
-          <ListPlus aria-hidden="true" size={15} />
-          {actionLabel("task.quickCapture")}
         </Button>
         <Button
           data-action-id="task.completeSelected"
@@ -393,53 +379,6 @@ export function TaskListsSidebarPanel({
             </div>
           );
         })}
-      </div>
-    </Panel>
-  );
-}
-
-export function QuickCapturePanel({
-  canCaptureTask,
-  onCaptureTask,
-  parsedQuickTask,
-  quickCaptureInput,
-  setQuickCaptureInput,
-  source
-}: {
-  canCaptureTask: boolean;
-  onCaptureTask: () => void;
-  parsedQuickTask: QuickTaskParseResult;
-  quickCaptureInput: string;
-  setQuickCaptureInput: Dispatch<SetStateAction<string>>;
-  source: CoreViewModelSource;
-}): JSX.Element {
-  return (
-    <Panel
-      action={
-        <Button disabled={!canCaptureTask} onClick={onCaptureTask} size="sm" variant="primary">
-          Capture
-        </Button>
-      }
-      title="Quick capture"
-      description={
-        parsedQuickTask.dueDate
-          ? `${parsedQuickTask.dueDate} - ${source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "Inbox"}`
-          : source.taskLists.find((list) => list.id === parsedQuickTask.listId)?.title ?? "No list"
-      }
-    >
-      <div className="grid gap-2 p-3">
-        <Input
-          aria-label="Quick capture task"
-          onChange={(event) => setQuickCaptureInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onCaptureTask();
-            }
-          }}
-          placeholder="Follow up tomorrow #Inbox"
-          value={quickCaptureInput}
-        />
       </div>
     </Panel>
   );

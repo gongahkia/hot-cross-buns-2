@@ -1,6 +1,5 @@
 export const hotkeyActionIds = [
   "task.create",
-  "task.quickCapture",
   "note.create",
   "calendar.create",
   "commandPalette.open",
@@ -36,7 +35,6 @@ export type HotkeyActionId = (typeof hotkeyActionIds)[number];
 
 export const defaultKeybindings: Record<HotkeyActionId, string | null> = {
   "task.create": "CmdOrCtrl+N",
-  "task.quickCapture": "CmdOrCtrl+Shift+Space",
   "note.create": "CmdOrCtrl+Shift+N",
   "calendar.create": "CmdOrCtrl+Shift+E",
   "commandPalette.open": "CmdOrCtrl+P",

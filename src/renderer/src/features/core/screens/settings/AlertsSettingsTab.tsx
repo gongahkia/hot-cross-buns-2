@@ -1,8 +1,7 @@
 import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contracts";
 import { Bell, Download, Play, Volume2 } from "lucide-react";
-import { Badge, Button } from "../../../../components/primitives";
+import { Button } from "../../../../components/primitives";
 import { playCompletionSound } from "../../completionSounds";
-import { displayAccelerator } from "../../hotkeys";
 import {
   SegmentedControl,
   SettingsControlRow,
@@ -35,7 +34,6 @@ const soundOptions: Array<{ label: string; value: SettingsSnapshot["taskCompleti
 ];
 
 const menuBarIconOptions: Array<{ label: string; value: SettingsSnapshot["menuBarIconName"] }> = [
-  { label: "Pin", value: "pin" },
   { label: "Calendar", value: "calendar" },
   { label: "Bun", value: "bun" },
   { label: "Checklist", value: "checklist" },
@@ -178,20 +176,6 @@ export function AlertsSettingsTab({
           label="Dock badge for overdue tasks"
           onChange={(checked) => updateSettings({ showDockBadge: checked })}
         />
-      </SettingsGroup>
-
-      <SettingsGroup title="Global hotkey">
-        <SettingsSwitch
-          checked={settings.globalQuickAddHotkeyEnabled}
-          label="Global quick-add hotkey"
-          onChange={(checked) => updateSettings({ globalQuickAddHotkeyEnabled: checked })}
-        />
-        <SettingsControlRow
-          description={settings.globalQuickAddHotkeyEnabled ? "Registered by the native shell when supported." : "The global quick-add hotkey is off."}
-          label="Shortcut"
-        >
-          <Badge>{displayAccelerator(settings.keybindings["task.quickCapture"])}</Badge>
-        </SettingsControlRow>
       </SettingsGroup>
     </div>
   );

@@ -19,15 +19,12 @@ import {
 } from "../../inspectors/TaskInspectorBody";
 import {
   CacheStatePanel,
-  scheduleRendererFrame,
   scheduledBlockByTaskId
 } from "../../coreScreenShared";
 import {
-  QuickCapturePanel,
   TaskMutationErrorBanner,
   TaskRefreshPanel
 } from "./TaskPanels";
-import { parseQuickTaskInput } from "./quickTaskParser";
 import {
   canSaveTaskDraft,
   defaultTaskListId,
@@ -45,7 +42,7 @@ import {
 } from "./GoogleTasksBoard";
 
 export interface TaskSurfaceCommand {
-  id: "task.create" | "task.quickCapture";
+  id: "task.create";
   nonce: number;
   paneId?: string;
 }
@@ -75,15 +72,12 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draft, setDraftState] = useState<TaskDraft>(() => newTaskDraft(source));
   const [taskInspectorMode, setTaskInspectorModeState] = useState<"view" | "edit">("edit");
-  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
-  const [quickCaptureInput, setQuickCaptureInput] = useState("");
   const taskDraftRef = useRef<TaskDraft>(draft);
   const taskDraftBaselineRef = useRef<TaskDraft>(draft);
   const taskInspectorDirtyRef = useRef(false);
   const taskInspectorInstanceRef = useRef(0);
   const taskInspectorModeRef = useRef<"view" | "edit">("edit");
   const handledCommandNonce = useRef<number | null>(null);
-  const quickCaptureOpenStartedAt = useRef<number | null>(null);
   const setDraft = useCallback<Dispatch<SetStateAction<TaskDraft>>>((next) => {
     setDraftState((current) => {
       const resolved =
@@ -102,10 +96,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     () => scheduledBlockByTaskId(source.scheduledTaskBlocks),
     [source.scheduledTaskBlocks]
   );
-  const parsedQuickTask = parseQuickTaskInput(quickCaptureInput, source.taskLists);
   const canSaveTask = canSaveTaskDraft(draft, source.taskMutationPending);
-  const canCaptureTask =
-    parsedQuickTask.title.length > 0 && parsedQuickTask.listId.length > 0 && !source.taskMutationPending;
 
   function setTaskInspectorMode(mode: "view" | "edit"): void {
     taskInspectorModeRef.current = mode;
@@ -129,12 +120,6 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
 
     handledCommandNonce.current = command.nonce;
     setSelectedBoardView({ mode: "lists", listIds: null });
-
-    if (command.id === "task.quickCapture") {
-      quickCaptureOpenStartedAt.current = rendererNow();
-      setQuickCaptureOpen(true);
-      return;
-    }
 
     openNewTask();
   }, [command, source]);
@@ -169,17 +154,6 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
   useEffect(() => {
     writeLocalStorageJSON(starredTasksAtStorageKey, starredTaskAt);
   }, [starredTaskAt]);
-
-  useEffect(() => {
-    if (!quickCaptureOpen) {
-      return;
-    }
-
-    scheduleRendererFrame(() => {
-      reportRendererTimingSince("quick-capture.open", quickCaptureOpenStartedAt.current);
-      quickCaptureOpenStartedAt.current = null;
-    });
-  }, [quickCaptureOpen]);
 
   useEffect(() => {
     if (currentInspector?.kind !== "task") {
@@ -425,31 +399,6 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     await closeInspector();
   }
 
-  async function captureQuickTask(): Promise<void> {
-    if (!canCaptureTask) {
-      return;
-    }
-
-    const created = await source.createTask({
-      title: parsedQuickTask.title,
-      notes: "",
-      dueDate: parsedQuickTask.dueDate || null,
-      listId: parsedQuickTask.listId,
-      parentId: null,
-      priority: "none",
-      plannedStart: parsedQuickTask.plannedStart,
-      plannedEnd: parsedQuickTask.plannedEnd,
-      durationMinutes: parsedQuickTask.durationMinutes,
-      lockedSchedule: parsedQuickTask.lockedSchedule,
-      tags: parsedQuickTask.tags
-    });
-
-    if (created) {
-      setQuickCaptureInput("");
-      setQuickCaptureOpen(false);
-    }
-  }
-
   function addSubtaskDraft(): void {
     addSubtaskForTask(selectedTask);
   }
@@ -543,16 +492,6 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
       <TaskMutationErrorBanner source={source} />
 
       <div className="grid min-h-0 flex-1 gap-3">
-        {quickCaptureOpen ? (
-          <QuickCapturePanel
-            canCaptureTask={canCaptureTask}
-            onCaptureTask={() => void captureQuickTask()}
-            parsedQuickTask={parsedQuickTask}
-            quickCaptureInput={quickCaptureInput}
-            setQuickCaptureInput={setQuickCaptureInput}
-            source={source}
-          />
-        ) : null}
         {source.dataState === "stale" ? <TaskRefreshPanel /> : null}
         <GoogleTasksBoard
           listSorts={listSorts}

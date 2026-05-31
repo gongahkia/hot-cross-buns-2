@@ -676,16 +676,6 @@ export const settingsSections: SettingsSectionViewModel[] = [
     ]
   },
   {
-    id: "hotkeys",
-    title: "Hotkeys",
-    status: "Conflict",
-    detail: "Quick capture shortcut state remains recoverable and visible.",
-    rows: [
-      { id: "capture", label: "Quick capture", value: "Conflict: Ctrl+Space" },
-      { id: "palette", label: "Command palette", value: "Ctrl+K" }
-    ]
-  },
-  {
     id: "tray",
     title: "Tray",
     status: "Enabled shell",

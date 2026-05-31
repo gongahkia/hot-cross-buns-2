@@ -248,7 +248,7 @@ export function QuickAddDialog({
           <div className="flex min-w-0 items-center gap-2">
             <Search aria-hidden="true" className="text-accent" size={17} />
             <h2 className="text-[var(--text-md)] font-semibold text-text-primary" id="quick-add-title">
-              Quick add
+              Quick Add
             </h2>
           </div>
           <IconButton icon={X} label="Close quick add" onClick={onClose} variant="ghost" />
