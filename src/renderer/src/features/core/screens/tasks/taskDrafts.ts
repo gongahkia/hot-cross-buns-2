@@ -29,7 +29,7 @@ export function editTaskDraft(task: TaskViewModel): TaskDraft {
     mode: "edit",
     id: task.id,
     title: task.title,
-    notes: task.detail === "Task cached locally" ? "" : task.detail,
+    notes: task.detail,
     dueDate: task.dueDate ?? "",
     listId: task.listId,
     parentId: task.parentId ?? "",

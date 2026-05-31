@@ -70,7 +70,7 @@ export const plannerSections: PlannerSection[] = [
     id: "notes",
     label: "Notes",
     title: "Notes",
-    subtitle: "Local-only notes and planning scratchpads",
+    subtitle: "Notes and planning scratchpads",
     metric: "3 notes",
     icon: StickyNote
   },
@@ -173,7 +173,7 @@ export const mockSettings: MockSetting[] = [
   {
     id: "sync",
     title: "Sync mode",
-    detail: "Local cache first, background refresh later.",
+    detail: "Synced data first, background refresh later.",
     status: "Mock only"
   },
   {

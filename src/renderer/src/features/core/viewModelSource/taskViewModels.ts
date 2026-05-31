@@ -81,7 +81,7 @@ function taskGroups(
   return Array.from(byList, ([list, listTasks]) => ({
     id: `${state}-${slugId(list)}`,
     title: list,
-    description: `${taskStateLabel(state)} tasks cached locally`,
+    description: `${taskStateLabel(state)} tasks`,
     countLabel: `${listTasks.length} ${listTasks.length === 1 ? "task" : "tasks"}`,
     tasks: listTasks
   })).sort(
@@ -162,7 +162,7 @@ export function stableTaskViewModel(
     listId: task.listId,
     parentId: task.parentId ?? null,
     title: task.title,
-    detail: task.notes || (hasFixtureTask ? fixtureTask.detail : "Task cached locally"),
+    detail: task.notes || (hasFixtureTask ? fixtureTask.detail : ""),
     list: listTitle ?? task.listId,
     dueDate: task.dueAt ? task.dueAt.slice(0, 10) : null,
     dueLabel: task.status === "completed" ? "Done" : dueLabel(task.dueAt),
@@ -258,7 +258,7 @@ export function missingTask(taskId: string): TaskViewModel {
     listId: "unknown",
     parentId: null,
     title: "Missing task",
-    detail: "The cached task is no longer available.",
+    detail: "The task is no longer available.",
     list: "Unknown",
     dueDate: null,
     dueLabel: "Unknown",

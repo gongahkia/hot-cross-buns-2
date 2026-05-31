@@ -486,7 +486,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     const taskList = source.taskLists.find((list) => list.id === taskListId);
     const title = taskList?.title ?? "this list";
 
-    if (!window.confirm(`Delete ${title}? This also deletes cached tasks in the list.`)) {
+    if (!window.confirm(`Delete ${title}? This also deletes tasks in the list.`)) {
       return;
     }
 

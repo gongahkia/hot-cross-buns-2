@@ -107,7 +107,7 @@ function sortTasks(
 function taskPreview(task: TaskViewModel): string {
   const text = task.detail.trim();
 
-  if (!text || text === "Task cached locally") {
+  if (!text) {
     return "";
   }
 

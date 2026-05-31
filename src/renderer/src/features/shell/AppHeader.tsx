@@ -133,7 +133,7 @@ export function AppHeader({
           className="min-w-8"
           data-action-id="sync.refresh"
           onClick={onRefresh}
-          title="Reload local cache"
+          title="Reload planner data"
           variant="ghost"
         >
           <RefreshCw aria-hidden="true" size={15} />

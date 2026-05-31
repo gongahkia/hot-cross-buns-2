@@ -549,8 +549,8 @@ export function TaskPerspectiveContent({
         <EmptyState
           description={
             activeFilterId === "empty"
-              ? "No cached tasks match this filter."
-              : "No cached tasks match this perspective."
+              ? "No tasks match this filter."
+              : "No tasks match this perspective."
           }
           title={activeFilterId === "empty" ? "No tasks in this filter" : "No tasks in this perspective"}
         />
