@@ -120,6 +120,8 @@ export interface CalendarMonthWeekViewModel {
 
 export interface NoteViewModel {
   id: string;
+  listId: string;
+  listTitle: string;
   title: string;
   body: string;
   preview: string;
