@@ -317,6 +317,13 @@ describe("App shell", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    const navButtons = within(primaryNavigation()).getAllByRole("button");
+    expect(navButtons.slice(0, 3).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Calendar",
+      "Tasks",
+      "Notes"
+    ]);
+
     const tasksButton = within(primaryNavigation()).getByRole("button", { name: "Tasks" });
     const calendarButton = within(primaryNavigation()).getByRole("button", { name: "Calendar" });
     const notesButton = within(primaryNavigation()).getByRole("button", { name: "Notes" });
@@ -333,9 +340,9 @@ describe("App shell", () => {
       "aria-keyshortcuts",
       "Meta+3 Control+3"
     );
-    expect(within(tasksButton).getByText("Cmd 1")).toBeInTheDocument();
-    expect(within(calendarButton).getByText("Cmd 2")).toBeInTheDocument();
-    expect(within(notesButton).getByText("Cmd 3")).toBeInTheDocument();
+    expect(within(tasksButton).queryByText("Cmd 1")).not.toBeInTheDocument();
+    expect(within(calendarButton).queryByText("Cmd 2")).not.toBeInTheDocument();
+    expect(within(notesButton).queryByText("Cmd 3")).not.toBeInTheDocument();
 
     await user.keyboard("{Meta>}1{/Meta}");
     expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();

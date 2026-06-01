@@ -5,7 +5,8 @@ import { ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import appIconUrl from "../../../../../assets/brand/buns-app-icon-sidebar.png";
 import { Badge, cx } from "../../components/primitives";
 import type { SectionId } from "../../data/mockPlanner";
-import { displayAccelerator } from "../core/hotkeys";
+import { useI18n } from "../../i18n";
+import { ariaKeyShortcuts } from "../core/hotkeys";
 import type { CoreViewModelSource } from "../core/coreViewModelSource";
 import { CalendarSourceSwatch } from "../core/screens/calendar/CalendarEventChips";
 import { scheduleFrame, sectionMetric } from "./shellUtils";
@@ -28,6 +29,8 @@ function SidebarCalendarDropdown({
   source: CoreViewModelSource;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element | null {
+  const { t } = useI18n();
+
   if (source.calendarSources.length === 0) {
     return null;
   }
@@ -45,7 +48,7 @@ function SidebarCalendarDropdown({
         type="button"
       >
         <ToggleIcon aria-hidden="true" size={13} />
-        <span className="min-w-0 flex-1 truncate">Calendars</span>
+        <span className="min-w-0 flex-1 truncate">{t("nav.calendars")}</span>
         <Badge tone={hiddenCount > 0 ? "warning" : "neutral"}>{visibleCalendarIds.size}</Badge>
       </button>
       {open ? (
@@ -92,7 +95,7 @@ function SidebarCalendarDropdown({
               type="button"
             >
               <EyeOff aria-hidden="true" size={13} />
-              <span>Show all calendars</span>
+              <span>{t("nav.showAllCalendars")}</span>
             </button>
           ) : null}
         </div>
@@ -120,6 +123,7 @@ export function AppSidebar({
   visibleCalendarIds: ReadonlySet<string>;
   visiblePrimarySections: VisiblePrimarySection[];
 }): JSX.Element {
+  const { t } = useI18n();
   const sectionButtonRefs = useRef(new Map<SectionId, HTMLButtonElement>());
   const [calendarDropdownOpen, setCalendarDropdownOpen] = useState(true);
 
@@ -187,16 +191,20 @@ export function AppSidebar({
       </div>
 
       <nav aria-label="Primary" className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-x-auto px-2 py-2 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:py-3">
-        {visiblePrimarySections.map(({ section, shortcutKey }) => {
+        {visiblePrimarySections.map(({ section }) => {
           const Icon = section.icon;
           const selected = section.id === activeSectionId;
+          const label = sectionLabel(section.id, t);
+          const shortcut = ariaKeyShortcuts(
+            source.settings.keybindings[`navigation.${section.id}` as keyof SettingsSnapshot["keybindings"]]
+          );
 
           return (
             <Fragment key={section.id}>
               <button
                 aria-current={selected ? "page" : undefined}
-                aria-keyshortcuts={`Meta+${shortcutKey} Control+${shortcutKey}`}
-                aria-label={section.label}
+                aria-keyshortcuts={shortcut}
+                aria-label={label}
                 className={cx(
                   "flex h-9 w-auto min-w-9 items-center justify-center gap-3 rounded-hcbMd px-2 text-left text-[var(--text-base)] transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:w-full lg:justify-start lg:px-3",
                   selected
@@ -206,17 +214,11 @@ export function AppSidebar({
                 onClick={() => onNavigateToSection(section.id)}
                 onKeyDown={(event) => handleNavigationKeyDown(event, section.id)}
                 ref={setSectionButtonRef(section.id)}
-                title={`${section.label} (Cmd ${shortcutKey})`}
+                title={label}
                 type="button"
               >
                 <Icon aria-hidden="true" className="shrink-0" size={16} strokeWidth={2} />
-                <span className="hidden min-w-0 flex-1 truncate lg:inline">{section.label}</span>
-                <span
-                  aria-hidden="true"
-                  className="hidden shrink-0 rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted lg:inline-flex"
-                >
-                  {displayAccelerator(source.settings.keybindings[`navigation.${section.id}` as keyof SettingsSnapshot["keybindings"]])}
-                </span>
+                <span className="hidden min-w-0 flex-1 truncate lg:inline">{label}</span>
                 <span className="hidden shrink-0 text-[var(--text-xs)] text-text-muted lg:inline">
                   {sectionMetric(source, section.id)}
                 </span>
@@ -239,4 +241,20 @@ export function AppSidebar({
 
     </aside>
   );
+}
+
+function sectionLabel(sectionId: SectionId, t: ReturnType<typeof useI18n>["t"]): string {
+  if (sectionId === "calendar") {
+    return t("nav.calendar");
+  }
+
+  if (sectionId === "tasks") {
+    return t("nav.tasks");
+  }
+
+  if (sectionId === "notes") {
+    return t("nav.notes");
+  }
+
+  return sectionId;
 }

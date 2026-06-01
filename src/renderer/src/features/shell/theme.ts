@@ -5,6 +5,7 @@ import {
   resolveAppThemeMode,
   semanticThemeVariables
 } from "@shared/ipc/themeCatalog";
+import { resolveAppLanguage } from "../../i18n";
 
 const systemFontStack = "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Segoe UI\", system-ui, Roboto, \"Helvetica Neue\", Arial, sans-serif";
 const monoFontStack = "\"SF Mono\", \"Cascadia Code\", \"Fira Code\", \"JetBrains Mono\", ui-monospace, monospace";
@@ -88,7 +89,7 @@ export function useAppliedTheme(settings: SettingsSnapshot): void {
     root.dataset.colorTheme = colorTheme.id;
     delete root.dataset.performanceMode;
     root.dataset.animations = settings.disableAnimations ? "disabled" : "enabled";
-    root.lang = settings.appLanguage === "system" ? navigator.language || "en" : settings.appLanguage;
+    root.lang = resolveAppLanguage(settings.appLanguage);
     root.style.setProperty("--font-family", cssFontFamily(settings.uiFontName));
     root.style.setProperty("--font-family-mono", cssMonoFontFamily(settings.uiFontName));
     root.style.setProperty("--font-family-sidebar", surfaceFontFamily(settings, "sidebar"));

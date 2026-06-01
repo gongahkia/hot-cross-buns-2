@@ -4,7 +4,7 @@ import type {
   SettingsUpdateRequest
 } from "@shared/ipc/contracts";
 import {
-  Copy,
+  FileSearch,
   Languages,
   Power,
   RotateCcw,
@@ -13,6 +13,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { Button, Input } from "../../../../components/primitives";
+import { languageOptions, useI18n } from "../../../../i18n";
 import {
   SettingsControlRow,
   SettingsGroup,
@@ -44,6 +45,8 @@ export function GeneralSettingsTab({
   settingsMutationPending,
   updateSettings
 }: GeneralSettingsTabProps): JSX.Element {
+  const { t } = useI18n();
+
   function retentionPresetValue(daysBack: number): string {
     return retentionOptions.some((option) => option.value === daysBack) ? String(daysBack) : "custom";
   }
@@ -73,22 +76,23 @@ export function GeneralSettingsTab({
 
   return (
     <div className="grid gap-5">
-      <SettingsGroup title="Language">
+      <SettingsGroup title={t("settings.language")}>
         <SettingsControlRow
-          description="System Default follows your macOS language order."
+          description={t("language.description")}
           icon={Languages}
-          label="App language"
+          label={t("settings.appLanguage")}
         >
           <select
-            aria-label="App language"
+            aria-label={t("settings.appLanguage")}
             className={settingsSelectClass}
             onChange={(event) =>
               updateSettings({ appLanguage: event.target.value as SettingsSnapshot["appLanguage"] })
             }
             value={settings.appLanguage}
           >
-            <option value="system">System Default</option>
-            <option value="en">English</option>
+            {languageOptions(t).map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </SettingsControlRow>
       </SettingsGroup>
@@ -103,27 +107,27 @@ export function GeneralSettingsTab({
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Diagnostics">
+      <SettingsGroup title={t("diagnostics.title")}>
         <SettingsControlRow
-          description="Inspect logs, mutation history, sync queues, and support bundles."
+          description={t("diagnostics.description")}
           icon={ShieldCheck}
-          label="Diagnostics"
+          label={t("diagnostics.title")}
         >
           <Button onClick={() => void openDiagnosticsDetails()} variant="secondary">
-            <Copy aria-hidden="true" size={14} />
-            Open diagnostics
+            <FileSearch aria-hidden="true" size={14} />
+            {t("action.viewDiagnostics")}
           </Button>
         </SettingsControlRow>
         <SettingsSwitch
           checked={settings.diagnosticsIncludePerformance}
-          description="Includes startup, migration, slow query, and MCP request timings in diagnostics."
-          label="Include performance diagnostics"
+          description={t("diagnostics.includePerformance.description")}
+          label={t("diagnostics.includePerformance")}
           onChange={(checked) => updateSettings({ diagnosticsIncludePerformance: checked })}
         />
         <SettingsSwitch
           checked={settings.rawGoogleDiagnosticsEnabled}
-          description="Future local logs may include field-redacted Google troubleshooting snippets."
-          label="Include field-redacted Google payloads in local logs"
+          description={t("diagnostics.includeGooglePayloads.description")}
+          label={t("diagnostics.includeGooglePayloads")}
           onChange={(checked) => updateSettings({ rawGoogleDiagnosticsEnabled: checked })}
         />
       </SettingsGroup>

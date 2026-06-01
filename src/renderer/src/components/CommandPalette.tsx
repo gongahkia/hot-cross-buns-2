@@ -10,7 +10,8 @@ import {
 import type { SectionId } from "../data/mockPlanner";
 import { useLocalSearch } from "../features/core/coreViewModelSource";
 import type { SearchResultViewModel, SearchSource } from "../features/core/coreViewModels";
-import { Badge, IconButton, Input, cx } from "./primitives";
+import { useI18n } from "../i18n";
+import { IconButton, Input, cx } from "./primitives";
 
 interface CommandPaletteProps {
   actionContext: PlannerActionContext;
@@ -44,18 +45,6 @@ function searchResultSection(source: SearchSource): SectionId {
   }
 
   return "tasks";
-}
-
-function searchResultTone(source: SearchSource): "accent" | "success" | "info" {
-  if (source === "event") {
-    return "accent";
-  }
-
-  if (source === "note") {
-    return "info";
-  }
-
-  return "success";
 }
 
 function dispatchCalendarCommand(command: PlannerAction): void {
@@ -125,6 +114,7 @@ export function CommandPalette({
   onOpenChange,
   open
 }: CommandPaletteProps): JSX.Element | null {
+  const { t } = useI18n();
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -270,9 +260,9 @@ export function CommandPalette({
         <div className="flex h-11 items-center gap-3 border-b border-border px-3">
           <Command aria-hidden="true" className="text-accent" size={17} />
           <h2 className="min-w-0 flex-1 truncate text-[var(--text-md)] font-semibold" id="command-palette-title">
-            Command palette
+            {t("command.title")}
           </h2>
-          <IconButton icon={X} label="Close command palette" onClick={closePalette} variant="ghost" />
+          <IconButton icon={X} label={t("command.close")} onClick={closePalette} variant="ghost" />
         </div>
 
         <div className="border-b border-border p-3">
@@ -285,11 +275,11 @@ export function CommandPalette({
             <Input
               aria-activedescendant={activeOptionId}
               aria-controls="command-palette-options"
-              aria-label="Filter commands"
+              aria-label={t("command.filter")}
               className="pl-9"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Run a command or search planner data"
+              placeholder={t("command.placeholder")}
               ref={inputRef}
               role="searchbox"
               value={query}
@@ -327,9 +317,6 @@ export function CommandPalette({
                       {availability.reason ?? command.description}
                     </div>
                   </div>
-                  <Badge tone={availability.enabled && command.sectionId ? "accent" : "neutral"}>
-                    {command.category}
-                  </Badge>
                 </button>
               );
             })
@@ -344,8 +331,8 @@ export function CommandPalette({
           ) : search.state === "loading" || search.state === "stale" ? (
             <div className="grid min-h-28 place-items-center text-center">
               <div>
-                <p className="text-[var(--text-md)] font-semibold text-text-primary">Searching planner data</p>
-                <p className="mt-1 text-[var(--text-sm)] text-text-muted">Tasks, events, notes, birthdays, and calendar text.</p>
+                <p className="text-[var(--text-md)] font-semibold text-text-primary">{t("command.loading.title")}</p>
+                <p className="mt-1 text-[var(--text-sm)] text-text-muted">{t("command.loading.detail")}</p>
               </div>
             </div>
           ) : searchResults.length > 0 ? (
@@ -369,29 +356,23 @@ export function CommandPalette({
                   <div className="truncate text-[var(--text-md)] font-medium">{result.title}</div>
                   <div className="truncate text-[var(--text-xs)] text-text-muted">{result.detail}</div>
                 </div>
-                <Badge tone={searchResultTone(result.source)}>{result.source}</Badge>
               </button>
             ))
           ) : trimmedQuery ? (
             <div className="grid min-h-28 place-items-center text-center">
               <div>
-                <p className="text-[var(--text-md)] font-semibold text-text-primary">No local results</p>
-                <p className="mt-1 text-[var(--text-sm)] text-text-muted">No commands or cached items matched this query.</p>
+                <p className="text-[var(--text-md)] font-semibold text-text-primary">{t("command.empty.noLocalResults")}</p>
+                <p className="mt-1 text-[var(--text-sm)] text-text-muted">{t("command.empty.unmatched")}</p>
               </div>
             </div>
           ) : (
             <div className="grid min-h-28 place-items-center text-center">
               <div>
-                <p className="text-[var(--text-md)] font-semibold text-text-primary">No commands found</p>
-                <p className="mt-1 text-[var(--text-sm)] text-text-muted">Try a section name or action.</p>
+                <p className="text-[var(--text-md)] font-semibold text-text-primary">{t("command.empty.noCommands")}</p>
+                <p className="mt-1 text-[var(--text-sm)] text-text-muted">{t("command.empty.trySection")}</p>
               </div>
             </div>
           )}
-        </div>
-
-        <div className="flex h-9 items-center justify-between border-t border-border px-3 text-[var(--text-xs)] text-text-muted">
-          <span>Enter opens selected command or result</span>
-          <span>Esc closes</span>
         </div>
       </div>
     </div>

@@ -8,8 +8,9 @@ import type {
   AppColorThemeDefinition,
   AppColorThemeId
 } from "@shared/ipc/themeCatalog";
-import { PanelLeft, PanelRight } from "lucide-react";
+import { ArrowDown, ArrowUp, PanelLeft, PanelRight, RotateCcw } from "lucide-react";
 import { Button, Input } from "../../../../components/primitives";
+import { useI18n } from "../../../../i18n";
 import {
   SegmentedControl,
   SettingsControlRow,
@@ -21,9 +22,11 @@ import {
   calendarViewModes,
   fontSurfaceOptions,
   navigationTabs,
+  toolbarActions,
   type CalendarViewModeId,
   type FontSurfaceId,
-  type NavigationTabId
+  type NavigationTabId,
+  type ToolbarActionId
 } from "./settingsUtils";
 
 type PerSurfaceFontOverride = NonNullable<
@@ -50,6 +53,8 @@ export function AppearanceSettingsTab({
   updateBaseTheme,
   updateSettings
 }: AppearanceSettingsTabProps): JSX.Element {
+  const { t } = useI18n();
+
   function updateNavigationTab(tabId: NavigationTabId, visible: boolean): void {
     const hidden = new Set(settings.hiddenNavigationTabs);
 
@@ -106,6 +111,18 @@ export function AppearanceSettingsTab({
     const next = { ...settings.perSurfaceFontOverrides };
     delete next[surface];
     updateSettings({ perSurfaceFontOverrides: next });
+  }
+
+  function moveNavigationTab(tabId: NavigationTabId, direction: -1 | 1): void {
+    updateSettings({
+      navigationTabOrder: moveItem(settings.navigationTabOrder, tabId, direction)
+    });
+  }
+
+  function moveToolbarAction(actionId: ToolbarActionId, direction: -1 | 1): void {
+    updateSettings({
+      toolbarActionOrder: moveItem(settings.toolbarActionOrder, actionId, direction)
+    });
   }
 
   function updateCalendarEventColorOverride(
@@ -325,10 +342,10 @@ export function AppearanceSettingsTab({
         })}
       </SettingsGroup>
 
-      <SettingsGroup title="Layout">
+      <SettingsGroup title={t("settings.layout")}>
         <SettingsControlRow
-          description="Left keeps the native sidebar placement; right moves the same tabs around the current view."
-          label="Navigation placement"
+          description={t("layout.navigationPlacement.description")}
+          label={t("layout.navigationPlacement")}
         >
           <SegmentedControl
             options={[
@@ -342,18 +359,101 @@ export function AppearanceSettingsTab({
           />
         </SettingsControlRow>
         <div className="grid gap-1 border-b border-border px-3 py-3 last:border-b-0">
-          <h3 className="text-[var(--text-md)] font-semibold text-text-primary">Navigation tabs</h3>
-          {navigationTabs.map((tab) => (
-            <SettingsSwitch
-              checked={!settings.hiddenNavigationTabs.includes(tab.id)}
-              key={tab.id}
-              label={tab.label}
-              onChange={(checked) => updateNavigationTab(tab.id, checked)}
-            />
-          ))}
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[var(--text-md)] font-semibold text-text-primary">{t("layout.navigationTabs")}</h3>
+            <Button
+              onClick={() => updateSettings({ navigationTabOrder: navigationTabs.map((tab) => tab.id) })}
+              size="sm"
+              variant="ghost"
+            >
+              <RotateCcw aria-hidden="true" size={13} />
+              {t("action.reset")}
+            </Button>
+          </div>
+          {settings.navigationTabOrder.map((tabId, index) => {
+            const tab = navigationTabs.find((item) => item.id === tabId);
+            if (!tab) {
+              return null;
+            }
+
+            return (
+              <SettingsSwitch
+                checked={!settings.hiddenNavigationTabs.includes(tab.id)}
+                key={tab.id}
+                label={navigationLabel(tab.id, t)}
+                onChange={(checked) => updateNavigationTab(tab.id, checked)}
+                trailing={
+                  <div className="flex items-center gap-1">
+                    <Button
+                      aria-label={`${t("action.moveUp")} ${navigationLabel(tab.id, t)}`}
+                      disabled={index === 0}
+                      onClick={() => moveNavigationTab(tab.id, -1)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <ArrowUp aria-hidden="true" size={13} />
+                    </Button>
+                    <Button
+                      aria-label={`${t("action.moveDown")} ${navigationLabel(tab.id, t)}`}
+                      disabled={index === settings.navigationTabOrder.length - 1}
+                      onClick={() => moveNavigationTab(tab.id, 1)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <ArrowDown aria-hidden="true" size={13} />
+                    </Button>
+                  </div>
+                }
+              />
+            );
+          })}
         </div>
         <div className="grid gap-1 border-b border-border px-3 py-3 last:border-b-0">
-          <h3 className="text-[var(--text-md)] font-semibold text-text-primary">Calendar view modes</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[var(--text-md)] font-semibold text-text-primary">{t("layout.toolbarActions")}</h3>
+            <Button
+              onClick={() => updateSettings({ toolbarActionOrder: toolbarActions.map((action) => action.id) })}
+              size="sm"
+              variant="ghost"
+            >
+              <RotateCcw aria-hidden="true" size={13} />
+              {t("action.reset")}
+            </Button>
+          </div>
+          {settings.toolbarActionOrder.map((actionId, index) => {
+            const action = toolbarActions.find((item) => item.id === actionId);
+            if (!action) {
+              return null;
+            }
+
+            return (
+              <SettingsControlRow key={action.id} label={toolbarLabel(action.id, t)}>
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    aria-label={`${t("action.moveUp")} ${toolbarLabel(action.id, t)}`}
+                    disabled={index === 0}
+                    onClick={() => moveToolbarAction(action.id, -1)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <ArrowUp aria-hidden="true" size={13} />
+                  </Button>
+                  <Button
+                    aria-label={`${t("action.moveDown")} ${toolbarLabel(action.id, t)}`}
+                    disabled={index === settings.toolbarActionOrder.length - 1}
+                    onClick={() => moveToolbarAction(action.id, 1)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <ArrowDown aria-hidden="true" size={13} />
+                  </Button>
+                </div>
+              </SettingsControlRow>
+            );
+          })}
+        </div>
+        <div className="grid gap-1 border-b border-border px-3 py-3 last:border-b-0">
+          <h3 className="text-[var(--text-md)] font-semibold text-text-primary">{t("layout.calendarViewModes")}</h3>
           {calendarViewModes.map((mode) => (
             <SettingsSwitch
               checked={!settings.hiddenCalendarViewModes.includes(mode.id)}
@@ -424,4 +524,53 @@ export function AppearanceSettingsTab({
       </SettingsGroup>
     </div>
   );
+}
+
+function moveItem<T>(items: readonly T[], item: T, direction: -1 | 1): T[] {
+  const next = [...items];
+  const index = next.indexOf(item);
+  const target = index + direction;
+
+  if (index < 0 || target < 0 || target >= next.length) {
+    return next;
+  }
+
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
+function navigationLabel(tabId: NavigationTabId, t: ReturnType<typeof useI18n>["t"]): string {
+  if (tabId === "calendar") {
+    return t("nav.calendar");
+  }
+
+  if (tabId === "tasks") {
+    return t("nav.tasks");
+  }
+
+  return t("nav.notes");
+}
+
+function toolbarLabel(actionId: ToolbarActionId, t: ReturnType<typeof useI18n>["t"]): string {
+  if (actionId === "commandPalette") {
+    return t("action.commandPalette");
+  }
+
+  if (actionId === "notifications") {
+    return t("action.notifications");
+  }
+
+  if (actionId === "diagnostics") {
+    return t("action.diagnostics");
+  }
+
+  if (actionId === "splitPane") {
+    return t("action.splitView");
+  }
+
+  if (actionId === "refresh") {
+    return t("action.refresh");
+  }
+
+  return t("action.settings");
 }

@@ -25,13 +25,14 @@ let deferredRuntimeStarted = false;
 let quittingAfterSync = false;
 let startupSyncInProgress = false;
 let syncStatusWindow: BrowserWindow | null = null;
-const macAppDisplayName = "Hot Cross Buns";
+const macAppDisplayName = "Hot Cross Buns 2";
 
 if (process.env.HCB_USER_DATA_DIR && !app.isPackaged) {
   app.setPath("userData", process.env.HCB_USER_DATA_DIR);
 }
 
 app.setName(macAppDisplayName);
+app.setAboutPanelOptions({ applicationName: macAppDisplayName });
 
 markStartupTiming("processStartedMs");
 appLogger.info("app launch", "misc", {

@@ -137,6 +137,37 @@ export function displayAccelerator(accelerator: string | null | undefined): stri
   return parts.join(" ");
 }
 
+export function ariaKeyShortcuts(accelerator: string | null | undefined): string | undefined {
+  const parsed = accelerator ? parseAccelerator(accelerator) : null;
+
+  if (!parsed) {
+    return undefined;
+  }
+
+  const key = ariaKey(parsed.key);
+  const modifiers = [
+    parsed.modifiers.has("alt") ? "Alt" : "",
+    parsed.modifiers.has("shift") ? "Shift" : ""
+  ].filter(Boolean);
+
+  if (parsed.modifiers.has("cmdorctrl")) {
+    return [
+      ["Meta", ...modifiers, key].join("+"),
+      ["Control", ...modifiers, key].join("+")
+    ].join(" ");
+  }
+
+  if (parsed.modifiers.has("cmd")) {
+    modifiers.unshift("Meta");
+  }
+
+  if (parsed.modifiers.has("ctrl")) {
+    modifiers.unshift("Control");
+  }
+
+  return [...modifiers, key].join("+");
+}
+
 export function duplicateAccelerators(
   keybindings: Partial<Record<HotkeyActionId, string | null>>
 ): Map<string, HotkeyActionId[]> {
@@ -227,4 +258,12 @@ function displayKey(key: string): string {
   }
 
   return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function ariaKey(key: string): string {
+  if (key === "left" || key === "right" || key === "up" || key === "down") {
+    return `Arrow${displayKey(key)}`;
+  }
+
+  return displayKey(key);
 }

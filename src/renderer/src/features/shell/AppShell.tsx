@@ -15,6 +15,7 @@ import {
   reportRendererTimingSince,
   useRenderTiming
 } from "../../hooks/useRenderTiming";
+import { I18nProvider } from "../../i18n";
 import { AppHeader } from "./AppHeader";
 import { NotificationsOverlay, SettingsOverlay } from "./AppOverlays";
 import { AppSidebar } from "./AppSidebar";
@@ -96,10 +97,13 @@ export function AppShell(): JSX.Element {
   );
   const visiblePrimarySections = useMemo<VisiblePrimarySection[]>(() => {
     const hidden = new Set<SectionId>(source.settings.hiddenNavigationTabs);
-    return primaryPlannerSections
-      .map((section, index) => ({ section, shortcutKey: String(index + 1) }))
+    const byId = new Map(primaryPlannerSections.map((section) => [section.id, section]));
+    return source.settings.navigationTabOrder
+      .map((sectionId) => byId.get(sectionId))
+      .filter((section): section is (typeof primaryPlannerSections)[number] => Boolean(section))
+      .map((section) => ({ section }))
       .filter(({ section }) => !hidden.has(section.id));
-  }, [source.settings.hiddenNavigationTabs]);
+  }, [source.settings.hiddenNavigationTabs, source.settings.navigationTabOrder]);
   const visiblePaneSectionIds = useMemo(
     () => visiblePrimarySections.map(({ section }) => section.id),
     [visiblePrimarySections]
@@ -718,6 +722,7 @@ export function AppShell(): JSX.Element {
   }, [commandPaletteOpen]);
 
   return (
+    <I18nProvider language={source.settings.appLanguage}>
     <div
       className={cx(
         "grid h-dvh min-h-0 overflow-hidden text-text-primary",
@@ -760,6 +765,7 @@ export function AppShell(): JSX.Element {
           onToggleSidebar={toggleSidebar}
           settingsOpen={settingsOpen}
           sidebarOpen={sidebarOpen}
+          toolbarActionOrder={source.settings.toolbarActionOrder}
         />
 
         <RenderTimingBoundary id={`pane-workspace:${paneWorkspace.activeSectionId}`}>
@@ -834,5 +840,6 @@ export function AppShell(): JSX.Element {
         />
       ) : null}
     </div>
+    </I18nProvider>
   );
 }

@@ -26,7 +26,7 @@ export function installAppMenu(actions: NativeTrayActions): NativeOperationResul
 
 function macAppDisplayName(): string {
   const currentName = app.name?.trim();
-  return currentName && currentName !== "Electron" ? currentName : "Hot Cross Buns";
+  return currentName && currentName !== "Electron" ? currentName : "Hot Cross Buns 2";
 }
 
 function appMenuTemplate(actions: NativeTrayActions): MenuItemConstructorOptions[] {

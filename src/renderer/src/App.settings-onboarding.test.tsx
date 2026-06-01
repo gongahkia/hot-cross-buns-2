@@ -167,7 +167,7 @@ describe("App settings and onboarding", () => {
     render(<App />);
 
     await goToSection("Settings");
-    await user.click(screen.getByRole("button", { name: /Open diagnostics/ }));
+    await user.click(screen.getByRole("button", { name: /View diagnostics/ }));
 
     const dialog = await screen.findByRole("dialog", { name: "Diagnostics" });
     expect(dialog).toBeInTheDocument();

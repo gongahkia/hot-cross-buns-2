@@ -7,6 +7,10 @@ import type {
   DomainJsonObject,
   DomainJsonValue
 } from "../domainInterfaces";
+import {
+  defaultNavigationTabOrder,
+  defaultToolbarActionOrder
+} from "@shared/settingsCatalog";
 import type { CalendarRecord, TaskRecord } from "./state";
 
 type PlaceholderTaskStatus = TaskSummary["status"];
@@ -183,11 +187,11 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
   }
 
   if (request.navigationTabOrder !== undefined) {
-    patch.navigationTabOrder = [...new Set(request.navigationTabOrder)];
+    patch.navigationTabOrder = normalizeOrder(request.navigationTabOrder, defaultNavigationTabOrder);
   }
 
   if (request.toolbarActionOrder !== undefined) {
-    patch.toolbarActionOrder = [...new Set(request.toolbarActionOrder)];
+    patch.toolbarActionOrder = normalizeOrder(request.toolbarActionOrder, defaultToolbarActionOrder);
   }
 
   if (request.hiddenCalendarViewModes !== undefined) {
@@ -415,6 +419,25 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
   }
 
   return patch;
+}
+
+function normalizeOrder<T extends string>(value: readonly T[], defaults: readonly T[]): T[] {
+  const allowed = new Set(defaults);
+  const next: T[] = [];
+
+  for (const item of value) {
+    if (allowed.has(item) && !next.includes(item)) {
+      next.push(item);
+    }
+  }
+
+  for (const item of defaults) {
+    if (!next.includes(item)) {
+      next.push(item);
+    }
+  }
+
+  return next;
 }
 
 export function recoveryPhrase(
