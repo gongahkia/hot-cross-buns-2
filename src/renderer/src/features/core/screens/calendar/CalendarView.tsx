@@ -18,6 +18,7 @@ import {
   buildCalendarEventDayIndex,
   calendarAddUtcDays,
   calendarAddUtcMonths,
+  calendarCurrentDayKey,
   calendarDateTitleFromIso,
   calendarDayViewForDate,
   calendarEventsForDay,
@@ -26,7 +27,6 @@ import {
   calendarMonthWeeksForDate,
   calendarRangeDaysForDate,
   calendarRangeTitle,
-  calendarTodayKey,
   calendarWeekDaysForDate,
   visibleCalendarEvent
 } from "./calendarGrid";
@@ -41,7 +41,9 @@ export function CalendarView({
 }): JSX.Element {
   const source = useCoreViewModelSource();
   const [activeViewId, setActiveViewId] = useState<CalendarViewId>("agenda");
-  const [calendarAnchorDate, setCalendarAnchorDate] = useState(calendarTodayKey);
+  const [calendarAnchorDate, setCalendarAnchorDate] = useState(() =>
+    calendarCurrentDayKey(source.settings.defaultTimeZone)
+  );
   const [multiDayCount, setMultiDayCount] = useState(3);
   const calendarNavigationStartedAt = useRef<number | null>(null);
   const {
@@ -150,6 +152,9 @@ export function CalendarView({
 
     calendarNavigationStartedAt.current = rendererNow();
     setActiveViewId(viewId);
+    if (viewId === "month") {
+      setCalendarAnchorDate(calendarCurrentDayKey(source.settings.defaultTimeZone));
+    }
   }
 
   function shiftCalendarAnchor(direction: -1 | 1): void {
@@ -157,7 +162,7 @@ export function CalendarView({
     setCalendarAnchorDate((current) => {
       if (activeViewId === "month") {
         const next = calendarAddUtcMonths(current, direction);
-        const offset = calendarMonthOffset(calendarTodayKey(), next);
+        const offset = calendarMonthOffset(calendarCurrentDayKey(source.settings.defaultTimeZone), next);
 
         if (
           offset < -source.settings.monthScrollPastMonths ||
@@ -183,7 +188,7 @@ export function CalendarView({
 
   function resetCalendarAnchor(): void {
     calendarNavigationStartedAt.current = rendererNow();
-    setCalendarAnchorDate(calendarTodayKey());
+    setCalendarAnchorDate(calendarCurrentDayKey(source.settings.defaultTimeZone));
   }
 
   useEffect(() => {
@@ -374,6 +379,7 @@ export function CalendarView({
               weeks={calendarMonthWeeks}
               onCreate={openCreate}
               onOpen={openEdit}
+              todayKey={calendarCurrentDayKey(source.settings.defaultTimeZone)}
               visibleCalendarIds={visibleCalendarIds}
             />
           ) : null}

@@ -139,8 +139,11 @@ describe("App shell", () => {
 
     let splitPane = await screen.findByRole("region", { name: "Choose split view pane" });
     expect(within(splitPane).getByRole("heading", { name: "Choose split view" })).toBeInTheDocument();
+    expect(within(splitPane).queryByText("App tabs")).not.toBeInTheDocument();
+    expect(within(splitPane).queryByText("Open webpage")).not.toBeInTheDocument();
     expect(within(splitPane).getByRole("button", { name: /Tasks/ })).toBeInTheDocument();
     expect(within(splitPane).getByRole("button", { name: /Notes/ })).toBeInTheDocument();
+    expect(within(splitPane).getByText("Webpage")).toBeInTheDocument();
     expect(within(splitPane).queryByRole("button", { name: /Calendar/ })).not.toBeInTheDocument();
 
     await user.click(within(splitPane).getByRole("button", { name: /Tasks/ }));
@@ -169,7 +172,7 @@ describe("App shell", () => {
     const chooserPane = await screen.findByRole("region", { name: "Choose split view pane" });
 
     await user.type(within(chooserPane).getByLabelText("Webpage URL"), "example.com");
-    await user.click(within(chooserPane).getByRole("button", { name: "Open" }));
+    await user.click(within(chooserPane).getByRole("button", { name: "Open webpage" }));
 
     const webPane = await screen.findByRole("region", { name: "example.com pane" });
     expect(within(webPane).getByTestId("split-webview")).toHaveAttribute("src", "https://example.com/");
@@ -178,6 +181,21 @@ describe("App shell", () => {
     expect(screen.getAllByTestId("pane-leaf")).toHaveLength(2);
     expect(within(webPane).getByRole("button", { name: "Select New tab" })).toBeInTheDocument();
     expect(within(webPane).getByLabelText("Webpage URL")).toBeInTheDocument();
+  });
+
+  it("opens typed webpages from the split view chooser on enter", async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    installHcb(seededHcb());
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Split view" }));
+    const chooserPane = await screen.findByRole("region", { name: "Choose split view pane" });
+
+    await user.type(within(chooserPane).getByLabelText("Webpage URL"), "example.org{Enter}");
+
+    const webPane = await screen.findByRole("region", { name: "example.org pane" });
+    expect(within(webPane).getByTestId("split-webview")).toHaveAttribute("src", "https://example.org/");
   });
 
   it("uses pane and diagnostics hotkeys", async () => {

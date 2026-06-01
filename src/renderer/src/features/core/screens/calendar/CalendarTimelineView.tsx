@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
 import { IconButton, cx } from "../../../../components/primitives";
@@ -189,6 +189,9 @@ function CalendarTimelineView({
   } | null>(null);
   const [dragSelection, setDragSelection] = useState<CalendarTimeBlock | null>(null);
   const [dropPreview, setDropPreview] = useState<CalendarTimeBlock | null>(null);
+  const [nowIso, setNowIso] = useState(() => new Date().toISOString());
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const timeGridRef = useRef<HTMLDivElement | null>(null);
   const timelineDragRef = useRef<{
     dayKey: string;
     mode: "availability" | "create";
@@ -203,6 +206,13 @@ function CalendarTimelineView({
     [days, hourRowHeight, visibleCalendarIds]
   );
   const visibleDays = timeline.days;
+  const visibleDayKeys = visibleDays.map(({ day }) => calendarDayKey(day)).join("|");
+  const currentPoint = useMemo(
+    () => calendarLocalPoint(nowIso, source.settings.defaultTimeZone),
+    [nowIso, source.settings.defaultTimeZone]
+  );
+  const currentDayIndex = visibleDays.findIndex(({ day }) => calendarDayKey(day) === currentPoint.dayKey);
+  const currentTimeTop = (currentPoint.minutes / 60) * hourRowHeight;
   const hasAllDayOverflow = timeline.allDayOverflowCounts.some((count) => count > 0);
   const allDayRowHeight = Math.max(
     112,
@@ -225,6 +235,31 @@ function CalendarTimelineView({
     hourRowHeight,
     source.settings.defaultTimeZone
   );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowIso(new Date().toISOString()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (currentDayIndex < 0) {
+      return;
+    }
+
+    const scrollContainer = scrollContainerRef.current;
+    const timeGrid = timeGridRef.current;
+
+    if (!scrollContainer || !timeGrid) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const targetTop = timeGrid.offsetTop + currentTimeTop - scrollContainer.clientHeight * 0.35;
+      scrollContainer.scrollTop = Math.max(0, targetTop);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentDayIndex, currentPoint.dayKey, gridLabel, hourRowHeight, visibleDayKeys]);
 
   function handleDrop(
     dragEvent: DragEvent<HTMLElement>,
@@ -466,7 +501,13 @@ function CalendarTimelineView({
         </div>
         {dayCountControl}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto" role="grid" aria-label={gridLabel}>
+      <div
+        className="min-h-0 flex-1 overflow-auto"
+        data-calendar-timeline-scroll
+        ref={scrollContainerRef}
+        role="grid"
+        aria-label={gridLabel}
+      >
         <div className="min-w-[720px]">
           <div className="grid grid-cols-[64px_minmax(0,1fr)] border-b border-border bg-bg-secondary/80">
             <div className="border-r border-border" aria-hidden="true" />
@@ -596,7 +637,7 @@ function CalendarTimelineView({
               </div>
             </div>
           </div>
-          <div className="relative">
+          <div className="relative" ref={timeGridRef}>
             {calendarTimelineHours.map((hour) => (
               <div
                 aria-label={`${hourSlotLabel(hour)} Open slot`}
@@ -748,6 +789,29 @@ function CalendarTimelineView({
                 </div>
               ))}
             </div>
+            {currentDayIndex >= 0 ? (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-0 left-16 right-0 top-0 z-30 grid"
+                style={{ gridTemplateColumns }}
+              >
+                {visibleDays.map(({ day }, dayIndex) => (
+                  <div className="relative min-w-0" key={`${day.id}-now-line`}>
+                    {dayIndex === currentDayIndex ? (
+                      <div
+                        className="absolute left-0 right-0"
+                        data-calendar-now-line
+                        data-calendar-now-minute={currentPoint.minutes}
+                        style={{ top: currentTimeTop }}
+                      >
+                        <span className="absolute -left-1.5 -top-1 block size-2.5 rounded-full bg-danger" />
+                        <span className="block h-px bg-danger" />
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

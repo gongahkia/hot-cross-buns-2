@@ -112,6 +112,14 @@ export function calendarTodayKey(): string {
   return calendarIsoDate(new Date(startOfUtcDayIso(new Date())));
 }
 
+export function calendarCurrentLocalPoint(timeZone = "UTC"): CalendarLocalPoint {
+  return calendarLocalPoint(new Date().toISOString(), timeZone);
+}
+
+export function calendarCurrentDayKey(timeZone = "UTC"): string {
+  return calendarCurrentLocalPoint(timeZone).dayKey;
+}
+
 export function calendarStartOfUtcDate(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }

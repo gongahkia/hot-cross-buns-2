@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, FormEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { ExternalLink, GripVertical, Plus, X } from "lucide-react";
+import { ExternalLink, GripVertical, Plus, Search, X } from "lucide-react";
 import { Button, cx } from "../../components/primitives";
 import { getPlannerSection, type SectionId } from "../../data/mockPlanner";
 import { SectionContent, type TaskSurfaceCommand } from "../core/CoreScreens";
@@ -585,66 +585,68 @@ function PaneChooser({
   return (
     <div className="grid h-full min-h-0 place-items-center overflow-auto p-4">
       <div className="grid w-full max-w-3xl gap-5">
-        <PaneChooserGroup title="App tabs">
-          <div className="grid gap-2">
-            {appSections.length > 0 ? appSections.map((sectionId) => {
-              const section = getPlannerSection(sectionId);
-              const Icon = section.icon;
+        <div className="grid gap-2">
+          {appSections.length > 0 ? appSections.map((sectionId) => {
+            const section = getPlannerSection(sectionId);
+            const Icon = section.icon;
 
-              return (
-                <button
-                  className="flex min-h-12 min-w-0 items-center gap-3 rounded-hcbMd border border-border bg-bg-secondary px-3 py-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  key={sectionId}
-                  onClick={() => onSelectSection(sectionId)}
-                  type="button"
-                >
-                  <Icon aria-hidden="true" className="shrink-0 text-text-muted" size={17} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[var(--text-base)] font-medium text-text-primary">{section.title}</span>
-                    <span className="block truncate text-[var(--text-xs)] text-text-muted">{section.subtitle}</span>
-                  </span>
-                </button>
-              );
-            }) : (
-              <p className="rounded-hcbMd border border-dashed border-border px-3 py-4 text-[var(--text-sm)] text-text-muted">
-                All app tabs are already open.
-              </p>
-            )}
-          </div>
-        </PaneChooserGroup>
-
-        <PaneChooserGroup title="Open webpage">
-          <form className="grid gap-2" onSubmit={handleOpenWebPage}>
-            <div className="flex min-w-0 gap-2">
-              <input
-                aria-label="Webpage URL"
-                className="h-9 min-w-0 flex-1 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] text-text-primary placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                onChange={(event) => {
-                  setWebPageUrl(event.target.value);
-                  setWebPageError(null);
-                }}
-                placeholder="https://example.com"
-                type="text"
-                value={webPageUrl}
-              />
-              <Button disabled={webPageUrl.trim().length === 0} type="submit" variant="secondary">
-                Open
-              </Button>
+            return (
+              <button
+                className="flex min-h-12 min-w-0 items-center gap-3 rounded-hcbMd border border-border bg-bg-secondary px-3 py-2 text-left transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                key={sectionId}
+                onClick={() => onSelectSection(sectionId)}
+                type="button"
+              >
+                <Icon aria-hidden="true" className="shrink-0 text-text-muted" size={17} />
+                <span className="min-w-0">
+                  <span className="block truncate text-[var(--text-base)] font-medium text-text-primary">{section.title}</span>
+                  <span className="block truncate text-[var(--text-xs)] text-text-muted">{section.subtitle}</span>
+                </span>
+              </button>
+            );
+          }) : (
+            <p className="rounded-hcbMd border border-dashed border-border px-3 py-4 text-[var(--text-sm)] text-text-muted">
+              All app tabs are already open.
+            </p>
+          )}
+          <div className="grid gap-2 rounded-hcbMd border border-border bg-bg-secondary px-3 py-2">
+            <div className="flex min-h-12 min-w-0 items-center gap-3 text-left">
+              <ExternalLink aria-hidden="true" className="shrink-0 text-text-muted" size={17} />
+              <span className="min-w-0">
+                <span className="block truncate text-[var(--text-base)] font-medium text-text-primary">Webpage</span>
+                <span className="block truncate text-[var(--text-xs)] text-text-muted">Open a website in this pane</span>
+              </span>
             </div>
-            {webPageError ? <p className="text-[var(--text-xs)] text-danger">{webPageError}</p> : null}
-          </form>
-        </PaneChooserGroup>
+            <form className="grid gap-2" onSubmit={handleOpenWebPage}>
+              <div className="flex min-w-0 gap-2">
+                <input
+                  aria-label="Webpage URL"
+                  className="h-9 min-w-0 flex-1 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] text-text-primary placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  onChange={(event) => {
+                    setWebPageUrl(event.target.value);
+                    setWebPageError(null);
+                  }}
+                  placeholder="https://example.com"
+                  type="text"
+                  value={webPageUrl}
+                />
+                <Button
+                  aria-label="Open webpage"
+                  className="size-9 px-0"
+                  disabled={webPageUrl.trim().length === 0}
+                  title="Open webpage"
+                  type="submit"
+                  variant="secondary"
+                >
+                  <Search aria-hidden="true" size={16} />
+                </Button>
+              </div>
+              {webPageError ? <p className="text-[var(--text-xs)] text-danger">{webPageError}</p> : null}
+            </form>
+          </div>
+        </div>
       </div>
     </div>
-  );
-}
-
-function PaneChooserGroup({ children, title }: { children: ReactNode; title: string }): JSX.Element {
-  return (
-    <section className="grid gap-2">
-      <h3 className="text-[var(--text-sm)] font-semibold uppercase text-text-muted">{title}</h3>
-      {children}
-    </section>
   );
 }
 

@@ -65,6 +65,79 @@ describe("App calendar", () => {
     expect(screen.queryByRole("heading", { name: "Share Availability" })).not.toBeInTheDocument();
   });
 
+  it("renders a live current-time line only on timeline ranges containing today", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+
+    let nowLine = document.querySelector<HTMLElement>("[data-calendar-now-line]");
+    expect(nowLine).toBeInTheDocument();
+    const actualMinute = Number(nowLine?.dataset.calendarNowMinute);
+    const expectedNow = new Date();
+    const expectedMinute = expectedNow.getUTCHours() * 60 + expectedNow.getUTCMinutes();
+
+    expect(Math.abs(actualMinute - expectedMinute)).toBeLessThanOrEqual(1);
+    expect(parseFloat(nowLine?.style.top ?? "0")).toBeCloseTo((actualMinute / 60) * 64, 1);
+
+    await user.click(within(tabs).getByRole("tab", { name: "Multi-Day" }));
+    expect(document.querySelector("[data-calendar-now-line]")).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Week" }));
+    expect(document.querySelector("[data-calendar-now-line]")).toBeInTheDocument();
+
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+    await user.click(screen.getByRole("button", { name: "Next day" }));
+    expect(document.querySelector("[data-calendar-now-line]")).not.toBeInTheDocument();
+  });
+
+  it("returns month view to today and scrolls the current day into view", async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+
+    try {
+      installHcb(seededHcb());
+      const user = userEvent.setup();
+      render(<App />);
+
+      await goToSection("Calendar");
+      const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+      await user.click(within(tabs).getByRole("tab", { name: "Month" }));
+
+      const currentMonth = new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC"
+      }).format(new Date(`${todayDate}T00:00:00.000Z`));
+
+      expect(screen.getByRole("button", { name: "Return calendar to today" })).toHaveTextContent(currentMonth);
+      expect(document.querySelector("[data-calendar-month-today='true']")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Next month" }));
+      expect(screen.getByRole("button", { name: "Return calendar to today" })).not.toHaveTextContent(currentMonth);
+
+      await user.click(within(tabs).getByRole("tab", { name: "Week" }));
+      await user.click(within(tabs).getByRole("tab", { name: "Month" }));
+
+      expect(screen.getByRole("button", { name: "Return calendar to today" })).toHaveTextContent(currentMonth);
+      expect(document.querySelector("[data-calendar-month-today='true']")).toBeInTheDocument();
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        configurable: true,
+        value: originalScrollIntoView
+      });
+    }
+  });
+
   it("places timed events in their display timezone hour on timeline views", async () => {
     const api = seededHcb();
     api.calendar.listEvents = vi.fn(async () =>

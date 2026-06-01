@@ -192,6 +192,17 @@ function hideMainWindow(): void {
   mainWindow?.hide();
 }
 
+function destroyMainWindowForQuit(): void {
+  const window = mainWindow;
+
+  mainWindow = null;
+  clearRevealFallbackTimer();
+
+  if (window && !window.isDestroyed()) {
+    window.destroy();
+  }
+}
+
 function showOrHideMainWindow(): void {
   if (!mainWindow || !mainWindow.isVisible()) {
     showMainWindow();
@@ -324,7 +335,8 @@ app.on("window-all-closed", () => {
 app.on("before-quit", (event) => {
   if (!quittingAfterSync && services) {
     event.preventDefault();
-    void runFullSyncWithStatusWindow("quit", mainWindow).finally(() => {
+    destroyMainWindowForQuit();
+    void runFullSyncWithStatusWindow("quit", null).finally(() => {
       quittingAfterSync = true;
       app.quit();
     });

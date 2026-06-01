@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
 import { cx } from "../../../../components/primitives";
 import { handleActivationKeyDown } from "../../coreScreenShared";
@@ -34,11 +34,13 @@ export function MonthView({
   weeks,
   onCreate,
   onOpen,
+  todayKey,
   visibleCalendarIds
 }: {
   weeks: CalendarMonthWeekViewModel[];
   onCreate: (seed?: CalendarCreateSeed) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  todayKey: string;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
   const [activeOverflow, setActiveOverflow] = useState<{
@@ -51,7 +53,17 @@ export function MonthView({
     () => visibleCalendarMonthWeeks(weeks, visibleCalendarIds),
     [weeks, visibleCalendarIds]
   );
+  const visibleWeekIds = visibleWeeks.map((week) => week.id).join("|");
   const dragRangeRef = useRef<{ moved: boolean; start: string } | null>(null);
+  const todayCellRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      todayCellRef.current?.scrollIntoView?.({ block: "center", inline: "nearest" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [todayKey, visibleWeekIds]);
 
   function orderedRange(start: string, end: string): { end: string; start: string } {
     return start <= end ? { start, end } : { start: end, end: start };
@@ -129,15 +141,17 @@ export function MonthView({
           >
             {week.days.map(({ day, overflowCount, visibleEventChips }, dayIndex) => {
               const dayKey = day.id.slice("month-".length);
+              const isCurrentDay = dayKey === todayKey;
 
               return (
                 <div
                   className={cx(
                     "relative z-0 min-h-[126px] border-r border-border bg-bg-tertiary px-2 py-1.5 text-left transition-colors duration-fast ease-hcb last:border-r-0 hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                    day.isToday && "bg-surface-0 ring-1 ring-inset ring-accent",
+                    isCurrentDay && "bg-surface-0 ring-1 ring-inset ring-accent",
                     day.isOutsideMonth && "opacity-50",
                     rangeContains(dayKey) && "bg-info/15 ring-1 ring-inset ring-info"
                   )}
+                  data-calendar-month-today={isCurrentDay || undefined}
                   key={day.id}
                   onClick={() => {
                     if (suppressClick) {
@@ -155,6 +169,11 @@ export function MonthView({
                   onPointerDown={(event) => handleDayPointerDown(event, dayKey)}
                   onPointerEnter={() => handleDayPointerEnter(dayKey)}
                   onPointerUp={() => handleDayPointerUp(dayKey)}
+                  ref={(node) => {
+                    if (isCurrentDay) {
+                      todayCellRef.current = node;
+                    }
+                  }}
                   role="gridcell"
                   style={{ gridColumn: `${dayIndex + 1}`, gridRow: "1 / -1" }}
                   tabIndex={0}
