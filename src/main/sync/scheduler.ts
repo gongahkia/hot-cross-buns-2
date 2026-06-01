@@ -27,7 +27,12 @@ export class SyncScheduler {
     }
 
     this.started = true;
-    this.applySettings(this.options.getSettings());
+
+    try {
+      this.applySettings(this.options.getSettings());
+    } catch {
+      this.started = false;
+    }
   }
 
   applySettings(settings: SettingsSnapshot): void {
@@ -45,7 +50,13 @@ export class SyncScheduler {
   }
 
   triggerSoon(delayMs = 250): void {
-    const settings = this.options.getSettings();
+    let settings: SettingsSnapshot;
+
+    try {
+      settings = this.options.getSettings();
+    } catch {
+      return;
+    }
 
     if (
       settings.syncMode === "manual" ||
@@ -88,7 +99,13 @@ export class SyncScheduler {
       // Sync status and diagnostics own sanitized failure reporting.
     } finally {
       this.running = false;
-      const settings = this.options.getSettings();
+      let settings: SettingsSnapshot;
+
+      try {
+        settings = this.options.getSettings();
+      } catch {
+        return;
+      }
 
       if (this.started && settings.syncMode === "near-real-time") {
         this.schedule(5 * 60_000 + Math.round(Math.random() * 30_000));

@@ -319,6 +319,14 @@ app.whenReady().then(async () => {
       showMainWindow();
     }
   });
+}).catch((error) => {
+  appLogger.error("startup failed", "misc", {
+    message: error instanceof Error ? error.message : String(error)
+  });
+  quittingAfterSync = true;
+  services?.close();
+  services = null;
+  app.quit();
 });
 
 app.on("window-all-closed", () => {

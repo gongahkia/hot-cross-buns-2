@@ -258,7 +258,18 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     mcpTools: mcpToolRegistry,
     nativeShell,
     startDeferredRuntime: () => {
-      void mcpController.applySettings(settingsRepository.get());
+      try {
+        void mcpController.applySettings(settingsRepository.get()).catch((error) => {
+          appLogger.warn("deferred MCP settings apply failed", "mcp", {
+            message: error instanceof Error ? error.message : String(error)
+          });
+        });
+      } catch (error) {
+        appLogger.warn("deferred MCP settings load failed", "mcp", {
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+
       syncScheduler?.start();
     },
     close: () => {

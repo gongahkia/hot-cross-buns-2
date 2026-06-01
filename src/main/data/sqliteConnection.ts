@@ -445,17 +445,32 @@ class PythonCompatSqliteConnection implements SqliteConnection {
   }
 
   private execute<T>(command: Record<string, unknown>): T {
-    const stdout = execFileSync(PYTHON_BINARY, ["-c", PYTHON_SQLITE_RUNNER], {
-      input: JSON.stringify(command),
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024 * 16,
-      env: {
-        ...process.env,
-        PYTHONIOENCODING: "utf-8"
-      }
-    });
+    let stdout: string;
 
-    const response = JSON.parse(stdout) as PythonSqliteResponse<T>;
+    try {
+      stdout = execFileSync(PYTHON_BINARY, ["-c", PYTHON_SQLITE_RUNNER], {
+        input: JSON.stringify(command),
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024 * 16,
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: "utf-8"
+        }
+      });
+    } catch (error) {
+      throw pythonSqliteSubprocessError(error);
+    }
+
+    let response: PythonSqliteResponse<T>;
+
+    try {
+      response = JSON.parse(stdout) as PythonSqliteResponse<T>;
+    } catch {
+      throw new SqliteExecutionError(
+        "SQLite compatibility runner returned invalid JSON",
+        "PythonSqliteProtocolError"
+      );
+    }
 
     if (!response.ok || response.result === undefined) {
       throw new SqliteExecutionError(
@@ -472,6 +487,34 @@ class PythonCompatSqliteConnection implements SqliteConnection {
       throw new SqliteExecutionError("SQLite connection is closed");
     }
   }
+}
+
+function pythonSqliteSubprocessError(error: unknown): SqliteExecutionError {
+  const processError = error as Error & {
+    signal?: string | null;
+    status?: number | null;
+    stderr?: Buffer | string;
+  };
+  const stderr = processOutputText(processError.stderr);
+  const detail = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-1)[0];
+  const reason = processError.signal
+    ? `interrupted by ${processError.signal}`
+    : processError.status === null || processError.status === undefined
+      ? "failed"
+      : `exited with ${processError.status}`;
+
+  return new SqliteExecutionError(
+    `SQLite compatibility runner ${reason}${detail ? `: ${detail}` : ""}`,
+    "PythonSqliteSubprocessError"
+  );
+}
+
+function processOutputText(output: Buffer | string | undefined): string {
+  if (output === undefined) {
+    return "";
+  }
+
+  return Buffer.isBuffer(output) ? output.toString("utf8") : output;
 }
 
 class PythonCompatPreparedStatement implements SqlitePreparedStatement {
