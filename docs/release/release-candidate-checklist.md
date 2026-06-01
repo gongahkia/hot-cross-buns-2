@@ -77,8 +77,8 @@ Search DSL follow-up on 2026-05-23: the local structured parser/filter slice rem
 |---|---|---|
 | User can connect Google through desktop OAuth. | IMPLEMENTED for macOS preview code path: Settings accepts BYO Desktop client ID/optional secret, opens PKCE loopback OAuth, stores tokens in Keychain, and returns sanitized status. Live account QA remains required. | Google Sync / Settings |
 | User can view selected task lists and calendars from local cache after sync. | PARTIAL: authenticated transport construction and scheduler are wired; live account sync QA and resource-selection polish remain. | Google Sync / Local Data |
-| User can create, edit, complete/reopen, move, and delete tasks. | PARTIAL: local optimistic SQLite flows and production mutation worker wiring exist; live Google write reconciliation still needs manual account QA. | Core UI / Sync |
-| User can create, edit, and delete calendar events. | PARTIAL: local optimistic SQLite flows and production mutation worker wiring exist; live Google write reconciliation still needs manual account QA. | Core UI / Sync |
+| User can create, edit, complete/reopen, move, and delete tasks. | WIRED: local optimistic SQLite flows, authenticated Google write transports, and mutation worker reconciliation are enabled by default; live account QA still required before release signoff. | Core UI / Sync |
+| User can create, edit, and delete calendar events. | WIRED: local optimistic SQLite flows, authenticated Google write transports, and mutation worker reconciliation are enabled by default; live account QA still required before release signoff. | Core UI / Sync |
 | User can create and search local notes. | IMPLEMENTED. | Core UI / Local Data |
 | User can open command palette and quick capture without leaving the keyboard. | IMPLEMENTED for in-app keyboard path; global hotkey path still needs manual verification. | Renderer / Native Shell |
 | Tray/menu bar and global hotkey flows work on macOS. | BLOCKED pending installed-app manual verification; code paths exist. | Native Shell |

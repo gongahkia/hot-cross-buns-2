@@ -202,7 +202,8 @@ describe("App settings and onboarding", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
 
-    expect(within(dialog).getByText("1. Google runtime")).toBeInTheDocument();
+    expect(within(dialog).getByText("1. Google account")).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "Google OAuth client ID" })).toBeInTheDocument();
     expect(within(dialog).getByText("2. Task lists")).toBeInTheDocument();
     expect(within(dialog).getByText("3. Calendars")).toBeInTheDocument();
     expect(within(dialog).getByText("4. Sync mode")).toBeInTheDocument();
@@ -238,12 +239,21 @@ describe("App settings and onboarding", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
     const connectButton = await within(dialog).findByRole("button", { name: "Connect Google" });
+    expect(connectButton).toBeDisabled();
 
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Google OAuth client ID" }),
+      "desktop-client-id.apps.googleusercontent.com"
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Save OAuth Client" }));
     expect(connectButton).toBeEnabled();
 
     await user.click(connectButton);
 
     await waitFor(() => {
+      expect(api.google.saveOAuthClient).toHaveBeenCalledWith({
+        clientId: "desktop-client-id.apps.googleusercontent.com"
+      });
       expect(api.google.beginOAuth).toHaveBeenCalled();
       expect(within(dialog).getByText("Google authorization opened in the browser.")).toBeInTheDocument();
     });

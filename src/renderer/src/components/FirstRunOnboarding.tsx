@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { SettingsSnapshot } from "@shared/ipc/contracts";
 import {
   Bell,
@@ -11,7 +11,7 @@ import {
   Server
 } from "lucide-react";
 import type { CoreViewModelSource } from "../features/core/coreViewModelSource";
-import { Badge, Button, StatusBanner } from "./primitives";
+import { Badge, Button, Input, StatusBanner } from "./primitives";
 
 export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }): JSX.Element {
   const initialTaskListIds =
@@ -31,7 +31,10 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
     useState<SettingsSnapshot["mcpPermissionMode"]>(source.settings.mcpPermissionMode);
   const [localError, setLocalError] = useState<string | null>(null);
   const [googleMessage, setGoogleMessage] = useState<string | null>(null);
+  const [googleClientId, setGoogleClientId] = useState(source.googleStatus.clientId ?? "");
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
   const [googleConnecting, setGoogleConnecting] = useState(false);
+  const [googleClientSaving, setGoogleClientSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const selectedTaskLists = useMemo(() => new Set(selectedTaskListIds), [selectedTaskListIds]);
   const selectedCalendars = useMemo(() => new Set(selectedCalendarIds), [selectedCalendarIds]);
@@ -41,10 +44,15 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
   const googleAccountLabel =
     source.googleStatus.account?.displayName ?? source.googleStatus.account?.email ?? "Google account";
   const nativeFlags = source.diagnosticsSummary?.native.flags ?? source.native.capabilityReport.flags;
-  const oauthLoopbackReady =
+  const oauthRuntimeReady =
     nativeFlags.supportsOAuthLoopback ??
     nativeFlags.supportsCredentialStorage ??
     false;
+  const googleClientConfigured = source.googleStatus.oauthClientConfigured;
+
+  useEffect(() => {
+    setGoogleClientId(source.googleStatus.clientId ?? "");
+  }, [source.googleStatus.clientId]);
 
   function toggleTaskList(taskListId: string, selected: boolean): void {
     setSelectedTaskListIds((current) => {
@@ -105,6 +113,11 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
   }
 
   async function connectGoogle(): Promise<void> {
+    if (!googleClientConfigured) {
+      setLocalError("Save a Google Desktop OAuth client ID before connecting.");
+      return;
+    }
+
     setGoogleConnecting(true);
     setGoogleMessage(null);
     setLocalError(null);
@@ -122,6 +135,28 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
     }
 
     setGoogleConnecting(false);
+  }
+
+  async function saveGoogleClient(): Promise<void> {
+    setGoogleClientSaving(true);
+    setGoogleMessage(null);
+    setLocalError(null);
+
+    const request =
+      googleClientSecret.trim().length > 0
+        ? { clientId: googleClientId, clientSecret: googleClientSecret.trim() }
+        : { clientId: googleClientId };
+    const result = await window.hcb?.google.saveOAuthClient(request);
+
+    if (result?.ok) {
+      source.setGoogleStatus(result.data);
+      setGoogleClientSecret("");
+      setGoogleMessage("Google OAuth client saved.");
+    } else {
+      setLocalError(result?.error.message ?? "Google OAuth client could not be saved.");
+    }
+
+    setGoogleClientSaving(false);
   }
 
   return (
@@ -152,16 +187,52 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
               description={
                 googleConnected
                   ? `Connected as ${googleAccountLabel}.`
-                  : oauthLoopbackReady
-                    ? "Open the browser to authorize Google Tasks and Calendar sync."
-                    : "Runtime OAuth client setup is still required in Settings."
+                  : !oauthRuntimeReady
+                    ? "Google OAuth browser handoff is unavailable in this runtime."
+                    : googleClientConfigured
+                      ? "Open the browser to authorize Google Tasks and Calendar sync."
+                      : "Save a Desktop OAuth client ID, then connect your Google account."
               }
               icon={Cloud}
-              status={googleConnected ? "Connected" : oauthLoopbackReady ? "Ready" : "Needs setup"}
-              title="1. Google runtime"
+              status={
+                googleConnected
+                  ? "Connected"
+                  : !oauthRuntimeReady
+                    ? "Unavailable"
+                    : googleClientConfigured
+                      ? "Ready"
+                      : "Needs client"
+              }
+              title="1. Google account"
             >
+              {!googleConnected ? (
+                <div className="grid w-full gap-2">
+                  <Input
+                    aria-label="Google OAuth client ID"
+                    onChange={(event) => setGoogleClientId(event.currentTarget.value)}
+                    placeholder="Desktop OAuth client ID"
+                    value={googleClientId}
+                  />
+                  <Input
+                    aria-label="Google OAuth client secret"
+                    onChange={(event) => setGoogleClientSecret(event.currentTarget.value)}
+                    placeholder={source.googleStatus.hasClientSecret ? "Stored client secret" : "Client secret (optional)"}
+                    type="password"
+                    value={googleClientSecret}
+                  />
+                </div>
+              ) : null}
+              {!googleConnected ? (
+                <Button
+                  disabled={googleClientId.trim().length < 10 || googleClientSaving}
+                  onClick={() => void saveGoogleClient()}
+                  variant="secondary"
+                >
+                  Save OAuth Client
+                </Button>
+              ) : null}
               <Button
-                disabled={googleConnecting || !oauthLoopbackReady || googleConnected}
+                disabled={googleConnecting || !oauthRuntimeReady || !googleClientConfigured || googleConnected}
                 onClick={() => void connectGoogle()}
                 variant="primary"
               >
@@ -297,7 +368,7 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
           {source.settingsMutationError || localError ? (
             <StatusBanner
               description={source.settingsMutationError ?? localError ?? "Setup settings failed."}
-              title="Setup not saved"
+              title={source.settingsMutationError ? "Setup not saved" : "Setup needs attention"}
               tone="warning"
             />
           ) : null}
@@ -359,7 +430,7 @@ function SetupCard({
         <Badge tone={status === "Ready" || status === "Selected" || status === "Connected" ? "success" : "warning"}>{status}</Badge>
       </div>
       <p className="mt-2 line-clamp-2 text-[var(--text-sm)] text-text-muted">{description}</p>
-      {children ? <div className="mt-3 flex flex-wrap items-center gap-2">{children}</div> : null}
+      {children ? <div className="mt-3 grid gap-2">{children}</div> : null}
     </section>
   );
 }

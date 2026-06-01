@@ -59,10 +59,7 @@ describe("service container integration", () => {
     }
   });
 
-  it("keeps runtime Google writes disabled unless explicitly enabled", async () => {
-    const priorWriteFlag = process.env.HCB_GOOGLE_WRITES_ENABLED;
-    delete process.env.HCB_GOOGLE_WRITES_ENABLED;
-
+  it("keeps runtime Google writes disabled when explicitly configured read-only", async () => {
     const appSupportDirectory = mkdtempSync(join(tmpdir(), "hcb2-service-runtime-readonly-"));
     let createdTaskId: string | undefined;
     const tasksRead: GoogleTasksReadTransport = {
@@ -100,6 +97,7 @@ describe("service container integration", () => {
     const services = createServiceContainer({
       appSupportDirectory,
       enableRuntimeGoogle: true,
+      enableRuntimeGoogleWrites: false,
       syncTasksTransport: tasksRead,
       syncCalendarTransport: calendarRead
     });
@@ -139,12 +137,6 @@ describe("service container integration", () => {
     } finally {
       services.close();
       rmSync(appSupportDirectory, { recursive: true, force: true });
-
-      if (priorWriteFlag === undefined) {
-        delete process.env.HCB_GOOGLE_WRITES_ENABLED;
-      } else {
-        process.env.HCB_GOOGLE_WRITES_ENABLED = priorWriteFlag;
-      }
     }
   });
 

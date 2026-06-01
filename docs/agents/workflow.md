@@ -50,7 +50,7 @@ Not allowed without explicit approval:
 - Update docs when behavior or architecture changes.
 - Preserve the performance budgets and measurement strategy in `docs/performance/performance-strategy.md`.
 - Preserve the port order in `docs/ports/cross-platform-porting.md`: macOS first, Linux second, Windows third.
-- Treat `HCB_GOOGLE_WRITES_ENABLED` as a temporary live-account QA guard. Do not convert read-only runtime sync into permanent product behavior; the app's end goal includes safe Google CRUD for personal use.
+- Runtime Google sync includes authenticated task/task-list/calendar-event writes by default; keep UI, MCP, and sync worker writes on the shared mutation queue.
 
 ## Work Selection
 
