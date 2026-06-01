@@ -10,6 +10,7 @@ import {
   runPaletteCommand,
   seededHcb,
   testDataTransfer,
+  testSettings,
   todayDate,
   tomorrowIso,
   utcWeekStartDate
@@ -400,6 +401,47 @@ describe("App calendar", () => {
     expect(screen.getByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "event");
     expect(screen.getByLabelText("Event starts")).toHaveValue(`${todayDate}T11:00`);
     expect(screen.getByLabelText("Event ends")).toHaveValue(`${todayDate}T12:00`);
+  });
+
+  it("preserves selected calendar timezone when saving timed event fields", async () => {
+    const api = seededHcb();
+    api.settings.get = vi.fn(async () => ok(testSettings({ defaultTimeZone: "Asia/Singapore" })));
+    api.calendar.listCalendars = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "cal-product",
+            title: "Product",
+            selected: true,
+            timeZone: "Asia/Singapore",
+            backgroundColor: "#34a853",
+            foregroundColor: "#ffffff",
+            updatedAt: now,
+            eventCount: 1
+          }
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    await user.click(screen.getByRole("button", { name: /New event/ }));
+    await user.type(await screen.findByRole("textbox", { name: "Event title" }), "Singapore hold");
+    fireEvent.change(screen.getByLabelText("Event starts"), { target: { value: "2026-06-01T10:00" } });
+    fireEvent.change(screen.getByLabelText("Event ends"), { target: { value: "2026-06-02T10:00" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startsAt: "2026-06-01T02:00:00.000Z",
+          endsAt: "2026-06-02T02:00:00.000Z"
+        })
+      );
+    });
   });
 
   it("closes dirty birthday creation from the inspector titlebar close button", async () => {
@@ -945,6 +987,28 @@ describe("App calendar", () => {
       `Availability from ${now} to ${tomorrowIso}`
     );
     expect(screen.getByText("2 busy blocks")).toBeInTheDocument();
+  });
+
+  it("uses timeline drags for availability slots while share availability is active", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+    await user.click(screen.getByRole("button", { name: "Share availability" }));
+
+    expect(await screen.findByRole("heading", { name: "Share Availability" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create event at 11:00" })).not.toBeInTheDocument();
+
+    const slot = screen.getByRole("gridcell", { name: /11 AM/ });
+    fireEvent.pointerDown(slot, { button: 0, clientY: 0 });
+    fireEvent.pointerMove(slot, { buttons: 1, clientY: 20 });
+    fireEvent.pointerUp(slot, { button: 0, clientY: 20 });
+
+    expect(screen.queryByRole("heading", { level: 2, name: "New event" })).not.toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
   });
 
   it("runs calendar-focused command palette actions", async () => {

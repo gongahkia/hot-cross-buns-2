@@ -124,6 +124,7 @@ describe("preload bridge", () => {
       ["calendar", "delete", { id: "" }],
       ["calendar", "scheduleSuggest", { date: "2026-05-23", workingHours: { start: 22, end: 6 } }],
       ["notes", "create", { title: "" }],
+      ["notes", "deleteList", { id: "" }],
       ["notes", "get", { id: "" }],
       ["notes", "update", { id: "note-1" }],
       ["notes", "linkSuggest", { query: "" }],

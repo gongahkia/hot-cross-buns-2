@@ -336,6 +336,30 @@ describe("SQLite-backed domain services", () => {
     });
   });
 
+  it("deletes note lists by moving notes back to the default list", async () => {
+    const { domain } = createTestServices();
+    const list = await domain.planner.createNoteList({ title: "Side notes" });
+    const note = await domain.planner.createNote({
+      listId: list.id,
+      title: "List note",
+      body: "Move me."
+    });
+
+    expect(() => domain.planner.deleteNoteList({ id: "note-list:default" })).toThrow(
+      "Default note list cannot be deleted."
+    );
+    const deleted = await domain.planner.deleteNoteList({ id: list.id });
+    const moved = await domain.planner.getNote({ id: note.id });
+    const lists = await domain.planner.listNotes({ limit: 10 });
+
+    expect(deleted).toMatchObject({ id: list.id, queued: false });
+    expect(moved).toMatchObject({
+      listId: "note-list:default",
+      listTitle: "Local notes"
+    });
+    expect(lists.lists.some((candidate) => candidate.id === list.id)).toBe(false);
+  });
+
   it("rejects destructive recovery actions without confirmation", async () => {
     const { domain, syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);

@@ -20,7 +20,7 @@ describe("App notes", () => {
     await goToSection("Notes");
     expect(screen.queryByRole("button", { name: "All notes" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Starred" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Notes" })).toBeInTheDocument();
     expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New note/ }));
@@ -271,7 +271,6 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    await user.click(screen.getByRole("checkbox", { name: "Notes" }));
     await user.click(await screen.findByRole("button", { name: "More actions for Notes" }));
     await user.click(await screen.findByRole("button", { name: "Rename list" }));
 
@@ -311,6 +310,29 @@ describe("App notes", () => {
         ],
         page: { limit: 50, totalKnown: 2 }
       })
+    );
+    api.notes.get = vi.fn(async ({ id }) =>
+      ok(
+        id === "note-side"
+          ? {
+              id,
+              listId: "note-list:side",
+              listTitle: "Side notes",
+              title: "Side note",
+              preview: "Side",
+              body: "Side",
+              updatedAt: now
+            }
+          : {
+              id,
+              listId: "note-list:default",
+              listTitle: "Notes",
+              title: "Default note",
+              preview: "Default",
+              body: "Default",
+              updatedAt: now
+            }
+      )
     );
     installHcb(api);
     const user = userEvent.setup();
