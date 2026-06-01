@@ -91,7 +91,7 @@ describe("App shell", () => {
 
     const tasksButton = within(primaryNavigation()).getByRole("button", { name: /Tasks/ });
     tasksButton.focus();
-    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowUp}");
 
     expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toBeInTheDocument();
     expect(within(primaryNavigation()).getByRole("button", { name: /Calendar/ })).toHaveFocus();
