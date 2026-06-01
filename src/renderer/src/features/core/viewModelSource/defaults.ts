@@ -87,6 +87,7 @@ export const emptySettings: SettingsSnapshot = {
   dismissedDuplicateGroupIds: [],
   taskTemplates: [],
   eventTemplates: [],
+  noteTemplates: [],
   lastUpdateCheckAt: null,
   mcpEnabled: false,
   mcpPermissionMode: "confirm-writes",

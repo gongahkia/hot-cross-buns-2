@@ -305,7 +305,7 @@ function TaskBoardSidebar({
   return (
     <aside className="min-h-0 rounded-hcbLg bg-bg-secondary p-3" aria-label="Task board navigation">
       <div className="flex items-center gap-2">
-        <Button className="h-12 min-w-0 flex-1 justify-start rounded-hcbLg shadow-sm" onClick={onCreateTask} variant="secondary">
+        <Button className="h-12 min-w-0 flex-1 justify-start rounded-hcbLg shadow-sm" onClick={onCreateTask} variant="primary">
           <Plus aria-hidden="true" size={18} />
           Create
         </Button>

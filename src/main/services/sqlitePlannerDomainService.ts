@@ -55,6 +55,7 @@ export function createSqlitePlannerDomainService(
     exportAvailability: (request) => repository.exportAvailability(request),
     listNotes: (request) => repository.listNotes(request),
     createNoteList: (request) => repository.createNoteList(request),
+    renameNoteList: (request) => repository.renameNoteList(request),
     getNote: (request) => repository.getNote(request.id),
     createNote: (request) => repository.createNote(request),
     updateNote: (request) => repository.updateNote(request),

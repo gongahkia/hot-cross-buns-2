@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from "react";
-import { Pencil, Star, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
 import { FloatingMenu } from "../../../components/FloatingMenu";
 import { Badge, IconButton, Panel, cx } from "../../../components/primitives";
 import { EmptyState } from "../../../components/states";
@@ -15,6 +15,7 @@ export function NotesBoard({
   onDeleteNote,
   onMoveNote,
   onOpenNote,
+  onRenameNoteList,
   onToggleStar,
   selectedNoteId,
   starredNoteIds
@@ -24,6 +25,7 @@ export function NotesBoard({
   onDeleteNote: (noteId: string) => void;
   onMoveNote: (noteId: string, listId: string) => void;
   onOpenNote: (noteId: string, mode?: "view" | "edit") => void;
+  onRenameNoteList: (listId: string, currentTitle: string) => void;
   onToggleStar: (noteId: string) => void;
   selectedNoteId: string | null;
   starredNoteIds: ReadonlySet<string>;
@@ -38,7 +40,14 @@ export function NotesBoard({
         {columns.length > 0 ? (
           columns.map((column) => (
             <Panel
-              action={<Badge tone="neutral">{column.id === "all" ? allNoteCount : column.notes.length}</Badge>}
+              action={
+                <NoteColumnAction
+                  count={column.id === "all" ? allNoteCount : column.notes.length}
+                  listId={column.listId}
+                  onRenameNoteList={onRenameNoteList}
+                  title={column.title}
+                />
+              }
               className="flex max-h-full w-[min(520px,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden bg-bg-primary"
               description={column.description}
               key={column.id}
@@ -84,6 +93,52 @@ export function NotesBoard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function NoteColumnAction({
+  count,
+  listId,
+  onRenameNoteList,
+  title
+}: {
+  count: number;
+  listId?: string;
+  onRenameNoteList: (listId: string, currentTitle: string) => void;
+  title: string;
+}): JSX.Element {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null);
+
+  return (
+    <div className="flex items-center gap-1">
+      <Badge tone="neutral">{count}</Badge>
+      {listId ? (
+        <>
+          <IconButton
+            className="size-7 rounded-full"
+            icon={MoreVertical}
+            label={`More actions for ${title}`}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setMenuPoint({ x: rect.right, y: rect.bottom });
+              setMenuOpen(true);
+            }}
+            variant="ghost"
+          />
+          {menuOpen ? (
+            <NoteListActionMenu
+              anchorPoint={menuPoint ?? undefined}
+              onClose={() => setMenuOpen(false)}
+              onRename={() => {
+                onRenameNoteList(listId, title);
+                setMenuOpen(false);
+              }}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -218,6 +273,29 @@ function NoteBoardRow({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function NoteListActionMenu({
+  anchorPoint,
+  onClose,
+  onRename
+}: {
+  anchorPoint?: { x: number; y: number };
+  onClose: () => void;
+  onRename: () => void;
+}): JSX.Element {
+  return (
+    <FloatingMenu anchorPoint={anchorPoint} onClose={onClose} width={224}>
+      <button
+        className="flex min-h-9 w-full items-center gap-3 px-4 text-left text-[var(--text-base)] text-text-primary transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        onClick={onRename}
+        type="button"
+      >
+        <Pencil aria-hidden="true" size={18} />
+        Rename list
+      </button>
+    </FloatingMenu>
   );
 }
 

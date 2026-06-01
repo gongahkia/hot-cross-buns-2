@@ -18,11 +18,11 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    expect(screen.getByRole("checkbox", { name: "All notes" })).toHaveAttribute("aria-checked", "true");
-    const starredToggle = screen.getByRole("checkbox", { name: "Starred" });
-    expect(starredToggle).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("button", { name: "All notes" })).toHaveAttribute("aria-current", "true");
+    const starredToggle = screen.getByRole("button", { name: "Starred" });
+    expect(starredToggle).not.toHaveAttribute("aria-current");
     await user.click(starredToggle);
-    expect(starredToggle).toHaveAttribute("aria-checked", "true");
+    expect(starredToggle).toHaveAttribute("aria-current", "true");
     expect(screen.getByRole("heading", { name: "Starred notes" })).toBeInTheDocument();
     await user.click(starredToggle);
     expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
@@ -30,6 +30,8 @@ describe("App notes", () => {
     await user.click(screen.getByRole("button", { name: /New note/ }));
     const titleInput = await screen.findByRole("textbox", { name: "Note title" });
     const bodyInput = screen.getByRole("textbox", { name: "Note body" });
+    expect(screen.getByRole("combobox", { name: "Note template" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Preview" })).not.toBeInTheDocument();
 
     await user.clear(titleInput);
     await user.type(titleInput, "Release note draft");
@@ -229,7 +231,7 @@ describe("App notes", () => {
     expect(await screen.findByRole("button", { name: "Open backlink Project plan" })).toBeInTheDocument();
   });
 
-  it("inserts planner links and creates templated notes", async () => {
+  it("inserts planner links and creates notes from the template field", async () => {
     const api = seededHcb();
     installHcb(api);
     const user = userEvent.setup();
@@ -249,16 +251,39 @@ describe("App notes", () => {
     await user.click(screen.getByRole("tab", { name: "Preview" }));
     expect(screen.getAllByText("task: Draft inbox triage rules").length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: "Daily note" }));
+    expect(screen.queryByRole("button", { name: "Daily note" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Meeting note" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /New note/ }));
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Note template" }), "daily");
     await waitFor(() => {
-      expect(api.notes.create).toHaveBeenCalledWith(
+      expect(api.notes.update).toHaveBeenCalledWith(
         expect.objectContaining({
+          id: "note-created",
           title: expect.stringMatching(/^Daily \d{4}-\d{2}-\d{2}$/),
           body: expect.stringContaining("tags: daily")
         })
       );
     });
     expect(await screen.findByText("tags: daily")).toBeInTheDocument();
+  });
+
+  it("renames note lists from the column menu", async () => {
+    const api = seededHcb();
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Renamed notes");
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    await user.click(screen.getByRole("checkbox", { name: "Notes" }));
+    await user.click(await screen.findByRole("button", { name: "More actions for Notes" }));
+    await user.click(await screen.findByRole("button", { name: "Rename list" }));
+
+    expect(promptSpy).toHaveBeenCalledWith("Rename list", "Notes");
+    expect(api.notes.renameList).toHaveBeenCalledWith({
+      id: "note-list:default",
+      title: "Renamed notes"
+    });
   });
 
   it("supports keyboard selection in the note link autocomplete", async () => {

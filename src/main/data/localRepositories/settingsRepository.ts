@@ -74,6 +74,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   dismissedDuplicateGroupIds: [],
   taskTemplates: [],
   eventTemplates: [],
+  noteTemplates: [],
   lastUpdateCheckAt: null,
   mcpEnabled: false,
   mcpPermissionMode: "confirm-writes",
@@ -301,6 +302,7 @@ export class LocalSettingsRepository {
       ),
       taskTemplates: this.readSetting("templates", "tasks", DEFAULT_SETTINGS.taskTemplates),
       eventTemplates: this.readSetting("templates", "events", DEFAULT_SETTINGS.eventTemplates),
+      noteTemplates: this.readSetting("templates", "notes", DEFAULT_SETTINGS.noteTemplates),
       lastUpdateCheckAt: this.readSetting(
         "updates",
         "lastCheckAt",
@@ -589,6 +591,10 @@ export class LocalSettingsRepository {
 
     if (request.eventTemplates !== undefined) {
       this.writeSetting("templates", "events", request.eventTemplates, now);
+    }
+
+    if (request.noteTemplates !== undefined) {
+      this.writeSetting("templates", "notes", request.noteTemplates, now);
     }
 
     if (request.lastUpdateCheckAt !== undefined) {

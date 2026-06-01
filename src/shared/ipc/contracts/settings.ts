@@ -188,6 +188,19 @@ export const eventTemplateSchema = z
 
 export type EventTemplate = z.infer<typeof eventTemplateSchema>;
 
+export const noteTemplateSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().min(1).max(80),
+    title: z.string().min(1).max(500),
+    body: z.string().max(50_000),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type NoteTemplate = z.infer<typeof noteTemplateSchema>;
+
 export const settingsSnapshotSchema = z
   .object({
     theme: appThemeSchema,
@@ -244,6 +257,7 @@ export const settingsSnapshotSchema = z
     dismissedDuplicateGroupIds: z.array(idSchema).max(1_000),
     taskTemplates: z.array(taskTemplateSchema).max(50),
     eventTemplates: z.array(eventTemplateSchema).max(50),
+    noteTemplates: z.array(noteTemplateSchema).max(50),
     lastUpdateCheckAt: isoDateTimeSchema.nullable(),
     mcpEnabled: z.boolean(),
     mcpPermissionMode: mcpPermissionModeSchema,
@@ -317,6 +331,7 @@ export const settingsUpdateRequestSchema = z
     dismissedDuplicateGroupIds: z.array(idSchema).max(1_000).optional(),
     taskTemplates: z.array(taskTemplateSchema).max(50).optional(),
     eventTemplates: z.array(eventTemplateSchema).max(50).optional(),
+    noteTemplates: z.array(noteTemplateSchema).max(50).optional(),
     lastUpdateCheckAt: isoDateTimeSchema.nullable().optional(),
     mcpEnabled: z.boolean().optional(),
     mcpPermissionMode: mcpPermissionModeSchema.optional(),

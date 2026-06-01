@@ -148,6 +148,35 @@ export function AdvancedSettingsTab({
     });
   }
 
+  function addNoteTemplate(): void {
+    const now = new Date().toISOString();
+    updateSettings({
+      noteTemplates: [
+        ...settings.noteTemplates,
+        {
+          id: crypto.randomUUID(),
+          name: `Note Template ${settings.noteTemplates.length + 1}`,
+          title: "Untitled note",
+          body: "",
+          createdAt: now,
+          updatedAt: now
+        }
+      ]
+    });
+  }
+
+  function updateNoteTemplate(
+    templateId: string,
+    patch: Partial<SettingsSnapshot["noteTemplates"][number]>
+  ): void {
+    const now = new Date().toISOString();
+    updateSettings({
+      noteTemplates: settings.noteTemplates.map((template) =>
+        template.id === templateId ? { ...template, ...patch, updatedAt: now } : template
+      )
+    });
+  }
+
   async function importPortableSettings(file: File): Promise<void> {
     const text = await file.text();
     const parsed = JSON.parse(text) as Partial<SettingsSnapshot>;
@@ -161,7 +190,8 @@ export function AdvancedSettingsTab({
       ...(parsed.savedSearchViews ? { savedSearchViews: parsed.savedSearchViews } : {}),
       ...(parsed.savedTaskViews ? { savedTaskViews: parsed.savedTaskViews } : {}),
       ...(parsed.taskTemplates ? { taskTemplates: parsed.taskTemplates } : {}),
-      ...(parsed.eventTemplates ? { eventTemplates: parsed.eventTemplates } : {})
+      ...(parsed.eventTemplates ? { eventTemplates: parsed.eventTemplates } : {}),
+      ...(parsed.noteTemplates ? { noteTemplates: parsed.noteTemplates } : {})
     });
   }
 
@@ -455,6 +485,52 @@ export function AdvancedSettingsTab({
         </SettingsControlRow>
         {settings.eventTemplates.map((template) => (
           <SettingsControlRow key={template.id} label={template.name} description={template.title} />
+        ))}
+      </SettingsGroup>
+
+      <SettingsGroup title="Note templates">
+        <SettingsControlRow
+          description="Define reusable note title and body fields."
+          icon={FilePlus2}
+          label="Note blueprint"
+        >
+          <Button onClick={addNoteTemplate} variant="secondary">
+            New Note Template
+          </Button>
+        </SettingsControlRow>
+        {settings.noteTemplates.length === 0 ? (
+          <EmptyState description="No custom note templates yet." title="No note templates" />
+        ) : settings.noteTemplates.map((template) => (
+          <div className="grid gap-2 border-b border-border px-3 py-3 last:border-b-0" key={template.id}>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto]">
+              <Input
+                aria-label={`Note template name ${template.name}`}
+                onChange={(event) => updateNoteTemplate(template.id, { name: event.currentTarget.value || "Note Template" })}
+                value={template.name}
+              />
+              <Input
+                aria-label={`Note template title ${template.name}`}
+                onChange={(event) => updateNoteTemplate(template.id, { title: event.currentTarget.value || "Untitled note" })}
+                value={template.title}
+              />
+              <Button
+                onClick={() =>
+                  updateSettings({
+                    noteTemplates: settings.noteTemplates.filter((candidate) => candidate.id !== template.id)
+                  })
+                }
+                variant="ghost"
+              >
+                Remove
+              </Button>
+            </div>
+            <textarea
+              aria-label={`Note template body ${template.name}`}
+              className="min-h-24 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onChange={(event) => updateNoteTemplate(template.id, { body: event.currentTarget.value })}
+              value={template.body}
+            />
+          </div>
         ))}
       </SettingsGroup>
     </div>

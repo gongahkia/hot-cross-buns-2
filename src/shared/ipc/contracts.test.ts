@@ -405,6 +405,7 @@ describe("shared IPC contracts", () => {
         dismissedDuplicateGroupIds: [],
         taskTemplates: [],
         eventTemplates: [],
+        noteTemplates: [],
         lastUpdateCheckAt: null,
         mcpEnabled: false,
         mcpPermissionMode: "confirm-writes",

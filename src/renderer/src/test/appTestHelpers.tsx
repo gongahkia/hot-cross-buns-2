@@ -169,6 +169,7 @@ export function testSettings(overrides: Partial<SettingsSnapshot> = {}): Setting
     dismissedDuplicateGroupIds: [],
     taskTemplates: [],
     eventTemplates: [],
+    noteTemplates: [],
     lastUpdateCheckAt: null,
     mcpEnabled: false,
     mcpPermissionMode: "confirm-writes",
@@ -604,6 +605,14 @@ export function seededHcb(): HcbApi {
           id: "note-list:new",
           title: request.title,
           noteCount: 0,
+          updatedAt: now
+        })
+      ),
+      renameList: vi.fn(async (request) =>
+        ok({
+          id: request.id,
+          title: request.title,
+          noteCount: 1,
           updatedAt: now
         })
       ),

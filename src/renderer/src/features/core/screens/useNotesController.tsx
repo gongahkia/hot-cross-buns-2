@@ -15,7 +15,8 @@ import {
   NoteInspectorBody,
   NoteInspectorSummary,
   type NoteDraftValue,
-  type NoteInspectorBodyHandle
+  type NoteInspectorBodyHandle,
+  type NoteTemplateOption
 } from "../inspectors/NoteInspectorBody";
 import { buildNotePreview } from "../notesParsing";
 import { rendererNow, reportRendererTimingSince } from "../../../hooks/useRenderTiming";
@@ -35,8 +36,6 @@ function displayNote(note: NoteViewModel): NoteViewModel {
 
 export function useNotesController(source: CoreViewModelSource): {
   allNoteCount: number;
-  createDailyNote: () => void;
-  createMeetingNote: () => void;
   createNote: () => Promise<void>;
   createNoteList: () => Promise<void>;
   deleteNote: (noteId: string) => Promise<void>;
@@ -49,6 +48,7 @@ export function useNotesController(source: CoreViewModelSource): {
   starredNoteCount: number;
   starredNoteIds: ReadonlySet<string>;
   moveNoteToList: (noteId: string, listId: string) => Promise<void>;
+  renameNoteList: (listId: string, currentTitle: string) => Promise<void>;
   toggleNoteStar: (noteId: string) => void;
   toggleNoteView: (view: NoteBoardSelection) => void;
 } {
@@ -73,6 +73,7 @@ export function useNotesController(source: CoreViewModelSource): {
   );
   const [draftCounter, setDraftCounter] = useState(1);
   const requestedNoteDetails = useRef(new Set<string>());
+  const createNoteIds = useRef(new Set<string>());
   const lastNoteEditReportAt = useRef(0);
   const noteInspectorBodyRef = useRef<NoteInspectorBodyHandle | null>(null);
   const noteInspectorModeRef = useRef<"view" | "edit">("edit");
@@ -82,6 +83,31 @@ export function useNotesController(source: CoreViewModelSource): {
     : [{ id: "note-list:default", title: defaultNoteListTitle, noteCount: notes.length, updatedAt: new Date().toISOString() }]
   ).map((list) => ({ ...list, title: displayNoteListTitle(list.title) }));
   const allNoteCount = Math.max(source.resourceCounts.notes, notes.length);
+  const noteTemplateOptions = useMemo<NoteTemplateOption[]>(() => {
+    const today = dateInputValue(new Date().toISOString());
+
+    return [
+      { id: "blank", name: "Blank", title: "Untitled note", body: "" },
+      {
+        id: "daily",
+        name: "Daily note",
+        title: `Daily ${today}`,
+        body: `status: open\ntags: daily\ndate: ${today}\n\n# Daily ${today}\n- [ ] Review calendar\n- [ ] Triage inbox\n`
+      },
+      {
+        id: "meeting",
+        name: "Meeting note",
+        title: `Meeting ${today}`,
+        body: `status: draft\ntags: meeting\ndate: ${today}\n\n# Meeting ${today}\nAttendees:\n\nNotes:\n\nDecisions:\n- \n`
+      },
+      ...source.settings.noteTemplates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        title: template.title,
+        body: template.body
+      }))
+    ];
+  }, [source.settings.noteTemplates]);
   const starredNotes = useMemo(
     () =>
       notes
@@ -279,6 +305,7 @@ export function useNotesController(source: CoreViewModelSource): {
     currentInspector?.id,
     currentInspector?.dirty,
     currentInspector?.kind,
+    noteTemplateOptions,
     notes,
     noteInspectorMode,
     selectedNote,
@@ -305,6 +332,8 @@ export function useNotesController(source: CoreViewModelSource): {
         onDraftChange={updateNoteDraft}
         onOpenNote={(noteId) => selectNote(noteId, "view")}
         onPersist={persistNoteDraft}
+        templates={noteTemplateOptions}
+        createMode={createNoteIds.current.has(note.id)}
         ref={noteInspectorBodyRef}
       />
     );
@@ -401,6 +430,7 @@ export function useNotesController(source: CoreViewModelSource): {
     setDraftCounter((current) => current + 1);
     setNotes((current) => [fallbackNote, ...current]);
     setSelectedNoteId(fallbackId);
+    createNoteIds.current.add(fallbackId);
     openNoteInspector(fallbackNote, "edit");
 
     const result = await window.hcb?.notes.create({
@@ -424,6 +454,8 @@ export function useNotesController(source: CoreViewModelSource): {
         current.map((note) => (note.id === fallbackId ? persisted : note))
       );
       setSelectedNoteId(result.data.id);
+      createNoteIds.current.delete(fallbackId);
+      createNoteIds.current.add(result.data.id);
       openNoteInspector(persisted, "edit");
     }
   }
@@ -448,6 +480,7 @@ export function useNotesController(source: CoreViewModelSource): {
     setDraftCounter((current) => current + 1);
     setNotes((current) => [fallbackNote, ...current]);
     setSelectedNoteId(fallbackId);
+    createNoteIds.current.add(fallbackId);
     openNoteInspector(fallbackNote, "edit");
 
     const result = await window.hcb?.notes.create({
@@ -472,24 +505,10 @@ export function useNotesController(source: CoreViewModelSource): {
         current.map((note) => (note.id === fallbackId ? persisted : note))
       );
       setSelectedNoteId(result.data.id);
+      createNoteIds.current.delete(fallbackId);
+      createNoteIds.current.add(result.data.id);
       openNoteInspector(persisted, "edit");
     }
-  }
-
-  function createDailyNote(): void {
-    const today = dateInputValue(new Date().toISOString());
-    void createNoteWithTemplate(
-      `Daily ${today}`,
-      `status: open\ntags: daily\ndate: ${today}\n\n# Daily ${today}\n- [ ] Review calendar\n- [ ] Triage inbox\n`
-    );
-  }
-
-  function createMeetingNote(): void {
-    const today = dateInputValue(new Date().toISOString());
-    void createNoteWithTemplate(
-      `Meeting ${today}`,
-      `status: draft\ntags: meeting\ndate: ${today}\n\n# Meeting ${today}\nAttendees:\n\nNotes:\n\nDecisions:\n- \n`
-    );
   }
 
   async function createNoteList(): Promise<void> {
@@ -498,6 +517,26 @@ export function useNotesController(source: CoreViewModelSource): {
 
     if (result?.ok) {
       setLocalNoteLists((current) => [...current, { ...result.data, title: displayNoteListTitle(result.data.title) }]);
+    }
+  }
+
+  async function renameNoteList(listId: string, currentTitle: string): Promise<void> {
+    const title = window.prompt("Rename list", currentTitle)?.trim();
+
+    if (!title || title === currentTitle) {
+      return;
+    }
+
+    const result = await window.hcb?.notes.renameList({ id: listId, title });
+
+    if (result?.ok) {
+      const displayTitle = displayNoteListTitle(result.data.title);
+      setLocalNoteLists((current) =>
+        current.map((list) => (list.id === listId ? { ...result.data, title: displayTitle } : list))
+      );
+      setNotes((current) =>
+        current.map((note) => (note.listId === listId ? { ...note, listTitle: displayTitle } : note))
+      );
     }
   }
 
@@ -579,6 +618,7 @@ export function useNotesController(source: CoreViewModelSource): {
 
     setNotes(nextNotes);
     setSelectedNoteId(nextNote?.id ?? null);
+    createNoteIds.current.delete(note.id);
 
     if (nextNote) {
       openNoteInspector(nextNote, "view");
@@ -654,8 +694,6 @@ export function useNotesController(source: CoreViewModelSource): {
 
   return {
     allNoteCount,
-    createDailyNote,
-    createMeetingNote,
     createNote,
     createNoteList,
     deleteNote,
@@ -668,6 +706,7 @@ export function useNotesController(source: CoreViewModelSource): {
     starredNoteCount: notes.filter((note) => starredNoteIds.has(note.id)).length,
     starredNoteIds,
     moveNoteToList,
+    renameNoteList,
     toggleNoteStar,
     toggleNoteView
   };

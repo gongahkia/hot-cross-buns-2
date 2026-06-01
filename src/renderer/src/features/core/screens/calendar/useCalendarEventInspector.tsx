@@ -282,8 +282,14 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
       dirty: false,
       id: nextDraft.id ?? "new",
       kind: "event",
-      onConfirmClose: () =>
-        calendarInspectorModeRef.current !== "edit" || !calendarInspectorDirtyRef.current,
+      onConfirmClose: () => {
+        if (calendarDraftRef.current?.mode === "create") {
+          discardEventInspectorState();
+          return true;
+        }
+
+        return calendarInspectorModeRef.current !== "edit" || !calendarInspectorDirtyRef.current;
+      },
       subtitle: eventInspectorSubtitle(nextDraft),
       title: eventInspectorTitle(nextDraft)
     });
@@ -316,6 +322,12 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
   }
 
   async function closeEventInspectorAfterMutation(): Promise<void> {
+    discardEventInspectorState();
+    await closeInspector();
+    source.refresh();
+  }
+
+  function discardEventInspectorState(): void {
     calendarDraftBaselineRef.current = null;
     calendarDraftRef.current = null;
     calendarInspectorDirtyRef.current = false;
@@ -323,8 +335,6 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
     setDraft(null);
     setCreateMode("event");
     setFormError(undefined);
-    await closeInspector();
-    source.refresh();
   }
 
   async function saveDraft(): Promise<void> {
@@ -427,13 +437,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
   }
 
   async function cancelEventInspector(): Promise<void> {
-    calendarDraftBaselineRef.current = null;
-    calendarDraftRef.current = null;
-    calendarInspectorDirtyRef.current = false;
-    setCalendarInspectorMode("edit");
-    setDraft(null);
-    setCreateMode("event");
-    setFormError(undefined);
+    discardEventInspectorState();
     await closeInspector();
   }
 

@@ -81,7 +81,8 @@ const settingsSearchTextByTab: Record<SettingsTabId, string> = {
     "Title similarity threshold",
     "Custom filters",
     "Task templates",
-    "Event templates"
+    "Event templates",
+    "Note templates"
   ].join(" "),
   alerts: [
     "Alerts",

@@ -91,6 +91,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     dismissedDuplicateGroupIds: [],
     taskTemplates: [],
     eventTemplates: [],
+    noteTemplates: [],
     lastUpdateCheckAt: null,
     mcpEnabled: false,
     mcpPermissionMode: "confirm-writes",

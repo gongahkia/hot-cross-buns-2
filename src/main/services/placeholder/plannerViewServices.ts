@@ -501,6 +501,12 @@ export function createPlaceholderPlannerViewService(
       noteCount: 0,
       updatedAt: new Date().toISOString()
     }),
+    renameNoteList: (request) => ({
+      id: request.id,
+      title: request.title.trim(),
+      noteCount: state.notes.filter((note) => note.listId === request.id).length,
+      updatedAt: new Date().toISOString()
+    }),
     createNote: (request) => {
       const now = new Date().toISOString();
       const body = request.body ?? "";

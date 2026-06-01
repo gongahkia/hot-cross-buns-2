@@ -236,6 +236,7 @@ export function createPlaceholderState(): PlaceholderState {
       dismissedDuplicateGroupIds: [],
       taskTemplates: [],
       eventTemplates: [],
+      noteTemplates: [],
       lastUpdateCheckAt: null,
       mcpEnabled: false,
       mcpPermissionMode: "confirm-writes",

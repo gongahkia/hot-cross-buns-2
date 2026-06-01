@@ -17,6 +17,7 @@ import {
   type NoteLinkSuggestRequest,
   type NoteListCreateRequest,
   type NoteListRequest,
+  type NoteListRenameRequest,
   type NoteUpdateRequest,
   type SearchQueryRequest,
   type ScheduledTaskBlockCreateRequest,
@@ -151,6 +152,10 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     {
       contract: ipcContracts.notes.createList,
       handle: (request) => services.planner.createNoteList(request as NoteListCreateRequest)
+    },
+    {
+      contract: ipcContracts.notes.renameList,
+      handle: (request) => services.planner.renameNoteList(request as NoteListRenameRequest)
     },
     {
       contract: ipcContracts.notes.get,

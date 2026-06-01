@@ -32,14 +32,23 @@ export interface NoteInspectorBodyHandle {
   getDraft: () => NoteDraftValue;
 }
 
+export interface NoteTemplateOption {
+  body: string;
+  id: string;
+  name: string;
+  title: string;
+}
+
 type LinkSuggestion = NoteLinkSuggestResponse["items"][number];
 
 interface NoteInspectorBodyProps {
+  createMode?: boolean;
   note: NoteViewModel;
   notes: NoteViewModel[];
   onDraftChange: (noteId: string, draft: NoteDraftValue) => void;
   onOpenNote: (noteId: string) => Promise<void> | void;
   onPersist: (noteId: string, draft: NoteDraftValue) => Promise<boolean>;
+  templates?: NoteTemplateOption[];
 }
 
 function noteDraftValuesEqual(left: NoteDraftValue, right: NoteDraftValue): boolean {
@@ -173,12 +182,13 @@ function linkButtonClass(tone: "accent" | "warning" | "neutral"): string {
 
 export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspectorBodyProps>(
   function NoteInspectorBody(
-    { note, notes, onDraftChange, onOpenNote, onPersist },
+    { createMode = false, note, notes, onDraftChange, onOpenNote, onPersist, templates = [] },
     ref
   ): JSX.Element {
     const dirty = useDirtyState<NoteDraftValue>({ title: note.title, body: note.body });
     const { update } = useInspector();
     const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
+    const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
     const [linkQuery, setLinkQuery] = useState("");
     const [suggestions, setSuggestions] = useState<LinkSuggestion[]>([]);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
@@ -267,6 +277,12 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
     }, [onDraftChange]);
 
     useEffect(() => {
+      if (createMode) {
+        setSelectedTemplateId("blank");
+      }
+    }, [createMode, note.id]);
+
+    useEffect(() => {
       const next = { title: note.title, body: note.body };
 
       if (!dirtyRef.current && !noteDraftValuesEqual(draftRef.current, next)) {
@@ -353,6 +369,17 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
 
     function patchDraft(partial: Partial<NoteDraftValue>): void {
       dirty.patch(partial);
+    }
+
+    function applyTemplate(templateId: string): void {
+      const template = templates.find((candidate) => candidate.id === templateId);
+
+      if (!template) {
+        return;
+      }
+
+      setSelectedTemplateId(templateId);
+      patchDraft({ title: template.title, body: template.body });
     }
 
     function markerForSuggestion(suggestion: LinkSuggestion): string {
@@ -459,35 +486,57 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
             value={dirty.value.title}
           />
 
+          {createMode && templates.length > 0 ? (
+            <label className="grid gap-1 text-[var(--text-sm)] font-medium text-text-secondary">
+              Template
+              <select
+                aria-label="Note template"
+                className="h-9 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onChange={(event) => applyTemplate(event.currentTarget.value)}
+                value={selectedTemplateId}
+              >
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2" role="tablist" aria-label="Note view mode">
-              <Button
-                aria-selected={viewMode === "edit"}
-                onClick={() => setViewMode("edit")}
-                role="tab"
-                size="sm"
-                variant={viewMode === "edit" ? "secondary" : "ghost"}
-              >
-                <Pencil aria-hidden="true" size={14} />
-                Edit
-              </Button>
-              <Button
-                aria-selected={viewMode === "preview"}
-                onClick={() => setViewMode("preview")}
-                role="tab"
-                size="sm"
-                variant={viewMode === "preview" ? "secondary" : "ghost"}
-              >
-                <Search aria-hidden="true" size={14} />
-                Preview
-              </Button>
-            </div>
+            {!createMode ? (
+              <div className="flex items-center gap-2" role="tablist" aria-label="Note view mode">
+                <Button
+                  aria-selected={viewMode === "edit"}
+                  onClick={() => setViewMode("edit")}
+                  role="tab"
+                  size="sm"
+                  variant={viewMode === "edit" ? "secondary" : "ghost"}
+                >
+                  <Pencil aria-hidden="true" size={14} />
+                  Edit
+                </Button>
+                <Button
+                  aria-selected={viewMode === "preview"}
+                  onClick={() => setViewMode("preview")}
+                  role="tab"
+                  size="sm"
+                  variant={viewMode === "preview" ? "secondary" : "ghost"}
+                >
+                  <Search aria-hidden="true" size={14} />
+                  Preview
+                </Button>
+              </div>
+            ) : (
+              <span />
+            )}
             <Badge tone={dirty.isDirty ? "warning" : "success"}>
               {dirty.isDirty ? "Saving" : "Saved"}
             </Badge>
           </div>
 
-          {viewMode === "edit" ? (
+          {createMode || viewMode === "edit" ? (
             <EmojiTextarea
               aria-label="Note body"
               className="min-h-[260px] w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

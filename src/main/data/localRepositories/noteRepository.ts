@@ -9,6 +9,7 @@ import type {
   NoteLinkSuggestResponse,
   NoteListCreateRequest,
   NoteListRequest,
+  NoteListRenameRequest,
   NoteListResponse,
   NoteListSummary,
   NoteUpdateRequest
@@ -100,6 +101,38 @@ export class NoteLocalRepository extends ScheduledTaskBlockLocalRepository {
          WHERE id = ?
          LIMIT 1;`,
         [id]
+      );
+
+      if (!row) {
+        throw notFound("Note list was not found.");
+      }
+
+      return noteListSummary(row);
+    });
+  }
+
+  renameNoteList(request: NoteListRenameRequest): NoteListSummary {
+    return this.measureSqlite("notes.renameList", () => {
+      const now = new Date().toISOString();
+
+      this.connection.run(
+        `UPDATE local_note_lists
+         SET title = ?, updated_at = ?
+         WHERE id = ? AND deleted_at IS NULL;`,
+        [request.title.trim(), now, request.id]
+      );
+
+      const row = this.connection.get<NoteListRow>(
+        `SELECT lists.id,
+                lists.title,
+                lists.updated_at AS updatedAt,
+                COUNT(notes.id) AS noteCount
+         FROM local_note_lists lists
+         LEFT JOIN local_notes notes ON notes.list_id = lists.id AND notes.deleted_at IS NULL
+         WHERE lists.id = ? AND lists.deleted_at IS NULL
+         GROUP BY lists.id, lists.title, lists.updated_at
+         LIMIT 1;`,
+        [request.id]
       );
 
       if (!row) {

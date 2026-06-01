@@ -354,6 +354,10 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
     patch.eventTemplates = request.eventTemplates;
   }
 
+  if (request.noteTemplates !== undefined) {
+    patch.noteTemplates = request.noteTemplates;
+  }
+
   if (request.lastUpdateCheckAt !== undefined) {
     patch.lastUpdateCheckAt = request.lastUpdateCheckAt;
   }
