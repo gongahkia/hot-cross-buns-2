@@ -402,6 +402,22 @@ describe("App calendar", () => {
     expect(screen.getByLabelText("Event ends")).toHaveValue(`${todayDate}T12:00`);
   });
 
+  it("closes dirty birthday creation from the inspector titlebar close button", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    await user.click(screen.getByRole("button", { name: "New event" }));
+    await user.click(await screen.findByRole("tab", { name: "Birthday" }));
+    expect(await screen.findByRole("heading", { level: 2, name: "New birthday" })).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "Birthday title" }), "Alex");
+    await user.click(screen.getByTestId("inspector-close"));
+
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+  });
+
   it("opens calendar events in the inspector", async () => {
     installHcb(seededHcb());
     const user = userEvent.setup();
