@@ -83,6 +83,7 @@ import {
   noteLinkSuggestResponseSchema,
   noteListCreateRequestSchema,
   noteListRequestSchema,
+  noteListRenameRequestSchema,
   noteListResponseSchema,
   noteListSummarySchema,
   noteUpdateRequestSchema
@@ -230,6 +231,7 @@ export const ipcContracts = {
   notes: {
     list: defineIpcContract("notes", "list", noteListRequestSchema, noteListResponseSchema),
     createList: defineIpcContract("notes", "createList", noteListCreateRequestSchema, noteListSummarySchema),
+    renameList: defineIpcContract("notes", "renameList", noteListRenameRequestSchema, noteListSummarySchema),
     get: defineIpcContract("notes", "get", entityByIdRequestSchema, noteDetailSchema),
     create: defineIpcContract("notes", "create", noteCreateRequestSchema, noteDetailSchema),
     update: defineIpcContract("notes", "update", noteUpdateRequestSchema, noteDetailSchema),

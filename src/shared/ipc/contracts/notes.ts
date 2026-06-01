@@ -37,6 +37,15 @@ export const noteListCreateRequestSchema = z
 
 export type NoteListCreateRequest = z.input<typeof noteListCreateRequestSchema>;
 
+export const noteListRenameRequestSchema = z
+  .object({
+    id: idSchema,
+    title: z.string().min(1).max(200)
+  })
+  .strict();
+
+export type NoteListRenameRequest = z.input<typeof noteListRenameRequestSchema>;
+
 export const noteSummarySchema = z
   .object({
     id: idSchema,

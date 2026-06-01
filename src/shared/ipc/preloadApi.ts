@@ -52,6 +52,7 @@ import type {
   NoteLinkSuggestResponse,
   NoteListCreateRequest,
   NoteListRequest,
+  NoteListRenameRequest,
   NoteListResponse,
   NoteListSummary,
   NoteUpdateRequest,
@@ -132,6 +133,7 @@ export interface HcbApi {
   notes: {
     list: (request?: NoteListRequest) => Promise<HcbResult<NoteListResponse>>;
     createList: (request: NoteListCreateRequest) => Promise<HcbResult<NoteListSummary>>;
+    renameList: (request: NoteListRenameRequest) => Promise<HcbResult<NoteListSummary>>;
     get: (request: EntityByIdRequest) => Promise<HcbResult<NoteDetail>>;
     create: (request: NoteCreateRequest) => Promise<HcbResult<NoteDetail>>;
     update: (request: NoteUpdateRequest) => Promise<HcbResult<NoteDetail>>;
