@@ -616,6 +616,13 @@ export function seededHcb(): HcbApi {
           updatedAt: now
         })
       ),
+      deleteList: vi.fn(async (request) =>
+        ok({
+          id: request.id,
+          queued: false,
+          revision: now
+        })
+      ),
       delete: vi.fn(async (request) =>
         ok({
           id: request.id,

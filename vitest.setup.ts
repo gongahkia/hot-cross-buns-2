@@ -329,6 +329,13 @@ const hcbApi: HcbApi = {
         updatedAt: now
       })
     ),
+    deleteList: vi.fn(async (request) =>
+      ok({
+        id: request.id,
+        queued: false,
+        revision: now
+      })
+    ),
     get: vi.fn(async (request) =>
       ok({
         id: request.id,

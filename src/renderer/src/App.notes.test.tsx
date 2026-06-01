@@ -18,13 +18,9 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    expect(screen.getByRole("button", { name: "All notes" })).toHaveAttribute("aria-current", "true");
-    const starredToggle = screen.getByRole("button", { name: "Starred" });
-    expect(starredToggle).not.toHaveAttribute("aria-current");
-    await user.click(starredToggle);
-    expect(starredToggle).toHaveAttribute("aria-current", "true");
-    expect(screen.getByRole("heading", { name: "Starred notes" })).toBeInTheDocument();
-    await user.click(starredToggle);
+    expect(screen.queryByRole("button", { name: "All notes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Starred" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument();
     expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New note/ }));
@@ -51,7 +47,7 @@ describe("App notes", () => {
 
     await user.click(screen.getByRole("button", { name: "Delete selected note" }));
     expect(api.notes.delete).toHaveBeenCalledWith({ id: "note-cache-first" });
-    expect(screen.getByText("No notes")).toBeInTheDocument();
+    expect(screen.getByText("No notes in this list")).toBeInTheDocument();
   });
 
   it("opens selected notes in the inspector and flushes pending edits on close", async () => {
@@ -145,7 +141,7 @@ describe("App notes", () => {
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
     await user.type(await screen.findByRole("textbox", { name: "Note body" }), " Switch flush.");
-    const notesList = screen.getByRole("list", { name: "All notes" });
+    const notesList = screen.getByRole("list", { name: "Notes" });
     await user.click(within(notesList).getByRole("button", { name: "Open note Daily note" }));
 
     await waitFor(() => {
@@ -284,6 +280,50 @@ describe("App notes", () => {
       id: "note-list:default",
       title: "Renamed notes"
     });
+  });
+
+  it("deletes custom note lists and moves their notes to Notes", async () => {
+    const api = seededHcb();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    api.notes.list = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "note-default",
+            listId: "note-list:default",
+            listTitle: "Notes",
+            title: "Default note",
+            preview: "Default",
+            updatedAt: now
+          },
+          {
+            id: "note-side",
+            listId: "note-list:side",
+            listTitle: "Side notes",
+            title: "Side note",
+            preview: "Side",
+            updatedAt: now
+          }
+        ],
+        lists: [
+          { id: "note-list:default", title: "Notes", noteCount: 1, updatedAt: now },
+          { id: "note-list:side", title: "Side notes", noteCount: 1, updatedAt: now }
+        ],
+        page: { limit: 50, totalKnown: 2 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    await user.click(await screen.findByRole("button", { name: "More actions for Side notes" }));
+    await user.click(await screen.findByRole("button", { name: "Delete list" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("Delete Side notes? Notes in this list move to Notes.");
+    expect(api.notes.deleteList).toHaveBeenCalledWith({ id: "note-list:side" });
+    expect(screen.queryByRole("heading", { name: "Side notes" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Notes" })).getByText("Side note")).toBeInTheDocument();
   });
 
   it("supports keyboard selection in the note link autocomplete", async () => {
