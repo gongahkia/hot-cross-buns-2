@@ -264,7 +264,7 @@ describe("App notes", () => {
         })
       );
     });
-    expect(await screen.findByText("tags: daily")).toBeInTheDocument();
+    expect((screen.getByRole("textbox", { name: "Note body" }) as HTMLTextAreaElement).value).toContain("tags: daily");
   });
 
   it("renames note lists from the column menu", async () => {
