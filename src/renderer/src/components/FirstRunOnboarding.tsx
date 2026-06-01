@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { SettingsSnapshot } from "@shared/ipc/contracts";
 import {
   Bell,
   CalendarDays,
   CheckCircle2,
   Cloud,
+  ExternalLink,
   ListChecks,
   RefreshCw,
   Server
@@ -29,13 +30,20 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
   const [mcpPermissionMode, setMcpPermissionMode] =
     useState<SettingsSnapshot["mcpPermissionMode"]>(source.settings.mcpPermissionMode);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [googleMessage, setGoogleMessage] = useState<string | null>(null);
+  const [googleConnecting, setGoogleConnecting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const selectedTaskLists = useMemo(() => new Set(selectedTaskListIds), [selectedTaskListIds]);
   const selectedCalendars = useMemo(() => new Set(selectedCalendarIds), [selectedCalendarIds]);
   const accountState = source.diagnosticsSummary?.account.state ?? "signed_out";
+  const googleConnected =
+    source.googleStatus.account?.connectionState === "connected" || accountState === "connected";
+  const googleAccountLabel =
+    source.googleStatus.account?.displayName ?? source.googleStatus.account?.email ?? "Google account";
+  const nativeFlags = source.diagnosticsSummary?.native.flags ?? source.native.capabilityReport.flags;
   const oauthLoopbackReady =
-    source.diagnosticsSummary?.native.flags.supportsOAuthLoopback ??
-    source.diagnosticsSummary?.native.flags.supportsCredentialStorage ??
+    nativeFlags.supportsOAuthLoopback ??
+    nativeFlags.supportsCredentialStorage ??
     false;
 
   function toggleTaskList(taskListId: string, selected: boolean): void {
@@ -96,6 +104,26 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
     }
   }
 
+  async function connectGoogle(): Promise<void> {
+    setGoogleConnecting(true);
+    setGoogleMessage(null);
+    setLocalError(null);
+
+    const result = await window.hcb?.google.beginOAuth();
+
+    if (result?.ok) {
+      setGoogleMessage(result.data.message);
+      source.refreshGoogleStatus();
+      for (const delayMs of [2_000, 5_000, 10_000]) {
+        window.setTimeout(() => source.refreshGoogleStatus(), delayMs);
+      }
+    } else {
+      setLocalError(result?.error.message ?? "Google authorization could not start.");
+    }
+
+    setGoogleConnecting(false);
+  }
+
   return (
     <div
       aria-labelledby="first-run-title"
@@ -113,8 +141,8 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
               Configure Mac v1 preferences and connect Google-backed planner data.
             </p>
           </div>
-          <Badge tone={accountState === "connected" ? "success" : "warning"}>
-            Google {accountState === "connected" ? "connected" : "not connected"}
+          <Badge tone={googleConnected ? "success" : "warning"}>
+            Google {googleConnected ? "connected" : "not connected"}
           </Badge>
         </header>
 
@@ -122,14 +150,28 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <SetupCard
               description={
-                oauthLoopbackReady
-                  ? "OAuth loopback is available; credentials stay outside the renderer."
-                  : "Runtime OAuth client setup is still required in Settings."
+                googleConnected
+                  ? `Connected as ${googleAccountLabel}.`
+                  : oauthLoopbackReady
+                    ? "Open the browser to authorize Google Tasks and Calendar sync."
+                    : "Runtime OAuth client setup is still required in Settings."
               }
               icon={Cloud}
-              status={oauthLoopbackReady ? "Ready" : "Needs setup"}
+              status={googleConnected ? "Connected" : oauthLoopbackReady ? "Ready" : "Needs setup"}
               title="1. Google runtime"
-            />
+            >
+              <Button
+                disabled={googleConnecting || !oauthLoopbackReady || googleConnected}
+                onClick={() => void connectGoogle()}
+                variant="primary"
+              >
+                <ExternalLink aria-hidden="true" size={14} />
+                {googleConnected ? "Google connected" : googleConnecting ? "Opening Google" : "Connect Google"}
+              </Button>
+              {googleMessage ? (
+                <p className="text-[var(--text-xs)] text-text-muted">{googleMessage}</p>
+              ) : null}
+            </SetupCard>
             <SetupCard
               description={`${selectedTaskListIds.length} task list${selectedTaskListIds.length === 1 ? "" : "s"} selected`}
               icon={ListChecks}
@@ -293,11 +335,13 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
 }
 
 function SetupCard({
+  children,
   description,
   icon: Icon,
   status,
   title
 }: {
+  children?: ReactNode;
   description: string;
   icon: typeof Cloud;
   status: string;
@@ -312,9 +356,10 @@ function SetupCard({
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[var(--text-md)] font-semibold text-text-primary">{title}</h3>
         </div>
-        <Badge tone={status === "Ready" || status === "Selected" ? "success" : "warning"}>{status}</Badge>
+        <Badge tone={status === "Ready" || status === "Selected" || status === "Connected" ? "success" : "warning"}>{status}</Badge>
       </div>
       <p className="mt-2 line-clamp-2 text-[var(--text-sm)] text-text-muted">{description}</p>
+      {children ? <div className="mt-3 flex flex-wrap items-center gap-2">{children}</div> : null}
     </section>
   );
 }

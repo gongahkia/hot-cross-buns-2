@@ -230,6 +230,25 @@ describe("App settings and onboarding", () => {
     });
   });
 
+  it("starts Google OAuth from first-run setup", async () => {
+    const { api } = onboardingHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
+    const connectButton = await within(dialog).findByRole("button", { name: "Connect Google" });
+
+    expect(connectButton).toBeEnabled();
+
+    await user.click(connectButton);
+
+    await waitFor(() => {
+      expect(api.google.beginOAuth).toHaveBeenCalled();
+      expect(within(dialog).getByText("Google authorization opened in the browser.")).toBeInTheDocument();
+    });
+  });
+
   it("lets users skip Google setup and keep planner data and settings usable", async () => {
     const { api } = onboardingHcb();
     installHcb(api);
