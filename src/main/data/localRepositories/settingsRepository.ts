@@ -5,6 +5,8 @@ import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contra
 import {
   defaultHistoryCategoryVisibility,
   defaultKeybindings,
+  defaultNavigationTabOrder,
+  defaultToolbarActionOrder,
   hotkeyActionIds
 } from "@shared/settingsCatalog";
 import type { SqliteConnection } from "../sqliteConnection";
@@ -22,6 +24,8 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   uiLayoutScale: 1,
   navigationPlacement: "left",
   hiddenNavigationTabs: [],
+  navigationTabOrder: defaultNavigationTabOrder,
+  toolbarActionOrder: defaultToolbarActionOrder,
   hiddenCalendarViewModes: [],
   showCompletedInCalendarViews: true,
   calendarTimelineDensity: "compact",
@@ -128,6 +132,14 @@ export class LocalSettingsRepository {
         "appearance",
         "hiddenNavigationTabs",
         DEFAULT_SETTINGS.hiddenNavigationTabs
+      ),
+      navigationTabOrder: normalizeOrder(
+        this.readSetting("appearance", "navigationTabOrder", DEFAULT_SETTINGS.navigationTabOrder),
+        defaultNavigationTabOrder
+      ),
+      toolbarActionOrder: normalizeOrder(
+        this.readSetting("appearance", "toolbarActionOrder", DEFAULT_SETTINGS.toolbarActionOrder),
+        defaultToolbarActionOrder
       ),
       hiddenCalendarViewModes: this.readSetting(
         "appearance",
@@ -403,6 +415,24 @@ export class LocalSettingsRepository {
 
     if (request.hiddenNavigationTabs !== undefined) {
       this.writeSetting("appearance", "hiddenNavigationTabs", request.hiddenNavigationTabs, now);
+    }
+
+    if (request.navigationTabOrder !== undefined) {
+      this.writeSetting(
+        "appearance",
+        "navigationTabOrder",
+        normalizeOrder(request.navigationTabOrder, defaultNavigationTabOrder),
+        now
+      );
+    }
+
+    if (request.toolbarActionOrder !== undefined) {
+      this.writeSetting(
+        "appearance",
+        "toolbarActionOrder",
+        normalizeOrder(request.toolbarActionOrder, defaultToolbarActionOrder),
+        now
+      );
     }
 
     if (request.hiddenCalendarViewModes !== undefined) {

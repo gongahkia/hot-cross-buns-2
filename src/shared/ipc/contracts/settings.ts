@@ -1,9 +1,13 @@
 import { z } from "zod";
 import {
+  defaultNavigationTabOrder,
   defaultHistoryCategoryVisibility,
   defaultKeybindings,
+  defaultToolbarActionOrder,
   historyCategoryIds,
-  hotkeyActionIds
+  hotkeyActionIds,
+  navigationTabIds,
+  toolbarActionIds
 } from "../../settingsCatalog";
 import { googleCalendarEventColorIds } from "../../googleCalendarColors";
 import { appColorThemeIds } from "../themeCatalog";
@@ -16,9 +20,10 @@ export const appColorThemeSchema = z.enum(appColorThemeIds);
 export const uiTextSizePointsSchema = z.number().min(9).max(24);
 export const uiFontNameSchema = z.string().trim().min(1).max(120).nullable();
 export const syncModeSchema = z.enum(["manual", "balanced", "near-real-time"]);
-export const appLanguageSchema = z.enum(["system", "en"]);
+export const appLanguageSchema = z.enum(["system", "en", "zh-Hans", "ta", "ms", "ko", "ja"]);
 export const navigationPlacementSchema = z.enum(["left", "right"]);
-export const navigationTabSchema = z.enum(["tasks", "calendar", "notes"]);
+export const navigationTabSchema = z.enum(navigationTabIds);
+export const toolbarActionSchema = z.enum(toolbarActionIds);
 export const calendarViewModeSchema = z.enum(["agenda", "day", "multiDay", "week", "month"]);
 export const calendarTimelineDensitySchema = z.enum(["compact", "comfortable", "spacious"]);
 export const trayClickActionSchema = z.enum([
@@ -214,6 +219,8 @@ export const settingsSnapshotSchema = z
     uiLayoutScale: z.number().min(0.8).max(1.5),
     navigationPlacement: navigationPlacementSchema,
     hiddenNavigationTabs: z.array(navigationTabSchema).max(2),
+    navigationTabOrder: z.array(navigationTabSchema).max(defaultNavigationTabOrder.length),
+    toolbarActionOrder: z.array(toolbarActionSchema).max(defaultToolbarActionOrder.length),
     hiddenCalendarViewModes: z.array(calendarViewModeSchema).max(4),
     showCompletedInCalendarViews: z.boolean(),
     calendarTimelineDensity: calendarTimelineDensitySchema,
@@ -288,6 +295,8 @@ export const settingsUpdateRequestSchema = z
     uiLayoutScale: z.number().min(0.8).max(1.5).optional(),
     navigationPlacement: navigationPlacementSchema.optional(),
     hiddenNavigationTabs: z.array(navigationTabSchema).max(2).optional(),
+    navigationTabOrder: z.array(navigationTabSchema).max(defaultNavigationTabOrder.length).optional(),
+    toolbarActionOrder: z.array(toolbarActionSchema).max(defaultToolbarActionOrder.length).optional(),
     hiddenCalendarViewModes: z.array(calendarViewModeSchema).max(4).optional(),
     showCompletedInCalendarViews: z.boolean().optional(),
     calendarTimelineDensity: calendarTimelineDensitySchema.optional(),

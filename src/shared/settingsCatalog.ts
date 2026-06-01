@@ -33,6 +33,28 @@ export const hotkeyActionIds = [
 
 export type HotkeyActionId = (typeof hotkeyActionIds)[number];
 
+export const navigationTabIds = ["calendar", "tasks", "notes"] as const;
+export type NavigationTabId = (typeof navigationTabIds)[number];
+export const defaultNavigationTabOrder: NavigationTabId[] = ["calendar", "tasks", "notes"];
+
+export const toolbarActionIds = [
+  "commandPalette",
+  "notifications",
+  "diagnostics",
+  "splitPane",
+  "refresh",
+  "settings"
+] as const;
+export type ToolbarActionId = (typeof toolbarActionIds)[number];
+export const defaultToolbarActionOrder: ToolbarActionId[] = [
+  "commandPalette",
+  "notifications",
+  "diagnostics",
+  "splitPane",
+  "refresh",
+  "settings"
+];
+
 export const defaultKeybindings: Record<HotkeyActionId, string | null> = {
   "task.create": "CmdOrCtrl+N",
   "note.create": "CmdOrCtrl+Shift+N",

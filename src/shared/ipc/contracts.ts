@@ -211,6 +211,7 @@ export {
   settingsUpdateRequestSchema,
   syncModeSchema,
   taskTemplateSchema,
+  toolbarActionSchema,
   trayClickActionSchema,
   uiFontNameSchema,
   uiTextSizePointsSchema,
