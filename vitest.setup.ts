@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, vi } from "vitest";
-import type { CalendarEventDetail, TaskDetail } from "./src/shared/ipc/contracts";
+import type { CalendarEventDetail, SettingsSnapshot, TaskDetail } from "./src/shared/ipc/contracts";
 import type { HcbApi } from "./src/shared/ipc/preloadApi";
 import { ok } from "./src/shared/ipc/result";
 import {
@@ -459,6 +459,8 @@ const hcbApi: HcbApi = {
         uiLayoutScale: 1,
         navigationPlacement: "left" as const,
         hiddenNavigationTabs: [],
+        navigationTabOrder: ["calendar", "tasks", "notes"] as SettingsSnapshot["navigationTabOrder"],
+        toolbarActionOrder: ["commandPalette", "notifications", "diagnostics", "splitPane", "refresh", "settings"] as SettingsSnapshot["toolbarActionOrder"],
         hiddenCalendarViewModes: [],
         showCompletedInCalendarViews: true,
         calendarTimelineDensity: "compact" as const,
@@ -536,6 +538,8 @@ const hcbApi: HcbApi = {
         uiLayoutScale: request.uiLayoutScale ?? 1,
         navigationPlacement: request.navigationPlacement ?? "left",
         hiddenNavigationTabs: request.hiddenNavigationTabs ?? [],
+        navigationTabOrder: request.navigationTabOrder ?? ["calendar", "tasks", "notes"],
+        toolbarActionOrder: request.toolbarActionOrder ?? ["commandPalette", "notifications", "diagnostics", "splitPane", "refresh", "settings"],
         hiddenCalendarViewModes: request.hiddenCalendarViewModes ?? [],
         showCompletedInCalendarViews: request.showCompletedInCalendarViews ?? true,
         calendarTimelineDensity: request.calendarTimelineDensity ?? "compact",
