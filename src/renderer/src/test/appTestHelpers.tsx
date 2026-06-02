@@ -291,9 +291,11 @@ export function signedOutGoogleStatus(overrides: Partial<GoogleStatusResponse> =
 export function seededTaskDetail(id: string, overrides: Partial<TaskDetail> = {}): TaskDetail {
   return {
     id,
-    listId: id === "task-inbox-rules" ? "list-inbox" : "list-planning",
+    listId: id === "task-inbox-rules" || id === "task-note-startup" ? "list-inbox" : "list-planning",
     title:
-      id === "task-done"
+      id === "task-note-startup"
+        ? "Startup data flow"
+        : id === "task-done"
         ? "Report shell-visible timing"
         : id === "task-calendar-fixtures"
           ? "Review calendar fixture shape"
@@ -305,11 +307,13 @@ export function seededTaskDetail(id: string, overrides: Partial<TaskDetail> = {}
         : id === "task-calendar-fixtures"
           ? "medium" as const
           : "low" as const,
-    dueAt: id === "task-done" ? null : now,
+    dueAt: id === "task-done" || id === "task-note-startup" ? null : now,
     updatedAt: now,
     tags: id === "task-inbox-rules" ? ["ops"] : id === "task-calendar-fixtures" ? ["calendar"] : [],
     notes:
-      id === "task-done"
+      id === "task-note-startup"
+        ? "Renderer paints from SQLite before fresh sync completes."
+        : id === "task-done"
         ? "Already complete."
         : id === "task-calendar-fixtures"
           ? "Keep visible rows stable for future agenda virtualization."
@@ -334,8 +338,8 @@ export function seededHcb(): HcbApi {
               id: "list-inbox",
               title: "Inbox",
               updatedAt: now,
-              taskCount: 2,
-              activeTaskCount: 1
+              taskCount: 3,
+              activeTaskCount: 2
             },
             {
               id: "list-planning",
@@ -360,6 +364,16 @@ export function seededHcb(): HcbApi {
               dueAt: now,
               updatedAt: now,
               tags: ["ops"]
+            },
+            {
+              id: "task-note-startup",
+              listId: "list-inbox",
+              title: "Startup data flow",
+              status: "active" as const,
+              priority: "none" as const,
+              dueAt: null,
+              updatedAt: now,
+              notes: "Renderer paints from SQLite before fresh sync completes."
             },
             {
               id: "task-calendar-fixtures",

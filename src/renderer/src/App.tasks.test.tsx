@@ -39,6 +39,12 @@ describe("App tasks", () => {
     const inboxTasks = screen.getByRole("list", { name: "Inbox tasks" });
     expect(within(inboxTasks).getByText("Draft inbox triage rules")).toBeInTheDocument();
     expect(within(inboxTasks).getByText("Today")).toBeInTheDocument();
+    const completedToggle = screen.getByRole("button", { name: "Completed (1)" });
+    expect(completedToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Report shell-visible timing")).not.toBeInTheDocument();
+    await user.click(completedToggle);
+    expect(completedToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Report shell-visible timing")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Star Draft inbox triage rules" }));
     await user.click(screen.getByRole("button", { name: /Starred/ }));
@@ -80,7 +86,7 @@ describe("App tasks", () => {
               title: "Second page task",
               status: "active" as const,
               priority: "none" as const,
-              dueAt: null,
+              dueAt: now,
               updatedAt: now
             }
           ],
@@ -96,7 +102,7 @@ describe("App tasks", () => {
             title: "First page task",
             status: "active" as const,
             priority: "none" as const,
-            dueAt: null,
+            dueAt: now,
             updatedAt: now
           }
         ],

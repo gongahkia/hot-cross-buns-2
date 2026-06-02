@@ -113,7 +113,7 @@ function NoteColumnAction({
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null);
-  const canDelete = listId !== "note-list:default";
+  const canDelete = true;
 
   return (
     <div className="flex items-center gap-1">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
+import type { TaskListSummary, TaskSummary } from "@shared/ipc/contracts";
 import { useInspector } from "../../../components/Inspector";
 import { Button } from "../../../components/primitives";
 import type { CoreViewModelSource } from "../coreViewModelSource";
@@ -24,7 +25,6 @@ import type { NoteBoardSelection, NoteViewColumn } from "./notesTypes";
 
 const starredNotesStorageKey = "hcb.starredNoteIds";
 const starredNotesAtStorageKey = "hcb.starredNoteAt";
-const defaultNoteListId = "note-list:default";
 const defaultNoteListTitle = "Notes";
 
 function noteListSelection(listId: string): NoteBoardSelection {
@@ -32,17 +32,39 @@ function noteListSelection(listId: string): NoteBoardSelection {
 }
 
 function initialNoteViews(noteLists: CoreViewModelSource["noteLists"]): NoteBoardSelection[] {
-  return noteLists.length > 0
-    ? noteLists.map((list) => noteListSelection(list.id))
-    : [noteListSelection(defaultNoteListId)];
-}
-
-function displayNoteListTitle(title: string): string {
-  return title === "Local notes" ? defaultNoteListTitle : title;
+  return noteLists.map((list) => noteListSelection(list.id));
 }
 
 function displayNote(note: NoteViewModel): NoteViewModel {
-  return { ...note, listTitle: displayNoteListTitle(note.listTitle) };
+  return note;
+}
+
+function noteFromTask(
+  task: TaskSummary,
+  noteLists: CoreViewModelSource["noteLists"],
+  updatedLabel = "Just now"
+): NoteViewModel {
+  const body = task.notes ?? "";
+  const listTitle = noteLists.find((list) => list.id === task.listId)?.title ?? defaultNoteListTitle;
+
+  return {
+    id: task.id,
+    listId: task.listId,
+    listTitle,
+    title: task.title,
+    body,
+    preview: buildNotePreview(body),
+    updatedLabel
+  };
+}
+
+function noteListFromTaskList(list: TaskListSummary): CoreViewModelSource["noteLists"][number] {
+  return {
+    id: list.id,
+    title: list.title,
+    updatedAt: list.updatedAt,
+    noteCount: 0
+  };
 }
 
 export function useNotesController(source: CoreViewModelSource): {
@@ -84,16 +106,12 @@ export function useNotesController(source: CoreViewModelSource): {
     () => readLocalStorageNumberRecord(starredNotesAtStorageKey)
   );
   const [draftCounter, setDraftCounter] = useState(1);
-  const requestedNoteDetails = useRef(new Set<string>());
   const createNoteIds = useRef(new Set<string>());
   const lastNoteEditReportAt = useRef(0);
   const noteInspectorBodyRef = useRef<NoteInspectorBodyHandle | null>(null);
   const noteInspectorModeRef = useRef<"view" | "edit">("edit");
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null;
-  const noteLists = (localNoteLists.length > 0
-    ? localNoteLists
-    : [{ id: defaultNoteListId, title: defaultNoteListTitle, noteCount: notes.length, updatedAt: new Date().toISOString() }]
-  ).map((list) => ({ ...list, title: displayNoteListTitle(list.title) }));
+  const noteLists = localNoteLists;
   const noteListSignature = noteLists.map((list) => list.id).join("\n");
   const noteTemplateOptions = useMemo<NoteTemplateOption[]>(() => {
     const today = dateInputValue(new Date().toISOString());
@@ -152,7 +170,6 @@ export function useNotesController(source: CoreViewModelSource): {
   }, [starredNoteAt]);
 
   useEffect(() => {
-    requestedNoteDetails.current.clear();
     setNotes(source.initialNotes.map(displayNote));
     setSelectedNoteId((current) =>
       current && source.initialNotes.some((note) => note.id === current)
@@ -174,80 +191,6 @@ export function useNotesController(source: CoreViewModelSource): {
       return next.length > 0 ? next : availableViews;
     });
   }, [noteListSignature]);
-
-  useEffect(() => {
-    if (
-      !selectedNote ||
-      selectedNote.id.startsWith("note-draft-") ||
-      requestedNoteDetails.current.has(selectedNote.id)
-    ) {
-      return;
-    }
-
-    requestedNoteDetails.current.add(selectedNote.id);
-    let cancelled = false;
-
-    void window.hcb?.notes.get({ id: selectedNote.id }).then((result) => {
-      if (cancelled || !result?.ok) {
-        return;
-      }
-
-      setNotes((current) =>
-        current.map((note) =>
-          note.id === selectedNote.id
-            ? {
-                id: result.data.id,
-                listId: result.data.listId,
-                listTitle: displayNoteListTitle(result.data.listTitle),
-                title: result.data.title,
-                body: result.data.body,
-                preview: result.data.preview,
-                updatedLabel: note.updatedLabel
-              }
-            : note
-        )
-      );
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedNote?.id]);
-
-  useEffect(() => {
-    for (const note of notes) {
-      if (
-        note.id === selectedNote?.id ||
-        note.id.startsWith("note-draft-") ||
-        requestedNoteDetails.current.has(note.id)
-      ) {
-        continue;
-      }
-
-      requestedNoteDetails.current.add(note.id);
-      void window.hcb?.notes.get({ id: note.id }).then((result) => {
-        if (!result?.ok) {
-          return;
-        }
-
-        setNotes((current) =>
-          current.map((currentNote) =>
-            currentNote.id === result.data.id
-              ? {
-                  id: result.data.id,
-                  listId: result.data.listId,
-                  listTitle: displayNoteListTitle(result.data.listTitle),
-                  title: result.data.title,
-                  body: result.data.body,
-                  preview: result.data.preview,
-                  updatedLabel: currentNote.updatedLabel
-                }
-              : currentNote
-          )
-        );
-      });
-    }
-  }, [notes, selectedNote?.id]);
 
   useEffect(() => {
     function handleNoteCommand(event: Event): void {
@@ -408,11 +351,16 @@ export function useNotesController(source: CoreViewModelSource): {
       await noteInspectorBodyRef.current?.flush();
     }
 
+    const list = noteLists[0];
+    if (!list) {
+      return;
+    }
+
     const fallbackId = `note-draft-${draftCounter}`;
     const fallbackNote: NoteViewModel = {
       id: fallbackId,
-      listId: "note-list:default",
-      listTitle: defaultNoteListTitle,
+      listId: list.id,
+      listTitle: list.title,
       title: "Untitled note",
       body: "",
       preview: "Empty note",
@@ -425,22 +373,15 @@ export function useNotesController(source: CoreViewModelSource): {
     createNoteIds.current.add(fallbackId);
     openNoteInspector(fallbackNote, "edit");
 
-    const result = await window.hcb?.notes.create({
+    const result = await window.hcb?.tasks.create({
       title: "Untitled note",
-      body: ""
+      notes: "",
+      listId: list.id,
+      dueDate: null
     });
 
     if (result?.ok) {
-      requestedNoteDetails.current.add(result.data.id);
-      const persisted = {
-        id: result.data.id,
-        listId: result.data.listId,
-        listTitle: displayNoteListTitle(result.data.listTitle),
-        title: result.data.title,
-        body: result.data.body,
-        preview: result.data.preview,
-        updatedLabel: "Just now"
-      };
+      const persisted = noteFromTask(result.data, noteLists);
 
       setNotes((current) =>
         current.map((note) => (note.id === fallbackId ? persisted : note))
@@ -457,12 +398,16 @@ export function useNotesController(source: CoreViewModelSource): {
       await noteInspectorBodyRef.current?.flush();
     }
 
-    const listTitle = noteLists.find((list) => list.id === listId)?.title ?? defaultNoteListTitle;
+    const list = noteLists.find((candidate) => candidate.id === listId) ?? noteLists[0];
+    if (!list) {
+      return;
+    }
+
     const fallbackId = `note-draft-${draftCounter}`;
     const fallbackNote: NoteViewModel = {
       id: fallbackId,
-      listId: listId ?? "note-list:default",
-      listTitle,
+      listId: list.id,
+      listTitle: list.title,
       title,
       body,
       preview: buildNotePreview(body),
@@ -475,23 +420,15 @@ export function useNotesController(source: CoreViewModelSource): {
     createNoteIds.current.add(fallbackId);
     openNoteInspector(fallbackNote, "edit");
 
-    const result = await window.hcb?.notes.create({
+    const result = await window.hcb?.tasks.create({
       title,
-      body,
-      ...(listId ? { listId } : {})
+      notes: body,
+      listId: list.id,
+      dueDate: null
     });
 
     if (result?.ok) {
-      requestedNoteDetails.current.add(result.data.id);
-      const persisted = {
-        id: result.data.id,
-        listId: result.data.listId,
-        listTitle: displayNoteListTitle(result.data.listTitle),
-        title: result.data.title,
-        body: result.data.body,
-        preview: result.data.preview,
-        updatedLabel: "Just now"
-      };
+      const persisted = noteFromTask(result.data, noteLists);
 
       setNotes((current) =>
         current.map((note) => (note.id === fallbackId ? persisted : note))
@@ -505,48 +442,32 @@ export function useNotesController(source: CoreViewModelSource): {
 
   async function createNoteList(): Promise<void> {
     const title = `Note list ${localNoteLists.length + 1}`;
-    const result = await window.hcb?.notes.createList({ title });
+    const result = await window.hcb?.tasks.createTaskList({ title });
 
     if (result?.ok) {
-      setLocalNoteLists((current) => [...current, { ...result.data, title: displayNoteListTitle(result.data.title) }]);
+      setLocalNoteLists((current) => [...current, noteListFromTaskList(result.data)]);
       setSelectedNoteViews((current) => [...current, noteListSelection(result.data.id)]);
     }
   }
 
   async function deleteNoteList(listId: string, title: string): Promise<void> {
-    if (listId === defaultNoteListId) {
+    if (!window.confirm(`Delete ${title}? Notes in this list will be deleted in Google Tasks.`)) {
       return;
     }
 
-    if (!window.confirm(`Delete ${title}? Notes in this list move to Notes.`)) {
-      return;
-    }
-
-    const result = await window.hcb?.notes.deleteList({ id: listId });
+    const result = await window.hcb?.tasks.deleteTaskList({ id: listId });
 
     if (!result?.ok) {
       return;
     }
 
-    const defaultList = noteLists.find((list) => list.id === defaultNoteListId);
-    const defaultTitle = defaultList?.title ?? defaultNoteListTitle;
-    const movedCount = notes.filter((note) => note.listId === listId).length;
-
     setLocalNoteLists((current) =>
-      current
-        .filter((list) => list.id !== listId)
-        .map((list) =>
-          list.id === defaultNoteListId ? { ...list, noteCount: list.noteCount + movedCount } : list
-        )
+      current.filter((list) => list.id !== listId)
     );
-    setNotes((current) =>
-      current.map((note) =>
-        note.listId === listId ? { ...note, listId: defaultNoteListId, listTitle: defaultTitle } : note
-      )
-    );
+    setNotes((current) => current.filter((note) => note.listId !== listId));
     setSelectedNoteViews((current) => {
       const next = current.filter((view) => view !== noteListSelection(listId));
-      return next.length > 0 ? next : [noteListSelection(defaultNoteListId)];
+      return next.length > 0 ? next : noteLists.filter((list) => list.id !== listId).map((list) => noteListSelection(list.id));
     });
   }
 
@@ -557,12 +478,12 @@ export function useNotesController(source: CoreViewModelSource): {
       return;
     }
 
-    const result = await window.hcb?.notes.renameList({ id: listId, title });
+    const result = await window.hcb?.tasks.renameTaskList({ id: listId, title });
 
     if (result?.ok) {
-      const displayTitle = displayNoteListTitle(result.data.title);
+      const displayTitle = result.data.title;
       setLocalNoteLists((current) =>
-        current.map((list) => (list.id === listId ? { ...result.data, title: displayTitle } : list))
+        current.map((list) => (list.id === listId ? noteListFromTaskList(result.data) : list))
       );
       setNotes((current) =>
         current.map((note) => (note.listId === listId ? { ...note, listTitle: displayTitle } : note))
@@ -601,13 +522,35 @@ export function useNotesController(source: CoreViewModelSource): {
 
   async function persistNoteDraft(noteId: string, draft: NoteDraftValue): Promise<boolean> {
     if (noteId.startsWith("note-draft-")) {
+      const note = notes.find((candidate) => candidate.id === noteId);
+      if (!note) {
+        return false;
+      }
+
+      const result = await window.hcb?.tasks.create({
+        title: draft.title || "Untitled note",
+        notes: draft.body,
+        listId: note.listId,
+        dueDate: null
+      });
+
+      if (!result?.ok) {
+        return false;
+      }
+
+      const persisted = noteFromTask(result.data, noteLists);
+      setNotes((current) => current.map((candidate) => candidate.id === noteId ? persisted : candidate));
+      setSelectedNoteId(persisted.id);
+      createNoteIds.current.delete(noteId);
+      createNoteIds.current.add(persisted.id);
       return true;
     }
 
-    const result = await window.hcb?.notes.update({
+    const result = await window.hcb?.tasks.update({
       id: noteId,
       title: draft.title,
-      body: draft.body
+      notes: draft.body,
+      dueDate: null
     });
 
     return result?.ok ?? false;
@@ -621,7 +564,7 @@ export function useNotesController(source: CoreViewModelSource): {
     }
 
     if (!note.id.startsWith("note-draft-")) {
-      await window.hcb?.notes.delete({ id: note.id });
+      await window.hcb?.tasks.delete({ id: note.id });
     }
 
     setStarredNoteIds((current) => {
@@ -698,7 +641,7 @@ export function useNotesController(source: CoreViewModelSource): {
     );
 
     if (!note.id.startsWith("note-draft-")) {
-      const result = await window.hcb?.notes.update({ id: note.id, listId });
+      const result = await window.hcb?.tasks.move({ id: note.id, listId });
 
       if (!result?.ok) {
         setNotes((current) =>

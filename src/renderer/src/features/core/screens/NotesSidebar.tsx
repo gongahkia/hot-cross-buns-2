@@ -1,10 +1,7 @@
 import { Check, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import type { NoteListSummary } from "@shared/ipc/contracts";
 import { Button, IconButton, cx } from "../../../components/primitives";
-import {
-  actionDescription,
-  actionLabel
-} from "../coreScreenShared";
+import { actionDescription } from "../coreScreenShared";
 import type { NoteBoardSelection } from "./notesTypes";
 
 export function NotesSidebar({
@@ -42,7 +39,7 @@ export function NotesSidebar({
     <aside className="min-h-0 rounded-hcbLg bg-bg-secondary p-3" aria-label="Notes navigation">
       <div className="flex items-center gap-2">
         <Button
-          aria-label={actionLabel("note.create")}
+          aria-label="Create notes"
           className="h-12 min-w-0 flex-1 justify-start rounded-hcbLg shadow-sm"
           data-action-id="note.create"
           onClick={onCreateNote}

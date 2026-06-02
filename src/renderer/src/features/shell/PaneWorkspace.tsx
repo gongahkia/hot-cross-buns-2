@@ -294,9 +294,6 @@ function PaneLeaf({
             variant="ghost"
           >
             <X aria-hidden="true" size={18} />
-            <span className="rounded-hcbSm border border-border px-1.5 font-mono text-[var(--text-xs)] text-text-muted">
-              Cmd W
-            </span>
           </Button>
         </div>
       </div>

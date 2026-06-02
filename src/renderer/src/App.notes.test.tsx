@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { TaskListSummary, TaskSummary } from "@shared/ipc/contracts";
 import { ok } from "@shared/ipc/result";
 import App from "./App";
 import {
@@ -9,6 +10,43 @@ import {
   now,
   seededHcb
 } from "./test/appTestHelpers";
+
+const inboxTaskList: TaskListSummary = {
+  id: "list-inbox",
+  title: "Inbox",
+  updatedAt: now,
+  taskCount: 0,
+  activeTaskCount: 0
+};
+
+function noteTask(overrides: Partial<TaskSummary> & Pick<TaskSummary, "id" | "title">): TaskSummary {
+  return {
+    listId: "list-inbox",
+    status: "active",
+    priority: "none",
+    dueAt: null,
+    updatedAt: now,
+    notes: "",
+    parentId: null,
+    ...overrides
+  };
+}
+
+function installTaskBackedNotes(
+  api: ReturnType<typeof seededHcb>,
+  items: TaskSummary[],
+  lists: TaskListSummary[] = [inboxTaskList]
+): void {
+  api.tasks.listTaskLists = vi.fn(async () =>
+    ok({ items: lists, page: { limit: 100, totalKnown: lists.length } })
+  );
+  api.tasks.list = vi.fn(async (request = {}) =>
+    ok({
+      items: request.status === "hidden" || request.status === "deleted" ? [] : items,
+      page: { limit: 100, totalKnown: items.length }
+    })
+  );
+}
 
 describe("App notes", () => {
   it("creates, edits, and deletes notes through preload", async () => {
@@ -20,10 +58,10 @@ describe("App notes", () => {
     await goToSection("Notes");
     expect(screen.queryByRole("button", { name: "All notes" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Starred" })).not.toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Inbox" })).toBeInTheDocument();
     expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /New note/ }));
+    await user.click(screen.getByRole("button", { name: /Create notes/ }));
     const titleInput = await screen.findByRole("textbox", { name: "Note title" });
     const bodyInput = screen.getByRole("textbox", { name: "Note body" });
     expect(screen.getByRole("combobox", { name: "Note template" })).toBeInTheDocument();
@@ -34,20 +72,26 @@ describe("App notes", () => {
     await user.type(bodyInput, "Document planner flow.");
 
     await waitFor(() => {
-      expect(api.notes.create).toHaveBeenCalled();
-      expect(api.notes.update).toHaveBeenCalledWith({
-        id: "note-created",
+      expect(api.tasks.create).toHaveBeenCalledWith({
+        title: "Untitled note",
+        notes: "",
+        listId: "list-inbox",
+        dueDate: null
+      });
+      expect(api.tasks.update).toHaveBeenCalledWith({
+        id: "task-created-1",
         title: "Release note draft",
-        body: "Document planner flow."
+        notes: "Document planner flow.",
+        dueDate: null
       });
     });
 
     await user.click(screen.getByRole("button", { name: "Delete selected note" }));
-    expect(api.notes.delete).toHaveBeenCalledWith({ id: "note-created" });
+    expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-created-1" });
 
     await user.click(screen.getByRole("button", { name: "Delete selected note" }));
-    expect(api.notes.delete).toHaveBeenCalledWith({ id: "note-cache-first" });
-    expect(screen.getByText("No notes in this list")).toBeInTheDocument();
+    expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-note-startup" });
+    expect(screen.getAllByText("No notes in this list").length).toBeGreaterThan(0);
   });
 
   it("opens selected notes in the inspector and flushes pending edits on close", async () => {
@@ -73,10 +117,11 @@ describe("App notes", () => {
     await user.click(screen.getByTestId("inspector-close"));
 
     await waitFor(() => {
-      expect(api.notes.update).toHaveBeenCalledWith({
-        id: "note-cache-first",
+      expect(api.tasks.update).toHaveBeenCalledWith({
+        id: "task-note-startup",
         title: "Startup data flow",
-        body: expect.stringContaining("Pending close flush.")
+        notes: expect.stringContaining("Pending close flush."),
+        dueDate: null
       });
     });
     expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
@@ -84,53 +129,14 @@ describe("App notes", () => {
 
   it("flushes pending note edits before switching the selected note row", async () => {
     const api = seededHcb();
-    api.notes.list = vi.fn(async () =>
-      ok({
-        items: [
-          {
-            id: "note-cache-first",
-            listId: "note-list:default",
-            listTitle: "Notes",
-            title: "Startup data flow",
-            preview: "Renderer paints from SQLite.",
-            updatedAt: now
-          },
-          {
-            id: "note-daily",
-            listId: "note-list:default",
-            listTitle: "Notes",
-            title: "Daily note",
-            preview: "Backlink review.",
-            updatedAt: now
-          }
-        ],
-        lists: [{ id: "note-list:default", title: "Notes", noteCount: 2, updatedAt: now }],
-        page: { limit: 50, totalKnown: 2 }
-      })
-    );
-    api.notes.get = vi.fn(async ({ id }) =>
-      ok(
-        id === "note-daily"
-          ? {
-              id,
-              listId: "note-list:default",
-              listTitle: "Notes",
-              title: "Daily note",
-              preview: "Backlink review.",
-              body: "Review backlinks.",
-              updatedAt: now
-            }
-          : {
-              id,
-              listId: "note-list:default",
-              listTitle: "Notes",
-              title: "Startup data flow",
-              preview: "Renderer paints from SQLite.",
-              body: "Renderer paints from SQLite before fresh sync completes.",
-              updatedAt: now
-            }
-      )
-    );
+    installTaskBackedNotes(api, [
+      noteTask({
+        id: "task-note-startup",
+        title: "Startup data flow",
+        notes: "Renderer paints from SQLite before fresh sync completes."
+      }),
+      noteTask({ id: "task-note-daily", title: "Daily note", notes: "Review backlinks." })
+    ]);
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);
@@ -141,14 +147,15 @@ describe("App notes", () => {
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
     await user.type(await screen.findByRole("textbox", { name: "Note body" }), " Switch flush.");
-    const notesList = screen.getByRole("list", { name: "Notes" });
+    const notesList = screen.getByRole("list", { name: "Inbox" });
     await user.click(within(notesList).getByRole("button", { name: "Open note Daily note" }));
 
     await waitFor(() => {
-      expect(api.notes.update).toHaveBeenCalledWith({
-        id: "note-cache-first",
+      expect(api.tasks.update).toHaveBeenCalledWith({
+        id: "task-note-startup",
         title: "Startup data flow",
-        body: expect.stringContaining("Switch flush.")
+        notes: expect.stringContaining("Switch flush."),
+        dueDate: null
       });
     });
     const inspector = await screen.findByTestId("inspector-shell");
@@ -158,53 +165,10 @@ describe("App notes", () => {
 
   it("renders note markdown preview, outgoing links, and backlinks", async () => {
     const api = seededHcb();
-    api.notes.list = vi.fn(async () =>
-      ok({
-        items: [
-          {
-            id: "note-project",
-            listId: "note-list:default",
-            listTitle: "Notes",
-            title: "Project plan",
-            preview: "See [[Daily note]]",
-            updatedAt: now
-          },
-          {
-            id: "note-daily",
-            listId: "note-list:default",
-            listTitle: "Notes",
-            title: "Daily note",
-            preview: "Back to [[Project plan]]",
-            updatedAt: now
-          }
-        ],
-        lists: [{ id: "note-list:default", title: "Notes", noteCount: 2, updatedAt: now }],
-        page: { limit: 50, totalKnown: 2 }
-      })
-    );
-    api.notes.get = vi.fn(async ({ id }) =>
-      ok(
-        id === "note-daily"
-          ? {
-              id,
-              listId: "note-list:default",
-              listTitle: "Notes",
-              title: "Daily note",
-              preview: "Back to [[Project plan]]",
-              body: "Back to [[Project plan]]",
-              updatedAt: now
-            }
-          : {
-              id,
-              listId: "note-list:default",
-              listTitle: "Notes",
-              title: "Project plan",
-              preview: "See [[Daily note]]",
-              body: "# Plan\n- [x] Kickoff\nSee [[Daily note]]",
-              updatedAt: now
-            }
-      )
-    );
+    installTaskBackedNotes(api, [
+      noteTask({ id: "task-note-project", title: "Project plan", notes: "# Plan\n- [x] Kickoff\nSee [[Daily note]]" }),
+      noteTask({ id: "task-note-daily", title: "Daily note", notes: "Back to [[Project plan]]" })
+    ]);
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);
@@ -249,14 +213,15 @@ describe("App notes", () => {
 
     expect(screen.queryByRole("button", { name: "Daily note" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Meeting note" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /New note/ }));
+    await user.click(screen.getByRole("button", { name: /Create notes/ }));
     await user.selectOptions(await screen.findByRole("combobox", { name: "Note template" }), "daily");
     await waitFor(() => {
-      expect(api.notes.update).toHaveBeenCalledWith(
+      expect(api.tasks.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: "note-created",
+          id: "task-created-1",
           title: expect.stringMatching(/^Daily \d{4}-\d{2}-\d{2}$/),
-          body: expect.stringContaining("tags: daily")
+          notes: expect.stringContaining("tags: daily"),
+          dueDate: null
         })
       );
     });
@@ -271,68 +236,29 @@ describe("App notes", () => {
     render(<App />);
 
     await goToSection("Notes");
-    await user.click(await screen.findByRole("button", { name: "More actions for Notes" }));
+    await user.click(await screen.findByRole("button", { name: "More actions for Inbox" }));
     await user.click(await screen.findByRole("button", { name: "Rename list" }));
 
-    expect(promptSpy).toHaveBeenCalledWith("Rename list", "Notes");
-    expect(api.notes.renameList).toHaveBeenCalledWith({
-      id: "note-list:default",
+    expect(promptSpy).toHaveBeenCalledWith("Rename list", "Inbox");
+    expect(api.tasks.renameTaskList).toHaveBeenCalledWith({
+      id: "list-inbox",
       title: "Renamed notes"
     });
   });
 
-  it("deletes custom note lists and moves their notes to Notes", async () => {
+  it("deletes custom note lists through Google Tasks", async () => {
     const api = seededHcb();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    api.notes.list = vi.fn(async () =>
-      ok({
-        items: [
-          {
-            id: "note-default",
-            listId: "note-list:default",
-            listTitle: "Notes",
-            title: "Default note",
-            preview: "Default",
-            updatedAt: now
-          },
-          {
-            id: "note-side",
-            listId: "note-list:side",
-            listTitle: "Side notes",
-            title: "Side note",
-            preview: "Side",
-            updatedAt: now
-          }
-        ],
-        lists: [
-          { id: "note-list:default", title: "Notes", noteCount: 1, updatedAt: now },
-          { id: "note-list:side", title: "Side notes", noteCount: 1, updatedAt: now }
-        ],
-        page: { limit: 50, totalKnown: 2 }
-      })
-    );
-    api.notes.get = vi.fn(async ({ id }) =>
-      ok(
-        id === "note-side"
-          ? {
-              id,
-              listId: "note-list:side",
-              listTitle: "Side notes",
-              title: "Side note",
-              preview: "Side",
-              body: "Side",
-              updatedAt: now
-            }
-          : {
-              id,
-              listId: "note-list:default",
-              listTitle: "Notes",
-              title: "Default note",
-              preview: "Default",
-              body: "Default",
-              updatedAt: now
-            }
-      )
+    installTaskBackedNotes(
+      api,
+      [
+        noteTask({ id: "task-note-default", title: "Default note", notes: "Default" }),
+        noteTask({ id: "task-note-side", listId: "list-side", title: "Side note", notes: "Side" })
+      ],
+      [
+        { id: "list-inbox", title: "Inbox", taskCount: 1, activeTaskCount: 1, updatedAt: now },
+        { id: "list-side", title: "Side notes", taskCount: 1, activeTaskCount: 1, updatedAt: now }
+      ]
     );
     installHcb(api);
     const user = userEvent.setup();
@@ -342,10 +268,10 @@ describe("App notes", () => {
     await user.click(await screen.findByRole("button", { name: "More actions for Side notes" }));
     await user.click(await screen.findByRole("button", { name: "Delete list" }));
 
-    expect(confirmSpy).toHaveBeenCalledWith("Delete Side notes? Notes in this list move to Notes.");
-    expect(api.notes.deleteList).toHaveBeenCalledWith({ id: "note-list:side" });
+    expect(confirmSpy).toHaveBeenCalledWith("Delete Side notes? Notes in this list will be deleted in Google Tasks.");
+    expect(api.tasks.deleteTaskList).toHaveBeenCalledWith({ id: "list-side" });
     expect(screen.queryByRole("heading", { name: "Side notes" })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "Notes" })).getByText("Side note")).toBeInTheDocument();
+    expect(screen.queryByText("Side note")).not.toBeInTheDocument();
   });
 
   it("supports keyboard selection in the note link autocomplete", async () => {
@@ -382,17 +308,9 @@ describe("App notes", () => {
 
   it("repairs broken note links from the note inspector", async () => {
     const api = seededHcb();
-    api.notes.get = vi.fn(async ({ id }) =>
-      ok({
-        id,
-        listId: "note-list:default",
-        listTitle: "Notes",
-        title: "Startup data flow",
-        preview: "See [[Missing note]]",
-        body: "See [[Missing note]]",
-        updatedAt: now
-      })
-    );
+    installTaskBackedNotes(api, [
+      noteTask({ id: "task-note-startup", title: "Startup data flow", notes: "See [[Missing note]]" })
+    ]);
     api.notes.listBrokenLinks = vi.fn(async () => ok({ items: [{ linkText: "Missing note" }] }));
     api.notes.linkSuggest = vi.fn(async (request) =>
       ok({

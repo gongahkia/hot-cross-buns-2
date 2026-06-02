@@ -1,5 +1,5 @@
-import type { CalendarEventSummary, TaskSummary } from "@shared/ipc/contracts";
-import type { CalendarEventViewModel } from "../coreViewModels";
+import type { CalendarEventSummary, NoteListSummary, TaskSummary } from "@shared/ipc/contracts";
+import type { CalendarEventViewModel, NoteViewModel, TaskViewModel } from "../coreViewModels";
 import {
   buildCalendarEventDayIndex,
   compareTimelineRows,
@@ -12,8 +12,7 @@ import {
   stableCalendarEventViewModel,
   weekDays
 } from "./calendarViewModels";
-import { dayKey, startOfUtcDay, syncLabel, timeLabel } from "./dateFormat";
-import { noteViewModel } from "./noteViewModels";
+import { dayKey, shortDateTime, startOfUtcDay, syncLabel, timeLabel } from "./dateFormat";
 import { idleSearchViewModel } from "./searchViewModels";
 import { settingsSections } from "./settingsViewModels";
 import { hasSnapshotData } from "./snapshot";
@@ -86,10 +85,13 @@ export function buildCoreViewModelSource(
   );
   const scheduledTaskIds = new Set(baseScheduledTaskBlocks.map((block) => block.taskId));
   const eventDayIndex = buildCalendarEventDayIndex(events);
-  const notes = snapshot.notes.map(noteViewModel);
   const rootTasks = tasks.filter((task) => task.parentId === null);
   const openTasks = rootTasks.filter((task) => task.status === "open");
-  const unscheduledOpenTasks = openTasks.filter((task) => !scheduledTaskIds.has(task.id));
+  const openDatedTasks = openTasks.filter((task) => task.dueDate !== null);
+  const openUndatedTasks = openTasks.filter((task) => task.dueDate === null);
+  const notes = openUndatedTasks.map((task) => taskBackedNoteViewModel(task));
+  const noteLists = taskBackedNoteLists(snapshot.taskLists, notes);
+  const unscheduledOpenTasks = openDatedTasks.filter((task) => !scheduledTaskIds.has(task.id));
   const completedTasks = rootTasks.filter((task) => task.status === "completed");
   const hiddenTasks = rootTasks.filter((task) => task.status === "hidden");
   const deletedTasks = rootTasks.filter((task) => task.status === "deleted");
@@ -124,7 +126,7 @@ export function buildCoreViewModelSource(
         left.id.localeCompare(right.id)
     );
   const taskFilterViewModels = taskFilters(
-    openTasks,
+    openDatedTasks,
     completedTasks,
     hiddenTasks,
     deletedTasks,
@@ -132,8 +134,8 @@ export function buildCoreViewModelSource(
   );
   const resourceCounts = {
     calendarEvents: snapshot.diagnosticsSummary?.cache.eventCount ?? snapshot.resourceCounts.calendarEvents,
-    notes: snapshot.diagnosticsSummary?.cache.noteCount ?? snapshot.resourceCounts.notes,
-    tasks: snapshot.diagnosticsSummary?.cache.taskCount ?? snapshot.resourceCounts.tasks
+    notes: notes.length,
+    tasks: openDatedTasks.length + completedTasks.length
   };
   const todayTimedRows = [
     ...todayEvents.map((event) => ({
@@ -172,7 +174,7 @@ export function buildCoreViewModelSource(
       taskFilterViewModels.find((filter) => filter.id === filterId) ?? taskFilterViewModels[0],
     hasCachedData: hasSnapshotData(snapshot),
     initialNotes: notes,
-    noteLists: snapshot.noteLists,
+    noteLists,
     isOffline: options.state === "offline" || snapshot.syncStatus.offline === true,
     isStale: options.state === "stale" || snapshot.syncStatus.stale === true,
     largeTaskWindow: tasks,
@@ -211,7 +213,7 @@ export function buildCoreViewModelSource(
     taskLists: snapshot.taskLists,
     todayViewModel: {
       metrics: [
-        { id: "open", label: "Open tasks", value: String(openTasks.length) },
+        { id: "open", label: "Open tasks", value: String(openDatedTasks.length) },
         { id: "scheduled", label: "Scheduled", value: String(scheduledTaskBlocks.length) },
         { id: "conflicts", label: "Conflicts", value: String(conflictCount) },
         { id: "events", label: "Events", value: String(events.length) },
@@ -242,4 +244,36 @@ function pruneViewModelCache<T extends { id: string }, V>(
       cache.delete(id);
     }
   }
+}
+
+function taskBackedNoteViewModel(task: TaskViewModel): NoteViewModel {
+  const body = task.detail.trim();
+
+  return {
+    id: task.id,
+    listId: task.listId,
+    listTitle: task.list,
+    title: task.title,
+    body,
+    preview: body.length > 0 ? body : "Empty task note",
+    updatedLabel: task.updatedAt ? shortDateTime(task.updatedAt) : "Unknown"
+  };
+}
+
+function taskBackedNoteLists(
+  taskLists: CoreDataSnapshot["taskLists"],
+  notes: NoteViewModel[]
+): NoteListSummary[] {
+  const noteCountsByList = new Map<string, number>();
+
+  for (const note of notes) {
+    noteCountsByList.set(note.listId, (noteCountsByList.get(note.listId) ?? 0) + 1);
+  }
+
+  return taskLists.map((list) => ({
+    id: list.id,
+    title: list.title,
+    updatedAt: list.updatedAt,
+    noteCount: noteCountsByList.get(list.id) ?? 0
+  }));
 }

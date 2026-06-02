@@ -3,8 +3,6 @@ import type {
   CalendarListResponse,
   CalendarRangeRequest,
   CalendarRangeResponse,
-  NoteListRequest,
-  NoteListResponse,
   ScheduledTaskBlockListRequest,
   ScheduledTaskBlockListResponse,
   SettingsSnapshot,
@@ -85,13 +83,12 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
     calendars,
     events,
     scheduledTaskBlocks,
-    notes,
     settings,
     syncStatus,
     googleStatus,
     native
   ] = await Promise.all([
-    loadAllPages(
+    loadAllPages<TaskListsRequest, TaskListsResponse>(
       { limit: 100 },
       (request) => hcb.tasks.listTaskLists(request).then((result) => unwrap(result, "Task lists failed"))
     ),
@@ -122,10 +119,6 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
           .listScheduledTaskBlocks(request)
           .then((result) => unwrap(result, "Scheduled task blocks failed"))
     ),
-    loadAllPages<NoteListRequest, NoteListResponse>(
-      { limit: 100 },
-      (request) => hcb.notes.list(request).then((result) => unwrap(result, "Notes failed"))
-    ),
     settingsLoad,
     hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
     hcb.google.status().then((result) => unwrap(result, "Google status failed")),
@@ -150,8 +143,8 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
     events: events.items,
     scheduledTaskBlocks: scheduledTaskBlocks.items,
     scheduleSuggestion,
-    notes: notes.items,
-    noteLists: notes.lists,
+    notes: [],
+    noteLists: [],
     settings,
     syncStatus,
     googleStatus,
@@ -160,7 +153,7 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
       calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)
         ? calendars.items.reduce((count, calendar) => count + (calendar.eventCount ?? 0), 0)
         : knownTotal(events.page.totalKnown, events.items.length),
-      notes: knownTotal(notes.page.totalKnown, notes.items.length),
+      notes: 0,
       tasks: taskLists.items.every((taskList) => taskList.taskCount !== undefined)
         ? taskLists.items.reduce((count, taskList) => count + (taskList.taskCount ?? 0), 0)
         : knownTotal(tasks.page.totalKnown, tasks.items.length) +

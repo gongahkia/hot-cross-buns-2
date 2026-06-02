@@ -3,6 +3,8 @@ import {
   CalendarClock,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   CornerDownRight,
   ListPlus,
   MoreVertical,
@@ -71,12 +73,22 @@ const taskDragType = "application/x-hcb-task-id";
 
 function activeRootTasks(source: CoreViewModelSource): TaskViewModel[] {
   return source.largeTaskWindow.filter(
-    (task) => task.parentId === null && task.status === "open"
+    (task) => task.parentId === null && task.status === "open" && task.dueDate !== null
   );
 }
 
 function visibleListTasks(source: CoreViewModelSource, listId: string): TaskViewModel[] {
   return activeRootTasks(source).filter((task) => task.listId === listId);
+}
+
+function completedRootTasks(source: CoreViewModelSource): TaskViewModel[] {
+  return source.largeTaskWindow.filter(
+    (task) => task.parentId === null && task.status === "completed"
+  );
+}
+
+function completedListTasks(source: CoreViewModelSource, listId: string): TaskViewModel[] {
+  return completedRootTasks(source).filter((task) => task.listId === listId);
 }
 
 function sortTasks(
@@ -153,7 +165,8 @@ export function GoogleTasksBoard({
             activeRootTasks(source).filter((task) => starred.ids.has(task.id)),
             "starred",
             starred
-          )
+          ),
+          completedTasks: []
         }
       ];
     }
@@ -168,7 +181,8 @@ export function GoogleTasksBoard({
         visibleListTasks(source, list.id),
         listSorts[list.id] ?? "myOrder",
         starred
-      )
+      ),
+      completedTasks: sortTasks(completedListTasks(source, list.id), "date", starred)
     }));
   }, [listSorts, selectedView.mode, source, starred, visibleListIdSet]);
 
@@ -218,6 +232,7 @@ export function GoogleTasksBoard({
                 selectedTaskId={selectedTaskId}
                 source={source}
                 starred={starred}
+                completedTasks={column.completedTasks}
                 tasks={column.tasks}
                 title={column.title}
               />
@@ -339,7 +354,7 @@ function TaskBoardSidebar({
           {source.taskLists.map((list) => (
             <TaskListCheckbox
               checked={visibleListIdSet.has(list.id)}
-              count={list.taskCount ?? visibleListTasks(source, list.id).length}
+              count={visibleListTasks(source, list.id).length}
               key={list.id}
               label={list.title}
               onClick={() => toggleList(list.id)}
@@ -445,6 +460,7 @@ function TaskListColumn({
   selectedTaskId,
   source,
   starred,
+  completedTasks,
   tasks,
   title
 }: {
@@ -465,11 +481,14 @@ function TaskListColumn({
   selectedTaskId: string | null;
   source: CoreViewModelSource;
   starred: StarredState;
+  completedTasks: TaskViewModel[];
   tasks: TaskViewModel[];
   title: string;
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+  const [completedOpen, setCompletedOpen] = useState(false);
+  const hasRows = tasks.length > 0 || completedTasks.length > 0;
 
   function handleDragOver(event: DragEvent<HTMLElement>): void {
     if (!list || !event.dataTransfer.types.includes(taskDragType)) {
@@ -562,14 +581,51 @@ function TaskListColumn({
               task={task}
             />
           ))
-        ) : (
+        ) : null}
+        {completedTasks.length > 0 ? (
+          <div className="border-t border-border/70 pt-2">
+            <button
+              aria-expanded={completedOpen}
+              className="mb-1 flex h-9 w-full items-center gap-2 px-4 text-left text-[var(--text-base)] font-medium text-text-secondary hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={() => setCompletedOpen((open) => !open)}
+              type="button"
+            >
+              {completedOpen ? (
+                <ChevronDown aria-hidden="true" size={17} />
+              ) : (
+                <ChevronRight aria-hidden="true" size={17} />
+              )}
+              Completed ({completedTasks.length})
+            </button>
+            {completedOpen
+              ? completedTasks.map((task) => (
+                  <GoogleTaskRow
+                    key={task.id}
+                    onCreateList={onCreateList}
+                    onDeleteTask={onDeleteTask}
+                    onMoveTask={onMoveTask}
+                    onOpenTask={onOpenTask}
+                    onToggleStar={onToggleStar}
+                    onToggleTask={onToggleTask}
+                    onAddSubtask={onAddSubtask}
+                    scheduledBlock={scheduledBlocksByTask.get(task.id)}
+                    selected={selectedTaskId === task.id}
+                    source={source}
+                    starred={starred.ids.has(task.id)}
+                    task={task}
+                  />
+                ))
+              : null}
+          </div>
+        ) : null}
+        {!hasRows ? (
           <div className="grid min-h-[320px] place-items-center px-6">
             <EmptyState
               description={list ? "Add a task to keep this list moving." : "Star tasks from any list to collect them here."}
               title={list ? "No tasks yet" : "No starred tasks"}
             />
           </div>
-        )}
+        ) : null}
       </div>
     </section>
   );
@@ -647,6 +703,7 @@ function GoogleTaskRow({
   const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null);
   const scheduleLabel = taskScheduleLabel(task, scheduledBlock);
   const preview = taskPreview(task);
+  const completed = task.status === "completed";
 
   return (
     <div
@@ -666,14 +723,22 @@ function GoogleTaskRow({
       }}
       role="listitem"
     >
-      <TaskCompletionButton completed={false} onToggle={onToggleTask} task={task} />
+      <TaskCompletionButton completed={completed} onToggle={onToggleTask} task={task} />
       <button
         className="min-w-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         onClick={() => onOpenTask(task.id)}
         type="button"
       >
-        <div className="line-clamp-2 text-[var(--text-md)] font-medium text-text-primary">{task.title}</div>
-        {preview ? <p className="mt-0.5 line-clamp-2 text-[var(--text-sm)] text-text-secondary">{preview}</p> : null}
+        <div className={cx(
+          "line-clamp-2 text-[var(--text-md)] font-medium",
+          completed ? "text-text-muted line-through" : "text-text-primary"
+        )}>{task.title}</div>
+        {preview ? (
+          <p className={cx(
+            "mt-0.5 line-clamp-2 text-[var(--text-sm)]",
+            completed ? "text-text-muted line-through" : "text-text-secondary"
+          )}>{preview}</p>
+        ) : null}
         {scheduleLabel || task.dueDate ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {task.dueDate ? (
