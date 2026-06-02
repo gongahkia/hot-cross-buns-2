@@ -6,7 +6,8 @@ DEV_PORT ?= 5173
 .PHONY: run stop status
 
 run: stop
-	@pnpm run dev
+	@echo "starting dev; use Ctrl-C to stop"
+	@trap '' QUIT; pnpm run dev
 
 stop:
 	@root="$(ROOT)"; \
