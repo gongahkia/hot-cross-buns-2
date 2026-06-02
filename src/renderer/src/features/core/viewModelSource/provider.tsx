@@ -131,12 +131,9 @@ function usePreloadCoreSource(): CoreViewModelSource {
 
     void loadCoreData(settingsPromise).then(
       (snapshot) => {
-        setLoadState((current) => ({
+        setLoadState(() => ({
           appearanceReady: true,
-          snapshot: {
-            ...snapshot,
-            googleStatus: current.snapshot.googleStatus
-          },
+          snapshot,
           state: hasSnapshotData(snapshot) ? "ready" : "empty"
         }));
       },

@@ -375,24 +375,11 @@ export function FirstRunOnboarding({ source }: { source: CoreViewModelSource }):
         </div>
 
         <footer className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2 sm:px-5">
+          <p className="text-[var(--text-sm)] text-text-muted">
+            Google connection is required before setup can finish.
+          </p>
           <Button
-            disabled={submitting || source.settingsMutationPending}
-            onClick={() =>
-              void completeSetup({
-                selectedTaskListIds: [],
-                selectedCalendarIds: [],
-                syncMode: "manual",
-                notificationsEnabled: false,
-                mcpEnabled: false,
-                mcpPermissionMode: "read-only"
-              })
-            }
-            variant="ghost"
-          >
-            Continue without sync
-          </Button>
-          <Button
-            disabled={submitting || source.settingsMutationPending}
+            disabled={submitting || source.settingsMutationPending || !googleConnected}
             onClick={() => void completeSetup()}
             variant="primary"
           >

@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import { ok } from "@shared/ipc/result";
 import App from "./App";
 import {
+  connectedGoogleStatus,
   goToSection,
   installHcb,
   now,
   onboardingHcb,
   seededHcb,
+  signedOutGoogleStatus,
   testSettings
 } from "./test/appTestHelpers";
 
@@ -196,6 +198,7 @@ describe("App settings and onboarding", () => {
 
   it("shows onboarding for a fresh database and completes setup through settings IPC", async () => {
     const { api, getSettings } = onboardingHcb();
+    api.google.status = vi.fn(async () => ok(connectedGoogleStatus()));
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);
@@ -203,7 +206,7 @@ describe("App settings and onboarding", () => {
     const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
 
     expect(within(dialog).getByText("1. Google account")).toBeInTheDocument();
-    expect(within(dialog).getByRole("textbox", { name: "Google OAuth client ID" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Connected as Planner Test.")).toBeInTheDocument();
     expect(within(dialog).getByText("2. Task lists")).toBeInTheDocument();
     expect(within(dialog).getByText("3. Calendars")).toBeInTheDocument();
     expect(within(dialog).getByText("4. Sync mode")).toBeInTheDocument();
@@ -256,42 +259,25 @@ describe("App settings and onboarding", () => {
       });
       expect(api.google.beginOAuth).toHaveBeenCalled();
       expect(within(dialog).getByText("Google authorization opened in the browser.")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Finish setup" })).toBeDisabled();
     });
   });
 
-  it("lets users skip Google setup and keep planner data and settings usable", async () => {
-    const { api } = onboardingHcb();
+  it("requires Google when setup was completed but the account is signed out", async () => {
+    const { api } = onboardingHcb({ setupCompletedAt: now });
+    api.google.status = vi.fn(async () => ok(signedOutGoogleStatus()));
     installHcb(api);
-    const user = userEvent.setup();
     render(<App />);
 
     const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
-    await user.click(within(dialog).getByRole("button", { name: "Continue without sync" }));
-
-    await waitFor(() => {
-      expect(api.settings.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          selectedTaskListIds: [],
-          selectedCalendarIds: [],
-          syncMode: "manual",
-          notificationsEnabled: false,
-          mcpEnabled: false,
-          mcpPermissionMode: "read-only",
-          setupCompletedAt: expect.any(String)
-        })
-      );
-      expect(screen.queryByRole("dialog", { name: "First-run setup" })).not.toBeInTheDocument();
-    });
-
-    await goToSection("Notes");
-    expect(await screen.findByText("Startup data flow")).toBeInTheDocument();
-
-    await goToSection("Settings");
-    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Continue without sync" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Finish setup" })).toBeDisabled();
+    expect(api.settings.update).not.toHaveBeenCalled();
   });
 
   it("resets onboarding from Settings without deleting planner data", async () => {
     const { api } = onboardingHcb({ setupCompletedAt: now });
+    api.google.status = vi.fn(async () => ok(connectedGoogleStatus()));
     installHcb(api);
     const user = userEvent.setup();
     render(<App />);

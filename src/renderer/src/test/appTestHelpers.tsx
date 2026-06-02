@@ -2,6 +2,7 @@ import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, vi } from "vitest";
 import type {
+  GoogleStatusResponse,
   NativeCapabilitiesResponse,
   SearchResultItem,
   SettingsSnapshot,
@@ -251,6 +252,38 @@ export function testNativeCapabilities(
     deferredStartup: {
       state: "complete"
     },
+    ...overrides
+  };
+}
+
+export function connectedGoogleStatus(overrides: Partial<GoogleStatusResponse> = {}): GoogleStatusResponse {
+  return {
+    oauthClientConfigured: true,
+    clientId: "desktop-client-id.apps.googleusercontent.com",
+    hasClientSecret: false,
+    account: {
+      accountId: "google:test-account",
+      googleAccountId: "test-account",
+      email: "planner@example.com",
+      displayName: "Planner Test",
+      connectionState: "connected",
+      grantedScopes: [
+        "https://www.googleapis.com/auth/tasks",
+        "https://www.googleapis.com/auth/calendar"
+      ],
+      missingScopes: [],
+      lastAuthenticatedAt: now,
+      updatedAt: now
+    },
+    ...overrides
+  };
+}
+
+export function signedOutGoogleStatus(overrides: Partial<GoogleStatusResponse> = {}): GoogleStatusResponse {
+  return {
+    oauthClientConfigured: false,
+    clientId: null,
+    hasClientSecret: false,
     ...overrides
   };
 }
@@ -696,6 +729,10 @@ export function seededHcb(): HcbApi {
           stale: false
         })
       )
+    },
+    google: {
+      ...api.google,
+      status: vi.fn(async () => ok(connectedGoogleStatus()))
     }
   };
 }
@@ -712,6 +749,7 @@ export function onboardingHcb(
   });
 
   api.settings.get = vi.fn(async () => ok(settings));
+  api.google.status = vi.fn(async () => ok(signedOutGoogleStatus()));
   api.settings.update = vi.fn(async (request) => {
     settings = testSettings({
       ...settings,

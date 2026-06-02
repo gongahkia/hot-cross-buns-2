@@ -1,6 +1,5 @@
 import type { SettingsSnapshot } from "@shared/ipc/contracts";
 import { dateOnlyFromLocalDate, visibleCalendarRange } from "./dateFormat";
-import { emptyGoogleStatus } from "./defaults";
 import { unwrap } from "./result";
 import { uniqueTasks } from "./taskViewModels";
 import type { CoreDataSnapshot } from "./types";
@@ -28,6 +27,7 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
     notes,
     settings,
     syncStatus,
+    googleStatus,
     native
   ] = await Promise.all([
     window.hcb.tasks.listTaskLists({ limit: 100 }).then((result) => unwrap(result, "Task lists failed")),
@@ -50,6 +50,7 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
     window.hcb.notes.list({ limit: 50 }).then((result) => unwrap(result, "Notes failed")),
     settingsLoad,
     window.hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
+    window.hcb.google.status().then((result) => unwrap(result, "Google status failed")),
     window.hcb.native.capabilities().then((result) => unwrap(result, "Native status failed"))
   ]);
   const scheduleDate = dateOnlyFromLocalDate(new Date());
@@ -75,7 +76,7 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
     noteLists: notes.lists,
     settings,
     syncStatus,
-    googleStatus: emptyGoogleStatus,
+    googleStatus,
     native,
     resourceCounts: {
       calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)

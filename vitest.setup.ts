@@ -409,9 +409,23 @@ const hcbApi: HcbApi = {
   google: {
     status: vi.fn(async () =>
       ok({
-        oauthClientConfigured: false,
-        clientId: null,
-        hasClientSecret: false
+        oauthClientConfigured: true,
+        clientId: "desktop-client-id.apps.googleusercontent.com",
+        hasClientSecret: false,
+        account: {
+          accountId: "google:test-account",
+          googleAccountId: "test-account",
+          email: "planner@example.com",
+          displayName: "Planner Test",
+          connectionState: "connected" as const,
+          grantedScopes: [
+            "https://www.googleapis.com/auth/tasks",
+            "https://www.googleapis.com/auth/calendar"
+          ],
+          missingScopes: [],
+          lastAuthenticatedAt: now,
+          updatedAt: now
+        }
       })
     ),
     saveOAuthClient: vi.fn(async (request) =>

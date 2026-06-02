@@ -117,8 +117,9 @@ export function AppShell(): JSX.Element {
     [availableCalendarIds, visibleCalendarIds]
   );
   const sidebarOnRight = source.settings.navigationPlacement === "right";
+  const googleConnected = source.googleStatus.account?.connectionState === "connected";
   const onboardingVisible =
-    source.settings.setupCompletedAt === null &&
+    (source.settings.setupCompletedAt === null || !googleConnected) &&
     source.dataState !== "loading" &&
     source.dataState !== "offline" &&
     source.dataState !== "error";
