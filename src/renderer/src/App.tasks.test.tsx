@@ -50,6 +50,70 @@ describe("App tasks", () => {
     expect(api.tasks.complete).toHaveBeenCalledWith({ id: "task-inbox-rules" });
   });
 
+  it("loads subsequent task pages during startup", async () => {
+    const api = seededHcb();
+    api.tasks.listTaskLists = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "list-inbox",
+            title: "Inbox",
+            updatedAt: now,
+            taskCount: 2,
+            activeTaskCount: 2
+          }
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      })
+    );
+    api.tasks.list = vi.fn(async (request = {}) => {
+      if (request.status === "hidden" || request.status === "deleted") {
+        return ok({ items: [], page: { limit: 100, totalKnown: 0 } });
+      }
+
+      if (request.cursor === "page-2") {
+        return ok({
+          items: [
+            {
+              id: "task-page-2",
+              listId: "list-inbox",
+              title: "Second page task",
+              status: "active" as const,
+              priority: "none" as const,
+              dueAt: null,
+              updatedAt: now
+            }
+          ],
+          page: { limit: 100, totalKnown: 2 }
+        });
+      }
+
+      return ok({
+        items: [
+          {
+            id: "task-page-1",
+            listId: "list-inbox",
+            title: "First page task",
+            status: "active" as const,
+            priority: "none" as const,
+            dueAt: null,
+            updatedAt: now
+          }
+        ],
+        page: { limit: 100, nextCursor: "page-2", totalKnown: 2 }
+      });
+    });
+    installHcb(api);
+    render(<App />);
+
+    await goToSection("Tasks");
+
+    expect(await screen.findByText("First page task")).toBeInTheDocument();
+    expect(screen.getByText("Second page task")).toBeInTheDocument();
+    expect(api.tasks.list).toHaveBeenCalledWith({ status: "all", limit: 100 });
+    expect(api.tasks.list).toHaveBeenCalledWith({ status: "all", limit: 100, cursor: "page-2" });
+  });
+
   it("opens task and list action menus for move, delete, sorting, rename, and list creation", async () => {
     const api = seededHcb();
     installHcb(api);

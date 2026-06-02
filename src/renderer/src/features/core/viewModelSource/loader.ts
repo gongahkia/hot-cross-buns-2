@@ -4,8 +4,54 @@ import { unwrap } from "./result";
 import { uniqueTasks } from "./taskViewModels";
 import type { CoreDataSnapshot } from "./types";
 
+type CursorRequest = { cursor?: string };
+type PagedResponse<Item> = {
+  items: Item[];
+  page: {
+    limit: number;
+    nextCursor?: string;
+    totalKnown?: number;
+  };
+};
+
 function knownTotal(pageTotal: number | undefined, itemCount: number): number {
   return pageTotal ?? itemCount;
+}
+
+async function loadAllPages<Request extends CursorRequest, Item, Response extends PagedResponse<Item>>(
+  loadPage: (request: Request) => Promise<Response>,
+  request: Request
+): Promise<Response> {
+  const items: Item[] = [];
+  let firstPage: Response | null = null;
+  let lastPage: Response | null = null;
+  let cursor = request.cursor;
+
+  do {
+    const page = await loadPage({
+      ...request,
+      ...(cursor === undefined ? {} : { cursor })
+    });
+    firstPage ??= page;
+    lastPage = page;
+    items.push(...page.items);
+    cursor = page.page.nextCursor;
+  } while (cursor !== undefined);
+
+  if (firstPage === null || lastPage === null) {
+    throw new Error("Paged request returned no data.");
+  }
+
+  const { nextCursor: _nextCursor, ...pageMetadata } = lastPage.page;
+
+  return {
+    ...lastPage,
+    items,
+    page: {
+      ...pageMetadata,
+      totalKnown: lastPage.page.totalKnown ?? firstPage.page.totalKnown ?? items.length
+    }
+  };
 }
 
 export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>): Promise<CoreDataSnapshot> {
@@ -30,24 +76,41 @@ export async function loadCoreData(settingsPromise?: Promise<SettingsSnapshot>):
     googleStatus,
     native
   ] = await Promise.all([
-    window.hcb.tasks.listTaskLists({ limit: 100 }).then((result) => unwrap(result, "Task lists failed")),
-    window.hcb.tasks.list({ status: "all", limit: 100 }).then((result) => unwrap(result, "Tasks failed")),
-    window.hcb.tasks
-      .list({ status: "hidden", limit: 100 })
-      .then((result) => unwrap(result, "Hidden tasks failed")),
-    window.hcb.tasks
-      .list({ status: "deleted", limit: 100 })
-      .then((result) => unwrap(result, "Deleted tasks failed")),
-    window.hcb.calendar
-      .listCalendars({ limit: 100 })
-      .then((result) => unwrap(result, "Calendars failed")),
-    window.hcb.calendar
-      .listEvents({ start: range.start, end: range.end, limit: 250 })
-      .then((result) => unwrap(result, "Calendar events failed")),
-    window.hcb.calendar
-      .listScheduledTaskBlocks({ start: range.start, end: range.end, limit: 250 })
-      .then((result) => unwrap(result, "Scheduled task blocks failed")),
-    window.hcb.notes.list({ limit: 50 }).then((result) => unwrap(result, "Notes failed")),
+    loadAllPages(
+      (request) => window.hcb.tasks.listTaskLists(request).then((result) => unwrap(result, "Task lists failed")),
+      { limit: 100 }
+    ),
+    loadAllPages(
+      (request) => window.hcb.tasks.list(request).then((result) => unwrap(result, "Tasks failed")),
+      { status: "all", limit: 100 }
+    ),
+    loadAllPages(
+      (request) => window.hcb.tasks.list(request).then((result) => unwrap(result, "Hidden tasks failed")),
+      { status: "hidden", limit: 100 }
+    ),
+    loadAllPages(
+      (request) => window.hcb.tasks.list(request).then((result) => unwrap(result, "Deleted tasks failed")),
+      { status: "deleted", limit: 100 }
+    ),
+    loadAllPages(
+      (request) => window.hcb.calendar.listCalendars(request).then((result) => unwrap(result, "Calendars failed")),
+      { limit: 100 }
+    ),
+    loadAllPages(
+      (request) => window.hcb.calendar.listEvents(request).then((result) => unwrap(result, "Calendar events failed")),
+      { start: range.start, end: range.end, limit: 500 }
+    ),
+    loadAllPages(
+      (request) =>
+        window.hcb.calendar
+          .listScheduledTaskBlocks(request)
+          .then((result) => unwrap(result, "Scheduled task blocks failed")),
+      { start: range.start, end: range.end, limit: 500 }
+    ),
+    loadAllPages(
+      (request) => window.hcb.notes.list(request).then((result) => unwrap(result, "Notes failed")),
+      { limit: 100 }
+    ),
     settingsLoad,
     window.hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
     window.hcb.google.status().then((result) => unwrap(result, "Google status failed")),
