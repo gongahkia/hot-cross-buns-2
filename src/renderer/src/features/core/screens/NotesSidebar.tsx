@@ -50,7 +50,7 @@ export function NotesSidebar({
           variant="primary"
         >
           <Plus aria-hidden="true" size={18} />
-          Create
+          Create notes
         </Button>
         <IconButton
           className="size-10 rounded-hcbMd"

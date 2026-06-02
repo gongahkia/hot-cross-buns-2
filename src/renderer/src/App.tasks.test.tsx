@@ -116,7 +116,7 @@ describe("App tasks", () => {
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create tasks" }));
     await user.type(screen.getByRole("textbox", { name: "Task title" }), "Send status recap");
     fireEvent.change(screen.getByLabelText("Task due date"), { target: { value: "2026-05-23" } });
     await user.selectOptions(screen.getByLabelText("Task priority"), "medium");
@@ -251,7 +251,7 @@ describe("App tasks", () => {
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create tasks" }));
     await user.type(screen.getByRole("textbox", { name: "Task title" }), "Retry optimistic write");
     await user.click(screen.getByRole("button", { name: "Save" }));
 

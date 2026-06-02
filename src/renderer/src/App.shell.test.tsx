@@ -524,7 +524,7 @@ describe("App shell", () => {
 
     await goToSection("Tasks");
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create tasks" })).toBeInTheDocument();
 
     await user.keyboard("{Meta>}p{/Meta}");
     const dialog = await screen.findByRole("dialog", { name: "Command palette" });
