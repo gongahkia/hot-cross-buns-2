@@ -153,7 +153,7 @@ describe("Google read sync service", () => {
           accountId: "google:account-1",
           resourceType: "task_list",
           resourceId: "list-1",
-          checkpointType: "watermark:v2-show-assigned"
+          checkpointType: "watermark:v3-split-completed"
         })
       ).toBe("2026-05-22T02:00:00.000Z");
       expect(
@@ -179,6 +179,105 @@ describe("Google read sync service", () => {
       expect(JSON.stringify(result)).not.toContain("token");
       expect(JSON.stringify(result)).not.toContain("Local cache only");
       expect(JSON.stringify(result)).not.toContain("Agenda");
+    });
+  });
+
+  it("full-syncs open no-date tasks separately from retained completed tasks", async () => {
+    await withRepository(async (repository, connection) => {
+      const tasks: GoogleTasksReadTransport = {
+        listTaskLists: vi.fn(async () => [
+          {
+            id: "list-1",
+            title: "Inbox",
+            updatedAt: "2026-05-21T01:00:00.000Z"
+          }
+        ]),
+        listTasks: vi.fn(async (request) => ({
+          serverDate: "Fri, 22 May 2026 02:00:00 GMT",
+          tasks:
+            request.showCompleted === false
+              ? [
+                  {
+                    id: "task-open-note",
+                    taskListId: "list-1",
+                    title: "Undated Google task",
+                    status: "needsAction" as const,
+                    dueAt: null,
+                    completedAt: null,
+                    deleted: false,
+                    hidden: false,
+                    position: "0001",
+                    updatedAt: "2026-05-21T02:00:00.000Z"
+                  }
+                ]
+              : [
+                  {
+                    id: "task-completed",
+                    taskListId: "list-1",
+                    title: "Finished Google task",
+                    status: "completed" as const,
+                    dueAt: null,
+                    completedAt: "2026-05-21T03:00:00.000Z",
+                    deleted: false,
+                    hidden: true,
+                    position: "0002",
+                    updatedAt: "2026-05-21T03:00:00.000Z"
+                  }
+                ]
+        }))
+      };
+      const service = new GoogleReadSyncService({
+        repository,
+        tasks,
+        calendar: defaultCalendarTransport(),
+        now: clock()
+      });
+
+      const result = await service.runReadSync({
+        account: connectedAccount(),
+        resources: ["tasks"],
+        completedTaskRetentionDaysBack: 365,
+        full: true
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.diagnostics.taskCount).toBe(2);
+      expect(tasks.listTasks).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          taskListId: "list-1",
+          updatedMin: null,
+          showCompleted: false
+        })
+      );
+      expect(tasks.listTasks).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          taskListId: "list-1",
+          updatedMin: null,
+          completedMin: "2025-05-22T10:00:00.250Z",
+          showCompleted: true
+        })
+      );
+      expect(
+        connection.get<{ title: string; dueAt: string | null; status: string }>(
+          "SELECT title, due_at AS dueAt, status FROM google_tasks WHERE google_id = ?;",
+          ["task-open-note"]
+        )
+      ).toEqual({
+        title: "Undated Google task",
+        dueAt: null,
+        status: "needsAction"
+      });
+      expect(
+        connection.get<{ title: string; status: string }>(
+          "SELECT title, status FROM google_tasks WHERE google_id = ?;",
+          ["task-completed"]
+        )
+      ).toEqual({
+        title: "Finished Google task",
+        status: "completed"
+      });
     });
   });
 

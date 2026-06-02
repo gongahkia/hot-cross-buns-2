@@ -36,6 +36,7 @@ export interface GoogleTasksReadTransport {
     taskListId: string;
     updatedMin?: string | null;
     completedMin?: string | null;
+    showCompleted?: boolean;
   }): Promise<GoogleTasksPage>;
 }
 
@@ -161,6 +162,7 @@ export class GoogleTasksHttpAdapter implements GoogleTasksTransport {
     taskListId: string;
     updatedMin?: string | null;
     completedMin?: string | null;
+    showCompleted?: boolean;
   }): Promise<GoogleTasksPage> {
     let pageToken: string | undefined;
     let firstPageServerDate: string | null = null;
@@ -168,20 +170,22 @@ export class GoogleTasksHttpAdapter implements GoogleTasksTransport {
     const tasks: GoogleTaskMirror[] = [];
 
     do {
+      const completedMin =
+        request.showCompleted !== false &&
+        (request.updatedMin === undefined || request.updatedMin === null)
+          ? request.completedMin ?? undefined
+          : undefined;
       const response = await this.transport.getJsonWithMetadata<GoogleTasksResponse>({
         path: `/tasks/v1/lists/${encodeGooglePathComponent(request.taskListId)}/tasks`,
         query: {
           showAssigned: "true",
-          showCompleted: "true",
+          showCompleted: request.showCompleted === false ? "false" : "true",
           showDeleted: "true",
           showHidden: "true",
           maxResults: "100",
           fields: TASKS_FIELDS,
           updatedMin: request.updatedMin ?? undefined,
-          completedMin:
-            request.updatedMin === undefined || request.updatedMin === null
-              ? request.completedMin ?? undefined
-              : undefined,
+          ...(completedMin === undefined ? {} : { completedMin }),
           pageToken
         }
       });

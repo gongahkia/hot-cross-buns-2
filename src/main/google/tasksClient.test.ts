@@ -108,6 +108,27 @@ describe("Google Tasks write mapping", () => {
     );
   });
 
+  it("can read open tasks without applying the completed date filter", async () => {
+    const transport = taskTransport();
+    const adapter = new GoogleTasksHttpAdapter(transport);
+
+    await adapter.listTasks({
+      taskListId: "list/1",
+      completedMin: "2026-01-01T00:00:00.000Z",
+      showCompleted: false
+    });
+
+    expect(transport.getJsonWithMetadataCalls).toContainEqual(
+      expect.objectContaining({
+        path: "/tasks/v1/lists/list%2F1/tasks",
+        query: expect.objectContaining({
+          showCompleted: "false"
+        })
+      })
+    );
+    expect(transport.getJsonWithMetadataCalls[0]?.query).not.toHaveProperty("completedMin");
+  });
+
   it("uses date-only due fields and move query parameters for task writes", async () => {
     const transport = taskTransport();
     const adapter = new GoogleTasksHttpAdapter(transport);

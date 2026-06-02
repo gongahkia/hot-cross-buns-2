@@ -2,6 +2,8 @@ import type {
   GoogleAccountConnectionStatusDto,
   GoogleCalendarListMirror,
   GoogleCalendarReadTransport,
+  GoogleTaskMirror,
+  GoogleTasksPage,
   GoogleTasksReadTransport
 } from "../google";
 import { GoogleApiError } from "../google";
@@ -36,7 +38,7 @@ interface MutableRunCounters {
 
 const DEFAULT_RESOURCES: readonly ReadSyncResource[] = ["tasks", "calendar"];
 const TASKS_WATERMARK_SLACK_MS = 5 * 60 * 1000;
-const TASKS_WATERMARK_CHECKPOINT_TYPE = "watermark:v2-show-assigned";
+const TASKS_WATERMARK_CHECKPOINT_TYPE = "watermark:v3-split-completed";
 
 export class GoogleReadSyncService {
   private readonly repository: GoogleSyncRepository;
@@ -236,11 +238,18 @@ export class GoogleReadSyncService {
             checkpointType: TASKS_WATERMARK_CHECKPOINT_TYPE
           });
       const didFullSync = checkpoint === null;
-      const page = await this.tasks.listTasks({
+      const openPage = await this.tasks.listTasks({
         taskListId: taskList.id,
         updatedMin: checkpoint,
-        completedMin: didFullSync ? completedMin : null
+        showCompleted: false
       });
+      const completedPage = await this.tasks.listTasks({
+        taskListId: taskList.id,
+        updatedMin: checkpoint,
+        completedMin: didFullSync ? completedMin : null,
+        showCompleted: true
+      });
+      const page = mergeTaskPages(openPage, completedPage);
       const writeNow = this.now().toISOString();
       const nextWatermark =
         page.serverDate !== undefined && page.serverDate !== null
@@ -517,6 +526,21 @@ function normalizeServerDate(value: string): string | null {
   const parsed = Date.parse(value);
 
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function mergeTaskPages(...pages: readonly GoogleTasksPage[]): GoogleTasksPage {
+  const tasksById = new Map<string, GoogleTaskMirror>();
+
+  for (const page of pages) {
+    for (const task of page.tasks) {
+      tasksById.set(task.id, task);
+    }
+  }
+
+  return {
+    tasks: Array.from(tasksById.values()),
+    serverDate: pages.find((page) => page.serverDate)?.serverDate ?? null
+  };
 }
 
 function durationMs(startedAt: Date, completedAt: Date): number {
