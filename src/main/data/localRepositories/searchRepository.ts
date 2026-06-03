@@ -11,6 +11,7 @@ import {
   resolveLocalSearchDomains,
   type ParsedLocalSearchQuery
 } from "@shared/search/localSearch";
+import { googleTaskIdFromCalendarDescription } from "./googleTaskProjection";
 import { preview } from "./mappers";
 import { NoteLocalRepository } from "./noteRepository";
 import {
@@ -127,6 +128,8 @@ export class SearchLocalRepository extends NoteLocalRepository {
         domain: SearchDomain;
         title: string;
         snippet: string | null;
+        accountId: string | null;
+        description: string | null;
         updatedAt: string;
       }>(
         `WITH task_matches AS (
@@ -172,6 +175,8 @@ export class SearchLocalRepository extends NoteLocalRepository {
            'tasks' AS domain,
            tasks.title AS title,
            COALESCE(tasks.notes, lists.title) AS snippet,
+           NULL AS accountId,
+           NULL AS description,
            tasks.updated_at AS updatedAt
          FROM task_ranked
          INNER JOIN google_tasks tasks ON tasks.rowid = task_ranked.taskRowid
@@ -187,6 +192,8 @@ export class SearchLocalRepository extends NoteLocalRepository {
            'calendar' AS domain,
            events.summary AS title,
            COALESCE(events.description, events.location, calendars.summary) AS snippet,
+           events.account_id AS accountId,
+           events.description AS description,
            events.updated_at AS updatedAt
          FROM event_ranked
          INNER JOIN google_calendar_events events ON events.rowid = event_ranked.eventRowid
@@ -202,6 +209,8 @@ export class SearchLocalRepository extends NoteLocalRepository {
            'notes' AS domain,
            notes.title AS title,
            notes.body AS snippet,
+           NULL AS accountId,
+           NULL AS description,
            notes.updated_at AS updatedAt
          FROM local_notes_fts
          INNER JOIN local_notes notes ON notes.rowid = local_notes_fts.rowid
@@ -212,11 +221,49 @@ export class SearchLocalRepository extends NoteLocalRepository {
          LIMIT ?;`,
         [ftsQuery, ftsQuery, ftsQuery, ftsQuery, ftsQuery, limit]
       )
+      .filter((row) => row.domain !== "calendar" || !this.isLinkedTaskProjection(row))
       .map((row) => ({
         id: row.id,
         domain: row.domain,
         title: row.title,
         snippet: row.domain === "notes" ? preview(row.snippet ?? "") : row.snippet ?? undefined,
+        updatedAt: row.updatedAt
+      }));
+  }
+
+  private isLinkedTaskProjection(row: { accountId: string | null; description: string | null }): boolean {
+    const googleId = googleTaskIdFromCalendarDescription(row.description);
+
+    if (!googleId || !row.accountId) {
+      return false;
+    }
+
+    return this.connection.get<{ id: string }>(
+      `SELECT id
+       FROM google_tasks
+       WHERE account_id = ?
+         AND google_id = ?
+         AND deleted_at IS NULL
+       LIMIT 1;`,
+      [row.accountId, googleId]
+    ) !== undefined;
+  }
+
+  private calendarSearchItems(rows: Array<{
+    id: string;
+    title: string;
+    snippet: string | null;
+    accountId: string;
+    description: string | null;
+    updatedAt: string;
+  }>): SearchResultItem[] {
+    return rows
+      .filter((row) => !this.isLinkedTaskProjection(row))
+      .map((row) => ({
+        id: row.id,
+        domain: "calendar" as const,
+        title: row.title,
+        snippet: row.snippet ?? undefined,
         updatedAt: row.updatedAt
       }));
   }
@@ -319,17 +366,21 @@ export class SearchLocalRepository extends NoteLocalRepository {
     const where = predicates.join(" AND ");
 
     if (!ftsQuery) {
-      return this.connection
+      const rows = this.connection
         .query<{
           id: string;
           title: string;
           snippet: string | null;
+          accountId: string;
+          description: string | null;
           updatedAt: string;
         }>(
           `SELECT
              events.id AS id,
              events.summary AS title,
              COALESCE(events.description, events.location, calendars.summary) AS snippet,
+             events.account_id AS accountId,
+             events.description AS description,
              events.updated_at AS updatedAt
            FROM google_calendar_events events
            INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
@@ -337,21 +388,18 @@ export class SearchLocalRepository extends NoteLocalRepository {
            ORDER BY events.start_at ASC, events.updated_at DESC, events.id ASC
            LIMIT ?;`,
           [...params, limit]
-        )
-        .map((row) => ({
-          id: row.id,
-          domain: "calendar" as const,
-          title: row.title,
-          snippet: row.snippet ?? undefined,
-          updatedAt: row.updatedAt
-        }));
+        );
+
+      return this.calendarSearchItems(rows);
     }
 
-    return this.connection
+    const rows = this.connection
       .query<{
         id: string;
         title: string;
         snippet: string | null;
+        accountId: string;
+        description: string | null;
         updatedAt: string;
       }>(
         `WITH matches AS (
@@ -377,6 +425,8 @@ export class SearchLocalRepository extends NoteLocalRepository {
            events.id AS id,
            events.summary AS title,
            COALESCE(events.description, events.location, calendars.summary) AS snippet,
+           events.account_id AS accountId,
+           events.description AS description,
            events.updated_at AS updatedAt
          FROM ranked
          INNER JOIN google_calendar_events events ON events.rowid = ranked.eventRowid
@@ -385,14 +435,9 @@ export class SearchLocalRepository extends NoteLocalRepository {
          ORDER BY ranked.rank ASC, events.updated_at DESC, events.id ASC
          LIMIT ?;`,
         [ftsQuery, ftsQuery, ...params, limit]
-      )
-      .map((row) => ({
-        id: row.id,
-        domain: "calendar" as const,
-        title: row.title,
-        snippet: row.snippet ?? undefined,
-        updatedAt: row.updatedAt
-      }));
+      );
+
+    return this.calendarSearchItems(rows);
   }
 
   private searchNotes(

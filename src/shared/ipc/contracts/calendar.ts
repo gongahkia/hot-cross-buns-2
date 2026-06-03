@@ -103,6 +103,7 @@ export const calendarEventSummarySchema = z
   .object({
     id: idSchema,
     eventId: idSchema.optional(),
+    linkedTaskId: idSchema.optional(),
     calendarId: idSchema,
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     title: z.string().min(1).max(500),

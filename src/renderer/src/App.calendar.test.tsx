@@ -445,6 +445,61 @@ describe("App calendar", () => {
     expect(api.tasks.complete).toHaveBeenCalledWith({ id: "task-calendar-fixtures" });
   });
 
+  it("renders linked Google Calendar task projections as timed tasks", async () => {
+    const api = seededHcb();
+    const title = "Timed linked task";
+    api.tasks.list = vi.fn(async () =>
+      ok({
+        items: [
+          seededTaskDetail("task-lawnet", {
+            title,
+            dueAt: `${todayDate}T00:00:00.000Z`,
+            status: "completed",
+            notes: "Task body"
+          })
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      })
+    );
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [{
+          id: "event-task-projection",
+          eventId: "event-task-projection",
+          linkedTaskId: "task-lawnet",
+          calendarId: "cal-product",
+          title,
+          startsAt: `${todayDate}T07:00:00.000Z`,
+          endsAt: `${todayDate}T07:30:00.000Z`,
+          allDay: false,
+          notes: "Changes made to the title, description or attachments will not be saved. To make edits, please go to: https://tasks.google.com/task/1u__Kt1mliHUFzMf",
+          updatedAt: now
+        }],
+        page: { limit: 500, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Day" }));
+
+    const timedTask = await screen.findByRole("button", { name: `07:00-07:30 ${title}` });
+    expect(within(timedTask).getByText(`07:00-07:30 ${title}`)).toHaveClass("line-through");
+    expect(screen.queryByRole("button", { name: title })).not.toBeInTheDocument();
+
+    await user.click(timedTask);
+    const inspector = await screen.findByTestId("inspector-shell");
+    expect(inspector).toHaveAttribute("data-inspector-kind", "task");
+    expect(inspector).toHaveAttribute("data-inspector-id", "task-lawnet");
+    expect(screen.queryByRole("button", { name: "Delete event" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: `Reopen ${title}` }));
+    expect(api.tasks.reopen).toHaveBeenCalledWith({ id: "task-lawnet" });
+  });
+
   it("renders multi-day all-day events as one spanning timeline segment", async () => {
     const api = seededHcb();
     api.calendar.listEvents = vi.fn(async () =>

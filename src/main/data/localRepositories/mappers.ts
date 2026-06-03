@@ -144,6 +144,7 @@ export function calendarEventSummary(row: CalendarEventRow): CalendarEventSummar
   return {
     id: row.id,
     eventId: row.eventId,
+    linkedTaskId: row.linkedTaskId ?? undefined,
     calendarId: row.calendarId,
     title: truncateText(row.title, textLimits.eventTitle),
     startsAt: row.startsAt,

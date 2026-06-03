@@ -162,6 +162,74 @@ export function stableTaskCalendarEventViewModel(
   return viewModel;
 }
 
+export function stableProjectedTaskCalendarEventViewModel(
+  event: CalendarEventSummary & { linkedTaskId: string },
+  task: TaskViewModel,
+  defaultTimeZone: string,
+  cache: Map<string, { signature: string; viewModel: CalendarEventViewModel }>
+): CalendarEventViewModel {
+  const timeZone = event.timeZone?.trim() || defaultTimeZone || "UTC";
+  const completed = task.status === "completed";
+  const signature = [
+    event.id,
+    event.eventId ?? "",
+    event.linkedTaskId,
+    event.calendarId,
+    event.startsAt,
+    event.endsAt,
+    event.allDay ? "1" : "0",
+    event.updatedAt,
+    task.id,
+    task.listId,
+    task.title,
+    task.detail,
+    task.status,
+    task.mutationState ?? "",
+    task.list,
+    timeZone
+  ].join("\u001c");
+  const cached = cache.get(event.id);
+
+  if (cached?.signature === signature) {
+    return cached.viewModel;
+  }
+
+  const viewModel: CalendarEventViewModel = {
+    id: event.id,
+    eventId: event.eventId ?? event.id,
+    sourceKind: "task",
+    taskId: task.id,
+    taskListId: task.listId,
+    taskStatus: task.status,
+    calendarId: `task-list:${task.listId}`,
+    colorId: null,
+    title: task.title,
+    calendar: task.list,
+    calendarBackgroundColor: completed ? "#e5e7eb" : "#f9a8d4",
+    calendarForegroundColor: completed ? "#6b7280" : "#3f0f24",
+    displayBackgroundColor: completed ? "#f3f4f6" : "#fce7f3",
+    displayForegroundColor: completed ? "#6b7280" : "#3f0f24",
+    timeLabel: event.allDay ? (completed ? "Done" : "Due") : timeLabel(event.startsAt, timeZone),
+    rangeLabel: event.allDay
+      ? completed ? "Completed task" : "Task due"
+      : `${timeLabel(event.startsAt, timeZone)}-${timeLabel(event.endsAt, timeZone)}`,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    timeZone,
+    allDay: event.allDay,
+    location: task.list,
+    notes: task.detail || "No notes",
+    guestEmails: [],
+    reminderMinutes: [],
+    conference: null,
+    mutationState: task.mutationState,
+    recurrenceRule: null
+  };
+
+  cache.set(event.id, { signature, viewModel });
+  return viewModel;
+}
+
 function taskCalendarEndIso(dueDate: string): string {
   const end = new Date(`${dueDate}T00:00:00.000Z`);
   end.setUTCDate(end.getUTCDate() + 1);

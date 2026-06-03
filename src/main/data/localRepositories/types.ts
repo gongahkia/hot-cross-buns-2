@@ -64,6 +64,7 @@ export interface CalendarListRow extends Record<string, unknown> {
 export interface CalendarEventRow extends Record<string, unknown> {
   id: string;
   eventId: string;
+  linkedTaskId?: string | null;
   accountId: string;
   calendarId: string;
   calendarTitle: string;

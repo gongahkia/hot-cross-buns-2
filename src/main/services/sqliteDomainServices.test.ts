@@ -468,6 +468,94 @@ describe("SQLite-backed domain services", () => {
     ).toThrow("Unsupported task status");
   });
 
+  it("links Google Calendar task projections to synced Google tasks", async () => {
+    const { domain, syncRepository } = createTestServices();
+    const taskUrlToken = "1u__Kt1mliHUFzMf";
+    const taskGoogleId = "MXVfX0t0MW1saUhVRnpNZg";
+    const taskId = `acct-1:task:inbox:${taskGoogleId}`;
+
+    syncRepository.writeTaskLists(
+      "acct-1",
+      [{ id: "inbox", title: "Inbox", updatedAt: now }],
+      now
+    );
+    syncRepository.writeTasks(
+      "acct-1",
+      "inbox",
+      [{
+        id: taskGoogleId,
+        taskListId: "inbox",
+        title: "WHATSAPP: Give Ian Chai a whatsapp message update on LawNet scraping",
+        notes: "Task body",
+        status: "completed",
+        dueAt: "2026-05-31T00:00:00.000Z",
+        deleted: false,
+        hidden: false,
+        updatedAt: now
+      }],
+      { fullSync: true, now }
+    );
+    syncRepository.writeCalendarLists(
+      "acct-1",
+      [{
+        id: "primary",
+        summary: "Primary",
+        timeZone: "UTC",
+        isSelected: true,
+        isHidden: false,
+        isPrimary: true,
+        updatedAt: now
+      }],
+      now
+    );
+    syncRepository.writeCalendarEvents(
+      "acct-1",
+      "primary",
+      [{
+        id: "projection-event",
+        calendarId: "primary",
+        status: "confirmed",
+        summary: "WHATSAPP: Give Ian Chai a whatsapp message update on LawNet scraping",
+        description: `Changes made to the title, description or attachments will not be saved. To make edits, please go to: https://tasks.google.com/task/${taskUrlToken}`,
+        startAt: "2026-05-31T07:00:00.000Z",
+        endAt: "2026-05-31T07:30:00.000Z",
+        isAllDay: false,
+        updatedAt: now
+      }],
+      { fullSync: true, now }
+    );
+
+    const events = await domain.planner.listCalendarEvents({
+      start: "2026-05-31T00:00:00.000Z",
+      end: "2026-06-01T00:00:00.000Z",
+      limit: 10
+    });
+    const event = events.items[0];
+    const detail = await domain.planner.getCalendarEvent({ id: event?.id ?? "" });
+    const calendarSearch = await domain.planner.search({
+      query: "source:calendar LawNet",
+      limit: 10
+    });
+    const taskSearch = await domain.planner.search({
+      query: "source:tasks LawNet",
+      limit: 10
+    });
+
+    expect(event).toMatchObject({
+      linkedTaskId: taskId,
+      startsAt: "2026-05-31T07:00:00.000Z",
+      endsAt: "2026-05-31T07:30:00.000Z"
+    });
+    expect(detail.linkedTaskId).toBe(taskId);
+    expect(calendarSearch.items).toEqual([]);
+    expect(taskSearch.items).toEqual([
+      expect.objectContaining({
+        domain: "tasks",
+        id: taskId
+      })
+    ]);
+  });
+
   it("optimistically mutates tasks, subtasks, lists, and queue-backed task writes", async () => {
     const { domain, syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);

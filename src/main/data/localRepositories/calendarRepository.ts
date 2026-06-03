@@ -21,6 +21,7 @@ import {
   normalizeCalendarWrite,
   recurrenceRuleFromRequest
 } from "./calendarWrites";
+import { googleTaskIdFromCalendarDescription } from "./googleTaskProjection";
 import { availabilityLine, calendarEventDetail, calendarEventSummary, calendarListSummary } from "./mappers";
 import {
   countRows,
@@ -139,7 +140,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
         params
       );
 
-      return pageFromRows(rows.map(calendarEventSummary), limit, offset, totalKnown);
+      return pageFromRows(this.withLinkedTaskIds(rows).map(calendarEventSummary), limit, offset, totalKnown);
     });
   }
 
@@ -151,7 +152,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
         throw notFound("Calendar event was not found.");
       }
 
-      return calendarEventDetail(row);
+      return calendarEventDetail(this.withLinkedTaskId(row));
     });
   }
 
@@ -404,6 +405,52 @@ export class CalendarLocalRepository extends TaskLocalRepository {
          LIMIT 1;`,
       [id, id, id]
       );
+  }
+
+  private withLinkedTaskId(row: CalendarEventRow): CalendarEventRow {
+    return this.withLinkedTaskIds([row])[0] ?? row;
+  }
+
+  private withLinkedTaskIds(rows: CalendarEventRow[]): CalendarEventRow[] {
+    const pairs = new Map<string, { accountId: string; googleId: string }>();
+
+    for (const row of rows) {
+      const googleId = googleTaskIdFromCalendarDescription(row.notes);
+
+      if (googleId) {
+        pairs.set(`${row.accountId}\u0000${googleId}`, { accountId: row.accountId, googleId });
+      }
+    }
+
+    if (pairs.size === 0) {
+      return rows;
+    }
+
+    const predicates: string[] = [];
+    const params: string[] = [];
+
+    for (const pair of pairs.values()) {
+      predicates.push("(account_id = ? AND google_id = ?)");
+      params.push(pair.accountId, pair.googleId);
+    }
+
+    const taskRows = this.connection.query<{ id: string; accountId: string; googleId: string }>(
+      `SELECT id, account_id AS accountId, google_id AS googleId
+       FROM google_tasks
+       WHERE deleted_at IS NULL
+         AND (${predicates.join(" OR ")});`,
+      params
+    );
+    const taskIdByGoogleId = new Map(
+      taskRows.map((task) => [`${task.accountId}\u0000${task.googleId}`, task.id])
+    );
+
+    return rows.map((row) => {
+      const googleId = googleTaskIdFromCalendarDescription(row.notes);
+      const linkedTaskId = googleId ? taskIdByGoogleId.get(`${row.accountId}\u0000${googleId}`) : undefined;
+
+      return linkedTaskId ? { ...row, linkedTaskId } : row;
+    });
   }
 
   protected requireCalendar(id: string): CalendarRow {

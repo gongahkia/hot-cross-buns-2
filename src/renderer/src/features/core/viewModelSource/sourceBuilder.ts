@@ -10,6 +10,7 @@ import {
   scheduledTaskBlockConflicts,
   scheduledTaskBlockViewModel,
   stableCalendarEventViewModel,
+  stableProjectedTaskCalendarEventViewModel,
   stableTaskCalendarEventViewModel,
   weekDays
 } from "./calendarViewModels";
@@ -58,19 +59,42 @@ export function buildCoreViewModelSource(
   const calendarForegroundColorById = Object.fromEntries(
     snapshot.calendars.map((calendar) => [calendar.id, calendar.foregroundColor ?? null])
   );
-  const events = snapshot.events.map((event) =>
-    stableCalendarEventViewModel(
-      event,
-      calendarTitleById[event.calendarId],
-      calendarTimeZoneById[event.calendarId] ?? null,
-      calendarBackgroundColorById[event.calendarId] ?? null,
-      calendarForegroundColorById[event.calendarId] ?? null,
-      snapshot.settings.calendarEventColorOverrides,
-      snapshot.settings.defaultTimeZone,
-      options.calendarEventViewModelCache
-    )
-  );
+  const events = snapshot.events.flatMap((event) => {
+    const linkedTask = event.linkedTaskId ? taskById[event.linkedTaskId] : undefined;
+
+    if (event.linkedTaskId && linkedTask) {
+      if (
+        linkedTask.status !== "open" &&
+        !(snapshot.settings.showCompletedInCalendarViews && linkedTask.status === "completed")
+      ) {
+        return [];
+      }
+
+      return [
+        stableProjectedTaskCalendarEventViewModel(
+          { ...event, linkedTaskId: event.linkedTaskId },
+          linkedTask,
+          snapshot.settings.defaultTimeZone,
+          options.calendarEventViewModelCache
+        )
+      ];
+    }
+
+    return [
+      stableCalendarEventViewModel(
+        event,
+        calendarTitleById[event.calendarId],
+        calendarTimeZoneById[event.calendarId] ?? null,
+        calendarBackgroundColorById[event.calendarId] ?? null,
+        calendarForegroundColorById[event.calendarId] ?? null,
+        snapshot.settings.calendarEventColorOverrides,
+        snapshot.settings.defaultTimeZone,
+        options.calendarEventViewModelCache
+      )
+    ];
+  });
   const eventsById = Object.fromEntries(events.map((event) => [event.id, event]));
+  const projectedTaskIds = new Set(events.flatMap((event) => event.taskId ? [event.taskId] : []));
   const scheduledEventIds = new Set(snapshot.scheduledTaskBlocks.map((block) => block.calendarEventId));
   const conflictTitlesByBlockId = scheduledTaskBlockConflicts(
     snapshot.scheduledTaskBlocks,
@@ -102,6 +126,7 @@ export function buildCoreViewModelSource(
   );
   const taskCalendarEvents = rootTasks
     .filter(taskHasDueDate)
+    .filter((task) => !projectedTaskIds.has(task.id))
     .filter((task) => selectedTaskListIds.has(task.listId))
     .filter((task) =>
       task.status === "open" ||
