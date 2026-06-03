@@ -3,6 +3,8 @@ import type {
   CalendarListResponse,
   CalendarRangeRequest,
   CalendarRangeResponse,
+  NoteListRequest,
+  NoteListResponse,
   ScheduledTaskBlockListRequest,
   ScheduledTaskBlockListResponse,
   SettingsSnapshot,
@@ -85,6 +87,7 @@ export async function loadCoreData(
     calendars,
     events,
     scheduledTaskBlocks,
+    notes,
     settings,
     syncStatus,
     googleStatus,
@@ -121,6 +124,10 @@ export async function loadCoreData(
           .listScheduledTaskBlocks(request)
           .then((result) => unwrap(result, "Scheduled task blocks failed"))
     ),
+    loadAllPages<NoteListRequest, NoteListResponse>(
+      { limit: 50 },
+      (request) => hcb.notes.list(request).then((result) => unwrap(result, "Notes failed"))
+    ),
     settingsLoad,
     hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
     hcb.google.status().then((result) => unwrap(result, "Google status failed")),
@@ -145,8 +152,8 @@ export async function loadCoreData(
     events: events.items,
     scheduledTaskBlocks: scheduledTaskBlocks.items,
     scheduleSuggestion,
-    notes: [],
-    noteLists: [],
+    notes: notes.items,
+    noteLists: notes.lists,
     settings,
     syncStatus,
     googleStatus,
@@ -155,7 +162,7 @@ export async function loadCoreData(
       calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)
         ? calendars.items.reduce((count, calendar) => count + (calendar.eventCount ?? 0), 0)
         : knownTotal(events.page.totalKnown, events.items.length),
-      notes: 0,
+      notes: knownTotal(notes.page.totalKnown, notes.items.length),
       tasks: taskLists.items.every((taskList) => taskList.taskCount !== undefined)
         ? taskLists.items.reduce((count, taskList) => count + (taskList.taskCount ?? 0), 0)
         : knownTotal(tasks.page.totalKnown, tasks.items.length) +

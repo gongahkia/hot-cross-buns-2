@@ -334,7 +334,7 @@ function TaskBoardSidebar({
       </div>
       <div className="mt-5 grid gap-1">
         <TaskSidebarButton
-          count={source.resourceCounts.tasks}
+          count={activeRootTasks(source).length}
           icon="all"
           label="All tasks"
           onClick={selectAllLists}

@@ -180,8 +180,8 @@ export function buildCoreViewModelSource(
   );
   const resourceCounts = {
     calendarEvents: snapshot.diagnosticsSummary?.cache.eventCount ?? snapshot.resourceCounts.calendarEvents,
-    notes: notes.length,
-    tasks: openDatedTasks.length
+    notes: snapshot.diagnosticsSummary?.cache.noteCount ?? snapshot.resourceCounts.notes,
+    tasks: snapshot.diagnosticsSummary?.cache.taskCount ?? snapshot.resourceCounts.tasks
   };
   const todayTimedRows = [
     ...todayEvents.map((event) => ({
