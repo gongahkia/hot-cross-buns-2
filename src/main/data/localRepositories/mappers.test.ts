@@ -68,6 +68,14 @@ describe("local repository mappers", () => {
         Array.from({ length: 60 }, (_, index) => `guest-${index}@example.com`)
       ),
       reminderMinutesJson: JSON.stringify([-1, 0, 15, 40_320, 40_321]),
+      conferenceJson: JSON.stringify({
+        solutionName: "Google Meet",
+        videoUri: "https://meet.google.com/nrf-pwpu-cws",
+        videoLabel: "meet.google.com/nrf-pwpu-cws",
+        phoneUri: "tel:+14017539584,,,708190980#",
+        phoneLabel: "(US) +1 401-753-9584",
+        phonePin: "708 190 980#"
+      }),
       pendingMutationStatus: null,
       timeZone: "UTC",
       recurrenceRule: "RRULE:FREQ=DAILY;".repeat(80),
@@ -86,6 +94,7 @@ describe("local repository mappers", () => {
     expect(summary.guestEmails).toHaveLength(50);
     expect(summary.reminderMinutes).toEqual([0, 15, 40_320]);
     expect(summary.recurrenceRule).toHaveLength(1_000);
+    expect(summary.conference?.videoLabel).toBe("meet.google.com/nrf-pwpu-cws");
 
     const detail = calendarEventDetail(row);
     expect(calendarEventDetailSchema.safeParse(detail).success).toBe(true);

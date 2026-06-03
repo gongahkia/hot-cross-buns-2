@@ -1,4 +1,5 @@
 import type {
+  CalendarConference,
   CalendarEventDetail,
   CalendarEventSummary,
   CalendarListSummary,
@@ -22,6 +23,54 @@ const textLimits = {
   recurrenceRule: 1_000,
   timeZone: 120
 } as const;
+
+function parseConference(value: string | null | undefined): CalendarConference | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const source = parsed as Record<string, unknown>;
+    const conference: CalendarConference = {};
+
+    for (const key of [
+      "solutionName",
+      "videoUri",
+      "videoLabel",
+      "phoneUri",
+      "phoneLabel",
+      "phonePin",
+      "moreUri",
+      "moreLabel"
+    ] as const) {
+      const item = source[key];
+      if (typeof item === "string" && item.trim().length > 0) {
+        conference[key] = item.slice(0, conferenceTextLimit(key));
+      }
+    }
+
+    return Object.keys(conference).length > 0 ? conference : null;
+  } catch {
+    return null;
+  }
+}
+
+function conferenceTextLimit(key: keyof CalendarConference & string): number {
+  if (key.endsWith("Uri")) {
+    return 1_300;
+  }
+
+  if (key === "phonePin") {
+    return 128;
+  }
+
+  return key === "solutionName" ? 200 : 512;
+}
 
 export function taskListSummary(row: TaskListRow): TaskListSummary {
   return {
@@ -107,6 +156,7 @@ export function calendarEventSummary(row: CalendarEventRow): CalendarEventSummar
     reminderMinutes: parseNumberArray(row.reminderMinutesJson)
       .filter((minutes) => minutes >= 0 && minutes <= 28 * 24 * 60)
       .slice(0, 10),
+    conference: parseConference(row.conferenceJson),
     mutationState: mutationState(row.pendingMutationStatus),
     timeZone: truncateNullableText(row.timeZone, textLimits.timeZone),
     recurrenceRule: truncateNullableText(row.recurrenceRule, textLimits.recurrenceRule),

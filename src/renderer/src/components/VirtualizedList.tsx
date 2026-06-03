@@ -10,6 +10,7 @@ interface VirtualizedListProps<T> {
   ariaLabel: string;
   emptyState?: ReactNode;
   estimateRowHeight?: number;
+  getEstimatedRowHeight?: (item: T, index: number) => number;
   getKey: (item: T, index: number) => Key;
   items: T[];
   overscan?: number;
@@ -22,6 +23,7 @@ export function VirtualizedList<T>({
   ariaLabel,
   emptyState,
   estimateRowHeight = 48,
+  getEstimatedRowHeight,
   getKey,
   items,
   overscan = 4,
@@ -31,19 +33,49 @@ export function VirtualizedList<T>({
 }: VirtualizedListProps<T>): JSX.Element {
   const [scrollTop, setScrollTop] = useState(0);
   const lastScrollReportAt = useRef(0);
+  const rowHeights = useMemo(
+    () => items.map((item, index) => Math.max(1, getEstimatedRowHeight?.(item, index) ?? estimateRowHeight)),
+    [estimateRowHeight, getEstimatedRowHeight, items]
+  );
+  const rowOffsets = useMemo(() => {
+    const offsets = [0];
+
+    for (const height of rowHeights) {
+      offsets.push(offsets[offsets.length - 1] + height);
+    }
+
+    return offsets;
+  }, [rowHeights]);
 
   const windowState = useMemo(() => {
-    const visibleCount = Math.ceil(viewportHeight / estimateRowHeight);
-    const startIndex = Math.max(0, Math.floor(scrollTop / estimateRowHeight) - overscan);
-    const endIndex = Math.min(items.length, startIndex + visibleCount + overscan * 2);
+    const findStartIndex = (top: number): number => {
+      let low = 0;
+      let high = items.length;
+
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+
+        if (rowOffsets[mid + 1] <= top) {
+          low = mid + 1;
+        } else {
+          high = mid;
+        }
+      }
+
+      return low;
+    };
+    const visibleStartIndex = findStartIndex(scrollTop);
+    const visibleEndIndex = findStartIndex(scrollTop + viewportHeight);
+    const startIndex = Math.max(0, visibleStartIndex - overscan);
+    const endIndex = Math.min(items.length, visibleEndIndex + overscan + 1);
 
     return {
       endIndex,
-      offsetY: startIndex * estimateRowHeight,
+      offsetY: rowOffsets[startIndex],
       startIndex,
-      totalHeight: items.length * estimateRowHeight
+      totalHeight: rowOffsets[rowOffsets.length - 1] ?? 0
     };
-  }, [estimateRowHeight, items.length, overscan, scrollTop, viewportHeight]);
+  }, [items.length, overscan, rowOffsets, scrollTop, viewportHeight]);
 
   function handleScroll(event: UIEvent<HTMLDivElement>): void {
     const startedAt = rendererNow();
@@ -86,7 +118,7 @@ export function VirtualizedList<T>({
             const index = windowState.startIndex + visibleIndex;
 
             return (
-              <div key={getKey(item, index)} style={{ minHeight: estimateRowHeight }}>
+              <div key={getKey(item, index)} style={{ minHeight: rowHeights[index] ?? estimateRowHeight }}>
                 {renderRow(item, index)}
               </div>
             );

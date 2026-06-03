@@ -1,4 +1,5 @@
 import type { GoogleApiTransport } from "./transport";
+import type { CalendarConference } from "@shared/ipc/contracts";
 
 export interface GoogleCalendarListMirror {
   id: string;
@@ -37,6 +38,7 @@ export interface GoogleCalendarEventMirror {
   visibility?: string | null;
   attendeeEmails?: string[];
   reminderMinutes?: number[];
+  conference?: CalendarConference | null;
   etag?: string | null;
   sequence?: number | null;
   updatedAt?: string | null;
@@ -137,6 +139,8 @@ interface GoogleEventDto {
   visibility?: string;
   attendees?: GoogleEventAttendeeDto[];
   reminders?: GoogleEventRemindersDto;
+  hangoutLink?: string;
+  conferenceData?: GoogleEventConferenceDataDto;
 }
 
 interface GoogleEventDateDto {
@@ -151,6 +155,24 @@ interface GoogleEventAttendeeDto {
 
 interface GoogleEventRemindersDto {
   overrides?: Array<{ method?: string; minutes?: number }>;
+}
+
+interface GoogleEventConferenceDataDto {
+  conferenceSolution?: {
+    name?: string;
+  };
+  entryPoints?: GoogleEventConferenceEntryPointDto[];
+}
+
+interface GoogleEventConferenceEntryPointDto {
+  entryPointType?: string;
+  uri?: string;
+  label?: string;
+  pin?: string;
+  accessCode?: string;
+  meetingCode?: string;
+  passcode?: string;
+  password?: string;
 }
 
 interface GoogleEventMutationDto {
@@ -170,7 +192,7 @@ interface GoogleEventMutationDto {
 const CALENDAR_LIST_FIELDS =
   "items(id,summary,description,timeZone,backgroundColor,foregroundColor,selected,hidden,primary,accessRole,etag)";
 const EVENTS_FIELDS =
-  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)))";
+  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password)))";
 
 export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
   private readonly transport: GoogleApiTransport;
@@ -253,7 +275,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "POST",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(calendarId)}/events`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
       },
       body: eventMutationBody(input)
     });
@@ -266,7 +288,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "PATCH",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(input.calendarId)}/events/${encodeGooglePathComponent(input.eventId)}`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
       },
       body: eventMutationBody(input),
       ifMatch: input.ifMatch ?? undefined
@@ -320,10 +342,45 @@ function mapEvent(
     visibility: item.visibility ?? null,
     attendeeEmails: normalizeAttendeeEmails(item.attendees),
     reminderMinutes: normalizeReminderMinutes(item.reminders),
+    conference: normalizeConference(item),
     etag: item.etag ?? null,
     sequence: item.sequence ?? null,
     updatedAt: normalizeIsoDateTime(item.updated)
   };
+}
+
+function normalizeConference(item: GoogleEventDto): CalendarConference | null {
+  const video = item.conferenceData?.entryPoints?.find((entry) => entry.entryPointType === "video");
+  const phone = item.conferenceData?.entryPoints?.find((entry) => entry.entryPointType === "phone");
+  const more = item.conferenceData?.entryPoints?.find((entry) => entry.entryPointType === "more");
+  const videoUri = textValue(video?.uri) ?? textValue(item.hangoutLink);
+  const phoneUri = textValue(phone?.uri);
+  const moreUri = textValue(more?.uri);
+  const conference: CalendarConference = {
+    ...(textValue(item.conferenceData?.conferenceSolution?.name) ? { solutionName: textValue(item.conferenceData?.conferenceSolution?.name) } : {}),
+    ...(videoUri ? { videoUri } : {}),
+    ...(textValue(video?.label) ? { videoLabel: textValue(video?.label) } : {}),
+    ...(phoneUri ? { phoneUri } : {}),
+    ...(textValue(phone?.label) ? { phoneLabel: textValue(phone?.label) } : {}),
+    ...(conferenceAccessCode(phone) ? { phonePin: conferenceAccessCode(phone) } : {}),
+    ...(moreUri ? { moreUri } : {}),
+    ...(textValue(more?.label) ? { moreLabel: textValue(more?.label) } : {})
+  };
+
+  return Object.keys(conference).length > 0 ? conference : null;
+}
+
+function conferenceAccessCode(entry: GoogleEventConferenceEntryPointDto | undefined): string | undefined {
+  return textValue(entry?.pin) ??
+    textValue(entry?.accessCode) ??
+    textValue(entry?.meetingCode) ??
+    textValue(entry?.passcode) ??
+    textValue(entry?.password);
+}
+
+function textValue(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function normalizeAttendeeEmails(attendees: GoogleEventAttendeeDto[] | undefined): string[] {

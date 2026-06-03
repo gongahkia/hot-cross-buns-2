@@ -65,6 +65,7 @@ export function newCalendarDraft(
     notes: "",
     guests: "",
     reminderMinutes: "",
+    conference: null,
     repeatFrequency: "none",
     repeatCustomFrequency: "weekly",
     repeatEndMode: "never",
@@ -92,6 +93,7 @@ export function editCalendarDraft(event: CalendarEventViewModel): CalendarEventD
     notes: event.notes === "No notes" ? "" : event.notes,
     guests: event.guestEmails.join(", "),
     reminderMinutes: event.reminderMinutes[0] === undefined ? "" : String(event.reminderMinutes[0]),
+    conference: event.conference,
     repeatFrequency: recurrence?.repeatFrequency ?? "none",
     repeatCustomFrequency: recurrence?.repeatCustomFrequency ?? "weekly",
     repeatEndMode: recurrence?.repeatEndMode ?? "never",
@@ -146,6 +148,7 @@ export function calendarEventDraftsEqual(
     left.notes === right.notes &&
     left.guests === right.guests &&
     left.reminderMinutes === right.reminderMinutes &&
+    JSON.stringify(left.conference ?? null) === JSON.stringify(right.conference ?? null) &&
     left.repeatFrequency === right.repeatFrequency &&
     left.repeatCustomFrequency === right.repeatCustomFrequency &&
     left.repeatEndMode === right.repeatEndMode &&

@@ -35,6 +35,7 @@ describe("App calendar", () => {
     const agendaTitle = within(agenda).getByText("Planner shell standup");
 
     expect(agendaTitle).toBeInTheDocument();
+    expect(within(agenda).queryByText("Scheduled - No notes")).not.toBeInTheDocument();
     expect(agendaTitle.style.backgroundColor).toBe("rgb(52, 168, 83)");
     expect(screen.queryByRole("button", { name: "Share availability" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Share Availability" })).not.toBeInTheDocument();
@@ -519,6 +520,51 @@ describe("App calendar", () => {
     const inspector = await screen.findByTestId("inspector-shell");
 
     expect(within(inspector).getByText("Queued")).toBeInTheDocument();
+  });
+
+  it("renders Meet and guest details only when present", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-meet",
+            calendarId: "cal-product",
+            title: "Team Elefant: Stand-up",
+            startsAt: `${todayDate}T08:30:00.000Z`,
+            endsAt: `${todayDate}T09:00:00.000Z`,
+            allDay: false,
+            guestEmails: ["krishna@example.com", "gabriel@example.com"],
+            conference: {
+              solutionName: "Google Meet",
+              videoUri: "https://meet.google.com/nrf-pwpu-cws",
+              videoLabel: "meet.google.com/nrf-pwpu-cws",
+              phoneUri: "tel:+14017539584,,,708190980#",
+              phoneLabel: "(US) +1 401-753-9584",
+              phonePin: "708 190 980#",
+              moreUri: "https://tel.meet/nrf-pwpu-cws"
+            },
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(within(agenda).getByText("Team Elefant: Stand-up"));
+    const inspectorBody = within(await screen.findByTestId("inspector-shell")).getByTestId("inspector-body");
+
+    expect(within(inspectorBody).getByText("Join with Google Meet")).toBeInTheDocument();
+    expect(within(inspectorBody).getByText("meet.google.com/nrf-pwpu-cws")).toBeInTheDocument();
+    expect(within(inspectorBody).getByText("Join by phone")).toBeInTheDocument();
+    expect(within(inspectorBody).getByText("(US) +1 401-753-9584 PIN: 708 190 980#")).toBeInTheDocument();
+    expect(within(inspectorBody).getByText("krishna@example.com")).toBeInTheDocument();
+    expect(within(inspectorBody).queryByText("No guests")).not.toBeInTheDocument();
   });
 
   it("keeps a dirty calendar event inspector open on Escape", async () => {

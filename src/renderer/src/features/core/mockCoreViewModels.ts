@@ -321,6 +321,7 @@ function mockCalendarEvent({
     notes,
     guestEmails: [],
     reminderMinutes: [],
+    conference: null,
     recurrenceRule: null
   };
 }

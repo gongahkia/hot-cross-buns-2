@@ -134,6 +134,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
       actions: eventInspectorActions(draft, calendarInspectorMode),
       body: eventInspectorBody(draft, calendarInspectorMode),
       dirty,
+      hideHeader: eventInspectorHidesHeader(draft, calendarInspectorMode),
       subtitle: eventInspectorSubtitle(draft),
       title: eventInspectorTitle(draft)
     });
@@ -265,6 +266,13 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
     );
   }
 
+  function eventInspectorHidesHeader(
+    nextDraft: CalendarEventDraft,
+    mode = calendarInspectorModeRef.current
+  ): boolean {
+    return nextDraft.mode === "edit" && mode === "view";
+  }
+
   function openEventInspector(
     nextDraft: CalendarEventDraft,
     mode: "view" | "edit" = nextDraft.mode === "edit" ? "view" : "edit"
@@ -280,6 +288,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
       actions: eventInspectorActions(nextDraft, mode),
       body: eventInspectorBody(nextDraft, mode),
       dirty: false,
+      hideHeader: eventInspectorHidesHeader(nextDraft, mode),
       id: nextDraft.id ?? "new",
       kind: "event",
       onConfirmClose: () => {

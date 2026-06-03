@@ -233,6 +233,7 @@ export function useNotesController(source: CoreViewModelSource): {
       actions: noteInspectorActions(selectedNote),
       body: noteInspectorBody(selectedNote),
       dirty: noteInspectorMode === "view" ? false : currentInspector.dirty,
+      hideHeader: noteInspectorMode === "view",
       subtitle: selectedNote.updatedLabel,
       title: selectedNote.title || "Untitled note"
     });
@@ -319,6 +320,7 @@ export function useNotesController(source: CoreViewModelSource): {
       actions: noteInspectorActions(note, mode),
       body: noteInspectorBody(note, mode),
       dirty: false,
+      hideHeader: mode === "view",
       id: note.id,
       kind: "note",
       onConfirmClose: async () => {

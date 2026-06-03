@@ -21,6 +21,7 @@ export interface InspectorItem {
   title: string;
   subtitle?: string;
   body: ReactNode;
+  hideHeader?: boolean; // body owns title/close affordance
   returnFocus?: RefObject<HTMLElement> | null; // restored on close
   dirty?: boolean; // whether body holds unsaved edits
   onConfirmClose?: () => Promise<boolean> | boolean; // return false to keep open
@@ -31,7 +32,7 @@ interface InspectorContextValue {
   current: InspectorItem | null;
   open: (item: InspectorItem) => void;
   close: () => Promise<void>;
-  update: (patch: Partial<Pick<InspectorItem, "title" | "subtitle" | "dirty" | "body" | "actions">>) => void;
+  update: (patch: Partial<Pick<InspectorItem, "title" | "subtitle" | "dirty" | "body" | "actions" | "hideHeader">>) => void;
   isOpen: boolean;
 }
 

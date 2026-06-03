@@ -63,6 +63,7 @@ export {
 export {
   availabilityExportRequestSchema,
   availabilityExportResponseSchema,
+  calendarConferenceSchema,
   calendarEventCreateRequestSchema,
   calendarEventDeleteRequestSchema,
   calendarEventDetailSchema,
@@ -86,6 +87,7 @@ export {
   scheduledTaskBlockUnscheduleRequestSchema,
   type AvailabilityExportRequest,
   type AvailabilityExportResponse,
+  type CalendarConference,
   type CalendarEventCreateRequest,
   type CalendarEventDeleteRequest,
   type CalendarEventDetail,

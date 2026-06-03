@@ -37,24 +37,48 @@ function taskPriorityLabel(priority: CorePriority): string {
   return priority === "none" ? "None" : `${priority[0].toUpperCase()}${priority.slice(1)}`;
 }
 
-function TaskDetailItem({
+function TaskDetailLine({
   children,
   icon: Icon,
   label
 }: {
   children: ReactNode;
   icon?: LucideIcon;
-  label: string;
+  label?: string;
 }): JSX.Element {
   return (
-    <div className="grid gap-1 rounded-hcbMd border border-border bg-bg-tertiary p-3">
-      <div className="inline-flex items-center gap-1 text-[var(--text-xs)] font-semibold uppercase text-text-muted">
-        {Icon ? <Icon aria-hidden="true" size={13} /> : null}
-        {label}
+    <div className="grid grid-cols-[18px_minmax(0,1fr)] gap-3">
+      <div className="pt-0.5 text-text-muted">
+        {Icon ? <Icon aria-hidden="true" size={16} /> : null}
       </div>
-      <div className="min-w-0 text-[var(--text-base)] text-text-primary">{children}</div>
+      <div className="min-w-0">
+        {label ? (
+          <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">{label}</div>
+        ) : null}
+        <div className="min-w-0 text-[var(--text-base)] leading-relaxed text-text-primary">{children}</div>
+      </div>
     </div>
   );
+}
+
+function taskAccentClass(priority: CorePriority, completed: boolean): string {
+  if (completed) {
+    return "bg-success";
+  }
+
+  if (priority === "high") {
+    return "bg-danger";
+  }
+
+  if (priority === "medium") {
+    return "bg-warning";
+  }
+
+  if (priority === "low") {
+    return "bg-accent";
+  }
+
+  return "bg-text-muted";
 }
 
 export function TaskInspectorDetails({
@@ -73,59 +97,77 @@ export function TaskInspectorDetails({
     parentOptions.find((candidate) => candidate.id === draft.parentId)?.title ??
     (draft.parentId ? "Parent task" : "No parent");
   const statusLabel = task?.status === "completed" ? "Completed" : "Open";
+  const completed = task?.status === "completed";
+  const priorityLabel = taskPriorityLabel(draft.priority);
+  const notes = draft.notes.trim();
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-3 rounded-hcbLg border border-border bg-bg-tertiary p-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge tone={task?.mutationState === "failed" ? "danger" : task?.mutationState === "queued" ? "warning" : "success"}>
-            {task?.mutationState === "failed" ? "Failed" : task?.mutationState === "queued" ? "Queued" : "Synced"}
-          </Badge>
-          <Badge tone={task?.status === "completed" ? "success" : "neutral"}>{statusLabel}</Badge>
-        </div>
-        <h3 className="text-[var(--text-xl)] font-semibold leading-snug text-text-primary">
-          {draft.title || "Untitled task"}
-        </h3>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
-          <Badge tone="neutral">{listTitle}</Badge>
-          <Badge tone={draft.priority === "high" ? "danger" : draft.priority === "medium" ? "warning" : draft.priority === "low" ? "accent" : "neutral"}>
-            {taskPriorityLabel(draft.priority)}
-          </Badge>
-          {draft.dueDate ? <Badge tone="neutral">{draft.dueDate}</Badge> : null}
+    <div className="grid gap-5 py-1">
+      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-4">
+        <span
+          aria-hidden="true"
+          className={`mt-2 size-3.5 rounded-hcbSm ${taskAccentClass(draft.priority, completed)}`}
+        />
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <h3 className="min-w-0 break-words text-[var(--text-2xl)] font-semibold leading-tight text-text-primary">
+              {draft.title || "Untitled task"}
+            </h3>
+            {task?.mutationState && task.mutationState !== "synced" ? (
+              <Badge tone={task.mutationState === "failed" ? "danger" : "warning"}>
+                {task.mutationState === "failed" ? "Failed" : "Queued"}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
+            <Badge tone={completed ? "success" : "neutral"}>{statusLabel}</Badge>
+            <Badge tone="neutral">{listTitle}</Badge>
+            {draft.priority !== "none" ? (
+              <Badge tone={draft.priority === "high" ? "danger" : draft.priority === "medium" ? "warning" : "accent"}>
+                {priorityLabel}
+              </Badge>
+            ) : null}
+            {draft.dueDate ? <Badge tone="neutral">{draft.dueDate}</Badge> : null}
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <TaskDetailItem icon={List} label="List">
-          {listTitle}
-        </TaskDetailItem>
-        <TaskDetailItem icon={CalendarClock} label="Due date">
-          {draft.dueDate || <span className="text-text-muted">No due date</span>}
-        </TaskDetailItem>
-        <TaskDetailItem icon={Flag} label="Priority">
-          {taskPriorityLabel(draft.priority)}
-        </TaskDetailItem>
-        <TaskDetailItem icon={ListPlus} label="Parent">
-          {draft.parentId ? parentTitle : <span className="text-text-muted">No parent</span>}
-        </TaskDetailItem>
-      </div>
-
-      <TaskDetailItem icon={FileText} label="Notes">
-        {draft.notes.trim() ? (
+      {notes ? (
+        <TaskDetailLine icon={FileText}>
           <MarkdownPreview
             ariaLabel="Task notes preview"
-            body={draft.notes}
+            body={notes}
             emptyDescription="No notes"
             emptyTitle="No notes"
             variant="plain"
           />
-        ) : (
-          <span className="text-text-muted">No notes</span>
-        )}
-      </TaskDetailItem>
+        </TaskDetailLine>
+      ) : null}
+
+      {draft.dueDate ? (
+        <TaskDetailLine icon={CalendarClock}>
+          {draft.dueDate}
+        </TaskDetailLine>
+      ) : null}
+
+      {draft.priority !== "none" ? (
+        <TaskDetailLine icon={Flag}>
+          {priorityLabel}
+        </TaskDetailLine>
+      ) : null}
+
+      <TaskDetailLine icon={List}>
+        {listTitle}
+      </TaskDetailLine>
+
+      {draft.parentId ? (
+        <TaskDetailLine icon={ListPlus}>
+          {parentTitle}
+        </TaskDetailLine>
+      ) : null}
 
       {task?.subtasks.length ? (
-        <TaskDetailItem icon={ListPlus} label="Subtasks">
+        <TaskDetailLine icon={ListPlus} label="Subtasks">
           <div className="grid gap-2">
             {task.subtasks.map((subtask) => (
               <div className="flex items-center gap-2 text-text-secondary" key={subtask.id}>
@@ -137,7 +179,7 @@ export function TaskInspectorDetails({
               </div>
             ))}
           </div>
-        </TaskDetailItem>
+        </TaskDetailLine>
       ) : null}
     </div>
   );

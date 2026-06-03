@@ -20,7 +20,7 @@ export const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "form-action 'none'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https: http:",
   "font-src 'self'",
   "connect-src 'none'"
 ].join("; ");
@@ -34,7 +34,7 @@ export const DEVELOPMENT_CONTENT_SECURITY_POLICY = [
   "form-action 'none'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https: http:",
   "font-src 'self'",
   "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*"
 ].join("; ");

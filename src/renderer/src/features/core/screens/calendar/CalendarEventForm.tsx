@@ -4,7 +4,7 @@ import {
   googleCalendarEventColors,
   type SettingsSnapshot
 } from "@shared/ipc/contracts";
-import { Bell, CalendarPlus, Clock3, FileText, Gift, ListPlus, MapPin, RotateCcw, Users, type LucideIcon } from "lucide-react";
+import { Bell, CalendarPlus, Clock3, ExternalLink, FileText, Gift, ListPlus, MapPin, Phone, RotateCcw, Users, Video, type LucideIcon } from "lucide-react";
 import { EmojiInput, EmojiTextarea } from "../../../../components/EmojiTextField";
 import { Badge, Input, cx } from "../../../../components/primitives";
 import { ErrorState } from "../../../../components/states";
@@ -47,22 +47,26 @@ function repeatWeekdayForIso(value: string): CalendarRepeatWeekday {
   return repeatWeekdays[Number.isFinite(date.getTime()) ? date.getUTCDay() : 0]?.id ?? "SU";
 }
 
-function DetailItem({
+function DetailLine({
   children,
   icon: Icon,
   label
 }: {
   children: ReactNode;
   icon?: LucideIcon;
-  label: string;
+  label?: string;
 }): JSX.Element {
   return (
-    <div className="grid gap-1 rounded-hcbMd border border-border bg-bg-tertiary p-3">
-      <div className="inline-flex items-center gap-1 text-[var(--text-xs)] font-semibold uppercase text-text-muted">
-        {Icon ? <Icon aria-hidden="true" size={13} /> : null}
-        {label}
+    <div className="grid grid-cols-[18px_minmax(0,1fr)] gap-3">
+      <div className="pt-0.5 text-text-muted">
+        {Icon ? <Icon aria-hidden="true" size={16} /> : null}
       </div>
-      <div className="min-w-0 text-[var(--text-base)] text-text-primary">{children}</div>
+      <div className="min-w-0">
+        {label ? (
+          <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">{label}</div>
+        ) : null}
+        <div className="min-w-0 text-[var(--text-base)] leading-relaxed text-text-primary">{children}</div>
+      </div>
     </div>
   );
 }
@@ -70,8 +74,12 @@ function DetailItem({
 function calendarReminderSummary(value: string): string {
   const minutes = Number.parseInt(value.trim(), 10);
 
-  if (!Number.isInteger(minutes) || minutes <= 0) {
+  if (!Number.isInteger(minutes) || minutes < 0) {
     return "None";
+  }
+
+  if (minutes === 0) {
+    return "At start";
   }
 
   if (minutes < 60) {
@@ -82,6 +90,94 @@ function calendarReminderSummary(value: string): string {
   const remainingMinutes = minutes % 60;
 
   return `${hours} hr ${remainingMinutes} min before`;
+}
+
+function eventDurationVisible(draft: CalendarEventDraft): boolean {
+  if (draft.allDay) {
+    return Date.parse(draft.endsAt) - Date.parse(draft.startsAt) > 24 * 60 * 60 * 1000;
+  }
+
+  return true;
+}
+
+function eventCrossesDate(draft: CalendarEventDraft): boolean {
+  return draft.allDay
+    ? Date.parse(draft.endsAt) - Date.parse(draft.startsAt) > 24 * 60 * 60 * 1000
+    : dateInputValue(draft.startsAt) !== dateInputValue(draft.endsAt);
+}
+
+function calendarDetailRangeLabel(draft: CalendarEventDraft): string {
+  if (!eventCrossesDate(draft)) {
+    return calendarDraftRangeLabel(draft);
+  }
+
+  if (draft.allDay) {
+    return `${dateInputValue(draft.startsAt)}-${allDayEndInputValue(draft.endsAt)} · All day`;
+  }
+
+  return `${dateInputValue(draft.startsAt)} · ${draft.startsAt.slice(11, 16)}-${dateInputValue(draft.endsAt)} · ${draft.endsAt.slice(11, 16)}`;
+}
+
+function visibleConferenceLabel(value: string | undefined): string | undefined {
+  const label = value?.trim();
+  return label ? label.replace(/^https?:\/\//, "") : undefined;
+}
+
+function CalendarConferenceDetails({ conference }: { conference: CalendarEventDraft["conference"] }): JSX.Element | null {
+  if (!conference) {
+    return null;
+  }
+
+  const joinLabel = conference.solutionName ? `Join with ${conference.solutionName}` : "Join with Google Meet";
+  const videoLabel = visibleConferenceLabel(conference.videoLabel) ?? visibleConferenceLabel(conference.videoUri);
+  const phoneLabel = visibleConferenceLabel(conference.phoneLabel) ?? visibleConferenceLabel(conference.phoneUri);
+  const moreLabel = visibleConferenceLabel(conference.moreLabel) ?? visibleConferenceLabel(conference.moreUri) ?? "More phone numbers";
+
+  if (!conference.videoUri && !conference.phoneUri && !conference.moreUri) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-4">
+      {conference.videoUri ? (
+        <DetailLine icon={Video}>
+          <a
+            className="inline-flex items-center gap-1 text-accent hover:underline"
+            href={conference.videoUri}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {joinLabel}
+            <ExternalLink aria-hidden="true" size={14} />
+          </a>
+          {videoLabel ? <div className="text-[var(--text-sm)] text-text-muted">{videoLabel}</div> : null}
+        </DetailLine>
+      ) : null}
+      {conference.phoneUri || phoneLabel ? (
+        <DetailLine icon={Phone}>
+          {conference.phoneUri ? (
+            <a className="text-accent hover:underline" href={conference.phoneUri}>
+              Join by phone
+            </a>
+          ) : (
+            <span>Join by phone</span>
+          )}
+          <div className="text-[var(--text-sm)] text-text-muted">
+            {[phoneLabel, conference.phonePin ? `PIN: ${conference.phonePin}` : null]
+              .filter(Boolean)
+              .join(" ")}
+          </div>
+        </DetailLine>
+      ) : null}
+      {conference.moreUri ? (
+        <DetailLine icon={ExternalLink}>
+          <a className="text-accent hover:underline" href={conference.moreUri} rel="noreferrer" target="_blank">
+            {moreLabel}
+          </a>
+        </DetailLine>
+      ) : null}
+    </div>
+  );
 }
 
 function draftDisplayColor(
@@ -169,63 +265,69 @@ export function CalendarEventDetails({
     .filter(Boolean);
   const reminderLabel = draft.reminderMinutes.trim()
     ? calendarReminderSummary(draft.reminderMinutes)
-    : "None";
+    : null;
   const repeats = draft.repeatFrequency !== "none";
   const showSourceTimeZone = sourceTimeZone !== defaultTimeZone;
+  const location = draft.location.trim();
+  const notes = draft.notes.trim();
+  const showReminder = reminderLabel !== null && reminderLabel !== "None";
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-3 rounded-hcbLg border border-border bg-bg-tertiary p-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <CalendarSourceSwatch calendarId={draft.calendarId} color={displayColor.background} />
-          <span className="min-w-0 flex-1 truncate text-[var(--text-sm)] font-semibold text-text-secondary">
-            {selectedCalendar?.title ?? "Calendar"}
-          </span>
-          {draft.mutationState && draft.mutationState !== "synced" ? (
-            <Badge tone={draft.mutationState === "failed" ? "danger" : "warning"}>
-              {draft.mutationState === "failed" ? "Failed" : "Queued"}
-            </Badge>
-          ) : (
-            <Badge tone="success">Synced</Badge>
-          )}
-        </div>
-        <h3 className="break-words text-[var(--text-xl)] font-semibold leading-snug text-text-primary">
-          {draft.title || "Untitled event"}
-        </h3>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <Clock3 aria-hidden="true" size={13} />
-            <span className="truncate">{calendarDraftRangeLabel(draft)}</span>
-          </span>
-          <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge>
-          {showSourceTimeZone ? <Badge tone="neutral">{sourceTimeZone}</Badge> : null}
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <DetailItem icon={Clock3} label="Time">
-          <div className="grid gap-1">
-            <span>{calendarDraftRangeLabel(draft)}</span>
-            {showSourceTimeZone ? (
-              <span className="text-[var(--text-sm)] text-text-muted">{sourceTimeZone}</span>
+    <div className="grid gap-5 py-1">
+      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-4">
+        <CalendarSourceSwatch
+          calendarId={draft.calendarId}
+          className="mt-2 size-3.5 rounded-hcbSm"
+          color={displayColor.background}
+        />
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <h3 className="min-w-0 break-words text-[var(--text-2xl)] font-semibold leading-tight text-text-primary">
+              {draft.title || "Untitled event"}
+            </h3>
+            {draft.mutationState && draft.mutationState !== "synced" ? (
+              <Badge tone={draft.mutationState === "failed" ? "danger" : "warning"}>
+                {draft.mutationState === "failed" ? "Failed" : "Queued"}
+              </Badge>
             ) : null}
           </div>
-        </DetailItem>
-        {repeats ? (
-          <DetailItem icon={RotateCcw} label="Repeat">
-            {calendarRecurrenceSummary(draft)}
-          </DetailItem>
-        ) : null}
-        <DetailItem icon={MapPin} label="Location">
-          {draft.location.trim() || <span className="text-text-muted">No location</span>}
-        </DetailItem>
-        <DetailItem icon={Bell} label="Reminder">
-          {reminderLabel}
-        </DetailItem>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-base)] text-text-secondary">
+            <span>{calendarDetailRangeLabel(draft)}</span>
+            {eventDurationVisible(draft) ? <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge> : null}
+            {selectedCalendar?.title ? <Badge tone="neutral">{selectedCalendar.title}</Badge> : null}
+            {showSourceTimeZone ? <Badge tone="neutral">{sourceTimeZone}</Badge> : null}
+          </div>
+        </div>
       </div>
 
-      <DetailItem icon={Users} label="Guests">
-        {guests.length > 0 ? (
+      {notes ? (
+        <DetailLine icon={FileText}>
+          <MarkdownPreview
+            ariaLabel="Event notes preview"
+            body={notes}
+            emptyDescription="No notes"
+            emptyTitle="No notes"
+            variant="plain"
+          />
+        </DetailLine>
+      ) : null}
+
+      {showReminder ? (
+        <DetailLine icon={Bell}>
+          {reminderLabel}
+        </DetailLine>
+      ) : null}
+
+      <CalendarConferenceDetails conference={draft.conference} />
+
+      {location ? (
+        <DetailLine icon={MapPin}>
+          {location}
+        </DetailLine>
+      ) : null}
+
+      {guests.length > 0 ? (
+        <DetailLine icon={Users}>
           <div className="flex flex-wrap gap-2">
             {guests.map((guest) => (
               <Badge key={guest} tone="neutral">
@@ -233,24 +335,14 @@ export function CalendarEventDetails({
               </Badge>
             ))}
           </div>
-        ) : (
-          <span className="text-text-muted">No guests</span>
-        )}
-      </DetailItem>
+        </DetailLine>
+      ) : null}
 
-      <DetailItem icon={FileText} label="Notes">
-        {draft.notes.trim() ? (
-          <MarkdownPreview
-            ariaLabel="Event notes preview"
-            body={draft.notes}
-            emptyDescription="No notes"
-            emptyTitle="No notes"
-            variant="plain"
-          />
-        ) : (
-          <span className="text-text-muted">No notes</span>
-        )}
-      </DetailItem>
+      {repeats ? (
+        <DetailLine icon={RotateCcw}>
+          {calendarRecurrenceSummary(draft)}
+        </DetailLine>
+      ) : null}
     </div>
   );
 }

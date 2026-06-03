@@ -83,25 +83,25 @@ export function NoteInspectorSummary({
   );
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-2 rounded-hcbLg border border-border bg-bg-tertiary p-4">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <h3 className="min-w-0 truncate text-[var(--text-xl)] font-semibold text-text-primary">
+    <div className="grid gap-5 py-1">
+      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-4">
+        <span aria-hidden="true" className="mt-2 size-3.5 rounded-hcbSm bg-info" />
+        <div className="min-w-0">
+          <h3 className="min-w-0 break-words text-[var(--text-2xl)] font-semibold leading-tight text-text-primary">
             {note.title || "Untitled note"}
           </h3>
-          <Badge tone="success">Saved</Badge>
+          <p className="mt-2 text-[var(--text-sm)] text-text-muted">{note.updatedLabel}</p>
+          {note.preview ? (
+            <p className="mt-2 text-[var(--text-base)] leading-relaxed text-text-secondary">{note.preview}</p>
+          ) : null}
         </div>
-        <p className="text-[var(--text-sm)] text-text-muted">{note.updatedLabel}</p>
-        {note.preview ? (
-          <p className="text-[var(--text-base)] leading-relaxed text-text-secondary">{note.preview}</p>
-        ) : null}
       </div>
 
-      <MarkdownPreview ariaLabel="Note preview" body={note.body} />
+      {note.body.trim() ? <MarkdownPreview ariaLabel="Note preview" body={note.body} /> : null}
 
-      <div className="grid gap-2">
-        <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">Properties</div>
-        {properties.length > 0 ? (
+      {properties.length > 0 ? (
+        <div className="grid gap-2">
+          <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">Properties</div>
           <div className="flex flex-wrap gap-2">
             {properties.map((property) => (
               <Badge key={`${property.key}-${property.value}`} tone="info">
@@ -109,64 +109,56 @@ export function NoteInspectorSummary({
               </Badge>
             ))}
           </div>
-        ) : (
-          <span className="text-[var(--text-sm)] text-text-muted">No properties</span>
-        )}
-      </div>
+        </div>
+      ) : null}
 
-      <div className="grid gap-3 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+      {links.length > 0 ? (
         <div className="grid gap-2">
           <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">Links</div>
-          {links.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {links.map((title) => {
-                const link = parsePlannerLink(title);
-                const linkedNote = link.kind === "note"
-                  ? noteByNormalizedTitle.get(normalizedNoteTitle(link.label))
-                  : undefined;
-                const action = linkedNote ? () => void onOpenNote(linkedNote.id) : () => undefined;
+          <div className="flex flex-wrap gap-2">
+            {links.map((title) => {
+              const link = parsePlannerLink(title);
+              const linkedNote = link.kind === "note"
+                ? noteByNormalizedTitle.get(normalizedNoteTitle(link.label))
+                : undefined;
+              const action = linkedNote ? () => void onOpenNote(linkedNote.id) : () => undefined;
 
-                return (
-                  <button
-                    aria-label={linkedNote ? `Open linked note ${linkedNote.title}` : `${link.kind} link ${link.label}`}
-                    className={linkButtonClass(linkedNote ? "accent" : "neutral")}
-                    key={title}
-                    onClick={action}
-                    type="button"
-                  >
-                    <Search aria-hidden="true" size={14} />
-                    {linkedNote ? linkedNote.title : `${link.kind}: ${link.label}`}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <span className="text-[var(--text-sm)] text-text-muted">None</span>
-          )}
-        </div>
-
-        <div className="grid gap-2">
-          <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">Backlinks</div>
-          {backlinks.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {backlinks.map((backlink) => (
+              return (
                 <button
-                  aria-label={`Open backlink ${backlink.title}`}
-                  className={linkButtonClass("accent")}
-                  key={backlink.id}
-                  onClick={() => void onOpenNote(backlink.id)}
+                  aria-label={linkedNote ? `Open linked note ${linkedNote.title}` : `${link.kind} link ${link.label}`}
+                  className={linkButtonClass(linkedNote ? "accent" : "neutral")}
+                  key={title}
+                  onClick={action}
                   type="button"
                 >
-                  <RotateCcw aria-hidden="true" size={14} />
-                  {backlink.title}
+                  <Search aria-hidden="true" size={14} />
+                  {linkedNote ? linkedNote.title : `${link.kind}: ${link.label}`}
                 </button>
-              ))}
-            </div>
-          ) : (
-            <span className="text-[var(--text-sm)] text-text-muted">None</span>
-          )}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {backlinks.length > 0 ? (
+        <div className="grid gap-2">
+          <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">Backlinks</div>
+          <div className="flex flex-wrap gap-2">
+            {backlinks.map((backlink) => (
+              <button
+                aria-label={`Open backlink ${backlink.title}`}
+                className={linkButtonClass("accent")}
+                key={backlink.id}
+                onClick={() => void onOpenNote(backlink.id)}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" size={14} />
+                {backlink.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

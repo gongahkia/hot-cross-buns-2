@@ -21,6 +21,7 @@ export interface CalendarEventDraft {
   notes: string;
   guests: string;
   reminderMinutes: string;
+  conference: CalendarEventViewModel["conference"];
   repeatFrequency: CalendarRepeatFrequency;
   repeatCustomFrequency: CalendarEventRecurrence["frequency"];
   repeatEndMode: CalendarRepeatEndMode;

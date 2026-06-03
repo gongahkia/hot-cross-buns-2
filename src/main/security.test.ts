@@ -20,10 +20,11 @@ import {
 } from "./security";
 
 describe("Electron security policy", () => {
-  it("defines a production CSP without remote network or inline script access", () => {
+  it("defines a production CSP without remote script or connect access", () => {
     expect(contentSecurityPolicy(true)).toBe(PRODUCTION_CONTENT_SECURITY_POLICY);
     expect(PRODUCTION_CONTENT_SECURITY_POLICY).toContain("default-src 'none'");
     expect(PRODUCTION_CONTENT_SECURITY_POLICY).toContain("script-src 'self'");
+    expect(PRODUCTION_CONTENT_SECURITY_POLICY).toContain("img-src 'self' data: https: http:");
     expect(PRODUCTION_CONTENT_SECURITY_POLICY).toContain("connect-src 'none'");
     expect(PRODUCTION_CONTENT_SECURITY_POLICY).toContain("object-src 'none'");
     expect(PRODUCTION_CONTENT_SECURITY_POLICY).toContain("frame-src 'none'");

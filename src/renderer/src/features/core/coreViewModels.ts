@@ -81,6 +81,16 @@ export interface CalendarEventViewModel {
   notes: string;
   guestEmails: string[];
   reminderMinutes: number[];
+  conference: {
+    solutionName?: string;
+    videoUri?: string;
+    videoLabel?: string;
+    phoneUri?: string;
+    phoneLabel?: string;
+    phonePin?: string;
+    moreUri?: string;
+    moreLabel?: string;
+  } | null;
   mutationState?: "synced" | "queued" | "failed";
   recurrenceRule: string | null;
 }

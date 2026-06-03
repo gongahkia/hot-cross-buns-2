@@ -166,6 +166,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
       actions: taskInspectorActions(draft, taskInspectorMode),
       body: taskInspectorBody(draft, taskInspectorMode),
       dirty,
+      hideHeader: taskInspectorHidesHeader(draft, taskInspectorMode),
       title: taskInspectorTitle(draft)
     });
   }, [
@@ -282,6 +283,10 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     );
   }
 
+  function taskInspectorHidesHeader(nextDraft: TaskDraft, mode = taskInspectorModeRef.current): boolean {
+    return nextDraft.mode === "edit" && mode === "view";
+  }
+
   function openTaskInspector(
     nextDraft: TaskDraft,
     mode: "view" | "edit" = nextDraft.mode === "edit" ? "view" : "edit"
@@ -296,6 +301,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
       actions: taskInspectorActions(nextDraft, mode),
       body: taskInspectorBody(nextDraft, mode),
       dirty: false,
+      hideHeader: taskInspectorHidesHeader(nextDraft, mode),
       id: nextDraft.id ?? "new",
       kind: "task",
       onConfirmClose: () => taskInspectorModeRef.current !== "edit" || !taskInspectorDirtyRef.current,

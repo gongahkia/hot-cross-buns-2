@@ -84,6 +84,21 @@ export const calendarListResponseSchema = pagedListResponseSchema(
 
 export type CalendarListResponse = z.infer<typeof calendarListResponseSchema>;
 
+export const calendarConferenceSchema = z
+  .object({
+    solutionName: z.string().min(1).max(200).optional(),
+    videoUri: z.string().min(1).max(1_300).optional(),
+    videoLabel: z.string().min(1).max(512).optional(),
+    phoneUri: z.string().min(1).max(1_300).optional(),
+    phoneLabel: z.string().min(1).max(512).optional(),
+    phonePin: z.string().min(1).max(128).optional(),
+    moreUri: z.string().min(1).max(1_300).optional(),
+    moreLabel: z.string().min(1).max(512).optional()
+  })
+  .strict();
+
+export type CalendarConference = z.infer<typeof calendarConferenceSchema>;
+
 export const calendarEventSummarySchema = z
   .object({
     id: idSchema,
@@ -99,6 +114,7 @@ export const calendarEventSummarySchema = z
     notes: z.string().max(20_000).optional(),
     guestEmails: z.array(guestEmailSchema).max(50).optional(),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
+    conference: calendarConferenceSchema.nullable().optional(),
     mutationState: z.enum(["synced", "queued", "failed"]).optional(),
     timeZone: z.string().min(1).max(120).nullable().optional(),
     recurrenceRule: z.string().min(1).max(1_000).nullable().optional(),

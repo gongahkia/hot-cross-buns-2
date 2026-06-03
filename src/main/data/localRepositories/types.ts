@@ -76,6 +76,7 @@ export interface CalendarEventRow extends Record<string, unknown> {
   notes: string | null;
   guestEmailsJson: string | null;
   reminderMinutesJson: string | null;
+  conferenceJson: string | null;
   pendingMutationStatus?: "pending" | "applying" | "failed" | null;
   timeZone: string | null;
   recurrenceRule: string | null;

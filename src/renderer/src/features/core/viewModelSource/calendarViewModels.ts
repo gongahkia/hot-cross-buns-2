@@ -52,6 +52,7 @@ export function stableCalendarEventViewModel(
     event.notes ?? "",
     (event.guestEmails ?? []).join("\u001f"),
     (event.reminderMinutes ?? []).join("\u001f"),
+    event.conference ? JSON.stringify(event.conference) : "",
     event.mutationState ?? "",
     event.recurrenceRule ?? "",
     calendarTitle ?? "",
@@ -89,6 +90,7 @@ export function stableCalendarEventViewModel(
     notes: event.notes?.trim() || "No notes",
     guestEmails: event.guestEmails ?? [],
     reminderMinutes: event.reminderMinutes ?? [],
+    conference: event.conference ?? null,
     mutationState: event.mutationState,
     recurrenceRule: event.recurrenceRule ?? null
   };

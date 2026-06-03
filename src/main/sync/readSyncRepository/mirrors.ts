@@ -210,9 +210,9 @@ export function writeCalendarEvents(
         id, account_id, calendar_id, google_id, recurring_event_id, original_start_at,
         status, summary, description, location, start_at, start_time_zone, end_at,
         end_time_zone, is_all_day, recurrence_rule, color_id, transparency, visibility, etag,
-        sequence, local_time_zone, attendee_emails_json, reminder_minutes_json, google_updated_at,
+        sequence, local_time_zone, attendee_emails_json, reminder_minutes_json, conference_json, google_updated_at,
         created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(account_id, calendar_id, google_id) DO UPDATE SET
         recurring_event_id = excluded.recurring_event_id,
         original_start_at = excluded.original_start_at,
@@ -234,6 +234,7 @@ export function writeCalendarEvents(
         local_time_zone = excluded.local_time_zone,
         attendee_emails_json = excluded.attendee_emails_json,
         reminder_minutes_json = excluded.reminder_minutes_json,
+        conference_json = excluded.conference_json,
         google_updated_at = excluded.google_updated_at,
         updated_at = excluded.updated_at,
         deleted_at = excluded.deleted_at;`,
@@ -262,6 +263,7 @@ export function writeCalendarEvents(
         localTimeZone,
         JSON.stringify(normalizeGuestEmails(event.attendeeEmails)),
         JSON.stringify(normalizeReminderMinutes(event.reminderMinutes)),
+        event.conference ? JSON.stringify(event.conference) : null,
         event.updatedAt ?? null,
         options.now,
         options.now,
@@ -402,6 +404,7 @@ export function updateCalendarEventFromRemote(
                 local_time_zone = ?,
                 attendee_emails_json = ?,
                 reminder_minutes_json = ?,
+                conference_json = ?,
                 google_updated_at = ?,
                 updated_at = ?,
                 deleted_at = ?
@@ -429,6 +432,7 @@ export function updateCalendarEventFromRemote(
         eventTimeZone(input.remote, defaultTimeZone),
         JSON.stringify(normalizeGuestEmails(input.remote.attendeeEmails)),
         JSON.stringify(normalizeReminderMinutes(input.remote.reminderMinutes)),
+        input.remote.conference ? JSON.stringify(input.remote.conference) : null,
         input.remote.updatedAt ?? null,
         input.now,
         input.remote.status === "cancelled" ? input.now : null,
