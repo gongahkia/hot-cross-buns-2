@@ -24,27 +24,39 @@ async function main(): Promise<void> {
     const port = await server.start(0);
     writeMcpRuntimeFile(runtimeFile, port, new Date("2026-06-04T00:00:00.000Z"));
 
-    const stdout = outputBuffer();
-    const stderr = outputBuffer();
-    const exitCode = await runHcbCli(["doctor"], {
-      runtimeFilePaths: [runtimeFile],
-      tokenProvider: async () => token,
-      stdout,
-      stderr
-    });
-
-    if (exitCode !== 0) {
-      throw new Error(`hcb doctor exited ${exitCode}: ${stderr.text()}${stdout.text()}`);
-    }
-
-    if (!stdout.text().includes("HCB doctor:")) {
-      throw new Error(`hcb doctor smoke output was unexpected: ${stdout.text()}`);
-    }
+    await expectCommand(["doctor"], "HCB doctor:", runtimeFile, token);
+    await expectCommand(["today"], "HCB today:", runtimeFile, token);
+    await expectCommand(["search", "launch"], "HCB search:", runtimeFile, token);
 
     process.stdout.write("hcb cli smoke passed\n");
   } finally {
     await server.stop();
     rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+async function expectCommand(
+  argv: string[],
+  expectedOutput: string,
+  runtimeFile: string,
+  token: string
+): Promise<void> {
+  const stdout = outputBuffer();
+  const stderr = outputBuffer();
+  const exitCode = await runHcbCli(argv, {
+    runtimeFilePaths: [runtimeFile],
+    tokenProvider: async () => token,
+    stdout,
+    stderr
+  });
+  const command = argv.join(" ");
+
+  if (exitCode !== 0) {
+    throw new Error(`hcb ${command} exited ${exitCode}: ${stderr.text()}${stdout.text()}`);
+  }
+
+  if (!stdout.text().includes(expectedOutput)) {
+    throw new Error(`hcb ${command} smoke output was unexpected: ${stdout.text()}`);
   }
 }
 

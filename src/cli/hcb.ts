@@ -34,7 +34,17 @@ export interface HcbCliDependencies {
 }
 
 interface ParsedCommand {
-  command: "status" | "log" | "diff" | "show" | "doctor" | "help";
+  command:
+    | "status"
+    | "log"
+    | "diff"
+    | "show"
+    | "doctor"
+    | "search"
+    | "today"
+    | "week"
+    | "export-diagnostics"
+    | "help";
   json: boolean;
   limit?: number;
   level?: string;
@@ -42,6 +52,9 @@ interface ParsedCommand {
   id?: string;
   logLimit?: number;
   mutationLimit?: number;
+  query?: string;
+  scope?: string;
+  startDate?: string;
 }
 
 interface RuntimeTarget {
@@ -102,7 +115,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
     return { command: "help", json: false };
   }
 
-  if (command !== "status" && command !== "log" && command !== "diff" && command !== "show" && command !== "doctor") {
+  if (!isCommand(command)) {
     throw new CliError(`Unknown command '${command}'. Run 'pnpm hcb -- help'.`, 2);
   }
 
@@ -148,6 +161,20 @@ export function parseCommand(argv: string[]): ParsedCommand {
       continue;
     }
 
+    if (arg === "--scope") {
+      const value = args[index + 1];
+      index += 1;
+      parsed.scope = parseScope(value);
+      continue;
+    }
+
+    if (arg === "--start-date") {
+      const value = args[index + 1];
+      index += 1;
+      parsed.startDate = parseStartDate(value);
+      continue;
+    }
+
     if (arg.startsWith("-")) {
       throw new CliError(`Unknown option '${arg}'.`, 2);
     }
@@ -166,8 +193,26 @@ export function parseCommand(argv: string[]): ParsedCommand {
     if (positional.length > 2) {
       throw new CliError("Too many positional arguments for show.", 2);
     }
+  } else if (command === "search") {
+    parsed.query = positional.join(" ").trim();
+
+    if (!parsed.query) {
+      throw new CliError("Usage: pnpm hcb -- search <query> [--scope <scope>] [--limit <limit>]", 2);
+    }
   } else if (positional.length > 0) {
     throw new CliError(`Unexpected argument '${positional[0]}'.`, 2);
+  }
+
+  if (parsed.scope !== undefined && command !== "search") {
+    throw new CliError(`--scope is only supported by search.`, 2);
+  }
+
+  if (parsed.startDate !== undefined && command !== "week") {
+    throw new CliError(`--start-date is only supported by week.`, 2);
+  }
+
+  if ((parsed.logLimit !== undefined || parsed.mutationLimit !== undefined) && command !== "doctor" && command !== "export-diagnostics") {
+    throw new CliError("--log-limit and --mutation-limit are only supported by doctor and export-diagnostics.", 2);
   }
 
   return parsed;
@@ -177,6 +222,10 @@ export async function callCommand(
   command: ParsedCommand,
   dependencies: HcbCliDependencies = {}
 ): Promise<McpToolResponse> {
+  if (command.command === "export-diagnostics") {
+    return callDiagnosticsExport(command, dependencies);
+  }
+
   const tool = toolName(command.command);
   const args: JsonObject = {};
 
@@ -204,6 +253,18 @@ export async function callCommand(
     args.mutationLimit = command.mutationLimit;
   }
 
+  if (command.query !== undefined) {
+    args.query = command.query;
+  }
+
+  if (command.scope !== undefined) {
+    args.scope = command.scope;
+  }
+
+  if (command.startDate !== undefined) {
+    args.startDate = command.startDate;
+  }
+
   return callMcpTool(tool, args, dependencies);
 }
 
@@ -214,6 +275,51 @@ export async function callMcpTool(
 ): Promise<McpToolResponse> {
   const target = discoverRuntime(dependencies);
   const token = await tokenProvider(dependencies)();
+  return callMcpToolWithAuth(name, argumentsObject, dependencies, target, token);
+}
+
+async function callDiagnosticsExport(
+  command: ParsedCommand,
+  dependencies: HcbCliDependencies = {}
+): Promise<McpToolResponse> {
+  const target = discoverRuntime(dependencies);
+  const token = await tokenProvider(dependencies)();
+  const logLimit = command.logLimit ?? 50;
+  const mutationLimit = command.mutationLimit ?? 50;
+  const call = (name: string, args: JsonObject) =>
+    callMcpToolWithAuth(name, args, dependencies, target, token);
+  const [doctor, status, mutations, warningLogs, errorLogs] = await Promise.all([
+    call("hcb_doctor", { logLimit, mutationLimit }),
+    call("hcb_status", {}),
+    call("hcb_diff", { limit: mutationLimit }),
+    call("hcb_log", { limit: logLimit, level: "warn" }),
+    call("hcb_log", { limit: logLimit, level: "error" })
+  ]);
+
+  return {
+    applied: false,
+    dryRun: false,
+    requiresConfirmation: false,
+    message: "Exported HCB diagnostics.",
+    item: {
+      kind: "diagnosticsExport",
+      generatedAt: new Date().toISOString(),
+      doctor: doctor.item ?? {},
+      status: status.item ?? {},
+      pendingMutations: mutations.items ?? [],
+      warningLogs: warningLogs.items ?? [],
+      errorLogs: errorLogs.items ?? []
+    }
+  };
+}
+
+async function callMcpToolWithAuth(
+  name: string,
+  argumentsObject: JsonObject,
+  dependencies: HcbCliDependencies,
+  target: RuntimeTarget,
+  token: string
+): Promise<McpToolResponse> {
   const response = await fetchImpl(dependencies)(`${target.url}:${target.port}/mcp`, {
     method: "POST",
     headers: {
@@ -356,6 +462,10 @@ export function parseRuntimeFile(text: string): HcbMcpRuntimeFile {
 }
 
 export function formatResponse(command: ParsedCommand, response: McpToolResponse): string {
+  if (command.command === "export-diagnostics") {
+    return `${JSON.stringify(response.item ?? {}, null, 2)}\n`;
+  }
+
   if (command.json) {
     return `${JSON.stringify(response, null, 2)}\n`;
   }
@@ -374,6 +484,18 @@ export function formatResponse(command: ParsedCommand, response: McpToolResponse
 
   if (command.command === "doctor") {
     return formatDoctor(response.item ?? {});
+  }
+
+  if (command.command === "search") {
+    return formatSearch(response.items ?? []);
+  }
+
+  if (command.command === "today") {
+    return formatAgenda("HCB today", response.item ?? {});
+  }
+
+  if (command.command === "week") {
+    return formatAgenda("HCB week", response.item ?? {});
   }
 
   return `${JSON.stringify(response.item ?? response, null, 2)}\n`;
@@ -450,6 +572,66 @@ function formatDoctor(item: JsonObject): string {
   return `${lines.join("\n")}\n`;
 }
 
+function formatSearch(items: JsonObject[]): string {
+  if (items.length === 0) {
+    return "No results.\n";
+  }
+
+  const lines = [`HCB search: ${items.length} result${items.length === 1 ? "" : "s"}`];
+
+  for (const item of items) {
+    lines.push(`  ${formatCompactItem(item)}`);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function formatAgenda(title: string, item: JsonObject): string {
+  const range = [optionalText(item.date), optionalText(item.startDate), optionalText(item.endDate)]
+    .filter(Boolean)
+    .join(" ");
+  const lines = [range ? `${title}: ${range}` : title];
+  const tasks = objectArray(item.tasks);
+  const events = objectArray(item.events);
+  const notes = objectArray(item.notes);
+
+  pushSection(lines, "Tasks", tasks);
+  pushSection(lines, "Events", events);
+  pushSection(lines, "Notes", notes);
+
+  if (tasks.length === 0 && events.length === 0 && notes.length === 0) {
+    lines.push("No agenda items.");
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function pushSection(lines: string[], title: string, items: JsonObject[]): void {
+  if (items.length === 0) {
+    return;
+  }
+
+  lines.push(`${title}:`);
+
+  for (const item of items) {
+    lines.push(`  ${formatCompactItem(item)}`);
+  }
+}
+
+function formatCompactItem(item: JsonObject): string {
+  return [
+    optionalText(item.kind) ?? "item",
+    optionalText(item.id) ? `id=${optionalText(item.id)}` : "",
+    optionalText(item.title) ?? optionalText(item.summary) ?? optionalText(item.name) ?? optionalText(item.message) ?? "Untitled",
+    optionalText(item.status) ? `status=${optionalText(item.status)}` : "",
+    optionalText(item.dueDate) ? `due=${optionalText(item.dueDate)}` : "",
+    optionalText(item.startDate) ? `start=${optionalText(item.startDate)}` : "",
+    optionalText(item.endDate) ? `end=${optionalText(item.endDate)}` : "",
+    optionalText(item.taskListTitle) ? `list=${optionalText(item.taskListTitle)}` : "",
+    optionalText(item.calendarTitle) ? `calendar=${optionalText(item.calendarTitle)}` : ""
+  ].filter(Boolean).join(" ");
+}
+
 function helpText(): string {
   return [
     "Usage: pnpm hcb -- <command> [options]",
@@ -457,6 +639,10 @@ function helpText(): string {
     "Commands:",
     "  doctor [--json]                         run agent-friendly diagnostics",
     "  status [--json]                         show account/sync/cache/pending status",
+    "  search <query> [--scope <scope>]        search tasks, notes, events, lists, calendars",
+    "  today [--json]                          show today's agenda",
+    "  week [--start-date <date>] [--json]     show a seven-day agenda",
+    "  export-diagnostics [--json]             export redacted diagnostics JSON",
     "  log [-n <limit>] [--level <level>]      show sanitized recent logs",
     "  diff [--limit <limit>] [--json]         show pending local-to-Google mutations",
     "  show <kind> [id] [--json]               show task, event, note, mutation, or diagnostics",
@@ -464,6 +650,10 @@ function helpText(): string {
     "",
     "Examples:",
     "  pnpm hcb -- doctor",
+    "  pnpm hcb -- search launch --scope tasks",
+    "  pnpm hcb -- today",
+    "  pnpm hcb -- week --start-date 2026-06-04",
+    "  pnpm hcb -- export-diagnostics > hcb-diagnostics.json",
     "  pnpm hcb -- status",
     "  pnpm hcb -- log -n 20 --level warn",
     "  pnpm hcb -- diff --json",
@@ -483,9 +673,29 @@ function toolName(command: ParsedCommand["command"]): string {
       return "hcb_show";
     case "doctor":
       return "hcb_doctor";
+    case "search":
+      return "hcb_search";
+    case "today":
+      return "hcb_today";
+    case "week":
+      return "hcb_week";
     default:
       throw new CliError("Help does not call MCP.");
   }
+}
+
+function isCommand(command: string): command is ParsedCommand["command"] {
+  return (
+    command === "status" ||
+    command === "log" ||
+    command === "diff" ||
+    command === "show" ||
+    command === "doctor" ||
+    command === "search" ||
+    command === "today" ||
+    command === "week" ||
+    command === "export-diagnostics"
+  );
 }
 
 function doctorFailureResponse(message: string): McpToolResponse {
@@ -554,6 +764,22 @@ function parseLevel(value: string | undefined): string {
   throw new CliError("Level must be one of: debug, info, warn, error.", 2);
 }
 
+function parseScope(value: string | undefined): string {
+  if (value === "all" || value === "tasks" || value === "notes" || value === "events" || value === "lists" || value === "calendars") {
+    return value;
+  }
+
+  throw new CliError("Scope must be one of: all, tasks, notes, events, lists, calendars.", 2);
+}
+
+function parseStartDate(value: string | undefined): string {
+  if (!value || Number.isNaN(Date.parse(value))) {
+    throw new CliError("Start date must be an ISO-8601 date or date-time.", 2);
+  }
+
+  return value;
+}
+
 function tokenProvider(dependencies: HcbCliDependencies): () => Promise<string> {
   return dependencies.tokenProvider ?? (() =>
     new KeychainMcpCredentialAdapter(new MacOsKeychainSecretStore()).loadBearerToken());
@@ -585,6 +811,23 @@ function asObject(value: unknown): JsonObject | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as JsonObject
     : undefined;
+}
+
+function objectArray(value: unknown): JsonObject[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is JsonObject => asObject(item) !== undefined);
+}
+
+function optionalText(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const output = String(value).trim();
+  return output.length === 0 ? undefined : output;
 }
 
 function text(value: unknown): string {

@@ -15,6 +15,10 @@ The CLI discovers the runtime file written by the app and loads the bearer token
 
 - `pnpm hcb -- doctor`: run read-only diagnostics and show suggested next commands.
 - `pnpm hcb -- status`: show account, sync, cache, pending mutation, MCP, and build state.
+- `pnpm hcb -- search <query> --scope tasks`: search tasks, notes, events, lists, or calendars.
+- `pnpm hcb -- today`: show today's tasks, events, and notes.
+- `pnpm hcb -- week --start-date 2026-06-04`: show a seven-day agenda.
+- `pnpm hcb -- export-diagnostics`: print a redacted diagnostics JSON bundle.
 - `pnpm hcb -- log -n 20 --level warn`: show sanitized recent logs.
 - `pnpm hcb -- diff --limit 20`: show pending local-to-Google mutations.
 - `pnpm hcb -- show task <id>`: show one task.
@@ -23,7 +27,7 @@ The CLI discovers the runtime file written by the app and loads the bearer token
 - `pnpm hcb -- show mutation <id>`: show one pending mutation.
 - `pnpm hcb -- show diagnostics`: show a diagnostics snapshot.
 
-All commands accept `--json` for structured output. `doctor` also accepts `--log-limit <n>` and `--mutation-limit <n>`.
+All commands accept `--json` for structured output. `doctor` and `export-diagnostics` also accept `--log-limit <n>` and `--mutation-limit <n>`. `export-diagnostics` prints JSON by default.
 
 ## Agent Workflow
 
@@ -32,6 +36,8 @@ All commands accept `--json` for structured output. `doctor` also accepts `--log
 3. If doctor reports failed or pending mutations, run `pnpm hcb -- diff`.
 4. If a mutation id is shown, run `pnpm hcb -- show mutation <id>`.
 5. If recent logs are flagged, run `pnpm hcb -- log --level warn` or `pnpm hcb -- log --level error`.
+6. For user-visible context, run `pnpm hcb -- today`, `pnpm hcb -- week`, or `pnpm hcb -- search <query>`.
+7. For a compact support bundle, run `pnpm hcb -- export-diagnostics`.
 
 ## Smoke Test
 
