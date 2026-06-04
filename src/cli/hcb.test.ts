@@ -191,6 +191,17 @@ describe("hcb CLI", () => {
       target: "task-list",
       id: "list-inbox"
     });
+    expect(parseCommand(["undo-status"])).toMatchObject({
+      command: "undo-status"
+    });
+    expect(parseCommand(["undo"])).toMatchObject({
+      command: "undo"
+    });
+    expect(parseCommand(["redo", "--apply", "--confirmation-id", "confirm-redo"])).toMatchObject({
+      command: "redo",
+      apply: true,
+      confirmationId: "confirm-redo"
+    });
     expect(parseCommand(["schedule", "task", "task-1", "--calendar-id", "cal-primary", "--start-date", "2026-06-04T09:00:00.000Z", "--duration-minutes", "45"])).toMatchObject({
       command: "schedule",
       target: "task",
@@ -247,6 +258,9 @@ describe("hcb CLI", () => {
     expect(() => parseCommand(["delete", "invalid", "id"])).toThrow("Delete target");
     expect(() => parseCommand(["delete", "task"])).toThrow("Usage");
     expect(() => parseCommand(["delete", "task", "task-1", "--title", "Nope"])).toThrow("--title");
+    expect(() => parseCommand(["undo-status", "--apply"])).toThrow("--apply");
+    expect(() => parseCommand(["undo", "task-1"])).toThrow("Usage");
+    expect(() => parseCommand(["redo", "--title", "Nope"])).toThrow("--title");
     expect(() => parseCommand(["schedule", "task", "task-1", "--calendar-id", "cal-primary"])).toThrow("Missing required --start-date");
     expect(() => parseCommand(["settings", "update", "--patch-json", "[]"])).toThrow("--patch-json");
     expect(() => parseCommand(["google", "save-oauth-client"])).toThrow("--client-id");
@@ -1088,6 +1102,103 @@ describe("hcb CLI", () => {
     }
   });
 
+  it("calls MCP undo status, undo, and redo commands", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "hcb-cli-undo-"));
+    const runtimeFile = join(directory, "mcp-runtime.json");
+    const calls: Array<{ body: Record<string, unknown>; authorization?: string }> = [];
+    const fetch: HcbCliDependencies["fetch"] = async (_url, init) => {
+      const body = JSON.parse(init.body) as {
+        params: {
+          name: string;
+          arguments: Record<string, unknown>;
+        };
+      };
+      calls.push({
+        body,
+        authorization: init.headers.Authorization
+      });
+
+      return {
+        status: 200,
+        json: async () => rpcResponse(
+          body.params.name === "hcb_undo_status"
+            ? responseForUndoStatusTool()
+            : responseForWriteTool(body.params.name, body.params.arguments)
+        ),
+        text: async () => ""
+      };
+    };
+
+    try {
+      writeFileSync(
+        runtimeFile,
+        JSON.stringify({
+          running: true,
+          url: "http://127.0.0.1",
+          port: 4777,
+          pid: process.pid,
+          updatedAt: "2026-06-04T00:00:00.000Z"
+        }),
+        "utf8"
+      );
+
+      const statusOut = outputBuffer();
+      const undoOut = outputBuffer();
+      const redoJsonOut = outputBuffer();
+      const redoApplyOut = outputBuffer();
+      const deps = {
+        fetch,
+        runtimeFilePaths: [runtimeFile],
+        stderr: outputBuffer(),
+        tokenProvider: async () => "secret-token"
+      };
+
+      expect(await runHcbCli(["undo-status"], { ...deps, stdout: statusOut })).toBe(0);
+      expect(await runHcbCli(["undo"], { ...deps, stdout: undoOut })).toBe(0);
+      expect(await runHcbCli(["redo", "--json"], { ...deps, stdout: redoJsonOut })).toBe(0);
+      expect(await runHcbCli(["redo", "--apply", "--confirmation-id", "confirm-redo"], { ...deps, stdout: redoApplyOut })).toBe(0);
+      const redoJson = JSON.parse(redoJsonOut.text()) as Record<string, unknown>;
+
+      expect(statusOut.text()).toContain("HCB undo status");
+      expect(statusOut.text()).toContain("Undo: yes Edit task");
+      expect(statusOut.text()).toContain("Redo: yes Edit note");
+      expect(undoOut.text()).toContain("HCB undo: dry-run");
+      expect(undoOut.text()).toContain("Apply: pnpm hcb -- undo --apply --confirmation-id confirm-undo");
+      expect(redoJson).toMatchObject({
+        tool: "hcb_redo",
+        target: "redo",
+        dryRun: true,
+        requiresConfirmation: true,
+        confirmationId: "confirm-redo",
+        applyCommand: "pnpm hcb -- redo --apply --confirmation-id confirm-redo"
+      });
+      expect(redoApplyOut.text()).toContain("HCB redo: applied");
+      expect(`${statusOut.text()}${undoOut.text()}${redoJsonOut.text()}${redoApplyOut.text()}`).not.toContain("secret-token");
+      expect(calls.every((call) => call.authorization === "Bearer secret-token")).toBe(true);
+      expect(calls.map((call) => (call.body.params as { name: string }).name)).toEqual([
+        "hcb_undo_status",
+        "hcb_undo",
+        "hcb_redo",
+        "hcb_redo"
+      ]);
+      expect(calls.map((call) => (call.body.params as { arguments: Record<string, unknown> }).arguments)).toEqual([
+        {},
+        {
+          dryRun: true
+        },
+        {
+          dryRun: true
+        },
+        {
+          dryRun: false,
+          confirmationId: "confirm-redo"
+        }
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("calls MCP advanced write commands without echoing OAuth secrets", async () => {
     const directory = mkdtempSync(join(tmpdir(), "hcb-cli-advanced-write-"));
     const runtimeFile = join(directory, "mcp-runtime.json");
@@ -1368,6 +1479,22 @@ function responseForWriteTool(name: string, args: Record<string, unknown>): Reco
       kind,
       id: String(args.id),
       title: String(args.title ?? patch.title ?? `${target} title`)
+    }
+  };
+}
+
+function responseForUndoStatusTool(): Record<string, unknown> {
+  return {
+    applied: false,
+    dryRun: false,
+    requiresConfirmation: false,
+    message: "Read undo status.",
+    item: {
+      kind: "undoStatus",
+      canUndo: true,
+      canRedo: true,
+      undoLabel: "Edit task",
+      redoLabel: "Edit note"
     }
   };
 }

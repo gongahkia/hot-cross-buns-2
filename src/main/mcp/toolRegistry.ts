@@ -1,4 +1,5 @@
 import { McpConfirmationStore } from "./confirmationStore";
+import { HcbPublicError } from "@shared/ipc/result";
 import type { McpAdminDomainServices, McpDomainServices } from "./domainServices";
 import { McpToolError } from "./errors";
 import type {
@@ -29,7 +30,8 @@ const readToolNames = [
   "hcb_get_note",
   "hcb_list_task_lists",
   "hcb_list_note_lists",
-  "hcb_list_calendars"
+  "hcb_list_calendars",
+  "hcb_undo_status"
 ] as const;
 
 const writeToolNames = [
@@ -55,7 +57,9 @@ const writeToolNames = [
   "hcb_delete_note",
   "hcb_delete_event",
   "hcb_delete_task_list",
-  "hcb_delete_note_list"
+  "hcb_delete_note_list",
+  "hcb_undo",
+  "hcb_redo"
 ] as const;
 
 const destructiveToolNames = new Set<string>([
@@ -63,7 +67,9 @@ const destructiveToolNames = new Set<string>([
   "hcb_delete_note",
   "hcb_delete_event",
   "hcb_delete_task_list",
-  "hcb_delete_note_list"
+  "hcb_delete_note_list",
+  "hcb_undo",
+  "hcb_redo"
 ]);
 
 export const MCP_READ_TOOL_NAMES = new Set<string>(readToolNames);
@@ -108,6 +114,7 @@ export const mcpToolDefinitions: readonly McpToolDefinition[] = [
   readTool("hcb_list_task_lists", "List available Google Tasks lists.", {}),
   readTool("hcb_list_note_lists", "List available local HCB note lists.", {}),
   readTool("hcb_list_calendars", "List available Google calendars.", {}),
+  readTool("hcb_undo_status", "Read current undo and redo availability.", {}),
   writeTool("hcb_create_task", "Create a dated task.", false, {
     title: stringSchema("Task title."),
     notes: stringSchema("Optional task notes."),
@@ -259,7 +266,15 @@ export const mcpToolDefinitions: readonly McpToolDefinition[] = [
     id: stringSchema("Note list id."),
     dryRun: booleanSchema("Preview without applying."),
     confirmationId: stringSchema("Confirmation id returned by a dry-run.")
-  }, ["id"])
+  }, ["id"]),
+  writeTool("hcb_undo", "Undo the latest undoable planner write. Always requires confirmation.", true, {
+    dryRun: booleanSchema("Preview without applying."),
+    confirmationId: stringSchema("Confirmation id returned by a dry-run.")
+  }),
+  writeTool("hcb_redo", "Redo the latest undone planner write. Always requires confirmation.", true, {
+    dryRun: booleanSchema("Preview without applying."),
+    confirmationId: stringSchema("Confirmation id returned by a dry-run.")
+  })
 ];
 
 export class McpToolRegistry {
@@ -429,6 +444,11 @@ export class McpToolRegistry {
         return success({
           message: "Read calendars.",
           items: await this.services.calendar.listCalendars()
+        });
+      case "hcb_undo_status":
+        return success({
+          message: "Read undo status.",
+          item: await this.services.undo.status()
         });
       default:
         throw new McpToolError("UNKNOWN_TOOL", "Unknown MCP tool.");
@@ -678,6 +698,14 @@ export class McpToolRegistry {
       hcb_delete_note_list: {
         preview: (args) => this.services.notes.previewDeleteNoteList(requiredString(args, "id")),
         apply: (args) => this.services.notes.deleteNoteList(requiredString(args, "id"))
+      },
+      hcb_undo: {
+        preview: async () => undoPreview("undo", await this.services.undo.status()),
+        apply: () => withMcpPublicError(() => this.services.undo.undo())
+      },
+      hcb_redo: {
+        preview: async () => undoPreview("redo", await this.services.undo.status()),
+        apply: () => withMcpPublicError(() => this.services.undo.redo())
       }
     };
   }
@@ -689,6 +717,49 @@ export class McpToolRegistry {
 
     return this.adminServices;
   }
+}
+
+function undoPreview(action: "undo" | "redo", status: JsonObject): JsonObject {
+  const canApply = action === "undo"
+    ? status.canUndo === true
+    : status.canRedo === true;
+  const label = action === "undo"
+    ? optionalJsonString(status, "undoLabel")
+    : optionalJsonString(status, "redoLabel");
+
+  if (!canApply) {
+    throw new McpToolError("INVALID_ARGUMENTS", action === "undo" ? "Nothing to undo." : "Nothing to redo.");
+  }
+
+  return {
+    kind: "undoAction",
+    action,
+    title: label ?? action,
+    canApply: true
+  };
+}
+
+async function withMcpPublicError(action: () => Promise<JsonObject> | JsonObject): Promise<JsonObject> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof HcbPublicError) {
+      throw new McpToolError(error.code === "CONFLICT" ? "MUTATION_FAILED" : "INVALID_ARGUMENTS", error.message);
+    }
+
+    throw error;
+  }
+}
+
+function optionalJsonString(input: JsonObject, key: string): string | undefined {
+  const value = input[key];
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
 }
 
 function readTool(

@@ -44,6 +44,7 @@ interface ParsedCommand {
     | "today"
     | "week"
     | "export-diagnostics"
+    | "undo-status"
     | "list"
     | "get"
     | "create"
@@ -53,6 +54,8 @@ interface ParsedCommand {
     | "reopen"
     | "move"
     | "delete"
+    | "undo"
+    | "redo"
     | "schedule"
     | "settings"
     | "google"
@@ -560,6 +563,18 @@ export function parseCommand(argv: string[]): ParsedCommand {
     }
 
     validateDeleteCommand(parsed);
+  } else if (command === "undo-status") {
+    if (positional.length !== 0) {
+      throw new CliError("Usage: pnpm hcb -- undo-status", 2);
+    }
+
+    validateUndoStatusCommand(parsed);
+  } else if (command === "undo" || command === "redo") {
+    if (positional.length !== 0) {
+      throw new CliError(`Usage: pnpm hcb -- ${command} [--apply --confirmation-id <id>]`, 2);
+    }
+
+    validateUndoRedoCommand(parsed);
   } else if (command === "schedule") {
     parsed.target = parseTaskStateTarget(positional[0], command);
     parsed.id = positional[1];
@@ -617,7 +632,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
   }
 
   if (hasWriteOnlyOptions(parsed) && !isWriteCommand(command)) {
-    throw new CliError("Write options are only supported by create, update, rename, complete, reopen, move, schedule, settings, google, and mcp.", 2);
+    throw new CliError("Write options are only supported by create, update, rename, complete, reopen, move, delete, undo, redo, schedule, settings, google, and mcp.", 2);
   }
 
   return parsed;
@@ -1077,6 +1092,10 @@ export function formatResponse(command: ParsedCommand, response: McpToolResponse
     return formatAgenda("HCB week", response.item ?? {});
   }
 
+  if (command.command === "undo-status") {
+    return formatUndoStatus(response.item ?? {});
+  }
+
   if (command.command === "list") {
     return formatList(command.target ?? "items", response.items ?? []);
   }
@@ -1197,11 +1216,22 @@ function formatDetail(target: string, item: JsonObject): string {
   return `HCB ${target}\n${JSON.stringify(item, null, 2)}\n`;
 }
 
+function formatUndoStatus(item: JsonObject): string {
+  return [
+    "HCB undo status",
+    `Undo: ${item.canUndo === true ? "yes" : "no"}${optionalText(item.undoLabel) ? ` ${optionalText(item.undoLabel)}` : ""}`,
+    `Redo: ${item.canRedo === true ? "yes" : "no"}${optionalText(item.redoLabel) ? ` ${optionalText(item.redoLabel)}` : ""}`
+  ].join("\n") + "\n";
+}
+
 function formatWrite(command: ParsedCommand, response: McpToolResponse): string {
   const target = command.target ?? "item";
+  const label = command.target === undefined && (command.command === "undo" || command.command === "redo")
+    ? command.command
+    : `${command.command} ${target}`;
   const state = response.applied ? "applied" : response.dryRun ? "dry-run" : "preview";
   const lines = [
-    `HCB ${command.command} ${target}: ${state}`,
+    `HCB ${label}: ${state}`,
     response.message,
     `Requires confirmation: ${response.requiresConfirmation}`
   ];
@@ -1228,7 +1258,7 @@ function writeJsonOutput(command: ParsedCommand, response: McpToolResponse): Rec
 
   return {
     tool: toolName(command),
-    target: command.target ?? "item",
+    target: command.target ?? command.command,
     ...response,
     ...(applyCommand ? { applyCommand } : {})
   };
@@ -1341,6 +1371,10 @@ function writeCommandPrefix(command: ParsedCommand): string[] {
     return ["pnpm", "hcb", "--", "mcp", command.action ?? "set-enabled"];
   }
 
+  if (command.command === "undo" || command.command === "redo") {
+    return ["pnpm", "hcb", "--", command.command];
+  }
+
   return ["pnpm", "hcb", "--", command.command, command.target ?? "item"];
 }
 
@@ -1439,6 +1473,7 @@ function helpText(): string {
     "  today [--json]                          show today's agenda",
     "  week [--start-date <date>] [--json]     show a seven-day agenda",
     "  export-diagnostics [--json]             export redacted diagnostics JSON",
+    "  undo-status [--json]                    show undo/redo availability",
     "  list <target> [--json]                  list task-lists, calendars, or note-lists",
     "  get <kind> <id> [--json]                get a task, event, or note",
     "  create <kind> [options]                 dry-run create a task, note, event, or list",
@@ -1448,6 +1483,8 @@ function helpText(): string {
     "  reopen task <id>                        dry-run reopen a task",
     "  move task <id> [options]                dry-run move a task",
     "  delete <kind> <id>                      dry-run delete a task, note, event, or list",
+    "  undo                                    dry-run undo latest planner write",
+    "  redo                                    dry-run redo latest undone planner write",
     "  schedule task <id> [options]            dry-run create a calendar block for a task",
     "  settings update --patch-json <json>     dry-run update settings",
     "  google save-oauth-client [options]      dry-run save Google OAuth client config",
@@ -1464,6 +1501,7 @@ function helpText(): string {
     "  pnpm hcb -- today",
     "  pnpm hcb -- week --start-date 2026-06-04",
     "  pnpm hcb -- export-diagnostics > hcb-diagnostics.json",
+    "  pnpm hcb -- undo-status",
     "  pnpm hcb -- list task-lists",
     "  pnpm hcb -- list note-lists",
     "  pnpm hcb -- get task task-id",
@@ -1479,6 +1517,9 @@ function helpText(): string {
     "  pnpm hcb -- move task task-id --parent-id parent-id --previous-sibling-id null",
     "  pnpm hcb -- delete task task-id",
     "  pnpm hcb -- delete task-list list-id",
+    "  pnpm hcb -- undo",
+    "  pnpm hcb -- undo --apply --confirmation-id confirm-id",
+    "  pnpm hcb -- redo",
     "  pnpm hcb -- schedule task task-id --calendar-id cal-id --start-date 2026-06-04T09:00:00.000Z",
     "  pnpm hcb -- settings update --patch-json '{\"mcpEnabled\":true}'",
     "  pnpm hcb -- google begin-oauth --apply",
@@ -1508,6 +1549,8 @@ function toolName(command: ParsedCommand): string {
       return "hcb_today";
     case "week":
       return "hcb_week";
+    case "undo-status":
+      return "hcb_undo_status";
     case "list":
       if (command.target === "task-lists") {
         return "hcb_list_task_lists";
@@ -1610,6 +1653,10 @@ function toolName(command: ParsedCommand): string {
       }
 
       throw new CliError("Unknown delete target.", 2);
+    case "undo":
+      return "hcb_undo";
+    case "redo":
+      return "hcb_redo";
     case "schedule":
       return "hcb_schedule_task_block";
     case "settings":
@@ -1642,6 +1689,7 @@ function isCommand(command: string): command is ParsedCommand["command"] {
     command === "today" ||
     command === "week" ||
     command === "export-diagnostics" ||
+    command === "undo-status" ||
     command === "list" ||
     command === "get" ||
     command === "create" ||
@@ -1651,6 +1699,8 @@ function isCommand(command: string): command is ParsedCommand["command"] {
     command === "reopen" ||
     command === "move" ||
     command === "delete" ||
+    command === "undo" ||
+    command === "redo" ||
     command === "schedule" ||
     command === "settings" ||
     command === "google" ||
@@ -2018,6 +2068,8 @@ function isWriteCommand(command: ParsedCommand["command"]): boolean {
     command === "reopen" ||
     command === "move" ||
     command === "delete" ||
+    command === "undo" ||
+    command === "redo" ||
     command === "schedule" ||
     command === "settings" ||
     command === "google" ||
@@ -2107,6 +2159,16 @@ function validateDeleteCommand(command: ParsedCommand): void {
   rejectCreateOptions(command, ["title", "notes", "dueDate", "taskListId", "parentId", "previousSiblingId", "priority", "plannedStart", "plannedEnd", "durationMinutes", "lockedSchedule", "snoozeUntil", "tags", "noteListId", "body", "details", "startDate", "endDate", "location", "calendarId", "allDay", "guestEmails", "reminderMinutes", "colorId", "timeZone", "recurrenceFrequency", "recurrenceInterval", "recurrenceEndsOn", "recurrenceCount", "recurrenceByDay", "clearRecurrence", "patchJson", "clientId", "clientSecret", "enabled"]);
 }
 
+function validateUndoStatusCommand(command: ParsedCommand): void {
+  rejectReadOptions(command, "undo-status");
+  rejectUnsupportedOptions(command, "undo-status", ["apply", "confirmationId", "title", "notes", "dueDate", "taskListId", "parentId", "previousSiblingId", "priority", "plannedStart", "plannedEnd", "durationMinutes", "lockedSchedule", "snoozeUntil", "tags", "noteListId", "body", "details", "startDate", "endDate", "location", "calendarId", "allDay", "guestEmails", "reminderMinutes", "colorId", "timeZone", "recurrenceFrequency", "recurrenceInterval", "recurrenceEndsOn", "recurrenceCount", "recurrenceByDay", "clearRecurrence", "patchJson", "clientId", "clientSecret", "enabled"]);
+}
+
+function validateUndoRedoCommand(command: ParsedCommand): void {
+  rejectReadOptions(command, command.command);
+  rejectUnsupportedOptions(command, command.command, ["title", "notes", "dueDate", "taskListId", "parentId", "previousSiblingId", "priority", "plannedStart", "plannedEnd", "durationMinutes", "lockedSchedule", "snoozeUntil", "tags", "noteListId", "body", "details", "startDate", "endDate", "location", "calendarId", "allDay", "guestEmails", "reminderMinutes", "colorId", "timeZone", "recurrenceFrequency", "recurrenceInterval", "recurrenceEndsOn", "recurrenceCount", "recurrenceByDay", "clearRecurrence", "patchJson", "clientId", "clientSecret", "enabled"]);
+}
+
 function validateScheduleCommand(command: ParsedCommand): void {
   rejectReadOptions(command, "schedule");
   command.calendarId = requiredCreateText(command.calendarId, "--calendar-id", "schedule task");
@@ -2172,6 +2234,16 @@ function rejectReadOptions(command: ParsedCommand, name: string): void {
 
   if (command.level !== undefined) {
     throw new CliError(`--level is not supported by ${name}.`, 2);
+  }
+}
+
+function rejectUnsupportedOptions(command: ParsedCommand, name: string, keys: Array<keyof ParsedCommand>): void {
+  for (const key of keys) {
+    const value = command[key];
+
+    if (value !== undefined && value !== false) {
+      throw new CliError(`${flagForKey(key)} is not supported by ${name}.`, 2);
+    }
   }
 }
 
@@ -2433,6 +2505,8 @@ function flagForKey(key: keyof ParsedCommand): string {
       return "--client-id";
     case "clientSecret":
       return "--client-secret";
+    case "confirmationId":
+      return "--confirmation-id";
     default:
       return `--${String(key)}`;
   }

@@ -142,7 +142,7 @@ describe("local MCP server contract", () => {
     const tools = jsonBody(list).result.tools as Array<{ name: string }>;
 
     expect(tools.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(["hcb_doctor", "hcb_status", "hcb_log", "hcb_diff", "hcb_show", "hcb_list_note_lists"])
+      expect.arrayContaining(["hcb_doctor", "hcb_status", "hcb_log", "hcb_diff", "hcb_show", "hcb_list_note_lists", "hcb_undo_status"])
     );
 
     const doctor = await post(
@@ -246,6 +246,26 @@ describe("local MCP server contract", () => {
         }
       ]
     });
+
+    const undoStatus = await post(
+      server,
+      rpc("tools/call", {
+        name: "hcb_undo_status",
+        arguments: {}
+      }),
+      authHeaders()
+    );
+
+    expect(structuredContent(undoStatus)).toMatchObject({
+      message: "Read undo status.",
+      item: {
+        kind: "undoStatus",
+        canUndo: true,
+        canRedo: true,
+        undoLabel: "Edit task",
+        redoLabel: "Edit note"
+      }
+    });
   });
 
   it("returns a confirmation id for a dry-run write in confirm-writes mode", async () => {
@@ -326,7 +346,9 @@ describe("local MCP server contract", () => {
         "hcb_rename_task_list",
         "hcb_rename_note_list",
         "hcb_delete_task_list",
-        "hcb_delete_note_list"
+        "hcb_delete_note_list",
+        "hcb_undo",
+        "hcb_redo"
       ])
     );
 
@@ -589,6 +611,41 @@ describe("local MCP server contract", () => {
       item: {
         id: "note-list:default",
         kind: "noteList"
+      }
+    });
+
+    const undoDirect = await post(
+      server,
+      rpc("tools/call", {
+        name: "hcb_undo",
+        arguments: {}
+      }),
+      authHeaders()
+    );
+
+    expect(jsonBody(undoDirect).error).toMatchObject({
+      code: -32001
+    });
+
+    const undoDryRun = await post(
+      server,
+      rpc("tools/call", {
+        name: "hcb_undo",
+        arguments: {
+          dryRun: true
+        }
+      }),
+      authHeaders()
+    );
+
+    expect(structuredContent(undoDryRun)).toMatchObject({
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        kind: "undoAction",
+        action: "undo",
+        title: "Edit task",
+        canApply: true
       }
     });
   });

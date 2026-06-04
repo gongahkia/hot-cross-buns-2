@@ -39,6 +39,25 @@ describe("McpToolRegistry read lists", () => {
       ]
     });
   });
+
+  it("returns undo status", async () => {
+    const response = await new McpToolRegistry(createMcpTestDomainServices()).callTool(
+      "hcb_undo_status",
+      {},
+      context
+    );
+
+    expect(response).toMatchObject({
+      message: "Read undo status.",
+      item: {
+        kind: "undoStatus",
+        canUndo: true,
+        canRedo: true,
+        undoLabel: "Edit task",
+        redoLabel: "Edit note"
+      }
+    });
+  });
 });
 
 describe("McpToolRegistry doctor", () => {
@@ -306,6 +325,95 @@ describe("McpToolRegistry advanced writes", () => {
         kind: "taskList",
         id: "list-inbox"
       }
+    });
+  });
+
+  it("undoes and redoes through the destructive confirmation gate", async () => {
+    const registry = new McpToolRegistry(createMcpTestDomainServices());
+    const undoPreview = await registry.callTool(
+      "hcb_undo",
+      {
+        dryRun: true
+      },
+      allowWritesContext
+    );
+
+    expect(undoPreview).toMatchObject({
+      applied: false,
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        kind: "undoAction",
+        action: "undo",
+        title: "Edit task",
+        canApply: true
+      }
+    });
+    expect(undoPreview.confirmationId).toEqual(expect.any(String));
+
+    await expect(registry.callTool(
+      "hcb_undo",
+      {},
+      allowWritesContext
+    )).rejects.toMatchObject({
+      code: "CONFIRMATION_REQUIRED"
+    });
+
+    const undoApply = await registry.callTool(
+      "hcb_undo",
+      {
+        confirmationId: undoPreview.confirmationId
+      },
+      allowWritesContext
+    );
+
+    expect(undoApply).toMatchObject({
+      applied: true,
+      item: {
+        kind: "undoAction",
+        action: "undo",
+        label: "Edit task",
+        resourceKind: "task",
+        resourceId: "task-1"
+      }
+    });
+
+    const redoPreview = await registry.callTool(
+      "hcb_redo",
+      {
+        dryRun: true
+      },
+      allowWritesContext
+    );
+
+    expect(redoPreview).toMatchObject({
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        kind: "undoAction",
+        action: "redo",
+        title: "Edit task"
+      }
+    });
+  });
+
+  it("refuses undo dry-runs when the stack is empty", async () => {
+    const services = createMcpTestDomainServices();
+    services.state.undoStatus = {
+      kind: "undoStatus",
+      canUndo: false,
+      canRedo: false
+    };
+
+    await expect(new McpToolRegistry(services).callTool(
+      "hcb_undo",
+      {
+        dryRun: true
+      },
+      allowWritesContext
+    )).rejects.toMatchObject({
+      code: "INVALID_ARGUMENTS",
+      message: "Nothing to undo."
     });
   });
 

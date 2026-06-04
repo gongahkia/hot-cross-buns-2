@@ -31,6 +31,7 @@ async function main(): Promise<void> {
     await expectCommand(["list", "calendars"], "HCB calendars:", runtimeFile, token);
     await expectCommand(["list", "note-lists"], "HCB note lists:", runtimeFile, token);
     await expectCommand(["get", "task", "task-1"], "HCB task", runtimeFile, token);
+    await expectCommand(["undo-status"], "HCB undo status", runtimeFile, token);
     await expectCommand(["create", "task", "--title", "Smoke task"], "HCB create task: dry-run", runtimeFile, token);
     await expectCommand(["create", "event", "--title", "Smoke event", "--start-date", "2026-06-04T09:00:00.000Z"], "HCB create event: dry-run", runtimeFile, token);
     await expectCommand(["create", "task-list", "--title", "Smoke tasks"], "HCB create task-list: dry-run", runtimeFile, token);
@@ -46,6 +47,8 @@ async function main(): Promise<void> {
     await expectCommand(["delete", "task", "task-1"], "HCB delete task: dry-run", runtimeFile, token);
     await expectCommand(["delete", "task-list", "list-inbox"], "HCB delete task-list: dry-run", runtimeFile, token);
     await expectCommand(["delete", "note-list", "note-list:default"], "HCB delete note-list: dry-run", runtimeFile, token);
+    await expectCommand(["undo"], "HCB undo: dry-run", runtimeFile, token);
+    await expectCommand(["redo"], "HCB redo: dry-run", runtimeFile, token);
     const updatePreview = await expectCommand(["update", "note", "note-1", "--title", "Smoke updated note"], "HCB update note: dry-run", runtimeFile, token);
     const updateConfirmationId = confirmationIdFromOutput(updatePreview);
     await expectCommand(["update", "note", "note-1", "--title", "Smoke updated note", "--apply", "--confirmation-id", updateConfirmationId], "HCB update note: applied", runtimeFile, token);
