@@ -257,6 +257,58 @@ describe("McpToolRegistry advanced writes", () => {
     });
   });
 
+  it("deletes lists through the destructive confirmation gate", async () => {
+    const registry = new McpToolRegistry(createMcpTestDomainServices());
+    const taskListPreview = await registry.callTool(
+      "hcb_delete_task_list",
+      {
+        id: "list-inbox",
+        dryRun: true
+      },
+      allowWritesContext
+    );
+
+    expect(taskListPreview).toMatchObject({
+      applied: false,
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        kind: "taskList",
+        id: "list-inbox"
+      }
+    });
+    expect(taskListPreview.confirmationId).toEqual(expect.any(String));
+
+    await expect(registry.callTool(
+      "hcb_delete_note_list",
+      {
+        id: "note-list:default"
+      },
+      allowWritesContext
+    )).rejects.toMatchObject({
+      code: "CONFIRMATION_REQUIRED"
+    });
+
+    const taskListApply = await registry.callTool(
+      "hcb_delete_task_list",
+      {
+        id: "list-inbox",
+        confirmationId: taskListPreview.confirmationId
+      },
+      allowWritesContext
+    );
+
+    expect(taskListApply).toMatchObject({
+      applied: true,
+      dryRun: false,
+      requiresConfirmation: false,
+      item: {
+        kind: "taskList",
+        id: "list-inbox"
+      }
+    });
+  });
+
   it("runs admin writes and redacts OAuth secrets from preview output", async () => {
     const settingsPatches: unknown[] = [];
     const savedClients: unknown[] = [];

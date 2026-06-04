@@ -181,6 +181,16 @@ describe("hcb CLI", () => {
       parentId: "parent-1",
       previousSiblingId: null
     });
+    expect(parseCommand(["delete", "task", "task-1"])).toMatchObject({
+      command: "delete",
+      target: "task",
+      id: "task-1"
+    });
+    expect(parseCommand(["delete", "task-list", "list-inbox"])).toMatchObject({
+      command: "delete",
+      target: "task-list",
+      id: "list-inbox"
+    });
     expect(parseCommand(["schedule", "task", "task-1", "--calendar-id", "cal-primary", "--start-date", "2026-06-04T09:00:00.000Z", "--duration-minutes", "45"])).toMatchObject({
       command: "schedule",
       target: "task",
@@ -234,6 +244,9 @@ describe("hcb CLI", () => {
     expect(() => parseCommand(["complete", "task", "task-1", "--title", "Nope"])).toThrow("--title");
     expect(() => parseCommand(["move", "task", "task-1"])).toThrow("At least one update field");
     expect(() => parseCommand(["move", "note", "note-1", "--task-list-id", "list-inbox"])).toThrow("move target");
+    expect(() => parseCommand(["delete", "invalid", "id"])).toThrow("Delete target");
+    expect(() => parseCommand(["delete", "task"])).toThrow("Usage");
+    expect(() => parseCommand(["delete", "task", "task-1", "--title", "Nope"])).toThrow("--title");
     expect(() => parseCommand(["schedule", "task", "task-1", "--calendar-id", "cal-primary"])).toThrow("Missing required --start-date");
     expect(() => parseCommand(["settings", "update", "--patch-json", "[]"])).toThrow("--patch-json");
     expect(() => parseCommand(["google", "save-oauth-client"])).toThrow("--client-id");
@@ -965,6 +978,116 @@ describe("hcb CLI", () => {
     }
   });
 
+  it("calls MCP delete commands with dry-run defaults and confirmation ids", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "hcb-cli-delete-"));
+    const runtimeFile = join(directory, "mcp-runtime.json");
+    const calls: Array<{ body: Record<string, unknown>; authorization?: string }> = [];
+    const fetch: HcbCliDependencies["fetch"] = async (_url, init) => {
+      const body = JSON.parse(init.body) as {
+        params: {
+          name: string;
+          arguments: Record<string, unknown>;
+        };
+      };
+      calls.push({
+        body,
+        authorization: init.headers.Authorization
+      });
+
+      return {
+        status: 200,
+        json: async () => rpcResponse(responseForWriteTool(body.params.name, body.params.arguments)),
+        text: async () => ""
+      };
+    };
+
+    try {
+      writeFileSync(
+        runtimeFile,
+        JSON.stringify({
+          running: true,
+          url: "http://127.0.0.1",
+          port: 4777,
+          pid: process.pid,
+          updatedAt: "2026-06-04T00:00:00.000Z"
+        }),
+        "utf8"
+      );
+
+      const taskOut = outputBuffer();
+      const noteOut = outputBuffer();
+      const eventOut = outputBuffer();
+      const taskListOut = outputBuffer();
+      const noteListJsonOut = outputBuffer();
+      const deps = {
+        fetch,
+        runtimeFilePaths: [runtimeFile],
+        stderr: outputBuffer(),
+        tokenProvider: async () => "secret-token"
+      };
+
+      expect(await runHcbCli(["delete", "task", "task-1"], { ...deps, stdout: taskOut })).toBe(0);
+      expect(await runHcbCli(["delete", "note", "note-1"], { ...deps, stdout: noteOut })).toBe(0);
+      expect(await runHcbCli(["delete", "event", "event-1", "--apply", "--confirmation-id", "confirm-delete-event"], { ...deps, stdout: eventOut })).toBe(0);
+      expect(await runHcbCli(["delete", "task-list", "list-inbox"], { ...deps, stdout: taskListOut })).toBe(0);
+      expect(await runHcbCli(["delete", "note-list", "note-list:default", "--json"], { ...deps, stdout: noteListJsonOut })).toBe(0);
+      const noteListJson = JSON.parse(noteListJsonOut.text()) as Record<string, unknown>;
+
+      expect(taskOut.text()).toContain("HCB delete task: dry-run");
+      expect(taskOut.text()).toContain("Apply: pnpm hcb -- delete task task-1 --apply --confirmation-id confirm-delete-task");
+      expect(noteOut.text()).toContain("HCB delete note: dry-run");
+      expect(eventOut.text()).toContain("HCB delete event: applied");
+      expect(taskListOut.text()).toContain("HCB delete task-list: dry-run");
+      expect(taskListOut.text()).toContain("Apply: pnpm hcb -- delete task-list list-inbox --apply --confirmation-id confirm-delete-task-list");
+      expect(noteListJson).toMatchObject({
+        tool: "hcb_delete_note_list",
+        target: "note-list",
+        dryRun: true,
+        requiresConfirmation: true,
+        confirmationId: "confirm-delete-note-list",
+        applyCommand: "pnpm hcb -- delete note-list note-list:default --apply --confirmation-id confirm-delete-note-list",
+        item: {
+          kind: "noteList",
+          id: "note-list:default"
+        }
+      });
+      expect(`${taskOut.text()}${noteOut.text()}${eventOut.text()}${taskListOut.text()}${noteListJsonOut.text()}`).not.toContain("secret-token");
+      expect(calls.every((call) => call.authorization === "Bearer secret-token")).toBe(true);
+      expect(calls.map((call) => (call.body.params as { name: string }).name)).toEqual([
+        "hcb_delete_task",
+        "hcb_delete_note",
+        "hcb_delete_event",
+        "hcb_delete_task_list",
+        "hcb_delete_note_list"
+      ]);
+      expect(calls.map((call) => (call.body.params as { arguments: Record<string, unknown> }).arguments)).toEqual([
+        {
+          id: "task-1",
+          dryRun: true
+        },
+        {
+          id: "note-1",
+          dryRun: true
+        },
+        {
+          id: "event-1",
+          dryRun: false,
+          confirmationId: "confirm-delete-event"
+        },
+        {
+          id: "list-inbox",
+          dryRun: true
+        },
+        {
+          id: "note-list:default",
+          dryRun: true
+        }
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("calls MCP advanced write commands without echoing OAuth secrets", async () => {
     const directory = mkdtempSync(join(tmpdir(), "hcb-cli-advanced-write-"));
     const runtimeFile = join(directory, "mcp-runtime.json");
@@ -1230,7 +1353,8 @@ function responseForWriteTool(name: string, args: Record<string, unknown>): Reco
     .replace(/^rename-/, "")
     .replace(/^complete-/, "")
     .replace(/^reopen-/, "")
-    .replace(/^move-/, "");
+    .replace(/^move-/, "")
+    .replace(/^delete-/, "");
   const kind = target === "task-list" ? "taskList" : target === "note-list" ? "noteList" : target;
   const patch = typeof args.patch === "object" && args.patch !== null ? args.patch as Record<string, unknown> : {};
 

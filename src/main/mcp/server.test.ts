@@ -324,7 +324,9 @@ describe("local MCP server contract", () => {
         "hcb_create_task_list",
         "hcb_create_note_list",
         "hcb_rename_task_list",
-        "hcb_rename_note_list"
+        "hcb_rename_note_list",
+        "hcb_delete_task_list",
+        "hcb_delete_note_list"
       ])
     );
 
@@ -530,6 +532,65 @@ describe("local MCP server contract", () => {
       requiresConfirmation: true
     });
     expect(preview.confirmationId).toEqual(expect.any(String));
+
+    const listDirect = await post(
+      server,
+      rpc("tools/call", {
+        name: "hcb_delete_task_list",
+        arguments: {
+          id: "list-inbox"
+        }
+      }),
+      authHeaders()
+    );
+
+    expect(jsonBody(listDirect).error).toMatchObject({
+      code: -32001
+    });
+
+    const listDryRun = await post(
+      server,
+      rpc("tools/call", {
+        name: "hcb_delete_task_list",
+        arguments: {
+          id: "list-inbox",
+          dryRun: true
+        }
+      }),
+      authHeaders()
+    );
+    const listPreview = structuredContent(listDryRun);
+
+    expect(listPreview).toMatchObject({
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        id: "list-inbox",
+        kind: "taskList"
+      }
+    });
+    expect(listPreview.confirmationId).toEqual(expect.any(String));
+
+    const noteListDryRun = await post(
+      server,
+      rpc("tools/call", {
+        name: "hcb_delete_note_list",
+        arguments: {
+          id: "note-list:default",
+          dryRun: true
+        }
+      }),
+      authHeaders()
+    );
+
+    expect(structuredContent(noteListDryRun)).toMatchObject({
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        id: "note-list:default",
+        kind: "noteList"
+      }
+    });
   });
 
   it("redacts audit metadata by recording keys and outcomes without argument values", async () => {

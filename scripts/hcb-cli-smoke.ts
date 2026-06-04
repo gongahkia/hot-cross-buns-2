@@ -43,6 +43,9 @@ async function main(): Promise<void> {
     await expectCommand(["complete", "task", "task-1"], "HCB complete task: dry-run", runtimeFile, token);
     await expectCommand(["move", "task", "task-1", "--task-list-id", "list-inbox"], "HCB move task: dry-run", runtimeFile, token);
     await expectCommand(["schedule", "task", "task-1", "--calendar-id", "cal-primary", "--start-date", "2026-06-04T09:00:00.000Z"], "HCB schedule task: dry-run", runtimeFile, token);
+    await expectCommand(["delete", "task", "task-1"], "HCB delete task: dry-run", runtimeFile, token);
+    await expectCommand(["delete", "task-list", "list-inbox"], "HCB delete task-list: dry-run", runtimeFile, token);
+    await expectCommand(["delete", "note-list", "note-list:default"], "HCB delete note-list: dry-run", runtimeFile, token);
     const updatePreview = await expectCommand(["update", "note", "note-1", "--title", "Smoke updated note"], "HCB update note: dry-run", runtimeFile, token);
     const updateConfirmationId = confirmationIdFromOutput(updatePreview);
     await expectCommand(["update", "note", "note-1", "--title", "Smoke updated note", "--apply", "--confirmation-id", updateConfirmationId], "HCB update note: applied", runtimeFile, token);
