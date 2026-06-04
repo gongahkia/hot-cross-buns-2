@@ -25,6 +25,9 @@ The CLI discovers the runtime file written by the app and loads the bearer token
 - `pnpm hcb -- get task <id>`: get one task by id.
 - `pnpm hcb -- get event <id>`: get one event by id.
 - `pnpm hcb -- get note <id>`: get one note by id.
+- `pnpm hcb -- create task --title "Plan" --due-date 2026-06-04`: dry-run a task create.
+- `pnpm hcb -- create note --title "Draft" --body "Body"`: dry-run a note create.
+- `pnpm hcb -- create event --title "Review" --start-date 2026-06-04T09:00:00.000Z`: dry-run an event create.
 - `pnpm hcb -- log -n 20 --level warn`: show sanitized recent logs.
 - `pnpm hcb -- diff --limit 20`: show pending local-to-Google mutations.
 - `pnpm hcb -- show task <id>`: show one task.
@@ -34,6 +37,14 @@ The CLI discovers the runtime file written by the app and loads the bearer token
 - `pnpm hcb -- show diagnostics`: show a diagnostics snapshot.
 
 All commands accept `--json` for structured output. `doctor` and `export-diagnostics` also accept `--log-limit <n>` and `--mutation-limit <n>`. `export-diagnostics` prints JSON by default.
+
+## Create Workflow
+
+1. Run `pnpm hcb -- create <task|note|event> --title <title> ...` without `--apply`.
+2. Inspect the preview and `Confirmation id` if one is returned.
+3. In `confirm-writes` mode, rerun the same create command with `--apply --confirmation-id <id>`.
+4. In `allow-writes` mode, rerun the same create command with `--apply`.
+5. In `read-only` mode, create commands are rejected.
 
 ## Agent Workflow
 

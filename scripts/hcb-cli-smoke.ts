@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const server = new LocalMcpServer({
     credentialAdapter: new StaticMcpCredentialAdapter(token, "smoke"),
     permissionProvider: {
-      getMode: () => "read-only"
+      getMode: () => "confirm-writes"
     },
     toolRegistry: new McpToolRegistry(createMcpTestDomainServices())
   });
@@ -31,6 +31,7 @@ async function main(): Promise<void> {
     await expectCommand(["list", "calendars"], "HCB calendars:", runtimeFile, token);
     await expectCommand(["list", "note-lists"], "HCB note lists:", runtimeFile, token);
     await expectCommand(["get", "task", "task-1"], "HCB task", runtimeFile, token);
+    await expectCommand(["create", "note", "--title", "Smoke note", "--body", "Smoke body"], "HCB create note: dry-run", runtimeFile, token);
 
     process.stdout.write("hcb cli smoke passed\n");
   } finally {
