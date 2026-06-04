@@ -12,6 +12,8 @@ interface TestDomainState {
   nextTaskId: number;
   nextNoteId: number;
   nextEventId: number;
+  nextTaskListId: number;
+  nextNoteListId: number;
 }
 
 export interface McpTestDomainServices extends McpDomainServices {
@@ -94,7 +96,9 @@ export function createMcpTestDomainServices(): McpTestDomainServices {
     ],
     nextTaskId: 2,
     nextNoteId: 2,
-    nextEventId: 2
+    nextEventId: 2,
+    nextTaskListId: 2,
+    nextNoteListId: 2
   };
 
   return {
@@ -132,6 +136,22 @@ export function createMcpTestDomainServices(): McpTestDomainServices {
     tasks: {
       getTask: (id) => cloneExisting(state.tasks, id, "Task"),
       listTaskLists: () => state.taskLists.map(cloneObject),
+      previewCreateTaskList: (input) =>
+        compactObject({
+          kind: "taskList",
+          title: requiredText(input, "title")
+        }),
+      createTaskList: (input) => {
+        const id = `task-list-${state.nextTaskListId}`;
+        state.nextTaskListId += 1;
+        const taskList = compactObject({
+          kind: "taskList",
+          id,
+          title: requiredText(input, "title")
+        });
+        state.taskLists.push(taskList);
+        return cloneObject(taskList);
+      },
       previewCreateTask: (input) =>
         compactObject({
           kind: "task",
@@ -208,6 +228,26 @@ export function createMcpTestDomainServices(): McpTestDomainServices {
     notes: {
       getNote: (id) => cloneExisting(state.notes, id, "Note"),
       listNoteLists: () => state.noteLists.map(cloneObject),
+      previewCreateNoteList: (input) =>
+        compactObject({
+          kind: "noteList",
+          title: requiredText(input, "title"),
+          noteCount: 0,
+          updatedAt: "2026-05-22T00:00:00.000Z"
+        }),
+      createNoteList: (input) => {
+        const id = `note-list:${state.nextNoteListId}`;
+        state.nextNoteListId += 1;
+        const noteList = compactObject({
+          kind: "noteList",
+          id,
+          title: requiredText(input, "title"),
+          noteCount: 0,
+          updatedAt: "2026-05-22T00:00:00.000Z"
+        });
+        state.noteLists.push(noteList);
+        return cloneObject(noteList);
+      },
       previewCreateNote: (input) =>
         compactObject({
           kind: "note",

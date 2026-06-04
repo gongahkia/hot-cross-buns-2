@@ -62,6 +62,24 @@ export function createMcpDomainServices(state: PlaceholderState): McpDomainServi
           id: taskList.id,
           title: taskList.title
         })),
+      previewCreateTaskList: (input) => compactJsonObject({
+        kind: "taskList",
+        title: requiredText(input, "title")
+      }),
+      createTaskList: (input) => {
+        const taskList = {
+          kind: "taskList",
+          id: `list-local-${state.taskLists.length + 1}`,
+          title: requiredText(input, "title")
+        };
+
+        state.taskLists.push({
+          id: taskList.id,
+          title: taskList.title
+        });
+        state.sync.pendingMutationCount += 1;
+        return taskList;
+      },
       previewCreateTask: (input) => compactJsonObject({
         kind: "task",
         title: requiredText(input, "title"),
@@ -138,6 +156,19 @@ export function createMcpDomainServices(state: PlaceholderState): McpDomainServi
     notes: {
       getNote: (id) => noteJson(requiredById(state.notes, id, "Note")),
       listNoteLists: () => noteListsFromState(state),
+      previewCreateNoteList: (input) => compactJsonObject({
+        kind: "noteList",
+        title: requiredText(input, "title"),
+        noteCount: 0,
+        updatedAt: new Date().toISOString()
+      }),
+      createNoteList: (input) => compactJsonObject({
+        kind: "noteList",
+        id: `note-list:${state.notes.length + 1}`,
+        title: requiredText(input, "title"),
+        noteCount: 0,
+        updatedAt: new Date().toISOString()
+      }),
       previewCreateNote: (input) => compactJsonObject({
         kind: "note",
         title: requiredText(input, "title"),

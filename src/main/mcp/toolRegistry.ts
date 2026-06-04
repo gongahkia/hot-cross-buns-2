@@ -36,6 +36,8 @@ const writeToolNames = [
   "hcb_create_task",
   "hcb_create_note",
   "hcb_create_event",
+  "hcb_create_task_list",
+  "hcb_create_note_list",
   "hcb_update_task",
   "hcb_update_note",
   "hcb_update_event",
@@ -122,6 +124,16 @@ export const mcpToolDefinitions: readonly McpToolDefinition[] = [
     dryRun: booleanSchema("Preview without applying."),
     confirmationId: stringSchema("Confirmation id returned by a dry-run.")
   }, ["title", "startDate"]),
+  writeTool("hcb_create_task_list", "Create a Google Tasks list.", false, {
+    title: stringSchema("Task list title."),
+    dryRun: booleanSchema("Preview without applying."),
+    confirmationId: stringSchema("Confirmation id returned by a dry-run.")
+  }, ["title"]),
+  writeTool("hcb_create_note_list", "Create a local HCB note list.", false, {
+    title: stringSchema("Note list title."),
+    dryRun: booleanSchema("Preview without applying."),
+    confirmationId: stringSchema("Confirmation id returned by a dry-run.")
+  }, ["title"]),
   writeTool("hcb_update_task", "Update task fields.", false, {
     id: stringSchema("Task id."),
     patch: objectSchema("Fields: title, notes, dueDate, taskListId."),
@@ -430,6 +442,14 @@ export class McpToolRegistry {
       hcb_create_event: {
         preview: (args) => this.services.calendar.previewCreateEvent(domainArguments(args)),
         apply: (args) => this.services.calendar.createEvent(domainArguments(args))
+      },
+      hcb_create_task_list: {
+        preview: (args) => this.services.tasks.previewCreateTaskList(domainArguments(args)),
+        apply: (args) => this.services.tasks.createTaskList(domainArguments(args))
+      },
+      hcb_create_note_list: {
+        preview: (args) => this.services.notes.previewCreateNoteList(domainArguments(args)),
+        apply: (args) => this.services.notes.createNoteList(domainArguments(args))
       },
       hcb_update_task: {
         preview: (args) =>

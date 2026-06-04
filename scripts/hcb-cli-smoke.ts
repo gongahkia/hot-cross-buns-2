@@ -31,7 +31,13 @@ async function main(): Promise<void> {
     await expectCommand(["list", "calendars"], "HCB calendars:", runtimeFile, token);
     await expectCommand(["list", "note-lists"], "HCB note lists:", runtimeFile, token);
     await expectCommand(["get", "task", "task-1"], "HCB task", runtimeFile, token);
-    await expectCommand(["create", "note", "--title", "Smoke note", "--body", "Smoke body"], "HCB create note: dry-run", runtimeFile, token);
+    await expectCommand(["create", "task", "--title", "Smoke task"], "HCB create task: dry-run", runtimeFile, token);
+    await expectCommand(["create", "event", "--title", "Smoke event", "--start-date", "2026-06-04T09:00:00.000Z"], "HCB create event: dry-run", runtimeFile, token);
+    await expectCommand(["create", "task-list", "--title", "Smoke tasks"], "HCB create task-list: dry-run", runtimeFile, token);
+    await expectCommand(["create", "note-list", "--title", "Smoke notes"], "HCB create note-list: dry-run", runtimeFile, token);
+    const notePreview = await expectCommand(["create", "note", "--title", "Smoke note", "--body", "Smoke body"], "HCB create note: dry-run", runtimeFile, token);
+    const confirmationId = confirmationIdFromOutput(notePreview);
+    await expectCommand(["create", "note", "--title", "Smoke note", "--body", "Smoke body", "--apply", "--confirmation-id", confirmationId], "HCB create note: applied", runtimeFile, token);
 
     process.stdout.write("hcb cli smoke passed\n");
   } finally {
@@ -45,7 +51,7 @@ async function expectCommand(
   expectedOutput: string,
   runtimeFile: string,
   token: string
-): Promise<void> {
+): Promise<string> {
   const stdout = outputBuffer();
   const stderr = outputBuffer();
   const exitCode = await runHcbCli(argv, {
@@ -63,6 +69,18 @@ async function expectCommand(
   if (!stdout.text().includes(expectedOutput)) {
     throw new Error(`hcb ${command} smoke output was unexpected: ${stdout.text()}`);
   }
+
+  return stdout.text();
+}
+
+function confirmationIdFromOutput(output: string): string {
+  const match = /^Confirmation id: (.+)$/m.exec(output);
+
+  if (!match) {
+    throw new Error(`confirmation id was missing: ${output}`);
+  }
+
+  return match[1].trim();
 }
 
 function outputBuffer(): NodeJS.WritableStream & { text: () => string } {

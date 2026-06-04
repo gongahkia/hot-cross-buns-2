@@ -97,7 +97,7 @@ describe("hcb CLI", () => {
       apply: true,
       confirmationId: "confirm-1"
     });
-    expect(parseCommand(["create", "event", "--title", "Review", "--start-date", "2026-06-04T09:00:00.000Z", "--end-date", "2026-06-04T10:00:00.000Z", "--details", "Agenda", "--location", "Office", "--calendar-id", "cal-primary", "--all-day"])).toMatchObject({
+    expect(parseCommand(["create", "event", "--title", "Review", "--start-date", "2026-06-04T09:00:00.000Z", "--end-date", "2026-06-04T10:00:00.000Z", "--details", "Agenda", "--location", "Office", "--calendar-id", "cal-primary"])).toMatchObject({
       command: "create",
       target: "event",
       title: "Review",
@@ -105,8 +105,25 @@ describe("hcb CLI", () => {
       endDate: "2026-06-04T10:00:00.000Z",
       details: "Agenda",
       location: "Office",
-      calendarId: "cal-primary",
+      calendarId: "cal-primary"
+    });
+    expect(parseCommand(["create", "event", "--title", "Holiday", "--start-date", "2026-06-04", "--end-date", "2026-06-05", "--all-day"])).toMatchObject({
+      command: "create",
+      target: "event",
+      title: "Holiday",
+      startDate: "2026-06-04",
+      endDate: "2026-06-05",
       allDay: true
+    });
+    expect(parseCommand(["create", "task-list", "--title", "Errands"])).toMatchObject({
+      command: "create",
+      target: "task-list",
+      title: "Errands"
+    });
+    expect(parseCommand(["create", "note-list", "--title", "Project notes"])).toMatchObject({
+      command: "create",
+      target: "note-list",
+      title: "Project notes"
     });
     expect(() => parseCommand(["search", "launch", "--scope", "invalid"])).toThrow("Scope");
     expect(() => parseCommand(["week", "--start-date", "not-a-date"])).toThrow("Start date");
@@ -115,8 +132,12 @@ describe("hcb CLI", () => {
     expect(() => parseCommand(["get", "invalid", "id"])).toThrow("Get target");
     expect(() => parseCommand(["get", "task"])).toThrow("Usage");
     expect(() => parseCommand(["create", "task"])).toThrow("Missing required --title");
+    expect(() => parseCommand(["create", "task", "--title", " "])).toThrow("Missing required --title");
     expect(() => parseCommand(["create", "event", "--title", "Review"])).toThrow("Missing required --start-date");
+    expect(() => parseCommand(["create", "event", "--title", "Review", "--start-date", "2026-06-04T10:00:00.000Z", "--end-date", "2026-06-04T09:00:00.000Z"])).toThrow("--end-date");
+    expect(() => parseCommand(["create", "event", "--title", "Holiday", "--start-date", "2026-06-04T09:00:00.000Z", "--all-day"])).toThrow("--all-day");
     expect(() => parseCommand(["create", "note", "--title", "Scratch", "--task-list-id", "list-inbox"])).toThrow("--task-list-id");
+    expect(() => parseCommand(["create", "task-list", "--title", "Errands", "--body", "Nope"])).toThrow("--body");
     expect(() => parseCommand(["create", "invalid", "--title", "Scratch"])).toThrow("Create target");
   });
 
@@ -603,8 +624,11 @@ describe("hcb CLI", () => {
       );
 
       const taskOut = outputBuffer();
+      const noteDryRunOut = outputBuffer();
       const noteOut = outputBuffer();
       const eventOut = outputBuffer();
+      const taskListOut = outputBuffer();
+      const noteListJsonOut = outputBuffer();
       const deps = {
         fetch,
         runtimeFilePaths: [runtimeFile],
@@ -613,21 +637,43 @@ describe("hcb CLI", () => {
       };
 
       expect(await runHcbCli(["create", "task", "--title", "Plan launch", "--notes", "Checklist", "--due-date", "2026-06-04", "--task-list-id", "list-inbox"], { ...deps, stdout: taskOut })).toBe(0);
+      expect(await runHcbCli(["create", "note", "--title", "Scratch", "--body", "Local body"], { ...deps, stdout: noteDryRunOut })).toBe(0);
       expect(await runHcbCli(["create", "note", "--title", "Scratch", "--body", "Local body", "--apply", "--confirmation-id", "confirm-1"], { ...deps, stdout: noteOut })).toBe(0);
-      expect(await runHcbCli(["create", "event", "--title", "Review", "--start-date", "2026-06-04T09:00:00.000Z", "--end-date", "2026-06-04T10:00:00.000Z", "--details", "Agenda", "--location", "Office", "--calendar-id", "cal-primary", "--all-day"], { ...deps, stdout: eventOut })).toBe(0);
+      expect(await runHcbCli(["create", "event", "--title", "Review", "--start-date", "2026-06-04T09:00:00.000Z", "--end-date", "2026-06-04T10:00:00.000Z", "--details", "Agenda", "--location", "Office", "--calendar-id", "cal-primary"], { ...deps, stdout: eventOut })).toBe(0);
+      expect(await runHcbCli(["create", "task-list", "--title", "Errands"], { ...deps, stdout: taskListOut })).toBe(0);
+      expect(await runHcbCli(["create", "note-list", "--title", "Project notes", "--json"], { ...deps, stdout: noteListJsonOut })).toBe(0);
+      const noteListJson = JSON.parse(noteListJsonOut.text()) as Record<string, unknown>;
 
       expect(taskOut.text()).toContain("HCB create task: dry-run");
       expect(taskOut.text()).toContain("Confirmation id: confirm-task");
+      expect(taskOut.text()).toContain("Apply: pnpm hcb -- create task --title 'Plan launch' --notes Checklist --due-date 2026-06-04 --task-list-id list-inbox --apply --confirmation-id confirm-task");
+      expect(noteDryRunOut.text()).toContain("Apply: pnpm hcb -- create note --title Scratch --body 'Local body' --apply --confirmation-id confirm-note");
       expect(noteOut.text()).toContain("HCB create note: applied");
       expect(eventOut.text()).toContain("HCB create event: dry-run");
-      expect(taskOut.text()).not.toContain("secret-token");
-      expect(noteOut.text()).not.toContain("secret-token");
-      expect(eventOut.text()).not.toContain("secret-token");
+      expect(taskListOut.text()).toContain("HCB create task-list: dry-run");
+      expect(taskListOut.text()).toContain("Apply: pnpm hcb -- create task-list --title Errands --apply --confirmation-id confirm-task-list");
+      expect(noteListJson).toMatchObject({
+        tool: "hcb_create_note_list",
+        target: "note-list",
+        dryRun: true,
+        requiresConfirmation: true,
+        confirmationId: "confirm-note-list",
+        applyCommand: "pnpm hcb -- create note-list --title 'Project notes' --apply --confirmation-id confirm-note-list",
+        item: {
+          kind: "noteList",
+          id: "note-list-1",
+          title: "Project notes"
+        }
+      });
+      expect(`${taskOut.text()}${noteDryRunOut.text()}${noteOut.text()}${eventOut.text()}${taskListOut.text()}${noteListJsonOut.text()}`).not.toContain("secret-token");
       expect(calls.every((call) => call.authorization === "Bearer secret-token")).toBe(true);
       expect(calls.map((call) => (call.body.params as { name: string }).name)).toEqual([
         "hcb_create_task",
         "hcb_create_note",
-        "hcb_create_event"
+        "hcb_create_note",
+        "hcb_create_event",
+        "hcb_create_task_list",
+        "hcb_create_note_list"
       ]);
       expect(calls.map((call) => (call.body.params as { arguments: Record<string, unknown> }).arguments)).toEqual([
         {
@@ -635,6 +681,11 @@ describe("hcb CLI", () => {
           notes: "Checklist",
           dueDate: "2026-06-04",
           taskListId: "list-inbox",
+          dryRun: true
+        },
+        {
+          title: "Scratch",
+          body: "Local body",
           dryRun: true
         },
         {
@@ -650,8 +701,15 @@ describe("hcb CLI", () => {
           endDate: "2026-06-04T10:00:00.000Z",
           location: "Office",
           calendarId: "cal-primary",
-          dryRun: true,
-          isAllDay: true
+          dryRun: true
+        },
+        {
+          title: "Errands",
+          dryRun: true
+        },
+        {
+          title: "Project notes",
+          dryRun: true
         }
       ]);
     } finally {
@@ -748,7 +806,8 @@ function rpcResponse(structuredContent: Record<string, unknown>): Record<string,
 
 function responseForCreateTool(name: string, args: Record<string, unknown>): Record<string, unknown> {
   const dryRun = args.dryRun !== false;
-  const target = name.replace("hcb_create_", "");
+  const target = name.replace("hcb_create_", "").replaceAll("_", "-");
+  const kind = target === "task-list" ? "taskList" : target === "note-list" ? "noteList" : target;
   const id = `${target}-1`;
 
   return {
@@ -758,7 +817,7 @@ function responseForCreateTool(name: string, args: Record<string, unknown>): Rec
     ...(dryRun ? { confirmationId: `confirm-${target}` } : {}),
     message: dryRun ? "Dry-run ready. Pass confirmationId to apply." : `Applied create ${target}.`,
     item: {
-      kind: target,
+      kind,
       id,
       title: String(args.title)
     }

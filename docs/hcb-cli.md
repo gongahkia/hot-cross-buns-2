@@ -28,6 +28,8 @@ The CLI discovers the runtime file written by the app and loads the bearer token
 - `pnpm hcb -- create task --title "Plan" --due-date 2026-06-04`: dry-run a task create.
 - `pnpm hcb -- create note --title "Draft" --body "Body"`: dry-run a note create.
 - `pnpm hcb -- create event --title "Review" --start-date 2026-06-04T09:00:00.000Z`: dry-run an event create.
+- `pnpm hcb -- create task-list --title "Errands"`: dry-run a task list create.
+- `pnpm hcb -- create note-list --title "Project notes"`: dry-run a note list create.
 - `pnpm hcb -- log -n 20 --level warn`: show sanitized recent logs.
 - `pnpm hcb -- diff --limit 20`: show pending local-to-Google mutations.
 - `pnpm hcb -- show task <id>`: show one task.
@@ -40,8 +42,8 @@ All commands accept `--json` for structured output. `doctor` and `export-diagnos
 
 ## Create Workflow
 
-1. Run `pnpm hcb -- create <task|note|event> --title <title> ...` without `--apply`.
-2. Inspect the preview and `Confirmation id` if one is returned.
+1. Run `pnpm hcb -- create <task|note|event|task-list|note-list> --title <title> ...` without `--apply`.
+2. Inspect the preview and `Apply:` command.
 3. In `confirm-writes` mode, rerun the same create command with `--apply --confirmation-id <id>`.
 4. In `allow-writes` mode, rerun the same create command with `--apply`.
 5. In `read-only` mode, create commands are rejected.
@@ -65,7 +67,7 @@ Run the fixture-backed CLI/MCP smoke test:
 pnpm hcb:smoke
 ```
 
-This starts an in-process local MCP server, writes a temporary runtime file, runs `pnpm hcb -- doctor` behavior through the CLI entry point, and removes the temp files.
+This starts an in-process local MCP server, writes a temporary runtime file, runs read/create behavior through the CLI entry point, and removes the temp files.
 
 ## Privacy
 

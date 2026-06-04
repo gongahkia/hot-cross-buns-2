@@ -39,6 +39,7 @@ Every write tool must accept `dryRun`.
 - `hcb_get_event`
 - `hcb_get_note`
 - `hcb_list_task_lists`
+- `hcb_list_note_lists`
 - `hcb_list_calendars`
 
 ## Required Write Tools
@@ -46,6 +47,8 @@ Every write tool must accept `dryRun`.
 - `hcb_create_task`
 - `hcb_create_note`
 - `hcb_create_event`
+- `hcb_create_task_list`
+- `hcb_create_note_list`
 - `hcb_update_task`
 - `hcb_update_note`
 - `hcb_update_event`

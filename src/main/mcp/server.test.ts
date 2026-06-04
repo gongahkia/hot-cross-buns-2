@@ -314,6 +314,96 @@ describe("local MCP server contract", () => {
     });
   });
 
+  it("exposes and gates create-list write tools", async () => {
+    const readOnly = fixture("read-only");
+    const list = await post(readOnly.server, rpc("tools/list"), authHeaders());
+    const tools = jsonBody(list).result.tools as Array<{ name: string }>;
+
+    expect(tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["hcb_create_task_list", "hcb_create_note_list"])
+    );
+
+    const denied = await post(
+      readOnly.server,
+      rpc("tools/call", {
+        name: "hcb_create_task_list",
+        arguments: {
+          title: "Errands",
+          dryRun: true
+        }
+      }),
+      authHeaders()
+    );
+
+    expect(jsonBody(denied).error).toMatchObject({
+      message: "MCP is in read-only mode."
+    });
+
+    const confirmWrites = fixture("confirm-writes");
+    const dryRun = await post(
+      confirmWrites.server,
+      rpc("tools/call", {
+        name: "hcb_create_task_list",
+        arguments: {
+          title: "Errands",
+          dryRun: true
+        }
+      }),
+      authHeaders()
+    );
+    const preview = structuredContent(dryRun);
+
+    expect(preview).toMatchObject({
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        kind: "taskList",
+        title: "Errands"
+      }
+    });
+    expect(preview.confirmationId).toEqual(expect.any(String));
+
+    const apply = await post(
+      confirmWrites.server,
+      rpc("tools/call", {
+        name: "hcb_create_task_list",
+        arguments: {
+          title: "Errands",
+          confirmationId: preview.confirmationId
+        }
+      }),
+      authHeaders()
+    );
+
+    expect(structuredContent(apply)).toMatchObject({
+      applied: true,
+      item: {
+        kind: "taskList",
+        title: "Errands"
+      }
+    });
+
+    const allowWrites = fixture("allow-writes");
+    const direct = await post(
+      allowWrites.server,
+      rpc("tools/call", {
+        name: "hcb_create_note_list",
+        arguments: {
+          title: "Project notes"
+        }
+      }),
+      authHeaders()
+    );
+
+    expect(structuredContent(direct)).toMatchObject({
+      applied: true,
+      item: {
+        kind: "noteList",
+        title: "Project notes"
+      }
+    });
+  });
+
   it("requires confirmation for destructive writes even in allow-writes mode", async () => {
     const { server } = fixture("allow-writes");
 

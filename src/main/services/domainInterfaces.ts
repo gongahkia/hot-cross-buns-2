@@ -93,6 +93,10 @@ export interface PlanningReadDomainService {
 export interface TaskDomainService {
   getTask: (id: string) => MaybePromise<DomainJsonObject>;
   listTaskLists: () => MaybePromise<DomainJsonObject[]>;
+  previewCreateTaskList: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
+  createTaskList: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
+  previewRenameTaskList: (id: string, input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
+  renameTaskList: (id: string, input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
   previewCreateTask: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
   createTask: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
   previewUpdateTask: (id: string, patch: DomainJsonObject) => MaybePromise<DomainJsonObject>;
@@ -110,6 +114,10 @@ export interface TaskDomainService {
 export interface NoteDomainService {
   getNote: (id: string) => MaybePromise<DomainJsonObject>;
   listNoteLists: () => MaybePromise<DomainJsonObject[]>;
+  previewCreateNoteList: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
+  createNoteList: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
+  previewRenameNoteList: (id: string, input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
+  renameNoteList: (id: string, input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
   previewCreateNote: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
   createNote: (input: DomainJsonObject) => MaybePromise<DomainJsonObject>;
   previewUpdateNote: (id: string, patch: DomainJsonObject) => MaybePromise<DomainJsonObject>;

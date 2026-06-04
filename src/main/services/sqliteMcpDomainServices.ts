@@ -81,6 +81,18 @@ export function createMcpDomainServices(dependencies: McpDomainServiceDependenci
     tasks: {
       getTask: (id) => jsonObject(repository.getTask(id)),
       listTaskLists: () => repository.listTaskLists({ limit: 100 }).items.map(jsonObject),
+      previewCreateTaskList: (input) =>
+        jsonObject({
+          kind: "taskList",
+          title: requiredText(input, "title")
+        }),
+      createTaskList: (input) =>
+        jsonObject({
+          kind: "taskList",
+          ...repository.createTaskList({
+            title: requiredText(input, "title")
+          })
+        }),
       previewCreateTask: (input) =>
         jsonObject({
           kind: "task",
@@ -124,6 +136,19 @@ export function createMcpDomainServices(dependencies: McpDomainServiceDependenci
     notes: {
       getNote: (id) => jsonObject(repository.getNote(id)),
       listNoteLists: () => repository.listNotes({ limit: 1 }).lists.map(jsonObject),
+      previewCreateNoteList: (input) =>
+        jsonObject({
+          kind: "noteList",
+          title: requiredText(input, "title"),
+          noteCount: 0
+        }),
+      createNoteList: (input) =>
+        jsonObject({
+          kind: "noteList",
+          ...repository.createNoteList({
+            title: requiredText(input, "title")
+          })
+        }),
       previewCreateNote: (input) =>
         jsonObject({
           kind: "note",

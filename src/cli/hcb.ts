@@ -312,7 +312,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
     parsed.target = parseCreateTarget(positional[0]);
 
     if (positional.length !== 1) {
-      throw new CliError("Usage: pnpm hcb -- create <task|note|event> --title <title> [options]", 2);
+      throw new CliError("Usage: pnpm hcb -- create <task|note|event|task-list|note-list> --title <title> [options]", 2);
     }
 
     validateCreateCommand(parsed);
@@ -636,6 +636,10 @@ export function formatResponse(command: ParsedCommand, response: McpToolResponse
   }
 
   if (command.json) {
+    if (command.command === "create") {
+      return `${JSON.stringify(createJsonOutput(command, response), null, 2)}\n`;
+    }
+
     return `${JSON.stringify(response, null, 2)}\n`;
   }
 
@@ -676,7 +680,7 @@ export function formatResponse(command: ParsedCommand, response: McpToolResponse
   }
 
   if (command.command === "create") {
-    return formatCreate(command.target ?? "item", response);
+    return formatCreate(command, response);
   }
 
   return `${JSON.stringify(response.item ?? response, null, 2)}\n`;
@@ -787,7 +791,8 @@ function formatDetail(target: string, item: JsonObject): string {
   return `HCB ${target}\n${JSON.stringify(item, null, 2)}\n`;
 }
 
-function formatCreate(target: string, response: McpToolResponse): string {
+function formatCreate(command: ParsedCommand, response: McpToolResponse): string {
+  const target = command.target ?? "item";
   const state = response.applied ? "applied" : response.dryRun ? "dry-run" : "preview";
   const lines = [
     `HCB create ${target}: ${state}`,
@@ -803,7 +808,79 @@ function formatCreate(target: string, response: McpToolResponse): string {
     lines.push(`Item: ${formatCompactItem(response.item)}`);
   }
 
+  const applyCommand = createApplyCommand(command, response);
+
+  if (applyCommand) {
+    lines.push(`Apply: ${applyCommand}`);
+  }
+
   return `${lines.join("\n")}\n`;
+}
+
+function createJsonOutput(command: ParsedCommand, response: McpToolResponse): Record<string, unknown> {
+  const applyCommand = createApplyCommand(command, response);
+
+  return {
+    tool: toolName(command),
+    target: command.target ?? "item",
+    ...response,
+    ...(applyCommand ? { applyCommand } : {})
+  };
+}
+
+function createApplyCommand(command: ParsedCommand, response: McpToolResponse): string | undefined {
+  if (command.command !== "create" || !response.dryRun || command.apply === true) {
+    return undefined;
+  }
+
+  const args = ["pnpm", "hcb", "--", "create", command.target ?? "item"];
+  pushFlag(args, "--title", command.title);
+
+  if (command.target === "task") {
+    pushFlag(args, "--notes", command.notes);
+    pushFlag(args, "--due-date", command.dueDate);
+    pushFlag(args, "--task-list-id", command.taskListId);
+  }
+
+  if (command.target === "note") {
+    pushFlag(args, "--body", command.body);
+  }
+
+  if (command.target === "event") {
+    pushFlag(args, "--start-date", command.startDate);
+    pushFlag(args, "--end-date", command.endDate);
+    pushFlag(args, "--details", command.details);
+    pushFlag(args, "--location", command.location);
+    pushFlag(args, "--calendar-id", command.calendarId);
+
+    if (command.allDay === true) {
+      args.push("--all-day");
+    }
+  }
+
+  args.push("--apply");
+  pushFlag(args, "--confirmation-id", response.confirmationId);
+  return shellJoin(args);
+}
+
+function pushFlag(args: string[], flag: string, value: string | undefined): void {
+  if (value === undefined) {
+    return;
+  }
+
+  args.push(flag, value);
+}
+
+function shellJoin(args: string[]): string {
+  return args.map(shellQuote).join(" ");
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(value)) {
+    return value;
+  }
+
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function formatAgenda(title: string, item: JsonObject): string {
@@ -869,7 +946,7 @@ function helpText(): string {
     "  export-diagnostics [--json]             export redacted diagnostics JSON",
     "  list <target> [--json]                  list task-lists, calendars, or note-lists",
     "  get <kind> <id> [--json]                get a task, event, or note",
-    "  create <kind> [options]                 dry-run create a task, note, or event",
+    "  create <kind> [options]                 dry-run create a task, note, event, or list",
     "  log [-n <limit>] [--level <level>]      show sanitized recent logs",
     "  diff [--limit <limit>] [--json]         show pending local-to-Google mutations",
     "  show <kind> [id] [--json]               show task, event, note, mutation, or diagnostics",
@@ -885,6 +962,7 @@ function helpText(): string {
     "  pnpm hcb -- list note-lists",
     "  pnpm hcb -- get task task-id",
     "  pnpm hcb -- create note --title 'Draft' --body 'Body'",
+    "  pnpm hcb -- create task-list --title 'Errands'",
     "  pnpm hcb -- create note --title 'Draft' --body 'Body' --apply --confirmation-id confirm-id",
     "  pnpm hcb -- status",
     "  pnpm hcb -- log -n 20 --level warn",
@@ -950,6 +1028,14 @@ function toolName(command: ParsedCommand): string {
 
       if (command.target === "event") {
         return "hcb_create_event";
+      }
+
+      if (command.target === "task-list") {
+        return "hcb_create_task_list";
+      }
+
+      if (command.target === "note-list") {
+        return "hcb_create_note_list";
       }
 
       throw new CliError("Unknown create target.", 2);
@@ -1090,11 +1176,11 @@ function parseGetTarget(value: string | undefined): string {
 }
 
 function parseCreateTarget(value: string | undefined): string {
-  if (value === "task" || value === "note" || value === "event") {
+  if (value === "task" || value === "note" || value === "event" || value === "task-list" || value === "note-list") {
     return value;
   }
 
-  throw new CliError("Create target must be one of: task, note, event.", 2);
+  throw new CliError("Create target must be one of: task, note, event, task-list, note-list.", 2);
 }
 
 function optionValue(value: string | undefined, flag: string): string {
@@ -1146,7 +1232,33 @@ function validateCreateCommand(command: ParsedCommand): void {
   if (command.target === "event") {
     rejectCreateOptions(command, ["notes", "dueDate", "taskListId", "body"]);
     command.startDate = requiredCreateText(command.startDate, "--start-date", "event");
+    validateCreateEventDates(command);
+    return;
   }
+
+  if (command.target === "task-list" || command.target === "note-list") {
+    rejectCreateOptions(command, ["notes", "dueDate", "taskListId", "body", "details", "startDate", "endDate", "location", "calendarId", "allDay"]);
+  }
+}
+
+function validateCreateEventDates(command: ParsedCommand): void {
+  if (command.allDay === true) {
+    if (!isDateOnly(command.startDate)) {
+      throw new CliError("--all-day requires --start-date as YYYY-MM-DD.", 2);
+    }
+
+    if (command.endDate !== undefined && !isDateOnly(command.endDate)) {
+      throw new CliError("--all-day requires --end-date as YYYY-MM-DD.", 2);
+    }
+  }
+
+  if (command.endDate !== undefined && Date.parse(command.endDate) < Date.parse(command.startDate ?? "")) {
+    throw new CliError("--end-date must not be before --start-date.", 2);
+  }
+}
+
+function isDateOnly(value: string | undefined): boolean {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function requiredCreateText(value: string | undefined, flag: string, target: string): string {
