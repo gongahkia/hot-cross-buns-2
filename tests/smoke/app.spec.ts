@@ -198,7 +198,7 @@ test("launches, navigates, opens command palette, and creates core items", async
     await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: /Smoke UI task/ }).first()).toBeVisible();
 
-    await page.locator("#planner-title").click();
+    await page.getByRole("button", { name: /Smoke UI task/ }).first().focus();
     await page.keyboard.press("Meta+Z");
     await expect(page.getByRole("button", { name: /Seeded smoke task/ }).first()).toBeVisible();
     await page.keyboard.press("Meta+Shift+Z");
@@ -221,7 +221,7 @@ test("launches, navigates, opens command palette, and creates core items", async
     await expect(page.getByRole("listitem").filter({ hasText: "Smoke UI event" })).toBeVisible();
 
     await page.getByRole("button", { name: /^Notes\b/ }).click();
-    await page.getByRole("button", { name: /^New note$/ }).click();
+    await page.getByRole("button", { name: "Add a note" }).click();
     await page.getByRole("textbox", { name: "Note title" }).fill("Smoke UI note");
     await page.getByRole("textbox", { name: "Note body" }).fill("Created by smoke test.");
     await page.getByRole("textbox", { name: "Note body" }).blur();
