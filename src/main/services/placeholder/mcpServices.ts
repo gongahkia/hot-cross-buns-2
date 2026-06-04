@@ -385,6 +385,25 @@ export function createMcpDomainServices(state: PlaceholderState): McpDomainServi
 
         throw new Error("Placeholder diagnostics item was not found.");
       }
+    },
+    undo: {
+      status: () => ({
+        kind: "undoStatus",
+        canUndo: false,
+        canRedo: false
+      }),
+      undo: () => ({
+        kind: "undoAction",
+        action: "undo",
+        applied: false,
+        title: "undo"
+      }),
+      redo: () => ({
+        kind: "undoAction",
+        action: "redo",
+        applied: false,
+        title: "redo"
+      })
     }
   };
 }

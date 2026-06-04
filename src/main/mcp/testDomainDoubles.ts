@@ -14,6 +14,7 @@ interface TestDomainState {
   nextEventId: number;
   nextTaskListId: number;
   nextNoteListId: number;
+  undoStatus: JsonObject;
 }
 
 export interface McpTestDomainServices extends McpDomainServices {
@@ -98,7 +99,14 @@ export function createMcpTestDomainServices(): McpTestDomainServices {
     nextNoteId: 2,
     nextEventId: 2,
     nextTaskListId: 2,
-    nextNoteListId: 2
+    nextNoteListId: 2,
+    undoStatus: {
+      kind: "undoStatus",
+      canUndo: true,
+      canRedo: true,
+      undoLabel: "Edit task",
+      redoLabel: "Edit note"
+    }
   };
 
   return {
@@ -515,6 +523,51 @@ export function createMcpTestDomainServices(): McpTestDomainServices {
         }
 
         throw new McpToolError("NOT_FOUND", "Diagnostics item was not found.");
+      }
+    },
+    undo: {
+      status: () => cloneObject(state.undoStatus),
+      undo: () => {
+        if (state.undoStatus.canUndo !== true) {
+          throw new McpToolError("INVALID_ARGUMENTS", "Nothing to undo.");
+        }
+
+        state.undoStatus = {
+          kind: "undoStatus",
+          canUndo: false,
+          canRedo: true,
+          redoLabel: "Edit task"
+        };
+        return {
+          kind: "undoAction",
+          action: "undo",
+          applied: true,
+          title: "Edit task",
+          label: "Edit task",
+          resourceKind: "task",
+          resourceId: "task-1"
+        };
+      },
+      redo: () => {
+        if (state.undoStatus.canRedo !== true) {
+          throw new McpToolError("INVALID_ARGUMENTS", "Nothing to redo.");
+        }
+
+        state.undoStatus = {
+          kind: "undoStatus",
+          canUndo: true,
+          canRedo: false,
+          undoLabel: "Edit note"
+        };
+        return {
+          kind: "undoAction",
+          action: "redo",
+          applied: true,
+          title: "Edit note",
+          label: "Edit note",
+          resourceKind: "note",
+          resourceId: "note-1"
+        };
       }
     }
   };

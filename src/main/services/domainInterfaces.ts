@@ -152,12 +152,19 @@ export interface DiagnosticsDomainService {
   show: (input: { kind: string; id?: string }) => MaybePromise<DomainJsonObject>;
 }
 
+export interface McpUndoDomainService {
+  status: () => MaybePromise<DomainJsonObject>;
+  undo: () => MaybePromise<DomainJsonObject>;
+  redo: () => MaybePromise<DomainJsonObject>;
+}
+
 export interface McpDomainServices {
   planning: PlanningReadDomainService;
   tasks: TaskDomainService;
   notes: NoteDomainService;
   calendar: CalendarDomainService;
   diagnostics: DiagnosticsDomainService;
+  undo: McpUndoDomainService;
 }
 
 export interface McpAdminDomainServices {

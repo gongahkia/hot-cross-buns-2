@@ -61,6 +61,7 @@ export function createSqliteDomainServices(
     mutationWorker
   });
   const mcpState = createInitialMcpState(options.settingsRepository);
+  const undo = createSqliteUndoDomainService(options.undoRepository);
 
   return {
     planner: createSqlitePlannerDomainService(options.plannerRepository, options.undoRepository),
@@ -72,7 +73,7 @@ export function createSqliteDomainServices(
       sync,
       syncRepository: options.syncRepository
     }),
-    undo: createSqliteUndoDomainService(options.undoRepository),
+    undo,
     mcp: createSqliteMcpControlService({
       mcpState,
       settingsRepository: options.settingsRepository
@@ -82,6 +83,7 @@ export function createSqliteDomainServices(
       plannerRepository: options.plannerRepository,
       settingsRepository: options.settingsRepository,
       syncRepository: options.syncRepository,
+      undo,
       syncStatus: () => sync.status()
     })
   };

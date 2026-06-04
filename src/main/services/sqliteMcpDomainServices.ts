@@ -20,7 +20,8 @@ import type {
   DomainJsonObject,
   DomainJsonValue,
   MaybePromise,
-  McpDomainServices
+  McpDomainServices,
+  UndoDomainService
 } from "./domainInterfaces";
 import type { SyncStatusResponse } from "@shared/ipc/contracts";
 
@@ -28,6 +29,7 @@ export interface McpDomainServiceDependencies {
   plannerRepository: LocalPlannerRepository;
   settingsRepository: LocalSettingsRepository;
   syncRepository: GoogleSyncRepository;
+  undo: UndoDomainService;
   syncStatus: () => MaybePromise<SyncStatusResponse>;
 }
 
@@ -332,8 +334,30 @@ export function createMcpDomainServices(dependencies: McpDomainServiceDependenci
 
         return jsonObject(pendingMutationView(mutation));
       }
+    },
+    undo: {
+      status: async () => jsonObject({
+        kind: "undoStatus",
+        ...(await dependencies.undo.status())
+      }),
+      undo: async () => undoActionObject(await dependencies.undo.undo()),
+      redo: async () => undoActionObject(await dependencies.undo.redo())
     }
   };
+}
+
+function undoActionObject(value: {
+  action: "undo" | "redo";
+  applied: boolean;
+  label?: string;
+  resourceKind?: string;
+  resourceId?: string;
+}): DomainJsonObject {
+  return jsonObject({
+    kind: "undoAction",
+    title: value.label ?? value.action,
+    ...value
+  });
 }
 
 async function thisDiagnosticsStatus(dependencies: McpDomainServiceDependencies): Promise<DomainJsonObject> {
