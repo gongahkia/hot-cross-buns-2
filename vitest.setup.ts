@@ -157,6 +157,20 @@ const hcbApi: HcbApi = {
         revision: now
       })
     ),
+    complete: vi.fn(async (request) =>
+      ok(testCalendarEvent({
+        id: request.id,
+        completedAt: now,
+        completionScopeApplied: request.scope ?? "occurrence"
+      }))
+    ),
+    reopen: vi.fn(async (request) =>
+      ok(testCalendarEvent({
+        id: request.id,
+        completedAt: null,
+        completionScopeApplied: request.scope ?? "occurrence"
+      }))
+    ),
     createTaskList: vi.fn(async (request) =>
       ok({
         id: "task-list-created",
@@ -477,7 +491,7 @@ const hcbApi: HcbApi = {
         toolbarActionOrder: ["commandPalette", "notifications", "diagnostics", "splitPane", "refresh", "settings"] as SettingsSnapshot["toolbarActionOrder"],
         hiddenCalendarViewModes: [],
         showCompletedInCalendarViews: true,
-        eventCompletionDefaultScope: "occurrence",
+        eventCompletionDefaultScope: "occurrence" as const,
         calendarTimelineDensity: "compact" as const,
         monthScrollPastMonths: 0,
         monthScrollFutureMonths: 1,
@@ -557,7 +571,7 @@ const hcbApi: HcbApi = {
         toolbarActionOrder: request.toolbarActionOrder ?? ["commandPalette", "notifications", "diagnostics", "splitPane", "refresh", "settings"],
         hiddenCalendarViewModes: request.hiddenCalendarViewModes ?? [],
         showCompletedInCalendarViews: request.showCompletedInCalendarViews ?? true,
-        eventCompletionDefaultScope: request.eventCompletionDefaultScope ?? "occurrence",
+        eventCompletionDefaultScope: request.eventCompletionDefaultScope ?? "occurrence" as const,
         calendarTimelineDensity: request.calendarTimelineDensity ?? "compact",
         monthScrollPastMonths: request.monthScrollPastMonths ?? 0,
         monthScrollFutureMonths: request.monthScrollFutureMonths ?? 1,

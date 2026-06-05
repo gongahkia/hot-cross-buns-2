@@ -1,5 +1,8 @@
+import { useRef, useState } from "react";
 import type { CSSProperties, DragEvent, KeyboardEvent } from "react";
+import type { CalendarEventCompletionScope, SettingsSnapshot } from "@shared/ipc/contracts";
 import { CheckCircle2, Circle } from "lucide-react";
+import { FloatingMenu } from "../../../../components/FloatingMenu";
 import { cx } from "../../../../components/primitives";
 import type { CalendarEventViewModel } from "../../coreViewModels";
 
@@ -125,6 +128,112 @@ function calendarEventLabel(
 }
 
 type CalendarEventChipSize = "default" | "compact";
+export type EventCompletionDefaultScope = SettingsSnapshot["eventCompletionDefaultScope"];
+
+const eventCompletionScopeOptions: Array<{ id: CalendarEventCompletionScope; label: string }> = [
+  { id: "occurrence", label: "This occurrence" },
+  { id: "seriesFuture", label: "Future series" },
+  { id: "seriesAll", label: "Whole series" }
+];
+
+function eventCompleted(event: CalendarEventViewModel): boolean {
+  return event.completedAt !== null && event.completedAt !== undefined;
+}
+
+export function CalendarItemCompletionButton({
+  event,
+  eventCompletionDefaultScope,
+  onToggleEvent,
+  onToggleTask,
+  size = "default"
+}: {
+  event: CalendarEventViewModel;
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
+  onToggleTask?: (taskId: string) => void;
+  size?: CalendarEventChipSize;
+}): JSX.Element | null {
+  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const isTask = event.sourceKind === "task";
+  const isCompletedTask = event.taskStatus === "completed";
+  const isCompletedEvent = event.sourceKind === "event" && eventCompleted(event);
+  const completed = isCompletedTask || isCompletedEvent;
+  const Icon = completed ? CheckCircle2 : Circle;
+  const iconSize = size === "compact" ? 13 : 14;
+
+  if (isTask && event.taskId && onToggleTask) {
+    const label = isCompletedTask ? `Reopen ${event.title}` : `Mark ${event.title} complete`;
+
+    return (
+      <button
+        aria-label={label}
+        className="shrink-0 rounded-full text-current transition-colors duration-fast ease-hcb hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        onClick={(clickEvent) => {
+          clickEvent.stopPropagation();
+          onToggleTask(event.taskId ?? "");
+        }}
+        onKeyDown={(keyEvent) => keyEvent.stopPropagation()}
+        onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
+        title={label}
+        type="button"
+      >
+        <Icon aria-hidden="true" size={iconSize} />
+      </button>
+    );
+  }
+
+  if (event.sourceKind !== "event" || !onToggleEvent) {
+    return isTask ? <Icon aria-hidden="true" className="shrink-0" size={iconSize} /> : null;
+  }
+
+  const label = isCompletedEvent ? `Reopen ${event.title}` : `Mark ${event.title} complete`;
+
+  function chooseScope(scope: CalendarEventCompletionScope): void {
+    setScopeMenuOpen(false);
+    onToggleEvent?.(event.id, scope);
+  }
+
+  return (
+    <>
+      <button
+        aria-label={label}
+        className="shrink-0 rounded-full text-current transition-colors duration-fast ease-hcb hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        onClick={(clickEvent) => {
+          clickEvent.stopPropagation();
+          if (eventCompletionDefaultScope === "ask") {
+            setScopeMenuOpen(true);
+            return;
+          }
+          onToggleEvent(event.id, eventCompletionDefaultScope ?? "occurrence");
+        }}
+        onKeyDown={(keyEvent) => keyEvent.stopPropagation()}
+        onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
+        ref={buttonRef}
+        title={label}
+        type="button"
+      >
+        <Icon aria-hidden="true" size={iconSize} />
+      </button>
+      {scopeMenuOpen ? (
+        <FloatingMenu anchorRef={buttonRef} onClose={() => setScopeMenuOpen(false)} width={220}>
+          <div className="grid p-1">
+            {eventCompletionScopeOptions.map((scope) => (
+              <button
+                className="rounded-hcbSm px-2 py-1.5 text-left text-[var(--text-sm)] text-text-secondary hover:bg-surface-0 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                key={scope.id}
+                onClick={() => chooseScope(scope.id)}
+                type="button"
+              >
+                {scope.label}
+              </button>
+            ))}
+          </div>
+        </FloatingMenu>
+      ) : null}
+    </>
+  );
+}
 
 export function CalendarSourceSwatch({
   calendarId,
@@ -153,18 +262,22 @@ export function CalendarEventChip({
   event,
   labelVariant,
   onDragStart,
+  eventCompletionDefaultScope,
   onKeyDown,
   onOpen,
+  onToggleEvent,
   onToggleTask,
   size = "default"
 }: {
   className?: string;
   draggable?: boolean;
   event: CalendarEventViewModel;
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   labelVariant: "range" | "time" | "title";
   onDragStart?: (dragEvent: DragEvent<HTMLElement>) => void;
   onKeyDown?: (keyEvent: KeyboardEvent<HTMLElement>) => void;
   onOpen?: (event: CalendarEventViewModel) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   size?: CalendarEventChipSize;
 }): JSX.Element {
@@ -172,11 +285,9 @@ export function CalendarEventChip({
   const fillStyle = calendarEventFillStyle(event);
   const accentStyle = fillStyle ?? calendarEventAccentStyle(event.calendarBackgroundColor);
   const label = calendarEventLabel(event, labelVariant);
-  const isTask = event.sourceKind === "task";
   const isCompletedTask = event.taskStatus === "completed";
-  const TaskIcon = isCompletedTask ? CheckCircle2 : Circle;
-  const taskToggleLabel = isCompletedTask ? `Reopen ${event.title}` : `Mark ${event.title} complete`;
-  const taskId = event.taskId;
+  const isCompletedEvent = eventCompleted(event);
+  const completed = isCompletedTask || isCompletedEvent;
 
   return (
     <div
@@ -186,7 +297,7 @@ export function CalendarEventChip({
         size === "compact" ? "min-h-0 px-1.5 py-0.5 text-[11px]" : "min-h-6 px-2 py-1 text-[var(--text-xs)]",
         draggable && "cursor-grab active:cursor-grabbing",
         event.allDay && "font-medium",
-        isCompletedTask && "text-text-muted",
+        completed && "text-text-muted opacity-70",
         fillStyle && "hover:brightness-95",
         accentStyle ? undefined : tone.border,
         className
@@ -215,25 +326,14 @@ export function CalendarEventChip({
       tabIndex={0}
       title={`${label} - ${event.calendar}`}
     >
-      {isTask && taskId && onToggleTask ? (
-        <button
-          aria-label={taskToggleLabel}
-          className="shrink-0 rounded-full text-current transition-colors duration-fast ease-hcb hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-          onClick={(clickEvent) => {
-            clickEvent.stopPropagation();
-            onToggleTask(taskId);
-          }}
-          onKeyDown={(keyEvent) => keyEvent.stopPropagation()}
-          onPointerDown={(pointerEvent) => pointerEvent.stopPropagation()}
-          title={taskToggleLabel}
-          type="button"
-        >
-          <TaskIcon aria-hidden="true" size={size === "compact" ? 13 : 14} />
-        </button>
-      ) : isTask ? (
-        <TaskIcon aria-hidden="true" className="shrink-0" size={size === "compact" ? 13 : 14} />
-      ) : null}
-      <span className={cx("min-w-0 flex-1 truncate leading-tight", isCompletedTask && "line-through")}>
+      <CalendarItemCompletionButton
+        event={event}
+        eventCompletionDefaultScope={eventCompletionDefaultScope}
+        onToggleEvent={onToggleEvent}
+        onToggleTask={onToggleTask}
+        size={size}
+      />
+      <span className={cx("min-w-0 flex-1 truncate leading-tight", completed && "line-through")}>
         {label}
       </span>
     </div>
@@ -275,15 +375,19 @@ export function CalendarOverflowChip({
 }
 
 export function CalendarOverflowPopover({
+  eventCompletionDefaultScope,
   events,
   onClose,
   onOpen,
+  onToggleEvent,
   onToggleTask,
   title
 }: {
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   events: CalendarEventViewModel[];
   onClose: () => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   title: string;
 }): JSX.Element {
@@ -324,12 +428,14 @@ export function CalendarOverflowPopover({
           {events.map((event) => (
             <CalendarEventChip
               event={event}
+              eventCompletionDefaultScope={eventCompletionDefaultScope}
               key={event.id}
               labelVariant="range"
               onOpen={(selectedEvent) => {
                 onClose();
                 onOpen(selectedEvent);
               }}
+              onToggleEvent={onToggleEvent}
               onToggleTask={onToggleTask}
             />
           ))}
@@ -341,16 +447,20 @@ export function CalendarOverflowPopover({
 
 export function CalendarAllDayLane({
   dayLabel,
+  eventCompletionDefaultScope,
   events,
   onCreate,
   onOpen,
+  onToggleEvent,
   onToggleTask,
   visibleCount = 4
 }: {
   dayLabel: string;
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   events: CalendarEventViewModel[];
   onCreate?: () => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   visibleCount?: number;
 }): JSX.Element {
@@ -369,7 +479,14 @@ export function CalendarAllDayLane({
       <div className="flex min-w-0 flex-wrap items-center gap-1 px-2 py-1.5">
         {visibleEvents.map((event) => (
           <div className="min-w-0 basis-[180px] grow" key={event.id}>
-            <CalendarEventChip event={event} labelVariant="title" onOpen={onOpen} onToggleTask={onToggleTask} />
+            <CalendarEventChip
+              event={event}
+              eventCompletionDefaultScope={eventCompletionDefaultScope}
+              labelVariant="title"
+              onOpen={onOpen}
+              onToggleEvent={onToggleEvent}
+              onToggleTask={onToggleTask}
+            />
           </div>
         ))}
         {overflowCount > 0 ? <CalendarOverflowChip count={overflowCount} /> : null}

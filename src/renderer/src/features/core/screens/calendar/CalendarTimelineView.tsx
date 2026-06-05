@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, MouseEvent, PointerEvent, ReactNode } from "react";
+import type { CalendarEventCompletionScope } from "@shared/ipc/contracts";
 import { Minus, Plus } from "lucide-react";
 import { IconButton, cx } from "../../../../components/primitives";
 import { useCoreViewModelSource } from "../../coreViewModelSource";
 import { handleActivationKeyDown } from "../../coreScreenShared";
 import type { CalendarDayViewModel, CalendarEventViewModel } from "../../coreViewModels";
-import { CalendarEventChip, CalendarOverflowChip, CalendarOverflowPopover } from "./CalendarEventChips";
+import {
+  CalendarEventChip,
+  CalendarOverflowChip,
+  CalendarOverflowPopover,
+  type EventCompletionDefaultScope
+} from "./CalendarEventChips";
 import {
   addUtcMinutesIso,
   calendarDateTitle,
@@ -39,16 +45,20 @@ const allDayLaneHeight = 28;
 function CalendarTimelineEventChip({
   className,
   event,
+  eventCompletionDefaultScope,
   labelVariant,
   onMoveEvent,
   onOpen,
+  onToggleEvent,
   onToggleTask
 }: {
   className?: string;
   event: CalendarEventViewModel;
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   labelVariant: "range" | "time" | "title";
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
 }): JSX.Element {
   const draggable = event.sourceKind !== "task";
@@ -59,6 +69,7 @@ function CalendarTimelineEventChip({
         className={cx("h-full min-h-0", className)}
         draggable={draggable}
         event={event}
+        eventCompletionDefaultScope={eventCompletionDefaultScope}
         labelVariant={labelVariant}
         onDragStart={draggable ? (dragEvent) => startCalendarEventDrag(dragEvent, event.id) : undefined}
         onKeyDown={(keyEvent) => {
@@ -84,6 +95,7 @@ function CalendarTimelineEventChip({
           );
         }}
         onOpen={onOpen}
+        onToggleEvent={onToggleEvent}
         onToggleTask={onToggleTask}
         size="compact"
       />
@@ -165,6 +177,7 @@ function CalendarTimelineView({
   availabilitySlots = [],
   days,
   dayCountControl,
+  eventCompletionDefaultScope,
   gridLabel,
   label,
   onAddAvailabilitySlot,
@@ -172,6 +185,7 @@ function CalendarTimelineView({
   onMoveEvent,
   onOpen,
   onResizeEvent,
+  onToggleEvent,
   onToggleTask,
   timedLabelVariant = "time",
   title,
@@ -181,6 +195,7 @@ function CalendarTimelineView({
   availabilitySlots?: CalendarTimeBlock[];
   days: CalendarDayViewModel[];
   dayCountControl?: ReactNode;
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   gridLabel: string;
   label: string;
   onAddAvailabilitySlot?: (slot: CalendarTimeBlock) => void;
@@ -188,6 +203,7 @@ function CalendarTimelineView({
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
   onResizeEvent: (eventId: string, endsAt: string) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   timedLabelVariant?: "range" | "time";
   title: string;
@@ -616,9 +632,11 @@ function CalendarTimelineView({
                   >
                     <CalendarTimelineEventChip
                       event={segment.event}
+                      eventCompletionDefaultScope={eventCompletionDefaultScope}
                       labelVariant="title"
                       onMoveEvent={onMoveEvent}
                       onOpen={onOpen}
+                      onToggleEvent={onToggleEvent}
                       onToggleTask={onToggleTask}
                     />
                   </div>
@@ -797,9 +815,11 @@ function CalendarTimelineView({
                       <CalendarTimelineEventChip
                         className="min-w-0"
                         event={layout.event}
+                        eventCompletionDefaultScope={eventCompletionDefaultScope}
                         labelVariant={timedLabelVariant}
                         onMoveEvent={onMoveEvent}
                         onOpen={onOpen}
+                        onToggleEvent={onToggleEvent}
                         onToggleTask={onToggleTask}
                       />
                     </div>
@@ -835,9 +855,11 @@ function CalendarTimelineView({
       </div>
       {activeOverflow ? (
         <CalendarOverflowPopover
+          eventCompletionDefaultScope={eventCompletionDefaultScope}
           events={activeOverflow.events}
           onClose={() => setActiveOverflow(null)}
           onOpen={onOpen}
+          onToggleEvent={onToggleEvent}
           onToggleTask={onToggleTask}
           title={activeOverflow.title}
         />
@@ -850,22 +872,26 @@ export function DayView({
   availabilityMode,
   availabilitySlots,
   day,
+  eventCompletionDefaultScope,
   onAddAvailabilitySlot,
   onCreate,
   onMoveEvent,
   onOpen,
   onResizeEvent,
+  onToggleEvent,
   onToggleTask,
   visibleCalendarIds
 }: {
   availabilityMode: boolean;
   availabilitySlots: CalendarTimeBlock[];
   day: CalendarDayViewModel;
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   onAddAvailabilitySlot: (slot: CalendarTimeBlock) => void;
   onCreate: (seed?: CalendarCreateSeed) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
   onResizeEvent: (eventId: string, endsAt: string) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
@@ -874,6 +900,7 @@ export function DayView({
       availabilityMode={availabilityMode}
       availabilitySlots={availabilitySlots}
       days={[day]}
+      eventCompletionDefaultScope={eventCompletionDefaultScope}
       gridLabel="Calendar day view"
       label={calendarDateTitle(day)}
       onAddAvailabilitySlot={onAddAvailabilitySlot}
@@ -881,6 +908,7 @@ export function DayView({
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
       onResizeEvent={onResizeEvent}
+      onToggleEvent={onToggleEvent}
       onToggleTask={onToggleTask}
       timedLabelVariant="range"
       title="Day view"
@@ -894,12 +922,14 @@ export function MultiDayView({
   availabilitySlots,
   dayCount,
   days,
+  eventCompletionDefaultScope,
   onAddAvailabilitySlot,
   onCreate,
   onDayCountChange,
   onMoveEvent,
   onOpen,
   onResizeEvent,
+  onToggleEvent,
   onToggleTask,
   visibleCalendarIds
 }: {
@@ -907,12 +937,14 @@ export function MultiDayView({
   availabilitySlots: CalendarTimeBlock[];
   dayCount: number;
   days: CalendarDayViewModel[];
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   onAddAvailabilitySlot: (slot: CalendarTimeBlock) => void;
   onCreate: (seed?: CalendarCreateSeed) => void;
   onDayCountChange: (dayCount: number) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
   onResizeEvent: (eventId: string, endsAt: string) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
@@ -944,6 +976,7 @@ export function MultiDayView({
         </div>
       }
       days={days}
+      eventCompletionDefaultScope={eventCompletionDefaultScope}
       gridLabel="Calendar multi-day view"
       label={calendarRangeTitle(days)}
       onAddAvailabilitySlot={onAddAvailabilitySlot}
@@ -951,6 +984,7 @@ export function MultiDayView({
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
       onResizeEvent={onResizeEvent}
+      onToggleEvent={onToggleEvent}
       onToggleTask={onToggleTask}
       title="Multi-Day view"
       visibleCalendarIds={visibleCalendarIds}
@@ -962,22 +996,26 @@ export function WeekView({
   availabilityMode,
   availabilitySlots,
   days,
+  eventCompletionDefaultScope,
   onAddAvailabilitySlot,
   onCreate,
   onMoveEvent,
   onOpen,
   onResizeEvent,
+  onToggleEvent,
   onToggleTask,
   visibleCalendarIds
 }: {
   availabilityMode: boolean;
   availabilitySlots: CalendarTimeBlock[];
   days: CalendarDayViewModel[];
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   onAddAvailabilitySlot: (slot: CalendarTimeBlock) => void;
   onCreate: (seed?: CalendarCreateSeed) => void;
   onMoveEvent: (eventId: string, startsAt: string, allDay: boolean) => void;
   onOpen: (event: CalendarEventViewModel) => void;
   onResizeEvent: (eventId: string, endsAt: string) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   visibleCalendarIds: ReadonlySet<string>;
 }): JSX.Element {
@@ -986,6 +1024,7 @@ export function WeekView({
       availabilityMode={availabilityMode}
       availabilitySlots={availabilitySlots}
       days={days}
+      eventCompletionDefaultScope={eventCompletionDefaultScope}
       gridLabel="Calendar week view"
       label={calendarRangeTitle(days)}
       onAddAvailabilitySlot={onAddAvailabilitySlot}
@@ -993,6 +1032,7 @@ export function WeekView({
       onMoveEvent={onMoveEvent}
       onOpen={onOpen}
       onResizeEvent={onResizeEvent}
+      onToggleEvent={onToggleEvent}
       onToggleTask={onToggleTask}
       title="Week view"
       visibleCalendarIds={visibleCalendarIds}

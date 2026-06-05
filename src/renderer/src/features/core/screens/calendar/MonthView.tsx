@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
+import type { CalendarEventCompletionScope } from "@shared/ipc/contracts";
 import { cx } from "../../../../components/primitives";
 import { handleActivationKeyDown } from "../../coreScreenShared";
 import type { CalendarEventViewModel, CalendarMonthWeekViewModel } from "../../coreViewModels";
-import { CalendarEventChip, CalendarOverflowChip, CalendarOverflowPopover } from "./CalendarEventChips";
+import {
+  CalendarEventChip,
+  CalendarOverflowChip,
+  CalendarOverflowPopover,
+  type EventCompletionDefaultScope
+} from "./CalendarEventChips";
 import { calendarAddUtcDays, calendarDateTitle, calendarMonthVisibleChipCount, visibleCalendarMonthWeeks } from "./calendarGrid";
 import type { CalendarCreateSeed, CalendarTimelineAllDaySegment } from "./types";
 
@@ -31,16 +37,20 @@ function monthOverflowStyle(dayIndex: number): CSSProperties {
 }
 
 export function MonthView({
+  eventCompletionDefaultScope,
   weeks,
   onCreate,
   onOpen,
+  onToggleEvent,
   onToggleTask,
   todayKey,
   visibleCalendarIds
 }: {
+  eventCompletionDefaultScope?: EventCompletionDefaultScope;
   weeks: CalendarMonthWeekViewModel[];
   onCreate: (seed?: CalendarCreateSeed) => void;
   onOpen: (event: CalendarEventViewModel) => void;
+  onToggleEvent?: (eventId: string, scope?: CalendarEventCompletionScope) => void;
   onToggleTask?: (taskId: string) => void;
   todayKey: string;
   visibleCalendarIds: ReadonlySet<string>;
@@ -201,12 +211,14 @@ export function MonthView({
                 <CalendarEventChip
                   className="h-5"
                   event={segment.event}
+                  eventCompletionDefaultScope={eventCompletionDefaultScope}
                   labelVariant="title"
                   onKeyDown={(keyEvent) => {
                     keyEvent.stopPropagation();
                     handleActivationKeyDown(keyEvent, () => onOpen(segment.event));
                   }}
                   onOpen={onOpen}
+                  onToggleEvent={onToggleEvent}
                   onToggleTask={onToggleTask}
                   size="compact"
                 />
@@ -223,12 +235,14 @@ export function MonthView({
                   <CalendarEventChip
                     className="h-5"
                     event={event}
+                    eventCompletionDefaultScope={eventCompletionDefaultScope}
                     labelVariant="title"
                     onKeyDown={(keyEvent) => {
                       keyEvent.stopPropagation();
                       handleActivationKeyDown(keyEvent, () => onOpen(event));
                     }}
                     onOpen={onOpen}
+                    onToggleEvent={onToggleEvent}
                     onToggleTask={onToggleTask}
                     size="compact"
                   />
@@ -260,9 +274,11 @@ export function MonthView({
       </div>
       {activeOverflow ? (
         <CalendarOverflowPopover
+          eventCompletionDefaultScope={eventCompletionDefaultScope}
           events={activeOverflow.events}
           onClose={() => setActiveOverflow(null)}
           onOpen={onOpen}
+          onToggleEvent={onToggleEvent}
           onToggleTask={onToggleTask}
           title={activeOverflow.title}
         />

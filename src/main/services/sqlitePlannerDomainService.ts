@@ -175,29 +175,33 @@ export function createSqlitePlannerDomainService(
     },
     completeCalendarEvent: (request) => {
       const beforeDetail = repository.getCalendarEvent(request.id);
-      const before = undoRepository?.calendarEventSnapshot(beforeDetail.eventId) ?? null;
+      const resourceId = beforeDetail.eventId ?? beforeDetail.id;
+      const before = undoRepository?.calendarEventSnapshot(resourceId) ?? null;
       const completed = repository.completeCalendarEvent(request);
+      const completedResourceId = completed.eventId ?? completed.id;
       recordUndo({
         actionKind: "calendar.events.complete",
         label: "Complete event",
         resourceKind: "calendarEvent",
-        resourceId: completed.eventId,
+        resourceId: completedResourceId,
         before,
-        after: undoRepository?.calendarEventSnapshot(completed.eventId)
+        after: undoRepository?.calendarEventSnapshot(completedResourceId)
       });
       return completed;
     },
     reopenCalendarEvent: (request) => {
       const beforeDetail = repository.getCalendarEvent(request.id);
-      const before = undoRepository?.calendarEventSnapshot(beforeDetail.eventId) ?? null;
+      const resourceId = beforeDetail.eventId ?? beforeDetail.id;
+      const before = undoRepository?.calendarEventSnapshot(resourceId) ?? null;
       const reopened = repository.reopenCalendarEvent(request);
+      const reopenedResourceId = reopened.eventId ?? reopened.id;
       recordUndo({
         actionKind: "calendar.events.reopen",
         label: "Reopen event",
         resourceKind: "calendarEvent",
-        resourceId: reopened.eventId,
+        resourceId: reopenedResourceId,
         before,
-        after: undoRepository?.calendarEventSnapshot(reopened.eventId)
+        after: undoRepository?.calendarEventSnapshot(reopenedResourceId)
       });
       return reopened;
     },

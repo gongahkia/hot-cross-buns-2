@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CalendarEventDetail } from "@shared/ipc/contracts";
+import type { CalendarEventCompletionScope, CalendarEventDetail } from "@shared/ipc/contracts";
 import { AlertTriangle, X } from "lucide-react";
 import { IconButton, StatusBanner } from "../../../../components/primitives";
 import { rendererNow, reportRendererTimingSince } from "../../../../hooks/useRenderTiming";
@@ -333,6 +333,17 @@ export function CalendarView({
     void taskInspector.toggleTask(taskId);
   }
 
+  function toggleCalendarEvent(eventId: string, scope?: CalendarEventCompletionScope): void {
+    const event = source.calendarEventsById[eventId];
+
+    if (event?.completedAt) {
+      void source.reopenEvent(eventId, scope);
+      return;
+    }
+
+    void source.completeEvent(eventId, scope);
+  }
+
   useEffect(() => {
     if (!visibleCalendarViewIds.includes(activeViewId)) {
       setCalendarView(visibleCalendarViewIds[0]);
@@ -500,9 +511,11 @@ export function CalendarView({
         <div className="h-full min-h-0 overflow-auto pr-1">
           {activeViewId === "agenda" ? (
             <CalendarAgendaView
+              eventCompletionDefaultScope={source.settings.eventCompletionDefaultScope}
               events={calendarAgendaEvents}
               label={calendarDateTitleFromIso(calendarAnchorDate)}
               onOpen={openCalendarItem}
+              onToggleEvent={toggleCalendarEvent}
               onToggleTask={toggleCalendarTask}
             />
           ) : null}
@@ -511,11 +524,13 @@ export function CalendarView({
               availabilityMode={availabilityMode}
               availabilitySlots={availabilitySlots}
               day={calendarDay}
+              eventCompletionDefaultScope={source.settings.eventCompletionDefaultScope}
               onAddAvailabilitySlot={addAvailabilitySlot}
               onCreate={openCreate}
               onMoveEvent={moveCalendarEvent}
               onOpen={openCalendarItem}
               onResizeEvent={resizeCalendarEvent}
+              onToggleEvent={toggleCalendarEvent}
               onToggleTask={toggleCalendarTask}
               visibleCalendarIds={visibleCalendarIds}
             />
@@ -526,12 +541,14 @@ export function CalendarView({
               availabilitySlots={availabilitySlots}
               dayCount={multiDayCount}
               days={calendarMultiDayDays}
+              eventCompletionDefaultScope={source.settings.eventCompletionDefaultScope}
               onAddAvailabilitySlot={addAvailabilitySlot}
               onCreate={openCreate}
               onDayCountChange={setMultiDayCount}
               onMoveEvent={moveCalendarEvent}
               onOpen={openCalendarItem}
               onResizeEvent={resizeCalendarEvent}
+              onToggleEvent={toggleCalendarEvent}
               onToggleTask={toggleCalendarTask}
               visibleCalendarIds={visibleCalendarIds}
             />
@@ -541,20 +558,24 @@ export function CalendarView({
               availabilityMode={availabilityMode}
               availabilitySlots={availabilitySlots}
               days={calendarWeekDays}
+              eventCompletionDefaultScope={source.settings.eventCompletionDefaultScope}
               onAddAvailabilitySlot={addAvailabilitySlot}
               onCreate={openCreate}
               onMoveEvent={moveCalendarEvent}
               onOpen={openCalendarItem}
               onResizeEvent={resizeCalendarEvent}
+              onToggleEvent={toggleCalendarEvent}
               onToggleTask={toggleCalendarTask}
               visibleCalendarIds={visibleCalendarIds}
             />
           ) : null}
           {activeViewId === "month" ? (
             <MonthView
+              eventCompletionDefaultScope={source.settings.eventCompletionDefaultScope}
               weeks={calendarMonthWeeks}
               onCreate={openCreate}
               onOpen={openCalendarItem}
+              onToggleEvent={toggleCalendarEvent}
               onToggleTask={toggleCalendarTask}
               todayKey={calendarCurrentDayKey(source.settings.defaultTimeZone)}
               visibleCalendarIds={visibleCalendarIds}

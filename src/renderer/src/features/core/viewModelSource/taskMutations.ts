@@ -272,6 +272,57 @@ export function useTaskMutations({
     [beginTaskMutation, failTaskMutation, finishTaskMutation, setTasksSnapshot]
   );
 
+  const setEventCompletion = useCallback(
+    async (
+      eventId: string,
+      completed: boolean,
+      scope: CalendarEventCompletionScope = "occurrence"
+    ): Promise<boolean> => {
+      if (!window.hcb) {
+        const retry = () => void setEventCompletion(eventId, completed, scope);
+        failTaskMutation("Calendar event writes require the preload bridge.", retry);
+        return false;
+      }
+
+      let previousEvents: CalendarEventSummary[] = [];
+      const now = new Date().toISOString();
+      beginTaskMutation(false);
+      setEventsSnapshot((events) => {
+        previousEvents = events;
+        return optimisticEventCompletionPatch(events, eventId, completed ? now : null, scope);
+      });
+
+      const result = completed
+        ? await window.hcb.calendar.complete({ id: eventId, scope })
+        : await window.hcb.calendar.reopen({ id: eventId, scope });
+
+      if (result.ok) {
+        setEventsSnapshot((events) =>
+          events.map((event) => (event.id === result.data.id ? result.data : event))
+        );
+        finishTaskMutation();
+        return true;
+      }
+
+      setEventsSnapshot(() => previousEvents);
+      failTaskMutation(result.error.message, () => void setEventCompletion(eventId, completed, scope));
+      return false;
+    },
+    [beginTaskMutation, failTaskMutation, finishTaskMutation, setEventsSnapshot]
+  );
+
+  const completeEvent = useCallback(
+    (eventId: string, scope?: CalendarEventCompletionScope): Promise<boolean> =>
+      setEventCompletion(eventId, true, scope),
+    [setEventCompletion]
+  );
+
+  const reopenEvent = useCallback(
+    (eventId: string, scope?: CalendarEventCompletionScope): Promise<boolean> =>
+      setEventCompletion(eventId, false, scope),
+    [setEventCompletion]
+  );
+
   const moveTask = useCallback(
     async (request: TaskMoveRequest): Promise<boolean> => {
       if (!window.hcb) {
@@ -557,6 +608,8 @@ export function useTaskMutations({
     updateTask,
     completeTask,
     reopenTask,
+    completeEvent,
+    reopenEvent,
     moveTask,
     deleteTask,
     createTaskList,
@@ -566,4 +619,48 @@ export function useTaskMutations({
     moveScheduledTaskBlock,
     unscheduleTaskBlock
   };
+}
+
+function optimisticEventCompletionPatch(
+  events: CalendarEventSummary[],
+  eventId: string,
+  completedAt: string | null,
+  scope: CalendarEventCompletionScope
+): CalendarEventSummary[] {
+  const target = events.find((event) => event.id === eventId || (event.eventId ?? event.id) === eventId);
+
+  if (!target) {
+    return events;
+  }
+
+  return events.map((event) => {
+    if (!eventCompletionScopeMatches(event, target, scope)) {
+      return event;
+    }
+
+    return {
+      ...event,
+      completedAt,
+      updatedAt: completedAt ?? new Date().toISOString()
+    };
+  });
+}
+
+function eventCompletionScopeMatches(
+  event: CalendarEventSummary,
+  target: CalendarEventSummary,
+  scope: CalendarEventCompletionScope
+): boolean {
+  if (scope === "seriesAll") {
+    return (event.eventId ?? event.id) === (target.eventId ?? target.id);
+  }
+
+  if (scope === "seriesFuture") {
+    return (
+      (event.eventId ?? event.id) === (target.eventId ?? target.id) &&
+      event.startsAt >= target.startsAt
+    );
+  }
+
+  return event.id === target.id;
 }

@@ -25,7 +25,8 @@ import { EmptyState } from "../../../../components/states";
 import {
   SettingsControlRow,
   SettingsGroup,
-  SettingsSwitch
+  SettingsSwitch,
+  settingsSelectClass
 } from "./SettingsPrimitives";
 
 interface AdvancedSettingsTabProps {
@@ -205,6 +206,27 @@ export function AdvancedSettingsTab({
           label="Show completed tasks and dismissed events in calendar views"
           onChange={(checked) => updateSettings({ showCompletedInCalendarViews: checked })}
         />
+        <SettingsControlRow
+          description="Default scope when marking a repeating event complete or open again."
+          icon={CalendarDays}
+          label="Event completion scope"
+        >
+          <select
+            aria-label="Event completion scope"
+            className={settingsSelectClass}
+            onChange={(event) =>
+              updateSettings({
+                eventCompletionDefaultScope: event.target.value as SettingsSnapshot["eventCompletionDefaultScope"]
+              })
+            }
+            value={settings.eventCompletionDefaultScope}
+          >
+            <option value="occurrence">This occurrence</option>
+            <option value="seriesFuture">Future series</option>
+            <option value="seriesAll">Whole series</option>
+            <option value="ask">Ask each time</option>
+          </select>
+        </SettingsControlRow>
         {calendarSources.length === 0 ? (
           <EmptyState description="No calendars are available yet." title="No calendars" />
         ) : calendarSources.map((calendar) => (

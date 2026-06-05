@@ -88,6 +88,10 @@ export function buildCoreViewModelSource(
       ];
     }
 
+    if (!snapshot.settings.showCompletedInCalendarViews && event.completedAt) {
+      return [];
+    }
+
     return [
       stableCalendarEventViewModel(
         event,
@@ -154,7 +158,10 @@ export function buildCoreViewModelSource(
   const today = startOfUtcDay(now);
   const todayKey = dayKey(today);
   const todayEvents = eventsForDate(eventDayIndex, today).filter(
-    (event) => !scheduledEventIds.has(event.eventId) && !scheduledEventIds.has(event.id)
+    (event) =>
+      !event.completedAt &&
+      !scheduledEventIds.has(event.eventId) &&
+      !scheduledEventIds.has(event.id)
   );
   const baseTodayScheduledBlocks = baseScheduledTaskBlocks
     .filter((block) => block.startsAt.slice(0, 10) === todayKey)
