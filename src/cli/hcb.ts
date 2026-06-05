@@ -907,6 +907,57 @@ export async function callCommand(
     args.patch = updatePatch(command);
   }
 
+  if (command.command === "convert") {
+    args.sourceKind = command.target ?? "";
+    args.sourceId = command.id ?? "";
+    args.targetKind = command.to ?? "";
+    args.sourceAction = command.sourceAction ?? "";
+
+    if (command.title !== undefined) {
+      args.title = command.title;
+    }
+
+    if (command.notes !== undefined) {
+      args.notes = command.notes;
+    }
+
+    if (command.body !== undefined) {
+      args.body = command.body;
+    }
+
+    if (command.details !== undefined) {
+      args.details = command.details;
+    }
+
+    if (command.dueDate !== undefined) {
+      args.dueDate = command.dueDate;
+    }
+
+    if (command.taskListId !== undefined) {
+      args.taskListId = command.taskListId;
+    }
+
+    if (command.noteListId !== undefined) {
+      args.noteListId = command.noteListId;
+    }
+
+    if (command.calendarId !== undefined) {
+      args.calendarId = command.calendarId;
+    }
+
+    if (command.startDate !== undefined) {
+      args.startDate = command.startDate;
+    }
+
+    if (command.endDate !== undefined) {
+      args.endDate = command.endDate;
+    }
+
+    if (command.allDay === true) {
+      args.isAllDay = true;
+    }
+  }
+
   if (command.command === "move") {
     if (command.taskListId !== undefined) {
       args.taskListId = command.taskListId;
@@ -1434,6 +1485,25 @@ function writeApplyCommand(command: ParsedCommand, response: McpToolResponse): s
     }
   }
 
+  if (command.command === "convert") {
+    pushFlag(args, "--to", command.to);
+    pushFlag(args, "--source-action", command.sourceAction);
+    pushFlag(args, "--title", command.title);
+    pushFlag(args, "--notes", command.notes);
+    pushFlag(args, "--body", command.body);
+    pushFlag(args, "--details", command.details);
+    pushFlagValue(args, "--due-date", command.dueDate);
+    pushFlag(args, "--task-list-id", command.taskListId);
+    pushFlag(args, "--note-list-id", command.noteListId);
+    pushFlag(args, "--calendar-id", command.calendarId);
+    pushFlag(args, "--start-date", command.startDate);
+    pushFlag(args, "--end-date", command.endDate);
+
+    if (command.allDay === true) {
+      args.push("--all-day");
+    }
+  }
+
   if (command.command === "move") {
     pushFlag(args, "--task-list-id", command.taskListId);
     pushFlagValue(args, "--parent-id", command.parentId);
@@ -1499,6 +1569,10 @@ function writeCommandPrefix(command: ParsedCommand): string[] {
 
   if (command.command === "retry-mutation" || command.command === "cancel-mutation") {
     return ["pnpm", "hcb", "--", command.command];
+  }
+
+  if (command.command === "convert") {
+    return ["pnpm", "hcb", "--", "convert", command.target ?? "item"];
   }
 
   return ["pnpm", "hcb", "--", command.command, command.target ?? "item"];
@@ -1608,6 +1682,7 @@ function helpText(): string {
     "  get <kind> <id> [--json]                get a task, event, or note",
     "  create <kind> [options]                 dry-run create a task, note, event, or list",
     "  update <kind> <id> [options]            dry-run update a task, note, or event",
+    "  convert <kind> <id> [options]           dry-run convert task, note, or event",
     "  rename <kind> <id> --title <title>      dry-run rename a task-list or note-list",
     "  complete <task|event> <id> [--scope s]  dry-run complete a task or event",
     "  reopen <task|event> <id> [--scope s]    dry-run reopen a task or event",
@@ -1645,6 +1720,7 @@ function helpText(): string {
     "  pnpm hcb -- update task task-id --title 'Next title'",
     "  pnpm hcb -- update task task-id --priority high --tags launch,ops",
     "  pnpm hcb -- update event event-id --recurrence-frequency weekly --recurrence-by-day MO,WE",
+    "  pnpm hcb -- convert event event-id --to task --source-action keep",
     "  pnpm hcb -- rename task-list list-id --title 'Errands'",
     "  pnpm hcb -- complete task task-id",
     "  pnpm hcb -- complete event event-id --scope occurrence",
@@ -1758,6 +1834,8 @@ function toolName(command: ParsedCommand): string {
       }
 
       throw new CliError("Unknown update target.", 2);
+    case "convert":
+      return "hcb_convert_item";
     case "rename":
       if (command.target === "task-list") {
         return "hcb_rename_task_list";
@@ -1849,6 +1927,7 @@ function isCommand(command: string): command is ParsedCommand["command"] {
     command === "get" ||
     command === "create" ||
     command === "update" ||
+    command === "convert" ||
     command === "rename" ||
     command === "complete" ||
     command === "reopen" ||
@@ -2263,6 +2342,7 @@ function isWriteCommand(command: ParsedCommand["command"]): boolean {
     command === "retry-mutation" ||
     command === "cancel-mutation" ||
     command === "update" ||
+    command === "convert" ||
     command === "rename" ||
     command === "complete" ||
     command === "reopen" ||
