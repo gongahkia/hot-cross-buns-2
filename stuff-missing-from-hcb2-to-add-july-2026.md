@@ -54,6 +54,12 @@ Gap analysis of features present in `../hot-cross-buns` (SwiftUI macOS original)
 - **Regex / field-operator advanced search** — `attendee:`, `duration>30m`, `has:notes`, `due<+7d`, etc.
 - **Custom-filter DSL** — `list:`, `tag:`, `AND/OR/NOT`, relative dates + saved queries
 
+### Linked markdown / knowledge graph
+- **Wikilinks everywhere** — resolve `[[note:...]]`, `[[task:...]]`, `[[event:...]]`, and list/calendar links inside every markdown surface, including note bodies, task notes, event descriptions, and list metadata.
+- **Transclusion / live embeds** — render `![[note:...]]` and `![[task:#id]]` inline as read-only live blocks, with cycle/depth limits so dashboards can compose existing notes/tasks/events without copy-paste.
+- **Universal entity-link graph** — add one polymorphic link table (`src_kind`, `src_id`, `dst_kind`, `dst_id`, `link_type`) for note/task/event/list/calendar links, extending current note-link parsing and scheduled-task-block relationships into a general backlink/graph model.
+- **Graph-backed backlinks + broken-link repair** — expose incoming/outgoing links for any primitive, not just notes, and make unresolved links visible/recoverable.
+
 ### Settings, distribution, platform integrations
 - **Local cache encryption** — AES-256-GCM, PBKDF2/Argon2 passphrase, session unlock sheet
 - **Per-surface font customisation** — six surfaces × family/size/weight. This repo has font-family setting but not the six-surface matrix.
