@@ -20,7 +20,13 @@ export function newTaskDraft(
     dueDate: seed.dueDate ?? "",
     listId: seed.listId ?? defaultTaskListId(source),
     parentId: seed.parentId ?? "",
-    priority: seed.priority ?? "none"
+    priority: seed.priority ?? "none",
+    plannedStart: seed.plannedStart ?? null,
+    plannedEnd: seed.plannedEnd ?? null,
+    durationMinutes: seed.durationMinutes ?? null,
+    lockedSchedule: seed.lockedSchedule ?? false,
+    snoozeUntil: seed.snoozeUntil ?? null,
+    tags: seed.tags ?? []
   };
 }
 
@@ -33,7 +39,31 @@ export function editTaskDraft(task: TaskViewModel): TaskDraft {
     dueDate: task.dueDate ?? "",
     listId: task.listId,
     parentId: task.parentId ?? "",
-    priority: task.priority
+    priority: task.priority,
+    plannedStart: task.plannedStart ?? null,
+    plannedEnd: task.plannedEnd ?? null,
+    durationMinutes: task.durationMinutes ?? null,
+    lockedSchedule: task.lockedSchedule ?? false,
+    snoozeUntil: task.snoozeUntil ?? null,
+    tags: task.tags ?? []
+  };
+}
+
+export function duplicateTaskDraft(task: TaskViewModel): TaskDraft {
+  return {
+    mode: "create",
+    title: task.title,
+    notes: task.detail,
+    dueDate: task.dueDate ?? "",
+    listId: task.listId,
+    parentId: task.parentId ?? "",
+    priority: task.priority,
+    plannedStart: task.plannedStart ?? null,
+    plannedEnd: task.plannedEnd ?? null,
+    durationMinutes: task.durationMinutes ?? null,
+    lockedSchedule: task.lockedSchedule ?? false,
+    snoozeUntil: task.snoozeUntil ?? null,
+    tags: task.tags ?? []
   };
 }
 
@@ -44,7 +74,13 @@ export function taskCreatePayload(draft: TaskDraft): TaskCreateRequest {
     dueDate: draft.dueDate || null,
     listId: draft.listId,
     parentId: draft.parentId || null,
-    priority: draft.priority
+    priority: draft.priority,
+    plannedStart: draft.plannedStart ?? null,
+    plannedEnd: draft.plannedEnd ?? null,
+    durationMinutes: draft.durationMinutes ?? null,
+    lockedSchedule: draft.lockedSchedule ?? false,
+    snoozeUntil: draft.snoozeUntil ?? null,
+    tags: draft.tags ?? []
   };
 }
 

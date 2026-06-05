@@ -18,6 +18,12 @@ export interface TaskDraft {
   listId: string;
   parentId: string;
   priority: CorePriority;
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  durationMinutes?: number | null;
+  lockedSchedule?: boolean;
+  snoozeUntil?: string | null;
+  tags?: string[];
 }
 
 export function taskDraftsEqual(left: TaskDraft, right: TaskDraft): boolean {
@@ -29,7 +35,13 @@ export function taskDraftsEqual(left: TaskDraft, right: TaskDraft): boolean {
     left.dueDate === right.dueDate &&
     left.listId === right.listId &&
     left.parentId === right.parentId &&
-    left.priority === right.priority
+    left.priority === right.priority &&
+    left.plannedStart === right.plannedStart &&
+    left.plannedEnd === right.plannedEnd &&
+    left.durationMinutes === right.durationMinutes &&
+    left.lockedSchedule === right.lockedSchedule &&
+    left.snoozeUntil === right.snoozeUntil &&
+    JSON.stringify(left.tags ?? []) === JSON.stringify(right.tags ?? [])
   );
 }
 
