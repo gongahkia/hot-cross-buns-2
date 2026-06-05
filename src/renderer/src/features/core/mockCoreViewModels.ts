@@ -546,7 +546,7 @@ export const calendarMonthWeeks: CalendarMonthWeekViewModel[] = [
 export const initialNotes: NoteViewModel[] = [
   {
     id: "note-cache-first",
-    listId: "note-list:default",
+    listId: "list-inbox",
     listTitle: "Notes",
     title: "Startup data flow",
     body: "Renderer should paint a useful shell before Google, SQLite, or MCP work is wired.",
@@ -555,7 +555,7 @@ export const initialNotes: NoteViewModel[] = [
   },
   {
     id: "note-command-surface",
-    listId: "note-list:default",
+    listId: "list-inbox",
     listTitle: "Notes",
     title: "Command palette surface",
     body: "Commands stay in memory and execute the same future services as visible controls.",
@@ -564,7 +564,7 @@ export const initialNotes: NoteViewModel[] = [
   },
   {
     id: "note-density",
-    listId: "note-list:default",
+    listId: "list-inbox",
     listTitle: "Notes",
     title: "Compact density checks",
     body: "Use 13px body text, stable toolbar controls, and visible focus rings.",

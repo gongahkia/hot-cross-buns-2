@@ -287,7 +287,7 @@ describe("hcb CLI", () => {
     expect(() => parseCommand(["convert", "event", "event-1", "--to", "task"])).toThrow("Missing required --source-action");
     expect(() => parseCommand(["convert", "event", "event-1", "--to", "event", "--source-action", "keep"])).toThrow("Convert source and target must differ");
     expect(() => parseCommand(["convert", "task", "task-1", "--to", "event", "--source-action", "keep", "--priority", "high"])).toThrow("--priority");
-    expect(() => parseCommand(["rename", "note-list", "note-list:default"])).toThrow("Missing required --title");
+    expect(() => parseCommand(["rename", "note-list", "list-inbox"])).toThrow("Missing required --title");
     expect(() => parseCommand(["complete", "task", "task-1", "--title", "Nope"])).toThrow("--title");
     expect(() => parseCommand(["move", "task", "task-1"])).toThrow("At least one update field");
     expect(() => parseCommand(["move", "note", "note-1", "--task-list-id", "list-inbox"])).toThrow("move target");
@@ -717,7 +717,7 @@ describe("hcb CLI", () => {
       expect(calendarsOut.text()).toContain("HCB calendars: 1 item");
       expect(calendarsOut.text()).toContain("calendar id=cal-primary Primary selected=true");
       expect(noteListsOut.text()).toContain("HCB note lists: 1 item");
-      expect(noteListsOut.text()).toContain("noteList id=note-list:default Local notes notes=1");
+      expect(noteListsOut.text()).toContain("noteList id=list-inbox Inbox notes=1");
       expect(getTaskOut.text()).toContain("HCB task");
       expect(getTaskOut.text()).toContain("\"id\": \"task-1\"");
       expect(getEventOut.text()).toContain("HCB event");
@@ -1025,7 +1025,7 @@ describe("hcb CLI", () => {
       expect(await runHcbCli(["update", "note", "note-1", "--title", "Scratch v2", "--body", "Body v2", "--json"], { ...deps, stdout: noteJsonOut })).toBe(0);
       expect(await runHcbCli(["update", "event", "event-1", "--title", "Review v2", "--start-date", "2026-06-04T09:00:00.000Z", "--end-date", "2026-06-04T10:00:00.000Z", "--details", "Agenda", "--location", "Office", "--calendar-id", "cal-primary"], { ...deps, stdout: eventOut })).toBe(0);
       expect(await runHcbCli(["rename", "task-list", "list-inbox", "--title", "Inbox v2"], { ...deps, stdout: renameTaskListOut })).toBe(0);
-      expect(await runHcbCli(["rename", "note-list", "note-list:default", "--title", "Notes v2", "--apply", "--confirmation-id", "confirm-rename-note-list"], { ...deps, stdout: renameNoteListOut })).toBe(0);
+      expect(await runHcbCli(["rename", "note-list", "list-inbox", "--title", "Notes v2", "--apply", "--confirmation-id", "confirm-rename-note-list"], { ...deps, stdout: renameNoteListOut })).toBe(0);
       expect(await runHcbCli(["complete", "task", "task-1"], { ...deps, stdout: completeOut })).toBe(0);
       expect(await runHcbCli(["reopen", "task", "task-1"], { ...deps, stdout: reopenOut })).toBe(0);
       expect(await runHcbCli(["move", "task", "task-1", "--task-list-id", "list-next"], { ...deps, stdout: moveOut })).toBe(0);
@@ -1095,7 +1095,7 @@ describe("hcb CLI", () => {
           title: "Inbox v2"
         },
         {
-          id: "note-list:default",
+          id: "list-inbox",
           dryRun: false,
           confirmationId: "confirm-rename-note-list",
           title: "Notes v2"
@@ -1171,7 +1171,7 @@ describe("hcb CLI", () => {
       expect(await runHcbCli(["delete", "note", "note-1"], { ...deps, stdout: noteOut })).toBe(0);
       expect(await runHcbCli(["delete", "event", "event-1", "--apply", "--confirmation-id", "confirm-delete-event"], { ...deps, stdout: eventOut })).toBe(0);
       expect(await runHcbCli(["delete", "task-list", "list-inbox"], { ...deps, stdout: taskListOut })).toBe(0);
-      expect(await runHcbCli(["delete", "note-list", "note-list:default", "--json"], { ...deps, stdout: noteListJsonOut })).toBe(0);
+      expect(await runHcbCli(["delete", "note-list", "list-inbox", "--json"], { ...deps, stdout: noteListJsonOut })).toBe(0);
       const noteListJson = JSON.parse(noteListJsonOut.text()) as Record<string, unknown>;
 
       expect(taskOut.text()).toContain("HCB delete task: dry-run");
@@ -1186,10 +1186,10 @@ describe("hcb CLI", () => {
         dryRun: true,
         requiresConfirmation: true,
         confirmationId: "confirm-delete-note-list",
-        applyCommand: "pnpm hcb -- delete note-list note-list:default --apply --confirmation-id confirm-delete-note-list",
+        applyCommand: "pnpm hcb -- delete note-list list-inbox --apply --confirmation-id confirm-delete-note-list",
         item: {
           kind: "noteList",
-          id: "note-list:default"
+          id: "list-inbox"
         }
       });
       expect(`${taskOut.text()}${noteOut.text()}${eventOut.text()}${taskListOut.text()}${noteListJsonOut.text()}`).not.toContain("secret-token");
@@ -1220,7 +1220,7 @@ describe("hcb CLI", () => {
           dryRun: true
         },
         {
-          id: "note-list:default",
+          id: "list-inbox",
           dryRun: true
         }
       ]);
@@ -1825,8 +1825,8 @@ function responseForDiscoveryTool(name: string): Record<string, unknown> {
       items: [
         {
           kind: "noteList",
-          id: "note-list:default",
-          title: "Local notes",
+          id: "list-inbox",
+          title: "Inbox",
           noteCount: 1
         }
       ]

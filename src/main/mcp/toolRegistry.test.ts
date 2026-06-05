@@ -20,7 +20,7 @@ const confirmWritesContext: McpToolCallContext = {
 };
 
 describe("McpToolRegistry read lists", () => {
-  it("returns local note lists", async () => {
+  it("returns note lists", async () => {
     const response = await new McpToolRegistry(createMcpTestDomainServices()).callTool(
       "hcb_list_note_lists",
       {},
@@ -32,8 +32,8 @@ describe("McpToolRegistry read lists", () => {
       items: [
         {
           kind: "noteList",
-          id: "note-list:default",
-          title: "Local notes",
+          id: "list-inbox",
+          title: "Inbox",
           noteCount: 1
         }
       ]
@@ -547,7 +547,7 @@ describe("McpToolRegistry advanced writes", () => {
     await expect(registry.callTool(
       "hcb_delete_note_list",
       {
-        id: "note-list:default"
+        id: "list-inbox"
       },
       allowWritesContext
     )).rejects.toMatchObject({

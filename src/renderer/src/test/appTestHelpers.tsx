@@ -606,21 +606,21 @@ export function seededHcb(): HcbApi {
           items: [
             {
               id: "note-cache-first",
-              listId: "note-list:default",
+              listId: "list-inbox",
               listTitle: "Notes",
               title: "Startup data flow",
               preview: "Renderer paints from SQLite.",
               updatedAt: now
             }
           ],
-          lists: [{ id: "note-list:default", title: "Notes", noteCount: 1, updatedAt: now }],
+          lists: [{ id: "list-inbox", title: "Notes", noteCount: 1, updatedAt: now }],
           page: { limit: 50, totalKnown: 1 }
         })
       ),
       get: vi.fn(async ({ id }) =>
         ok({
           id,
-          listId: "note-list:default",
+          listId: "list-inbox",
           listTitle: "Notes",
           title: "Startup data flow",
           preview: "Renderer paints from SQLite.",
@@ -631,7 +631,7 @@ export function seededHcb(): HcbApi {
       create: vi.fn(async (request) =>
         ok({
           id: "note-created",
-          listId: request.listId ?? "note-list:default",
+          listId: request.listId ?? "list-inbox",
           listTitle: "Notes",
           title: request.title,
           preview: request.body ?? "Empty note",
@@ -642,7 +642,7 @@ export function seededHcb(): HcbApi {
       update: vi.fn(async (request) =>
         ok({
           id: request.id,
-          listId: request.listId ?? "note-list:default",
+          listId: request.listId ?? "list-inbox",
           listTitle: "Notes",
           title: request.title ?? "Untitled note",
           preview: request.body ?? "",

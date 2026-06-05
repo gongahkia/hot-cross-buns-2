@@ -300,7 +300,7 @@ describe("Google Calendar mapping", () => {
     await adapter.insertEvent("primary", {
       hcbKind: "birthday",
       summary: "Alex",
-      description: "local-only notes must not leak",
+      description: "task-backed note bodies must not leak",
       location: "local-only location",
       startAt: "2026-06-01T00:00:00.000Z",
       endAt: "2026-06-02T00:00:00.000Z",
@@ -360,7 +360,7 @@ describe("Google Calendar mapping", () => {
       calendarId: "primary",
       eventId: "birthday-1",
       summary: "Alex",
-      description: "local-only notes must not leak",
+      description: "task-backed note bodies must not leak",
       location: "local-only location",
       startAt: "2026-06-03T00:00:00.000Z",
       endAt: "2026-06-04T00:00:00.000Z",

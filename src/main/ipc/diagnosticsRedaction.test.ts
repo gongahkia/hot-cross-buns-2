@@ -16,7 +16,7 @@ describe("diagnostics redaction", () => {
         notes: "Sensitive task notes"
       },
       note: {
-        body: "Sensitive local note body"
+        body: "Sensitive note body"
       },
       safeCount: 3
     });

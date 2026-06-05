@@ -538,6 +538,7 @@ export function useNotesController(source: CoreViewModelSource): {
         conversionCleanupByNoteId.current.set(note.id, cleanup);
       }
       openNoteInspector(note, "edit");
+      void persistNoteDraft(note.id, { title: note.title, body: note.body });
       return;
     }
 
@@ -875,6 +876,8 @@ export function useNotesController(source: CoreViewModelSource): {
       }
       source.refreshUndoStatus();
       source.refresh();
+    } else {
+      setNoteActionError(result?.error.message ?? "Note was not saved.");
     }
 
     return result?.ok ?? false;

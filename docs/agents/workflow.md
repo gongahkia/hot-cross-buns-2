@@ -46,7 +46,7 @@ Not allowed without explicit approval:
 - Put filesystem, SQLite, Google, MCP, tray, shortcuts, notifications, and updater work in main/worker services.
 - Use domain services for both UI and MCP mutations.
 - Keep Google as the source of truth for synced tasks/events.
-- Keep notes local-only unless a later spec changes that.
+- Keep notes task-backed unless a later spec changes that.
 - Update docs when behavior or architecture changes.
 - Preserve the performance budgets and measurement strategy in `docs/performance/performance-strategy.md`.
 - Preserve the port order in `docs/ports/cross-platform-porting.md`: macOS first, Linux second, Windows third.

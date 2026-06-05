@@ -2,7 +2,7 @@
 
 ## Scope
 
-SQLite is the local operating store for Hot Cross Buns 2. It stores mirrored Google data, local notes, settings, sync checkpoints, pending mutations, diagnostics metadata, and local-only UI preferences.
+SQLite is the local operating store for Hot Cross Buns 2. It stores mirrored Google data, settings, sync checkpoints, pending mutations, diagnostics metadata, and local-only UI preferences.
 
 SQLite is not a custom cloud source of truth.
 
@@ -22,7 +22,7 @@ Start from the existing Hot Cross Buns canonical SQLite model:
 - `headings`
 - `sync_meta`
 
-Hot Cross Buns 2 must add mirror tables for Google account/calendar/event state and local-only notes/settings/mutations.
+Hot Cross Buns 2 must add mirror tables for Google account/task/calendar/event state plus settings and mutations.
 
 Required table groups:
 
@@ -30,10 +30,10 @@ Required table groups:
 - Task mirrors: task lists, tasks, subtasks, tags/headings if retained.
 - Calendar mirrors: calendar lists, events, recurring metadata, event instances if materialized.
 - Scheduled task blocks: local links between Google Tasks and the Google Calendar events that time-block them.
-- Notes: local notes and search fields.
+- Notes: task-backed note projections and search fields.
 - Settings: app, sync, selected lists/calendars, appearance, hotkeys, tray, MCP.
 - Sync checkpoints: Tasks watermarks and Calendar `nextSyncToken` values.
-- Pending mutations: queued task/event/note operations and retry metadata.
+- Pending mutations: queued task/event/task-backed-note operations and retry metadata.
 - Diagnostics metadata: sanitized sync, MCP, and migration state.
 
 ## Migration Rules
@@ -53,20 +53,13 @@ Required table groups:
 - Return DTOs rather than raw database rows.
 - Normalize dates as ISO strings with explicit timezone fields where needed.
 
-## Local Notes
+## Task-Backed Notes
 
-Notes are local-only for v1.
+Notes are stored as Google Tasks rows.
 
-Minimum fields:
+Note rows are active, non-hidden, non-completed, root tasks with no due date. Note lists map to Google Tasks lists.
 
-- id
-- title
-- body
-- created_at
-- updated_at
-- deleted_at
-
-Future linking fields may associate notes with task ids, event ids, list ids, or calendar ids, but linked notes still remain local-only unless a future sync spec changes that.
+No separate local SQLite note tables should be created.
 
 ## Encryption And Secrets
 
@@ -99,8 +92,8 @@ Required tests:
 
 ## Current Implementation Notes
 
-- SQLite repositories now back the core task, task-list, calendar-event, note, settings, search, sync-status, and performance-timing paths exposed through typed IPC.
-- UI IPC handlers and MCP tools share the same main-side domain services. Synced task and event writes update local mirrors and enqueue `google_pending_mutations`; note writes remain local-only and are not queued for Google.
+- SQLite repositories now back the core task, task-list, calendar-event, task-backed note, settings, search, sync-status, and performance-timing paths exposed through typed IPC.
+- UI IPC handlers and MCP tools share the same main-side domain services. Synced task, note, and event writes update local mirrors and enqueue `google_pending_mutations`.
 - Scheduled task blocks are local metadata rows that link a task to a real queued Google Calendar event, preserving Google Tasks as date-only while making the Today timeline movable. Active block listing reconciles against the linked Calendar event, marks missing/cancelled event links as orphaned, and uses the live event range when Google was edited externally.
 - Local search reads current task, event, and note rows from SQLite with capped results and indexed recent/search paths. Renderer search requests stay bounded and do not call Google.
 - The renderer receives DTOs only. It does not import SQLite modules, raw Google payloads, tokens, filesystem internals, or unbounded result sets.

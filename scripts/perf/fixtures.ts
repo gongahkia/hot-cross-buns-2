@@ -158,7 +158,7 @@ function generateNotes(size: PerfFixtureSize, count: number): PerfNoteFixture[] 
           ? eventId(size, index % PERF_FIXTURE_COUNTS[size].eventInstances)
           : null,
       title: `Generated note ${padded(index + 1, 5)}`,
-      body: `Generated local note body ${padded(index + 1, 5)} for deterministic performance fixtures.`,
+      body: `Generated note body ${padded(index + 1, 5)} for deterministic performance fixtures.`,
       updatedAt: timestamp(index - 360)
     };
   });

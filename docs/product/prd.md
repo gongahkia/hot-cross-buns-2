@@ -28,7 +28,7 @@ Mac core app success:
 - User can view selected task lists and calendars from local cache after sync.
 - User can create, edit, complete/reopen, move, and delete tasks.
 - User can create, edit, and delete calendar events.
-- User can create and search local notes.
+- User can create and search task-backed notes.
 - User can open command palette and quick capture without leaving the keyboard.
 - Tray/menu bar and global hotkey flows work on macOS.
 - Local MCP read tools work behind bearer-token authentication.
@@ -42,7 +42,7 @@ Core v1 includes:
 - Onboarding and Google OAuth setup
 - Tasks, task lists, subtasks, completion, deletion, and move flows
 - Calendar agenda/day/week/month views with event create/edit/delete
-- Local notes and note search
+- Task-backed notes and note search
 - Command palette
 - Global quick capture
 - Local-first search over cached tasks, events, and notes
@@ -79,7 +79,6 @@ V1 does not include:
 
 These do not block docs or scaffold, but must be resolved before v1 release:
 
-- Whether local notes should remain local-only forever or eventually sync through a user-owned provider.
+- Whether notes need a future provider beyond their current Google Tasks-backed representation.
 - Whether Windows/Linux v1 should support feature parity or a smaller planner-only subset.
 - Whether public distribution should remain unsigned preview or move to signed/notarized releases before broad use.
-

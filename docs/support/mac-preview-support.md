@@ -46,7 +46,7 @@ If that option is unavailable, use `System Settings > Privacy & Security > Open 
 - No third-party analytics SDK is included.
 - No hosted sync backend is included in v1.
 - Google Tasks and Calendar data is mirrored into local SQLite for planner use.
-- Local notes stay local-only.
+- Notes are task-backed and sync through Google Tasks.
 - OAuth tokens, optional OAuth client secrets, and MCP bearer tokens live in macOS Keychain; they are not stored in SQLite or exposed to the renderer.
 - Diagnostics are designed to redact credentials, raw Google payloads, task notes, calendar descriptions, note bodies, MCP bearer tokens, and sensitive account/resource identifiers.
 
@@ -67,7 +67,7 @@ Useful local evidence for maintainers:
 - `release/SHASUMS256.txt` checksum line
 - screenshots of Gatekeeper or permission prompts, with personal data redacted
 
-Do not share OAuth credentials, MCP bearer tokens, local SQLite databases, local note bodies, raw Google API payloads, or Apple signing/notarization material.
+Do not share OAuth credentials, MCP bearer tokens, local SQLite databases, task/note bodies, raw Google API payloads, or Apple signing/notarization material.
 
 ## Reinstall And Rollback
 
@@ -79,4 +79,4 @@ If a preview build cannot launch:
 2. Reinstall the previous preview artifact if compatible.
 3. Keep the local data directory intact unless a release note explicitly says a migration is not downgrade-compatible.
 
-Clearing the local Google cache should be done from Settings recovery controls when the app still launches. Manual deletion of app data is a last resort because it removes local notes and diagnostic evidence.
+Clearing the local Google cache should be done from Settings recovery controls when the app still launches. Manual deletion of app data is a last resort because it removes pending local state and diagnostic evidence.

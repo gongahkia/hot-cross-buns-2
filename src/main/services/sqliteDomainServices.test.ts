@@ -591,7 +591,7 @@ describe("SQLite-backed domain services", () => {
     expect((await domain.planner.listTasks({ status: "all", limit: 10 })).items).toEqual([]);
   });
 
-  it("uses the same local note service through MCP and planner search", async () => {
+  it("uses the same task-backed note service through MCP and planner search", async () => {
     const { domain, syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);
 

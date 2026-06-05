@@ -20,7 +20,7 @@ Then read the spec for the subsystem you are changing. Do not scaffold app code 
 - Future platforms: Windows and Linux
 - Default stack: Electron, React, TypeScript, Vite, Tailwind, SQLite
 - Source of truth: Google Tasks and Google Calendar
-- Local database role: cache, settings, checkpoints, offline mutations, local notes
+- Local database role: Google Tasks/Calendar cache, settings, checkpoints, offline mutations, diagnostics
 - Agent access: opt-in local MCP server on `127.0.0.1`
 
 ## Implementation Status
@@ -28,7 +28,7 @@ Then read the spec for the subsystem you are changing. Do not scaffold app code 
 - Electron/Vite/React scaffold exists with hardened renderer settings and a typed preload bridge.
 - Renderer screens read bounded task, calendar, note, settings, sync, diagnostics, and search view models through the typed preload bridge. Local mock data remains only as fixture fallback for isolated renderer tests and command metadata.
 - Core IPC contracts are versioned under `src/shared/ipc/`, with read and write routes for tasks, task lists, calendar events, notes, local search, sync, settings, MCP, native capabilities, and diagnostics.
-- Main-side SQLite domain services are shared by UI IPC handlers and MCP tool handlers. Task and calendar writes update optimistic local mirror rows and enqueue Google-backed pending mutations; notes stay local-only.
+- Main-side SQLite domain services are shared by UI IPC handlers and MCP tool handlers. Task, note, task-list, note-list, and calendar writes update optimistic local mirror rows and enqueue Google-backed pending mutations.
 - Local data now includes migrations, repositories, temporary-database integration tests, search over current task/event/note state, pending mutation tracking, and sanitized performance timing storage.
 - Performance smoke runs in report-only mode with generated local fixtures and temporary app data paths.
 

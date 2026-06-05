@@ -146,8 +146,8 @@ export function createPlaceholderState(): PlaceholderState {
     notes: [
       {
         id: "note-cache-first",
-        listId: "note-list:default",
-        listTitle: "Local notes",
+        listId: "list-inbox",
+        listTitle: "Inbox",
         title: "Cache-first startup",
         preview: "Renderer should paint a useful shell before Google, SQLite, or MCP work is wired.",
         updatedAt: nowIso,
@@ -155,8 +155,8 @@ export function createPlaceholderState(): PlaceholderState {
       },
       {
         id: "note-command-surface",
-        listId: "note-list:default",
-        listTitle: "Local notes",
+        listId: "list-inbox",
+        listTitle: "Inbox",
         title: "Command palette surface",
         preview: "Commands stay in memory and execute future services as visible controls.",
         updatedAt: "2026-05-22T01:39:00.000Z",
@@ -164,12 +164,12 @@ export function createPlaceholderState(): PlaceholderState {
       },
       ...Array.from({ length: 60 }, (_, index): NoteDetail => ({
         id: `note-window-${index + 1}`,
-        listId: "note-list:default",
-        listTitle: "Local notes",
-        title: `Generated local note ${String(index + 1).padStart(2, "0")}`,
+        listId: "list-inbox",
+        listTitle: "Inbox",
+        title: `Generated note ${String(index + 1).padStart(2, "0")}`,
         preview: "Placeholder note for paginated preload calls.",
         updatedAt: nowIso,
-        body: "Placeholder note body for future local note repository data."
+        body: "Placeholder note body for task-backed note data."
       }))
     ],
     settings: {

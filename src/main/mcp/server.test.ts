@@ -244,9 +244,9 @@ describe("local MCP server contract", () => {
       message: "Read note lists.",
       items: [
         {
-          id: "note-list:default",
+          id: "list-inbox",
           kind: "noteList",
-          title: "Local notes",
+          title: "Inbox",
           noteCount: 1
         }
       ]
@@ -671,7 +671,7 @@ describe("local MCP server contract", () => {
       rpc("tools/call", {
         name: "hcb_rename_note_list",
         arguments: {
-          id: "note-list:default",
+          id: "list-inbox",
           title: "Notes v2"
         }
       }),
@@ -682,7 +682,7 @@ describe("local MCP server contract", () => {
       applied: true,
       item: {
         kind: "noteList",
-        id: "note-list:default",
+        id: "list-inbox",
         title: "Notes v2"
       }
     });
@@ -768,7 +768,7 @@ describe("local MCP server contract", () => {
       rpc("tools/call", {
         name: "hcb_delete_note_list",
         arguments: {
-          id: "note-list:default",
+          id: "list-inbox",
           dryRun: true
         }
       }),
@@ -779,7 +779,7 @@ describe("local MCP server contract", () => {
       dryRun: true,
       requiresConfirmation: true,
       item: {
-        id: "note-list:default",
+        id: "list-inbox",
         kind: "noteList"
       }
     });

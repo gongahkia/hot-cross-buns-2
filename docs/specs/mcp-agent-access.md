@@ -105,7 +105,7 @@ The MCP server must:
 
 MCP tools must call the same domain services as the UI. Do not create a separate MCP-only mutation path.
 
-Current implementation note: MCP tool handlers are wired to the same main-side domain services used by UI IPC handlers. Task and event MCP writes therefore use the same local mirror and pending-mutation queue behavior as visible UI writes, while notes remain local-only. The user-facing MCP enable/disable IPC status is stateful, but a live listener still remains deferred until Keychain-backed bearer token storage and startup-safe server lifecycle wiring are complete.
+Current implementation note: MCP tool handlers are wired to the same main-side domain services used by UI IPC handlers. Task, note, and event MCP writes therefore use the same local mirror and pending-mutation queue behavior as visible UI writes. The user-facing MCP enable/disable IPC status is stateful, but a live listener still remains deferred until Keychain-backed bearer token storage and startup-safe server lifecycle wiring are complete.
 
 ## Tests
 

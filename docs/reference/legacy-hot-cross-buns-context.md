@@ -14,7 +14,7 @@ The original app is a macOS planner built around:
 
 - Google Tasks task lists and tasks
 - Google Calendar calendars and events
-- local notes
+- notes
 - keyboard-first navigation and command palette
 - menu bar/tray surfaces
 - global quick capture
@@ -66,7 +66,7 @@ Tests worth studying for behavior:
 ## Behavior Contracts Already Decided
 
 - Google Tasks and Google Calendar are the synced sources of truth.
-- Local SQLite is cache, settings, checkpoints, offline mutation queue, diagnostics metadata, and local-only notes.
+- Local SQLite is cache, settings, checkpoints, offline mutation queue, diagnostics metadata, and task-backed note mirrors.
 - Google Drive is out of scope.
 - Renderer code in Hot Cross Buns 2 never gets direct filesystem, token, SQLite, or Google API access.
 - UI writes and MCP writes must use the same domain services.
@@ -90,4 +90,3 @@ Not allowed without explicit approval:
 - Reintroduce Xcode/XcodeGen as the active build path.
 - Make Hot Cross Buns 2 import or shell out to the old Swift app.
 - Expand scope to mobile apps before the desktop roadmap is stable.
-

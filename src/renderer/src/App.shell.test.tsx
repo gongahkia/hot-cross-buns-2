@@ -417,14 +417,14 @@ describe("App shell", () => {
         items: [
           {
             id: "note-cache-first",
-            listId: "note-list:default",
+            listId: "list-inbox",
             listTitle: "Notes",
             title: "Startup data flow",
             preview: "Renderer paints from SQLite.",
             updatedAt: now
           }
         ],
-        lists: [{ id: "note-list:default", title: "Notes", noteCount: 1, updatedAt: now }],
+        lists: [{ id: "list-inbox", title: "Notes", noteCount: 1, updatedAt: now }],
         page: { limit: 50, totalKnown: 321 }
       });
     installHcb(api);

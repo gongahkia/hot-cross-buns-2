@@ -32,7 +32,7 @@ Status on 2026-05-22:
 - Implemented a first-run setup modal keyed by the local `setupCompletedAt` setting.
 - The modal covers Google runtime/OAuth readiness, cached task-list selection, cached calendar selection, sync mode, notification preference, and optional MCP access.
 - Completing setup persists selected resources, sync mode, notifications, MCP preference, and setup completion timestamp through existing settings IPC.
-- Choosing local-only setup completes onboarding without Google selections and keeps local notes/settings available.
+- Choosing local-only setup completes onboarding without Google selections and keeps cached notes/settings available.
 - Settings now has a non-destructive Reset onboarding action that clears only the completion timestamp.
 
 Remaining blockers:
@@ -45,7 +45,7 @@ Acceptance checks:
 
 - Fresh local database opens onboarding before the main planner.
 - Completing setup writes settings and returns to Today.
-- Skipping Google still leaves local notes and settings usable.
+- Skipping Google still leaves cached notes and settings usable.
 - Reset onboarding reopens the flow without deleting planner data.
 
 ### 2. Advanced Search, Query DSL, And Custom Filters

@@ -8,7 +8,7 @@ Hot Cross Buns 2 will use an Electron-first desktop stack:
 - React + TypeScript for renderer UI.
 - Vite for renderer development and production builds.
 - Tailwind CSS with Hot Cross Buns design tokens for fast, consistent UI work.
-- SQLite for local cache, settings, sync checkpoints, offline mutation queue, and local notes.
+- SQLite for local cache, settings, sync checkpoints, offline mutation queue, diagnostics, and task-backed note mirrors.
 - Node service modules in Electron main or dedicated workers for Google sync, local data, MCP, and native integration.
 
 The first implementation milestone targets macOS only. The architecture must not block Windows or Linux support.
@@ -82,4 +82,3 @@ Use these unless a later ADR replaces them:
 - UI state library: choose Zustand or Jotai.
 - Date library: choose `date-fns` or `luxon`.
 - SQLite encryption strategy: decide whether v1 needs SQLCipher or file-level encryption; until then, tokens still never live in SQLite.
-

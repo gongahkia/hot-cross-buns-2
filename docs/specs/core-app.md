@@ -67,19 +67,19 @@ Calendar views must be virtualized or windowed where large accounts could create
 
 ## Notes
 
-Notes are local-only in v1.
+Notes are represented as undated, root Google Tasks rows and cached locally through the task mirror.
 
 Required note capabilities:
 
 - create note
 - edit note title/content
 - delete note
-- preview markdown-style local note content
-- resolve local `[[note title]]` links and backlinks
+- preview markdown-style note content
+- resolve `[[note title]]` links and backlinks
 - search note title/body
-- link note rows to tasks/events later through local metadata
+- link note rows to tasks/events later through explicit metadata
 
-Notes must not be uploaded to Google unless a later spec adds a sync provider.
+Notes must not use separate local SQLite note tables.
 
 ## Search
 
@@ -174,8 +174,8 @@ Current Mac v1 setup behavior:
 - The app shows a first-run setup modal when local settings have no `setupCompletedAt` timestamp.
 - Setup writes normal local settings through the existing typed preload IPC: selected task lists, selected calendars, sync mode, notification preference, optional MCP enablement/permission mode, and the setup completion timestamp.
 - Google setup is represented as runtime/OAuth readiness and current sanitized account state only. The flow does not collect OAuth client secrets and does not create new Google transports.
-- Users can choose local-only setup. That marks setup complete, leaves Google selections empty, uses manual sync, disables notifications/MCP, and keeps local notes/settings usable.
-- Settings includes a reset onboarding action that clears only the setup completion timestamp. It does not delete planner rows, local notes, Google cache rows, checkpoints, or pending mutations.
+- Users can choose local-only setup. That marks setup complete, leaves Google selections empty, uses manual sync, disables notifications/MCP, and keeps cached notes/settings usable.
+- Settings includes a reset onboarding action that clears only the setup completion timestamp. It does not delete planner rows, Google cache rows, checkpoints, or pending mutations.
 
 Remaining Mac v1 blockers:
 
@@ -194,7 +194,7 @@ Remaining Mac v1 blockers:
 ## Current Implementation Notes
 
 - Core IPC read routes return bounded, paginated SQLite-backed DTOs. Renderer screens load those DTOs through `coreViewModelSource` and keep route-level state small.
-- UI task, task-list, calendar-event, and note commands call typed preload APIs. Task and event writes optimistically update local mirrors and enqueue Google mutations; note writes update local SQLite only.
+- UI task, task-list, calendar-event, and note commands call typed preload APIs. Task, note, task-list, and event writes optimistically update local mirrors and enqueue Google mutations.
 - MCP task, event, and note tools call the same main-side domain services as UI IPC handlers, including the same validation and mutation queue paths for synced task/event resources.
 - Local search is SQLite-backed and capped. It indexes current task title/details/list names, event title/location/description/calendar names, and note title/body; it applies the structured local DSL in main-process SQLite and never calls Google per keystroke.
 - Today's local timeline is grouped into all-day, morning, afternoon, evening, and unscheduled sections using cached events, scheduled task blocks, and existing task rows. Timed tasks are represented as linked Google Calendar blocks plus local metadata; task due dates remain date-only. Today also shows next-up context, linked-block conflict warnings, and earlier/later movement controls.
@@ -202,5 +202,5 @@ Remaining Mac v1 blockers:
 - Today block controls support duration changes in addition to earlier/later movement.
 - Tasks support per-row multi-select plus bulk complete/reopen, move, and delete actions over the active filtered task set.
 - Calendar exposes static text availability export in the renderer by calling the same typed local calendar service used by MCP and tests. Day view is an hourly planning grid where empty slots create timed event drafts directly; day/week grids accept dragged events for time/day moves, and day events expose resize handles for end-time changes.
-- Notes support local markdown-style preview, `[[note title]]` outgoing links, and backlinks over loaded local note bodies.
+- Notes support markdown-style preview, `[[note title]]` outgoing links, and backlinks over loaded note bodies.
 - Calendar agenda, task, note, and search surfaces remain virtualized or range/pagination-shaped to preserve renderer and IPC budgets.

@@ -213,8 +213,8 @@ export function createMcpDomainServices(state: PlaceholderState): McpDomainServi
         const noteList = noteListById(state, id);
         for (const note of state.notes) {
           if (note.listId === id) {
-            note.listId = "note-list:default";
-            note.listTitle = "Local notes";
+            note.listId = "list-inbox";
+            note.listTitle = "Inbox";
           }
         }
         return noteList;
@@ -230,8 +230,8 @@ export function createMcpDomainServices(state: PlaceholderState): McpDomainServi
         const body = optionalText(input, "body") ?? "";
         const note: NoteDetail = {
           id,
-          listId: "note-list:default",
-          listTitle: "Local notes",
+          listId: "list-inbox",
+          listTitle: "Inbox",
           title: requiredText(input, "title"),
           preview: preview(body),
           body,
@@ -515,11 +515,11 @@ function noteListsFromState(state: PlaceholderState): DomainJsonObject[] {
     }));
   }
 
-  if (!lists.has("note-list:default")) {
-    lists.set("note-list:default", compactJsonObject({
+  if (!lists.has("list-inbox")) {
+    lists.set("list-inbox", compactJsonObject({
       kind: "noteList",
-      id: "note-list:default",
-      title: "Local notes",
+      id: "list-inbox",
+      title: "Inbox",
       noteCount: 0,
       updatedAt: ""
     }));

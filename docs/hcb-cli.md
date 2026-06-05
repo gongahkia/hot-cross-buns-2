@@ -21,7 +21,7 @@ The CLI discovers the runtime file written by the app and loads the bearer token
 - `pnpm hcb -- export-diagnostics`: print a redacted diagnostics JSON bundle.
 - `pnpm hcb -- list task-lists`: list Google Tasks lists.
 - `pnpm hcb -- list calendars`: list Google calendars.
-- `pnpm hcb -- list note-lists`: list local HCB note lists.
+- `pnpm hcb -- list note-lists`: list HCB note lists backed by Google Tasks lists.
 - `pnpm hcb -- get task <id>`: get one task by id.
 - `pnpm hcb -- get event <id>`: get one event by id.
 - `pnpm hcb -- get note <id>`: get one note by id.

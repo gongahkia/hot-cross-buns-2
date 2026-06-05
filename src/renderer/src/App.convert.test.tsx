@@ -15,6 +15,15 @@ function dispatchConvert(detail: ConvertCommandDetail): void {
   fireEvent(window, new CustomEvent("hcb:convert-command", { detail }));
 }
 
+function dispatchNoteConvert(detail: NonNullable<ConvertCommandDetail["noteDraft"]>): void {
+  fireEvent(window, new CustomEvent("hcb:note-command", {
+    detail: {
+      action: "convert-to-note",
+      draft: detail
+    }
+  }));
+}
+
 async function saveInspector(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Save" }));
 }
@@ -172,14 +181,11 @@ describe("App conversion flows", () => {
     render(<App />);
 
     await goToSection("Notes");
-    dispatchConvert({
-      target: "note",
-      noteDraft: {
-        title: "Converted task",
-        body: "Task notes",
-        listId: "list-inbox",
-        listTitle: "Inbox"
-      }
+    dispatchNoteConvert({
+      title: "Converted task",
+      body: "Task notes",
+      listId: "list-inbox",
+      listTitle: "Inbox"
     });
     expect(await screen.findByRole("textbox", { name: "Note title" })).toHaveValue("Converted task");
     await saveInspector(user);
@@ -195,25 +201,20 @@ describe("App conversion flows", () => {
   it("converts tasks to notes in place when replacing the source", async () => {
     const api = seededHcb();
     installHcb(api);
-    const user = userEvent.setup();
     render(<App />);
 
     await goToSection("Notes");
-    dispatchConvert({
-      target: "note",
-      noteDraft: {
-        title: "Converted task replace",
-        body: "Task notes",
-        id: "task-source",
-        listId: "list-inbox",
-        listTitle: "Inbox",
-        replaceSource: true
-      }
+    dispatchNoteConvert({
+      title: "Converted task replace",
+      body: "Task notes",
+      id: "task-source",
+      listId: "list-inbox",
+      listTitle: "Inbox",
+      replaceSource: true
     });
     await waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue("Converted task replace");
     });
-    await saveInspector(user);
     await waitFor(() => expect(api.tasks.update).toHaveBeenCalledWith(expect.objectContaining({
       id: "task-source",
       title: "Converted task replace",

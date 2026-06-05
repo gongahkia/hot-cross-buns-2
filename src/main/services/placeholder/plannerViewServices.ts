@@ -508,8 +508,8 @@ export function createPlaceholderPlannerViewService(
       ),
       lists: [
         {
-          id: "note-list:default",
-          title: "Local notes",
+          id: "list-inbox",
+          title: "Inbox",
           noteCount: state.notes.length,
           updatedAt: nowIso
         }
@@ -539,8 +539,8 @@ export function createPlaceholderPlannerViewService(
     deleteNoteList: (request) => {
       for (const note of state.notes) {
         if (note.listId === request.id) {
-          note.listId = "note-list:default";
-          note.listTitle = "Local notes";
+          note.listId = "list-inbox";
+          note.listTitle = "Inbox";
         }
       }
 
@@ -555,8 +555,8 @@ export function createPlaceholderPlannerViewService(
       const body = request.body ?? "";
       const note: NoteDetail = {
         id: `note-local-${state.notes.length + 1}`,
-        listId: request.listId ?? "note-list:default",
-        listTitle: "Local notes",
+        listId: request.listId ?? "list-inbox",
+        listTitle: "Inbox",
         title: request.title,
         body,
         preview: preview(body),
@@ -585,7 +585,7 @@ export function createPlaceholderPlannerViewService(
 
       if (request.listId !== undefined) {
         note.listId = request.listId;
-        note.listTitle = "Local notes";
+        note.listTitle = "Inbox";
       }
 
       note.updatedAt = new Date().toISOString();

@@ -17,7 +17,7 @@ Sensitive assets include:
 - cache encryption keys if added later
 - task notes/details
 - calendar event descriptions, locations, guests
-- local note bodies
+- task/note bodies
 - diagnostics that could reveal account or filesystem metadata
 
 ## Storage Rules
@@ -140,19 +140,19 @@ Controls:
 - No analytics by default.
 - No hosted sync backend in v1.
 - No Google Drive access in v1.
-- No sharing local notes with Google or MCP clients unless explicitly requested by the user/tool.
+- No sharing planner data with MCP clients unless explicitly requested by the user/tool.
 - MCP is opt-in and local-only.
 
-Diagnostics and performance reports expose counts, timings, status states, query-plan summaries, and redaction guarantees. They do not include raw Google payloads, OAuth credentials, MCP bearer tokens, local note bodies, task notes, calendar descriptions, guest lists, or full mutation payloads. Copyable diagnostics also omit account identifiers, account email/display names, and task-list/calendar identifiers or titles; selected-resource rows use stable placeholders only. If the user disables performance diagnostics, copied summaries and the diagnostics performance endpoint omit timing samples.
+Diagnostics and performance reports expose counts, timings, status states, query-plan summaries, and redaction guarantees. They do not include raw Google payloads, OAuth credentials, MCP bearer tokens, note bodies, task notes, calendar descriptions, guest lists, or full mutation payloads. Copyable diagnostics also omit account identifiers, account email/display names, and task-list/calendar identifiers or titles; selected-resource rows use stable placeholders only. If the user disables performance diagnostics, copied summaries and the diagnostics performance endpoint omit timing samples.
 
 ## Preview Support Summary
 
 Use this short summary in release notes and support replies for unsigned macOS preview builds:
 
-- Hot Cross Buns 2 stores planner cache data, settings, checkpoints, local notes, diagnostics metadata, and pending mutation state on the local Mac.
+- Hot Cross Buns 2 stores planner cache data, settings, checkpoints, diagnostics metadata, and pending mutation state on the local Mac.
 - Google Tasks and Calendar use a bring-your-own Desktop OAuth client in the Mac preview. OAuth tokens, optional client secrets, and MCP bearer tokens are stored in macOS Keychain by the main process, not in renderer storage or SQLite.
 - Authenticated Google sync transport and scheduling are wired for macOS preview use, but live-account QA, conflict recovery polish, and signed/notarized distribution remain release blockers.
-- Local notes are local-only and are not uploaded to Google.
+- Notes are task-backed and sync through Google Tasks.
 - The app includes no third-party analytics SDK and no hosted sync backend.
 - Copyable diagnostics are sanitized and are the preferred support artifact.
 - Users and maintainers must not share OAuth credentials, MCP bearer tokens, local databases, raw Google payloads, Apple signing material, or notarization secrets.

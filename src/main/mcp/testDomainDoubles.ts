@@ -47,8 +47,8 @@ export function createMcpTestDomainServices(): McpTestDomainServices {
         {
           kind: "note",
           id: "note-1",
-          title: "Local note",
-          body: "Only stored locally",
+          title: "Task-backed note",
+          body: "Stored as an undated task",
           deepLink: "hotcrossbuns://note/note-1"
         }
       ]
@@ -81,8 +81,8 @@ export function createMcpTestDomainServices(): McpTestDomainServices {
     noteLists: [
       {
         kind: "noteList",
-        id: "note-list:default",
-        title: "Local notes",
+        id: "list-inbox",
+        title: "Inbox",
         noteCount: 1,
         updatedAt: "2026-05-22T00:00:00.000Z"
       }
