@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Copy, Pencil, Save, Trash2, X } from "lucide-react";
 import type { TaskListSummary, TaskSummary } from "@shared/ipc/contracts";
 import { useInspector } from "../../../components/Inspector";
 import { Button } from "../../../components/primitives";
@@ -72,6 +72,7 @@ export function useNotesController(source: CoreViewModelSource): {
   createNoteList: () => Promise<void>;
   deleteNoteList: (listId: string, title: string) => Promise<void>;
   deleteNote: (noteId: string) => Promise<void>;
+  duplicateNote: (noteId: string) => Promise<void>;
   noteViewColumns: NoteViewColumn[];
   noteLists: CoreViewModelSource["noteLists"];
   notes: NoteViewModel[];
@@ -276,6 +277,8 @@ export function useNotesController(source: CoreViewModelSource): {
   }
 
   function noteInspectorActions(note: NoteViewModel, mode = noteInspectorModeRef.current): ReactNode {
+    const localDraft = note.id.startsWith("note-draft-");
+
     if (mode === "view") {
       return (
         <div className="flex w-full items-center justify-between gap-2">
@@ -288,6 +291,10 @@ export function useNotesController(source: CoreViewModelSource): {
               <Pencil aria-hidden="true" size={14} />
               Edit
             </Button>
+            <Button onClick={() => void duplicateNote(note.id)} size="sm" variant="secondary">
+              <Copy aria-hidden="true" size={14} />
+              Duplicate
+            </Button>
           </div>
           <Button onClick={() => void closeInspector()} size="sm" variant="ghost">
             <X aria-hidden="true" size={14} />
@@ -297,11 +304,30 @@ export function useNotesController(source: CoreViewModelSource): {
       );
     }
 
+    if (localDraft) {
+      return (
+        <>
+          <Button onClick={() => void deleteNote(note.id)} size="sm" variant="danger">
+            <Trash2 aria-hidden="true" size={14} />
+            Discard
+          </Button>
+          <Button onClick={() => void saveLocalNoteDraft(note.id)} size="sm" variant="primary">
+            <Save aria-hidden="true" size={14} />
+            Save
+          </Button>
+        </>
+      );
+    }
+
     return (
       <>
         <Button onClick={() => void deleteNote(note.id)} size="sm" variant="danger">
           <Trash2 aria-hidden="true" size={14} />
           Delete selected note
+        </Button>
+        <Button onClick={() => void duplicateNote(note.id)} size="sm" variant="secondary">
+          <Copy aria-hidden="true" size={14} />
+          Duplicate
         </Button>
         <Button onClick={() => void closeInspector()} size="sm" variant="ghost">
           <X aria-hidden="true" size={14} />
@@ -396,6 +422,30 @@ export function useNotesController(source: CoreViewModelSource): {
     }
   }
 
+  function openLocalNoteDraft(seed: {
+    body: string;
+    listId: string;
+    listTitle: string;
+    title: string;
+  }): void {
+    const fallbackId = `note-draft-${draftCounter}`;
+    const fallbackNote: NoteViewModel = {
+      id: fallbackId,
+      listId: seed.listId,
+      listTitle: seed.listTitle,
+      title: seed.title,
+      body: seed.body,
+      preview: buildNotePreview(seed.body),
+      updatedLabel: "Just now"
+    };
+
+    setDraftCounter((current) => current + 1);
+    setNotes((current) => [fallbackNote, ...current]);
+    setSelectedNoteId(fallbackId);
+    createNoteIds.current.add(fallbackId);
+    openNoteInspector(fallbackNote, "edit");
+  }
+
   async function createNoteWithTemplate(title: string, body: string, listId?: string): Promise<void> {
     if (noteInspectorModeRef.current === "edit") {
       await noteInspectorBodyRef.current?.flush();
@@ -442,6 +492,61 @@ export function useNotesController(source: CoreViewModelSource): {
       openNoteInspector(persisted, "edit");
       source.refreshUndoStatus();
     }
+  }
+
+  async function duplicateNote(noteId: string): Promise<void> {
+    if (noteInspectorModeRef.current === "edit") {
+      await noteInspectorBodyRef.current?.flush();
+    }
+
+    const note = notes.find((candidate) => candidate.id === noteId);
+    if (!note) {
+      return;
+    }
+
+    const liveDraft =
+      currentInspector?.kind === "note" && currentInspector.id === note.id
+        ? noteInspectorBodyRef.current?.getDraft()
+        : null;
+
+    openLocalNoteDraft({
+      title: liveDraft?.title ?? note.title,
+      body: liveDraft?.body ?? note.body,
+      listId: note.listId,
+      listTitle: note.listTitle
+    });
+  }
+
+  async function saveLocalNoteDraft(noteId: string): Promise<void> {
+    const note = notes.find((candidate) => candidate.id === noteId);
+
+    if (!note) {
+      return;
+    }
+
+    const draft = noteInspectorBodyRef.current?.getDraft() ?? {
+      title: note.title,
+      body: note.body
+    };
+    const result = await window.hcb?.tasks.create({
+      title: draft.title || "Untitled note",
+      notes: draft.body,
+      listId: note.listId,
+      dueDate: null
+    });
+
+    if (!result?.ok) {
+      return;
+    }
+
+    const persisted = noteFromTask(result.data, noteLists);
+
+    setNotes((current) => current.map((candidate) => candidate.id === noteId ? persisted : candidate));
+    setSelectedNoteId(persisted.id);
+    createNoteIds.current.delete(noteId);
+    createNoteIds.current.add(persisted.id);
+    openNoteInspector(persisted, "edit");
+    source.refreshUndoStatus();
   }
 
   async function createNoteList(): Promise<void> {
@@ -686,6 +791,7 @@ export function useNotesController(source: CoreViewModelSource): {
     createNoteList,
     deleteNoteList,
     deleteNote,
+    duplicateNote,
     noteViewColumns,
     noteLists,
     notes,

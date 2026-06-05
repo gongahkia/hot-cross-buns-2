@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Copy,
   CornerDownRight,
   ListPlus,
   MoreVertical,
@@ -47,6 +48,7 @@ interface GoogleTasksBoardProps {
   onCreateTask: (listId?: string) => void;
   onDeleteList: (listId: string) => void;
   onDeleteTask: (taskId: string) => void;
+  onDuplicateTask: (taskId: string) => void;
   onMoveTask: (taskId: string, listId: string) => void;
   onOpenTask: (taskId: string) => void;
   onRenameList: (list: TaskListSummary) => void;
@@ -133,6 +135,7 @@ export function GoogleTasksBoard({
   onCreateTask,
   onDeleteList,
   onDeleteTask,
+  onDuplicateTask,
   onMoveTask,
   onOpenTask,
   onRenameList,
@@ -221,6 +224,7 @@ export function GoogleTasksBoard({
                 onCreateTask={onCreateTask}
                 onDeleteList={onDeleteList}
                 onDeleteTask={onDeleteTask}
+                onDuplicateTask={onDuplicateTask}
                 onMoveTask={onMoveTask}
                 onOpenTask={onOpenTask}
                 onRenameList={onRenameList}
@@ -449,6 +453,7 @@ function TaskListColumn({
   onCreateTask,
   onDeleteList,
   onDeleteTask,
+  onDuplicateTask,
   onMoveTask,
   onOpenTask,
   onRenameList,
@@ -470,6 +475,7 @@ function TaskListColumn({
   onCreateTask: (listId?: string) => void;
   onDeleteList: (listId: string) => void;
   onDeleteTask: (taskId: string) => void;
+  onDuplicateTask: (taskId: string) => void;
   onMoveTask: (taskId: string, listId: string) => void;
   onOpenTask: (taskId: string) => void;
   onRenameList: (list: TaskListSummary) => void;
@@ -569,6 +575,7 @@ function TaskListColumn({
               key={task.id}
               onCreateList={onCreateList}
               onDeleteTask={onDeleteTask}
+              onDuplicateTask={onDuplicateTask}
               onMoveTask={onMoveTask}
               onOpenTask={onOpenTask}
               onToggleStar={onToggleStar}
@@ -603,6 +610,7 @@ function TaskListColumn({
                     key={task.id}
                     onCreateList={onCreateList}
                     onDeleteTask={onDeleteTask}
+                    onDuplicateTask={onDuplicateTask}
                     onMoveTask={onMoveTask}
                     onOpenTask={onOpenTask}
                     onToggleStar={onToggleStar}
@@ -675,6 +683,7 @@ function ListActionMenu({
 function GoogleTaskRow({
   onCreateList,
   onDeleteTask,
+  onDuplicateTask,
   onMoveTask,
   onOpenTask,
   onToggleStar,
@@ -688,6 +697,7 @@ function GoogleTaskRow({
 }: {
   onCreateList: () => void;
   onDeleteTask: (taskId: string) => void;
+  onDuplicateTask: (taskId: string) => void;
   onMoveTask: (taskId: string, listId: string) => void;
   onOpenTask: (taskId: string) => void;
   onToggleStar: (taskId: string) => void;
@@ -773,6 +783,7 @@ function GoogleTaskRow({
             onAddSubtask={() => { onAddSubtask(task); setMenuOpen(false); }}
             onCreateList={() => { onCreateList(); setMenuOpen(false); }}
             onDelete={() => { onDeleteTask(task.id); setMenuOpen(false); }}
+            onDuplicate={() => { onDuplicateTask(task.id); setMenuOpen(false); }}
             onMoveTask={(listId) => { onMoveTask(task.id, listId); setMenuOpen(false); }}
             onOpen={() => { onOpenTask(task.id); setMenuOpen(false); }}
             source={source}
@@ -790,6 +801,7 @@ function TaskActionMenu({
   onAddSubtask,
   onCreateList,
   onDelete,
+  onDuplicate,
   onMoveTask,
   onOpen,
   source,
@@ -800,6 +812,7 @@ function TaskActionMenu({
   onAddSubtask: () => void;
   onCreateList: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   onMoveTask: (listId: string) => void;
   onOpen: () => void;
   source: CoreViewModelSource;
@@ -814,6 +827,10 @@ function TaskActionMenu({
       <MenuButton onClick={onAddSubtask}>
         <CornerDownRight aria-hidden="true" size={18} />
         Add a subtask
+      </MenuButton>
+      <MenuButton onClick={onDuplicate}>
+        <Copy aria-hidden="true" size={18} />
+        Duplicate
       </MenuButton>
       <MenuButton disabled>
         <Paperclip aria-hidden="true" size={18} />

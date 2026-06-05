@@ -17,6 +17,7 @@ export interface CalendarEventDraft {
   colorId: string;
   startsAt: string;
   endsAt: string;
+  timeZone?: string;
   allDay: boolean;
   location: string;
   notes: string;

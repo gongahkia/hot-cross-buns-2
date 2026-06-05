@@ -323,6 +323,36 @@ describe("App tasks", () => {
 
   });
 
+  it("duplicates tasks as editable create drafts", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Tasks");
+    await user.click(await screen.findByRole("button", { name: /^Draft inbox triage rules / }));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Duplicate" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New task" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Task title" })).toHaveValue("Draft inbox triage rules");
+    expect(screen.getByLabelText("Task priority")).toHaveValue("high");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.tasks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Draft inbox triage rules",
+          notes: "Define keyboard-first review states before sync writes exist.",
+          listId: "list-inbox",
+          parentId: null,
+          priority: "high",
+          tags: ["ops"]
+        })
+      );
+    });
+  });
+
   it("opens the task inspector from a row and blocks Escape while dirty", async () => {
     installHcb(seededHcb());
     const user = userEvent.setup();

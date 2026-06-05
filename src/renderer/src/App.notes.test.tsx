@@ -128,6 +128,34 @@ describe("App notes", () => {
     expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
   });
 
+  it("duplicates notes as unsaved drafts and persists them on Save", async () => {
+    const api = seededHcb();
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Notes");
+    await user.click(await screen.findByText("Startup data flow"));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Duplicate" }));
+
+    expect(await screen.findByRole("textbox", { name: "Note title" })).toHaveValue("Startup data flow");
+    expect(screen.getByRole("textbox", { name: "Note body" })).toHaveValue(
+      "Renderer paints from SQLite before fresh sync completes."
+    );
+    expect(api.tasks.create).not.toHaveBeenCalled();
+
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.tasks.create).toHaveBeenCalledWith({
+        title: "Startup data flow",
+        notes: "Renderer paints from SQLite before fresh sync completes.",
+        listId: "list-inbox",
+        dueDate: null
+      });
+    });
+  });
+
   it("flushes pending note edits before switching the selected note row", async () => {
     const api = seededHcb();
     installTaskBackedNotes(api, [

@@ -16,6 +16,7 @@ export function NotesView(): JSX.Element {
     createNoteList,
     deleteNoteList,
     deleteNote,
+    duplicateNote,
     noteViewColumns,
     noteLists,
     moveNoteToList,
@@ -56,6 +57,7 @@ export function NotesView(): JSX.Element {
         onCreateNote={(listId) => void createNote(listId)}
         onDeleteNoteList={(listId, title) => void deleteNoteList(listId, title)}
         onDeleteNote={(noteId) => void deleteNote(noteId)}
+        onDuplicateNote={(noteId) => void duplicateNote(noteId)}
         onMoveNote={(noteId, listId) => void moveNoteToList(noteId, listId)}
         onOpenNote={(noteId, mode = "view") => void selectNote(noteId, mode)}
         onRenameNoteList={(listId, title) => void renameNoteList(listId, title)}

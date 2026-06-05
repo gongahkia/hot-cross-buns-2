@@ -61,6 +61,7 @@ export function newCalendarDraft(
     colorId: "",
     startsAt,
     endsAt: allDay ? endsAt : timedEnd,
+    timeZone: undefined,
     allDay,
     location: "",
     notes: "",
@@ -90,6 +91,7 @@ export function editCalendarDraft(event: CalendarEventViewModel): CalendarEventD
     colorId: event.colorId ?? "",
     startsAt: event.startsAt,
     endsAt: event.endsAt,
+    timeZone: event.timeZone || undefined,
     allDay: event.allDay,
     location: event.location === "Scheduled" || event.location === "All day" ? "" : event.location,
     notes: event.notes === "No notes" ? "" : event.notes,
@@ -115,6 +117,7 @@ export function calendarEventPayload(draft: CalendarEventDraft): CalendarEventCr
     colorId: draft.colorId.trim() || null,
     startsAt: draft.startsAt,
     endsAt: draft.endsAt,
+    timeZone: draft.timeZone,
     allDay: draft.allDay,
     location: draft.location,
     notes: draft.notes,
@@ -145,6 +148,7 @@ export function calendarEventDraftsEqual(
     left.colorId === right.colorId &&
     left.startsAt === right.startsAt &&
     left.endsAt === right.endsAt &&
+    left.timeZone === right.timeZone &&
     left.allDay === right.allDay &&
     left.location === right.location &&
     left.notes === right.notes &&

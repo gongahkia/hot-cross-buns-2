@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { CalendarEventUpdateRequest } from "@shared/ipc/contracts";
-import { Pencil, Save, Trash2, X } from "lucide-react";
+import { Copy, Pencil, Save, Trash2, X } from "lucide-react";
 import { useInspector } from "../../../../components/Inspector";
 import { Button } from "../../../../components/primitives";
 import type { CoreViewModelSource } from "../../coreViewModelSource";
@@ -237,6 +237,10 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
               <Pencil aria-hidden="true" size={14} />
               Edit
             </Button>
+            <Button onClick={() => duplicateEventDraftValue(nextDraft)} size="sm" variant="secondary">
+              <Copy aria-hidden="true" size={14} />
+              Duplicate
+            </Button>
           </div>
           <Button onClick={() => void cancelEventInspector()} size="sm" variant="ghost">
             <X aria-hidden="true" size={14} />
@@ -252,6 +256,12 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
           <Button onClick={() => void deleteDraft()} size="sm" variant="danger">
             <Trash2 aria-hidden="true" size={14} />
             Delete event
+          </Button>
+        ) : null}
+        {nextDraft.mode === "edit" ? (
+          <Button onClick={() => duplicateEventDraftValue(nextDraft)} size="sm" variant="secondary">
+            <Copy aria-hidden="true" size={14} />
+            Duplicate
           </Button>
         ) : null}
         <Button onClick={() => void cancelEventInspector()} size="sm" variant="ghost">
@@ -328,6 +338,37 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
 
     setCreateMode("event");
     openEventInspector(editCalendarDraft(event), "view");
+  }
+
+  function duplicateEventDraftValue(sourceDraft: CalendarEventDraft): void {
+    const nextMode: CalendarCreateMode = isBirthdayLikeDraft(sourceDraft) ? "birthday" : "event";
+    const nextDraft = applyCreateModeToDraft({
+      ...sourceDraft,
+      completedAt: null,
+      conference: null,
+      guests: "",
+      id: undefined,
+      mode: "create",
+      mutationState: undefined
+    }, nextMode);
+
+    setCreateModeValue(nextMode);
+    setCreateTaskListId(defaultTaskListId(source));
+    openEventInspector(nextDraft, "edit");
+  }
+
+  function isBirthdayLikeDraft(candidate: CalendarEventDraft): boolean {
+    const frequency =
+      candidate.repeatFrequency === "custom" ? candidate.repeatCustomFrequency : candidate.repeatFrequency;
+
+    return (
+      candidate.allDay &&
+      frequency === "yearly" &&
+      candidate.location.trim() === "" &&
+      candidate.notes.trim() === "" &&
+      candidate.guests.trim() === "" &&
+      candidate.conference === null
+    );
   }
 
   async function closeEventInspectorAfterMutation(): Promise<void> {

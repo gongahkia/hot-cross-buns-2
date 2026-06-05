@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { Pencil, Save, Trash2, X } from "lucide-react";
+import { Copy, Pencil, Save, Trash2, X } from "lucide-react";
 import { useInspector } from "../../../../components/Inspector";
 import { Button } from "../../../../components/primitives";
 import { rendererNow, reportRendererTimingSince } from "../../../../hooks/useRenderTiming";
@@ -16,6 +16,7 @@ import {
 import {
   canSaveTaskDraft,
   defaultTaskListId,
+  duplicateTaskDraft,
   editTaskDraft,
   newTaskDraft,
   taskCreatePayload,
@@ -29,6 +30,7 @@ type CoreViewModelSource = ReturnType<typeof useCoreViewModelSource>;
 export interface TaskInspectorController {
   addSubtaskForTask: (task: TaskViewModel | null) => void;
   deleteTask: (taskId: string) => Promise<void>;
+  duplicateTask: (taskId: string) => void;
   openNewTask: (seed?: string | Partial<Omit<TaskDraft, "mode">>) => void;
   selectedTaskId: string | null;
   selectTask: (taskId: string) => void;
@@ -168,6 +170,10 @@ export function useTaskInspector(source: CoreViewModelSource): TaskInspectorCont
               <Pencil aria-hidden="true" size={14} />
               Edit
             </Button>
+            <Button onClick={() => duplicateTaskDraftValue(nextDraft)} size="sm" variant="secondary">
+              <Copy aria-hidden="true" size={14} />
+              Duplicate
+            </Button>
           </div>
           <Button onClick={() => void cancelTaskInspector()} size="sm" variant="ghost">
             <X aria-hidden="true" size={14} />
@@ -188,6 +194,12 @@ export function useTaskInspector(source: CoreViewModelSource): TaskInspectorCont
           >
             <Trash2 aria-hidden="true" size={14} />
             Delete
+          </Button>
+        ) : null}
+        {nextDraft.mode === "edit" ? (
+          <Button onClick={() => duplicateTaskDraftValue(nextDraft)} size="sm" variant="secondary">
+            <Copy aria-hidden="true" size={14} />
+            Duplicate
           </Button>
         ) : null}
         <Button onClick={() => void cancelTaskInspector()} size="sm" variant="ghost">
@@ -253,6 +265,28 @@ export function useTaskInspector(source: CoreViewModelSource): TaskInspectorCont
     const task = source.getTaskById(taskId);
     setSelectedTaskId(taskId);
     openTaskInspector(editTaskDraft(task), "view");
+  }
+
+  function duplicateTask(taskId: string): void {
+    if (!canReplaceTaskInspector()) {
+      return;
+    }
+
+    const task = source.getTaskById(taskId);
+    openDuplicateTaskDraft(duplicateTaskDraft(task));
+  }
+
+  function duplicateTaskDraftValue(sourceDraft: TaskDraft): void {
+    openDuplicateTaskDraft({
+      ...sourceDraft,
+      id: undefined,
+      mode: "create"
+    });
+  }
+
+  function openDuplicateTaskDraft(nextDraft: TaskDraft): void {
+    setSelectedTaskId(null);
+    openTaskInspector(newTaskDraft(source, nextDraft), "edit");
   }
 
   async function saveTask(): Promise<void> {
@@ -351,6 +385,7 @@ export function useTaskInspector(source: CoreViewModelSource): TaskInspectorCont
   return {
     addSubtaskForTask,
     deleteTask,
+    duplicateTask,
     openNewTask,
     selectedTaskId,
     selectTask,

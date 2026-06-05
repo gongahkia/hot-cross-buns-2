@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from "react";
-import { MoreVertical, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { Copy, MoreVertical, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { FloatingMenu } from "../../../components/FloatingMenu";
 import { Badge, IconButton, Panel, cx } from "../../../components/primitives";
 import { EmptyState } from "../../../components/states";
@@ -14,6 +14,7 @@ export function NotesBoard({
   onCreateNote,
   onDeleteNoteList,
   onDeleteNote,
+  onDuplicateNote,
   onMoveNote,
   onOpenNote,
   onRenameNoteList,
@@ -25,6 +26,7 @@ export function NotesBoard({
   onCreateNote: (listId: string) => void;
   onDeleteNoteList: (listId: string, title: string) => void;
   onDeleteNote: (noteId: string) => void;
+  onDuplicateNote: (noteId: string) => void;
   onMoveNote: (noteId: string, listId: string) => void;
   onOpenNote: (noteId: string, mode?: "view" | "edit") => void;
   onRenameNoteList: (listId: string, currentTitle: string) => void;
@@ -86,6 +88,7 @@ export function NotesBoard({
                       key={note.id}
                       note={note}
                       onDeleteNote={onDeleteNote}
+                      onDuplicateNote={onDuplicateNote}
                       onOpenNote={onOpenNote}
                       onToggleStar={onToggleStar}
                       selected={note.id === selectedNoteId}
@@ -215,6 +218,7 @@ function NoteColumnDropTarget({
 function NoteBoardRow({
   note,
   onDeleteNote,
+  onDuplicateNote,
   onOpenNote,
   onToggleStar,
   selected,
@@ -222,6 +226,7 @@ function NoteBoardRow({
 }: {
   note: NoteViewModel;
   onDeleteNote: (noteId: string) => void;
+  onDuplicateNote: (noteId: string) => void;
   onOpenNote: (noteId: string, mode?: "view" | "edit") => void;
   onToggleStar: (noteId: string) => void;
   selected: boolean;
@@ -286,6 +291,10 @@ function NoteBoardRow({
               onDeleteNote(note.id);
               setMenuOpen(false);
             }}
+            onDuplicate={() => {
+              onDuplicateNote(note.id);
+              setMenuOpen(false);
+            }}
             onEdit={() => {
               onOpenNote(note.id, "edit");
               setMenuOpen(false);
@@ -338,11 +347,13 @@ function NoteActionMenu({
   anchorPoint,
   onClose,
   onDelete,
+  onDuplicate,
   onEdit
 }: {
   anchorPoint?: { x: number; y: number };
   onClose: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   onEdit: () => void;
 }): JSX.Element {
   return (
@@ -354,6 +365,14 @@ function NoteActionMenu({
       >
         <Pencil aria-hidden="true" size={18} />
         Edit note
+      </button>
+      <button
+        className="flex min-h-9 w-full items-center gap-3 px-4 text-left text-[var(--text-base)] text-text-primary transition-colors duration-fast ease-hcb hover:bg-surface-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        onClick={onDuplicate}
+        type="button"
+      >
+        <Copy aria-hidden="true" size={18} />
+        Duplicate
       </button>
       <button
         className="flex min-h-9 w-full items-center gap-3 px-4 text-left text-[var(--text-base)] text-danger transition-colors duration-fast ease-hcb hover:bg-danger/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

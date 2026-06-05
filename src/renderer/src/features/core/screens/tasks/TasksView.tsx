@@ -35,6 +35,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
   const {
     addSubtaskForTask,
     deleteTask,
+    duplicateTask,
     openNewTask,
     selectedTaskId,
     selectTask,
@@ -190,6 +191,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
           onCreateTask={openNewTask}
           onDeleteList={confirmDeleteTaskList}
           onDeleteTask={(taskId) => void deleteTask(taskId)}
+          onDuplicateTask={duplicateTask}
           onMoveTask={moveTaskToList}
           onOpenTask={selectTask}
           onRenameList={promptRenameTaskList}

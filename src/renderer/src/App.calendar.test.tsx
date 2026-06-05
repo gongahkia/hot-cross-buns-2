@@ -749,6 +749,123 @@ describe("App calendar", () => {
     expect(await screen.findByRole("textbox", { name: "Event title" })).toHaveValue("Planner shell standup");
   });
 
+  it("duplicates events as editable drafts while clearing guests and conference data", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-duplicate-source",
+            calendarId: "cal-product",
+            title: "Duplicate source sync",
+            startsAt: `${todayDate}T08:30:00.000Z`,
+            endsAt: `${todayDate}T09:00:00.000Z`,
+            allDay: false,
+            timeZone: "Asia/Singapore",
+            location: "Room 4",
+            notes: "Bring notes.",
+            guestEmails: ["ada@example.com"],
+            reminderMinutes: [15],
+            colorId: "9",
+            recurrenceRule: "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO",
+            conference: {
+              solutionName: "Google Meet",
+              videoUri: "https://meet.google.com/source",
+              videoLabel: "meet.google.com/source"
+            },
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(within(agenda).getByText("Duplicate source sync"));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Duplicate" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Event title" })).toHaveValue("Duplicate source sync");
+    expect(screen.getByRole("textbox", { name: "Event guests" })).toHaveValue("");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Duplicate source sync",
+          calendarId: "cal-product",
+          colorId: "9",
+          location: "Room 4",
+          notes: "Bring notes.",
+          guestEmails: [],
+          reminderMinutes: [15],
+          timeZone: "Asia/Singapore",
+          recurrence: {
+            frequency: "weekly",
+            interval: 2,
+            byDay: ["MO"],
+            endsOn: null,
+            count: null
+          }
+        })
+      );
+    });
+  });
+
+  it("duplicates birthday-style events as birthday drafts", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-birthday-source",
+            calendarId: "cal-product",
+            title: "Alex",
+            startsAt: `${todayDate}T00:00:00.000Z`,
+            endsAt: `${tomorrowIso.slice(0, 10)}T00:00:00.000Z`,
+            allDay: true,
+            recurrenceRule: "RRULE:FREQ=YEARLY",
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const agenda = await screen.findByRole("list", { name: "Calendar agenda" });
+    await user.click(within(agenda).getByText("Alex"));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Duplicate" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New birthday" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Birthday title" })).toHaveValue("Alex");
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.calendar.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Alex",
+          allDay: true,
+          recurrence: {
+            frequency: "yearly",
+            interval: 1,
+            endsOn: null,
+            count: null
+          }
+        })
+      );
+    });
+  });
+
   it("hides event pending mutation state in rows and inspector", async () => {
     const api = seededHcb();
     api.calendar.listEvents = vi.fn(async () =>
