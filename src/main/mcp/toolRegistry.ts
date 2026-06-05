@@ -957,7 +957,7 @@ function convertTargetPayload(
   args: Record<string, unknown>
 ): JsonObject {
   if (targetKind === "task") {
-    return convertTaskPayload(source, args);
+    return convertTaskPayload(sourceKind, source, args);
   }
 
   if (targetKind === "note") {
@@ -967,7 +967,16 @@ function convertTargetPayload(
   return convertEventPayload(sourceKind, source, args);
 }
 
-function convertTaskPayload(source: JsonObject, args: Record<string, unknown>): JsonObject {
+function convertTaskPayload(
+  sourceKind: ConvertItemKind,
+  source: JsonObject,
+  args: Record<string, unknown>
+): JsonObject {
+  const sourceEventDate = sourceKind === "event"
+    ? optionalJsonString(source, "startsAt") ?? optionalJsonString(source, "startDate")
+    : undefined;
+  const dueDate = optionalString(args, "dueDate") ?? sourceEventDate;
+
   return {
     title: optionalString(args, "title") ?? optionalJsonString(source, "title") ?? "Untitled task",
     notes:
@@ -978,9 +987,9 @@ function convertTaskPayload(source: JsonObject, args: Record<string, unknown>): 
       optionalJsonString(source, "details") ??
       optionalJsonString(source, "body") ??
       "",
-    ...(optionalString(args, "dueDate") === undefined
+    ...(dueDate === undefined
       ? {}
-      : { dueDate: optionalString(args, "dueDate") }),
+      : { dueDate }),
     ...(optionalString(args, "taskListId") === undefined
       ? {}
       : { taskListId: optionalString(args, "taskListId") })
@@ -1038,7 +1047,7 @@ function convertEventPayload(
 function convertNoteBody(sourceKind: ConvertItemKind, source: JsonObject): string {
   if (sourceKind === "event") {
     return [
-      optionalJsonString(source, "notes") ?? "",
+      optionalJsonString(source, "details") ?? optionalJsonString(source, "notes") ?? "",
       `Event: ${optionalJsonString(source, "startsAt") ?? optionalJsonString(source, "startDate") ?? ""} - ${optionalJsonString(source, "endsAt") ?? optionalJsonString(source, "endDate") ?? ""}`,
       optionalJsonString(source, "location") ? `Location: ${optionalJsonString(source, "location")}` : ""
     ].filter(Boolean).join("\n\n");

@@ -152,6 +152,16 @@ describe("hcb CLI", () => {
       location: "Office",
       calendarId: "cal-primary"
     });
+    expect(parseCommand(["convert", "event", "event-1", "--to", "task", "--source-action", "replace", "--title", "Follow up", "--due-date", "2026-06-05", "--task-list-id", "list-inbox"])).toMatchObject({
+      command: "convert",
+      target: "event",
+      id: "event-1",
+      to: "task",
+      sourceAction: "replace",
+      title: "Follow up",
+      dueDate: "2026-06-05",
+      taskListId: "list-inbox"
+    });
     expect(parseCommand(["rename", "task-list", "list-inbox", "--title", "Inbox v2"])).toMatchObject({
       command: "rename",
       target: "task-list",
@@ -273,6 +283,10 @@ describe("hcb CLI", () => {
     expect(() => parseCommand(["update", "note", "note-1", "--task-list-id", "list-inbox"])).toThrow("--task-list-id");
     expect(() => parseCommand(["update", "event", "event-1", "--start-date", "2026-06-04T10:00:00.000Z", "--end-date", "2026-06-04T09:00:00.000Z"])).toThrow("--end-date");
     expect(() => parseCommand(["update", "event", "event-1", "--start-date", "2026-06-04T09:00:00.000Z", "--all-day"])).toThrow("--all-day");
+    expect(() => parseCommand(["convert", "event", "event-1", "--source-action", "keep"])).toThrow("Missing required --to");
+    expect(() => parseCommand(["convert", "event", "event-1", "--to", "task"])).toThrow("Missing required --source-action");
+    expect(() => parseCommand(["convert", "event", "event-1", "--to", "event", "--source-action", "keep"])).toThrow("Convert source and target must differ");
+    expect(() => parseCommand(["convert", "task", "task-1", "--to", "event", "--source-action", "keep", "--priority", "high"])).toThrow("--priority");
     expect(() => parseCommand(["rename", "note-list", "note-list:default"])).toThrow("Missing required --title");
     expect(() => parseCommand(["complete", "task", "task-1", "--title", "Nope"])).toThrow("--title");
     expect(() => parseCommand(["move", "task", "task-1"])).toThrow("At least one update field");
@@ -862,6 +876,93 @@ describe("hcb CLI", () => {
         {
           title: "Project notes",
           dryRun: true
+        }
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("calls MCP convert commands with source and target primitives", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "hcb-cli-convert-"));
+    const runtimeFile = join(directory, "mcp-runtime.json");
+    const calls: Array<{ body: Record<string, unknown>; authorization?: string }> = [];
+    const fetch: HcbCliDependencies["fetch"] = async (_url, init) => {
+      const body = JSON.parse(init.body) as {
+        params: {
+          name: string;
+          arguments: Record<string, unknown>;
+        };
+      };
+      calls.push({
+        body,
+        authorization: init.headers.Authorization
+      });
+
+      return {
+        status: 200,
+        json: async () => rpcResponse(responseForConvertTool(body.params.arguments)),
+        text: async () => ""
+      };
+    };
+
+    try {
+      writeFileSync(
+        runtimeFile,
+        JSON.stringify({
+          running: true,
+          url: "http://127.0.0.1",
+          port: 4777,
+          pid: process.pid,
+          updatedAt: "2026-06-04T00:00:00.000Z"
+        }),
+        "utf8"
+      );
+
+      const dryRunOut = outputBuffer();
+      const applyOut = outputBuffer();
+      const deps = {
+        fetch,
+        runtimeFilePaths: [runtimeFile],
+        stderr: outputBuffer(),
+        tokenProvider: async () => "secret-token"
+      };
+
+      expect(await runHcbCli(["convert", "event", "event-1", "--to", "task", "--source-action", "replace", "--title", "Follow up", "--due-date", "2026-06-05", "--task-list-id", "list-inbox"], { ...deps, stdout: dryRunOut })).toBe(0);
+      expect(await runHcbCli(["convert", "note", "note-1", "--to", "event", "--source-action", "keep", "--start-date", "2026-06-04T09:00:00.000Z", "--end-date", "2026-06-04T10:00:00.000Z", "--details", "Agenda", "--calendar-id", "cal-primary", "--all-day", "--apply", "--confirmation-id", "confirm-convert-item"], { ...deps, stdout: applyOut })).toBe(0);
+
+      expect(dryRunOut.text()).toContain("HCB convert event: dry-run");
+      expect(dryRunOut.text()).toContain("Apply: pnpm hcb -- convert event event-1 --to task --source-action replace --title 'Follow up' --due-date 2026-06-05 --task-list-id list-inbox --apply --confirmation-id confirm-convert-item");
+      expect(applyOut.text()).toContain("HCB convert note: applied");
+      expect(`${dryRunOut.text()}${applyOut.text()}`).not.toContain("secret-token");
+      expect(calls.every((call) => call.authorization === "Bearer secret-token")).toBe(true);
+      expect(calls.map((call) => (call.body.params as { name: string }).name)).toEqual([
+        "hcb_convert_item",
+        "hcb_convert_item"
+      ]);
+      expect(calls.map((call) => (call.body.params as { arguments: Record<string, unknown> }).arguments)).toEqual([
+        {
+          sourceKind: "event",
+          sourceId: "event-1",
+          targetKind: "task",
+          sourceAction: "replace",
+          title: "Follow up",
+          dueDate: "2026-06-05",
+          taskListId: "list-inbox",
+          dryRun: true
+        },
+        {
+          sourceKind: "note",
+          sourceId: "note-1",
+          targetKind: "event",
+          sourceAction: "keep",
+          details: "Agenda",
+          calendarId: "cal-primary",
+          startDate: "2026-06-04T09:00:00.000Z",
+          endDate: "2026-06-04T10:00:00.000Z",
+          isAllDay: true,
+          dryRun: false,
+          confirmationId: "confirm-convert-item"
         }
       ]);
     } finally {
@@ -1598,6 +1699,29 @@ function responseForWriteTool(name: string, args: Record<string, unknown>): Reco
       kind,
       id: String(args.id),
       title: String(args.title ?? patch.title ?? `${target} title`)
+    }
+  };
+}
+
+function responseForConvertTool(args: Record<string, unknown>): Record<string, unknown> {
+  const dryRun = args.dryRun !== false;
+
+  return {
+    applied: !dryRun,
+    dryRun,
+    requiresConfirmation: true,
+    ...(dryRun ? { confirmationId: "confirm-convert-item" } : {}),
+    message: dryRun ? "Dry-run ready. Pass confirmationId to apply." : "Applied convert item.",
+    item: {
+      kind: "conversion",
+      source: {
+        kind: String(args.sourceKind),
+        id: String(args.sourceId),
+        action: String(args.sourceAction)
+      },
+      target: {
+        kind: String(args.targetKind)
+      }
     }
   };
 }

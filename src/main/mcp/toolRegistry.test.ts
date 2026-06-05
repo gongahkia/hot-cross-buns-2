@@ -354,6 +354,141 @@ describe("McpToolRegistry advanced writes", () => {
     });
   });
 
+  it("converts primitives through the destructive confirmation gate", async () => {
+    const services = createMcpTestDomainServices();
+    const registry = new McpToolRegistry(services);
+    const preview = await registry.callTool(
+      "hcb_convert_item",
+      {
+        sourceKind: "event",
+        sourceId: "event-1",
+        targetKind: "task",
+        sourceAction: "replace",
+        dryRun: true
+      },
+      allowWritesContext
+    );
+
+    expect(preview).toMatchObject({
+      dryRun: true,
+      requiresConfirmation: true,
+      item: {
+        kind: "conversion",
+        source: {
+          kind: "event",
+          id: "event-1",
+          title: "Planning review"
+        },
+        target: {
+          kind: "task",
+          payload: {
+            title: "Planning review",
+            notes: "Calendar event details",
+            dueDate: "2026-05-22T09:00:00.000Z"
+          }
+        },
+        sourceAction: "replace",
+        willRemoveSource: true
+      }
+    });
+    expect(preview.confirmationId).toEqual(expect.any(String));
+
+    const apply = await registry.callTool(
+      "hcb_convert_item",
+      {
+        sourceKind: "event",
+        sourceId: "event-1",
+        targetKind: "task",
+        sourceAction: "replace",
+        confirmationId: preview.confirmationId
+      },
+      allowWritesContext
+    );
+
+    expect(apply).toMatchObject({
+      applied: true,
+      item: {
+        kind: "conversion",
+        source: {
+          kind: "event",
+          id: "event-1",
+          action: "replace",
+          removed: {
+            kind: "event",
+            id: "event-1"
+          }
+        },
+        target: {
+          kind: "task",
+          item: {
+            kind: "task",
+            id: "task-2",
+            title: "Planning review",
+            dueDate: "2026-05-22T09:00:00.000Z"
+          }
+        }
+      }
+    });
+    expect(services.state.events.has("event-1")).toBe(false);
+    expect(services.state.tasks.has("task-2")).toBe(true);
+  });
+
+  it("keeps event details when converting events to notes", async () => {
+    const response = await new McpToolRegistry(createMcpTestDomainServices()).callTool(
+      "hcb_convert_item",
+      {
+        sourceKind: "event",
+        sourceId: "event-1",
+        targetKind: "note",
+        sourceAction: "keep",
+        dryRun: true
+      },
+      allowWritesContext
+    );
+
+    expect(response).toMatchObject({
+      item: {
+        target: {
+          kind: "note",
+          payload: {
+            title: "Planning review"
+          }
+        }
+      }
+    });
+    const payload = (response.item?.target as JsonObject | undefined)?.payload as JsonObject | undefined;
+    expect(payload?.body).toContain("Calendar event details");
+    expect(payload?.body).toContain("Location: Office");
+  });
+
+  it("refuses to convert birthday events", async () => {
+    const services = createMcpTestDomainServices();
+    services.state.events.set("birthday-1", {
+      kind: "event",
+      id: "birthday-1",
+      title: "Ada birthday",
+      hcbKind: "birthday",
+      startDate: "2026-12-10",
+      endDate: "2026-12-11",
+      isAllDay: true
+    });
+
+    await expect(new McpToolRegistry(services).callTool(
+      "hcb_convert_item",
+      {
+        sourceKind: "event",
+        sourceId: "birthday-1",
+        targetKind: "task",
+        sourceAction: "keep",
+        dryRun: true
+      },
+      allowWritesContext
+    )).rejects.toMatchObject({
+      code: "INVALID_ARGUMENTS",
+      message: "Birthday events cannot be converted."
+    });
+  });
+
   it("requires confirmation for cancelling pending mutations", async () => {
     const registry = new McpToolRegistry(createMcpTestDomainServices());
 
