@@ -257,9 +257,10 @@ describe("Google pending mutation worker", () => {
     const createdEvent = planner.createCalendarEvent({
       title: "Queue event create",
       calendarId: "acct-1:calendar:primary",
-      startsAt: "2026-05-23T09:00:00.000Z",
-      endsAt: "2026-05-23T10:00:00.000Z",
-      allDay: false
+      startsAt: "2026-05-23T00:00:00.000Z",
+      endsAt: "2026-05-24T00:00:00.000Z",
+      allDay: true,
+      hcbKind: "birthday"
     });
     const tasks = taskWrites({
       insertTask: vi.fn(async (taskListId, input) => {
@@ -308,11 +309,11 @@ describe("Google pending mutation worker", () => {
       )
     ).toEqual({ googleId: "remote-task-created", etag: "remote-task-etag" });
     expect(
-      connection.get<{ googleId: string; etag: string | null }>(
-        "SELECT google_id AS googleId, etag FROM google_calendar_events WHERE id = ?;",
+      connection.get<{ googleId: string; etag: string | null; hcbKind: string | null }>(
+        "SELECT google_id AS googleId, etag, hcb_kind AS hcbKind FROM google_calendar_events WHERE id = ?;",
         [createdEvent.id]
       )
-    ).toEqual({ googleId: "remote-event-1", etag: "remote-event-etag" });
+    ).toEqual({ googleId: "remote-event-1", etag: "remote-event-etag", hcbKind: "birthday" });
   });
 
   it("schedules retryable failures with bounded exponential backoff and later applies them", async () => {

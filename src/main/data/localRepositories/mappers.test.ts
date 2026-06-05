@@ -53,6 +53,7 @@ describe("local repository mappers", () => {
     const row: CalendarEventRow = {
       id: "acct-1:event-instance:event-1",
       eventId: "acct-1:event:event-1",
+      hcbKind: "birthday",
       accountId: "acct-1",
       calendarId: "acct-1:calendar:primary",
       calendarTitle: "Primary calendar ".repeat(40),
@@ -96,6 +97,7 @@ describe("local repository mappers", () => {
     expect(summary.reminderMinutes).toEqual([0, 15, 40_320]);
     expect(summary.recurrenceRule).toHaveLength(1_000);
     expect(summary.conference?.videoLabel).toBe("meet.google.com/nrf-pwpu-cws");
+    expect(summary.hcbKind).toBe("birthday");
 
     const detail = calendarEventDetail(row);
     expect(calendarEventDetailSchema.safeParse(detail).success).toBe(true);

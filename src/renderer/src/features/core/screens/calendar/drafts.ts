@@ -54,6 +54,7 @@ export function newCalendarDraft(
 
   return {
     mode: "create",
+    hcbKind: undefined,
     mutationState: undefined,
     completedAt: null,
     title: "",
@@ -84,6 +85,7 @@ export function editCalendarDraft(event: CalendarEventViewModel): CalendarEventD
   return {
     mode: "edit",
     id: event.id,
+    hcbKind: event.hcbKind,
     mutationState: event.mutationState,
     completedAt: event.completedAt ?? null,
     title: event.title,
@@ -123,7 +125,8 @@ export function calendarEventPayload(draft: CalendarEventDraft): CalendarEventCr
     notes: draft.notes,
     guestEmails: normalizeGuestEmails(draft.guests.split(",")),
     reminderMinutes,
-    recurrence: calendarDraftRecurrence(draft)
+    recurrence: calendarDraftRecurrence(draft),
+    hcbKind: draft.hcbKind
   };
 }
 
@@ -142,6 +145,7 @@ export function calendarEventDraftsEqual(
   return (
     left.mode === right.mode &&
     left.id === right.id &&
+    left.hcbKind === right.hcbKind &&
     left.mutationState === right.mutationState &&
     left.title === right.title &&
     left.calendarId === right.calendarId &&

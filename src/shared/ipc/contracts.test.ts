@@ -122,6 +122,7 @@ describe("shared IPC contracts", () => {
         guestEmails: ["ADA@example.com"],
         reminderMinutes: [10],
         timeZone: "Asia/Singapore",
+        hcbKind: "birthday",
         recurrence: {
           frequency: "weekly",
           interval: 2,
@@ -135,6 +136,7 @@ describe("shared IPC contracts", () => {
       colorId: "9",
       guestEmails: ["ada@example.com"],
       timeZone: "Asia/Singapore",
+      hcbKind: "birthday",
       allDay: false,
       recurrence: {
         frequency: "weekly",
@@ -169,12 +171,14 @@ describe("shared IPC contracts", () => {
         id: "event-1",
         colorId: null,
         recurrence: null,
+        hcbKind: "birthday",
         timeZone: "Asia/Singapore"
       })
     ).toEqual({
       id: "event-1",
       colorId: null,
       recurrence: null,
+      hcbKind: "birthday",
       timeZone: "Asia/Singapore"
     });
   });
@@ -194,6 +198,7 @@ describe("shared IPC contracts", () => {
         calendarTitle: "Product",
         deepLink: "hotcrossbuns://calendar/event-1",
         mutationState: "queued",
+        hcbKind: "birthday",
         timeZone: "America/New_York",
         recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4",
         recurringEventId: "series-1",
@@ -201,6 +206,7 @@ describe("shared IPC contracts", () => {
       })
     ).toMatchObject({
       mutationState: "queued",
+      hcbKind: "birthday",
       colorId: "10",
       recurrenceRule: "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=4",
       timeZone: "America/New_York"

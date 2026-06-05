@@ -119,7 +119,7 @@ describe("SQLite connection foundation", () => {
         ["native"]
       );
 
-      expect(result.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      expect(result.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       expect(rows).toEqual([{ title: "SQLite native adapter" }]);
     } finally {
       temporary.cleanup();
@@ -144,13 +144,14 @@ describe("SQLite connection foundation", () => {
       const result = runLocalDataMigrations(temporary.connection, {
         defaultTimeZone: "Asia/Singapore"
       });
-      const row = temporary.connection.get<{ localTimeZone: string | null }>(
-        "SELECT local_time_zone AS localTimeZone FROM google_calendar_events WHERE id = ?;",
+      const row = temporary.connection.get<{ hcbKind: string | null; localTimeZone: string | null }>(
+        "SELECT hcb_kind AS hcbKind, local_time_zone AS localTimeZone FROM google_calendar_events WHERE id = ?;",
         ["event-1"]
       );
 
-      expect(result.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      expect(result.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       expect(row?.localTimeZone).toBe("Asia/Singapore");
+      expect(row?.hcbKind).toBeNull();
     } finally {
       temporary.cleanup();
     }

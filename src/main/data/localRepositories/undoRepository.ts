@@ -121,6 +121,7 @@ interface CalendarEventSnapshot extends Record<string, JsonValue> {
   transparency: string | null;
   visibility: string | null;
   localTimeZone: string | null;
+  hcbKind: string | null;
   attendeeEmailsJson: string;
   reminderMinutesJson: string;
   conferenceJson: string | null;
@@ -380,6 +381,7 @@ export class LocalUndoRepository {
          events.transparency,
          events.visibility,
          events.local_time_zone AS localTimeZone,
+         events.hcb_kind AS hcbKind,
          events.attendee_emails_json AS attendeeEmailsJson,
          events.reminder_minutes_json AS reminderMinutesJson,
          events.conference_json AS conferenceJson,
@@ -1292,9 +1294,9 @@ function upsertCalendarEventOperation(event: CalendarEventSnapshot, now: string)
       id, account_id, calendar_id, google_id, recurring_event_id, original_start_at,
       status, summary, description, location, start_at, start_time_zone, end_at,
       end_time_zone, is_all_day, recurrence_rule, color_id, transparency,
-      visibility, local_time_zone, attendee_emails_json, reminder_minutes_json,
+      visibility, local_time_zone, hcb_kind, attendee_emails_json, reminder_minutes_json,
       conference_json, etag, sequence, google_updated_at, created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       account_id = excluded.account_id,
       calendar_id = excluded.calendar_id,
@@ -1315,6 +1317,7 @@ function upsertCalendarEventOperation(event: CalendarEventSnapshot, now: string)
       transparency = excluded.transparency,
       visibility = excluded.visibility,
       local_time_zone = excluded.local_time_zone,
+      hcb_kind = excluded.hcb_kind,
       attendee_emails_json = excluded.attendee_emails_json,
       reminder_minutes_json = excluded.reminder_minutes_json,
       conference_json = excluded.conference_json,
@@ -1344,6 +1347,7 @@ function upsertCalendarEventOperation(event: CalendarEventSnapshot, now: string)
       event.transparency,
       event.visibility,
       event.localTimeZone,
+      event.hcbKind,
       event.attendeeEmailsJson,
       event.reminderMinutesJson,
       event.conferenceJson,

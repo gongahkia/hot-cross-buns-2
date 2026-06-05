@@ -80,12 +80,13 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
 
   function applyCreateModeToDraft(nextDraft: CalendarEventDraft, mode: CalendarCreateMode): CalendarEventDraft {
     if (mode !== "birthday") {
-      return nextDraft;
+      return { ...nextDraft, hcbKind: undefined };
     }
 
     const startsAt = startOfUtcDayIso(nextDraft.startsAt);
     return {
       ...nextDraft,
+      hcbKind: "birthday",
       allDay: true,
       startsAt,
       endsAt: addUtcDaysIso(startsAt, 1),
@@ -106,15 +107,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
   function setCreateMode(mode: CalendarCreateMode): void {
     setCreateModeValue(mode);
 
-    if (mode === "birthday") {
-      setDraft((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return applyCreateModeToDraft(current, mode);
-      });
-    }
+    setDraft((current) => current ? applyCreateModeToDraft(current, mode) : current);
   }
 
   function setCreateTaskListId(listId: string): void {
@@ -360,6 +353,10 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
   }
 
   function isBirthdayLikeDraft(candidate: CalendarEventDraft): boolean {
+    if (candidate.hcbKind === "birthday") {
+      return true;
+    }
+
     const frequency =
       candidate.repeatFrequency === "custom" ? candidate.repeatCustomFrequency : candidate.repeatFrequency;
 
@@ -446,6 +443,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
             allDay: true,
             startsAt: startOfUtcDayIso(currentDraft.startsAt),
             endsAt: addUtcDaysIso(startOfUtcDayIso(currentDraft.startsAt), 1),
+            hcbKind: "birthday" as const,
             recurrence: {
               frequency: "yearly" as const,
               interval: 1,

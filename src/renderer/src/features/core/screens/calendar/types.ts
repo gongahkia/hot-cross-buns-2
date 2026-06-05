@@ -10,6 +10,7 @@ export type CalendarCreateSeed = { startsAt?: string; endsAt?: string; allDay?: 
 export interface CalendarEventDraft {
   mode: "create" | "edit";
   id?: string;
+  hcbKind?: "birthday";
   mutationState?: CalendarEventViewModel["mutationState"];
   completedAt?: string | null;
   title: string;

@@ -141,6 +141,7 @@ describe("google_calendar_events local timezone column", () => {
       const columns = eventColumnsOf(temporary.connection);
       expect(columns.has("local_time_zone")).toBe(true);
       expect(columns.has("recurrence_rule")).toBe(true);
+      expect(columns.has("hcb_kind")).toBe(true);
     } finally {
       temporary.cleanup();
     }
@@ -185,6 +186,7 @@ describe("google_calendar_events local timezone column", () => {
       const columns = eventColumnsOf(temporary.connection);
 
       expect(columns.has("local_time_zone")).toBe(true);
+      expect(columns.has("hcb_kind")).toBe(true);
     } finally {
       temporary.cleanup();
     }
@@ -260,6 +262,7 @@ describe("google_calendar_events local timezone column", () => {
             endAt: "2026-05-23T02:00:00.000Z",
             endTimeZone: "Asia/Singapore",
             isAllDay: false,
+            hcbKind: "birthday",
             updatedAt: "2026-05-23T00:00:00.000Z"
           }
         ],
@@ -270,12 +273,43 @@ describe("google_calendar_events local timezone column", () => {
         }
       );
 
-      const row = temporary.connection.get<{ localTimeZone: string | null }>(
-        "SELECT local_time_zone AS localTimeZone FROM google_calendar_events WHERE google_id = ?;",
+      const row = temporary.connection.get<{ hcbKind: string | null; localTimeZone: string | null }>(
+        "SELECT hcb_kind AS hcbKind, local_time_zone AS localTimeZone FROM google_calendar_events WHERE google_id = ?;",
         ["event-1"]
       );
 
       expect(row?.localTimeZone).toBe("Asia/Singapore");
+      expect(row?.hcbKind).toBe("birthday");
+
+      repository.writeCalendarEvents(
+        "acct-1",
+        "product",
+        [
+          {
+            id: "event-1",
+            calendarId: "product",
+            status: "confirmed",
+            summary: "Event",
+            startAt: "2026-05-23T01:00:00.000Z",
+            startTimeZone: "Asia/Singapore",
+            endAt: "2026-05-23T02:00:00.000Z",
+            endTimeZone: "Asia/Singapore",
+            isAllDay: false,
+            updatedAt: "2026-05-24T00:00:00.000Z"
+          }
+        ],
+        {
+          fullSync: false,
+          now: "2026-05-24T00:00:00.000Z",
+          defaultTimeZone: "UTC"
+        }
+      );
+
+      const preserved = temporary.connection.get<{ hcbKind: string | null }>(
+        "SELECT hcb_kind AS hcbKind FROM google_calendar_events WHERE google_id = ?;",
+        ["event-1"]
+      );
+      expect(preserved?.hcbKind).toBe("birthday");
     } finally {
       temporary.cleanup();
     }

@@ -82,6 +82,7 @@ describe("Google Calendar mapping", () => {
         {
           id: "all-day-1",
           summary: "All-day freeze",
+          eventType: "birthday",
           start: { date: "2026-05-23" },
           end: { date: "2026-05-24" },
           updated: "2026-05-22T00:00:00.000Z"
@@ -108,12 +109,32 @@ describe("Google Calendar mapping", () => {
       }),
       expect.objectContaining({
         id: "all-day-1",
+        hcbKind: "birthday",
         startAt: "2026-05-23T00:00:00.000Z",
         endAt: "2026-05-24T00:00:00.000Z",
         isAllDay: true
       })
     ]);
     expect(JSON.stringify(page.events)).not.toContain("<br>");
+  });
+
+  it("requests Google birthday event metadata", async () => {
+    const getJsonCalls: Parameters<GoogleApiTransport["getJson"]>[0][] = [];
+    const getJson = async <T,>(request: Parameters<GoogleApiTransport["getJson"]>[0]): Promise<T> => {
+      getJsonCalls.push(request);
+
+      return { items: [], nextSyncToken: "sync-token" } as T;
+    };
+    const adapter = new GoogleCalendarHttpAdapter({
+      getJson,
+      getJsonWithMetadata: vi.fn(),
+      send: vi.fn()
+    });
+
+    await adapter.listEvents({ calendarId: "primary", defaultTimeZone: "UTC" });
+
+    expect(String(getJsonCalls[0]?.query?.fields)).toContain("eventType");
+    expect(String(getJsonCalls[0]?.query?.fields)).toContain("birthdayProperties");
   });
 
   it("preserves Google HTML description blocks and lists as markdown", async () => {

@@ -45,6 +45,7 @@ export function stableCalendarEventViewModel(
   const signature = [
     event.id,
     event.eventId ?? "",
+    event.hcbKind ?? "",
     event.calendarId,
     event.colorId ?? "",
     event.title,
@@ -76,6 +77,7 @@ export function stableCalendarEventViewModel(
   const viewModel: CalendarEventViewModel = {
     id: event.id,
     eventId: event.eventId ?? event.id,
+    hcbKind: event.hcbKind,
     sourceKind: "event",
     calendarId: event.calendarId,
     colorId: event.colorId ?? null,

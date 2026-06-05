@@ -824,6 +824,7 @@ describe("App calendar", () => {
         items: [
           {
             id: "event-birthday-source",
+            hcbKind: "birthday" as const,
             calendarId: "cal-product",
             title: "Alex",
             startsAt: `${todayDate}T00:00:00.000Z`,
@@ -855,6 +856,7 @@ describe("App calendar", () => {
         expect.objectContaining({
           title: "Alex (copy)",
           allDay: true,
+          hcbKind: "birthday",
           recurrence: {
             frequency: "yearly",
             interval: 1,
