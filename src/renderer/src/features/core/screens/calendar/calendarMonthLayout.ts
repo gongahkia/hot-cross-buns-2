@@ -40,6 +40,7 @@ export function visibleCalendarMonthWeeks(
           day,
           overflowCount: overflowEvents.length,
           overflowEvents,
+          popupEvents: visibleEvents,
           visibleEventChips
         };
       })

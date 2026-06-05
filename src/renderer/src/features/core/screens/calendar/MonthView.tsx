@@ -249,7 +249,7 @@ export function MonthView({
                 </div>
               ))
             )}
-            {week.days.map(({ day, overflowCount, overflowEvents }, dayIndex) =>
+            {week.days.map(({ day, overflowCount, popupEvents }, dayIndex) =>
               overflowCount > 0 ? (
                 <div
                   className="z-10 min-w-0 px-1.5"
@@ -261,8 +261,8 @@ export function MonthView({
                     count={overflowCount}
                     onOpen={() =>
                       setActiveOverflow({
-                        events: overflowEvents,
-                        title: `More items for ${calendarDateTitle(day)}`
+                        events: popupEvents,
+                        title: `Items for ${calendarDateTitle(day)}`
                       })
                     }
                   />

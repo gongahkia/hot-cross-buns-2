@@ -52,7 +52,6 @@ export interface VisibleCalendarTimelineDay extends VisibleCalendarDay {
 
 export interface VisibleCalendarTimeline {
   allDayOverflowCounts: number[];
-  allDayOverflowEvents: CalendarEventViewModel[][];
   allDaySegments: CalendarTimelineAllDaySegment[];
   days: VisibleCalendarTimelineDay[];
 }
@@ -86,6 +85,7 @@ export interface CalendarTimeBlock {
 export interface VisibleCalendarMonthDay {
   day: CalendarDayViewModel;
   overflowEvents: CalendarEventViewModel[];
+  popupEvents: CalendarEventViewModel[];
   visibleEventChips: Array<{
     event: CalendarEventViewModel;
     laneIndex: number;

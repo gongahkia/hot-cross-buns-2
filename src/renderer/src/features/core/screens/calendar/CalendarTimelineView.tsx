@@ -642,8 +642,9 @@ function CalendarTimelineView({
                   </div>
                 ))}
                 {timeline.allDayOverflowCounts.map((count, dayIndex) => {
-                  const day = visibleDays[dayIndex]?.day;
-                  const overflowEvents = timeline.allDayOverflowEvents[dayIndex] ?? [];
+                  const visibleDay = visibleDays[dayIndex];
+                  const day = visibleDay?.day;
+                  const popupEvents = visibleDay?.allDayEvents ?? [];
 
                   return count > 0 && day ? (
                     <div
@@ -658,8 +659,8 @@ function CalendarTimelineView({
                         count={count}
                         onOpen={() =>
                           setActiveOverflow({
-                            events: overflowEvents,
-                            title: `More all-day items for ${calendarDateTitle(day)}`
+                            events: popupEvents,
+                            title: `Items for ${calendarDateTitle(day)}`
                           })
                         }
                       />

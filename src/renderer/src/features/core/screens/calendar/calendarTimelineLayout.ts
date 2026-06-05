@@ -82,7 +82,6 @@ export function visibleCalendarTimeline(
 
   return {
     allDayOverflowCounts: allDayLayout.overflowCounts,
-    allDayOverflowEvents: allDayLayout.overflowEvents,
     allDaySegments: allDayLayout.segments,
     days: visibleDays
   };

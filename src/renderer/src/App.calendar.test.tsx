@@ -271,7 +271,20 @@ describe("App calendar", () => {
 
   it("separates all-day calendar events and summarizes dense month cells", async () => {
     const api = seededHcb();
-    hideTaskCalendarItems(api);
+    api.settings = {
+      ...api.settings,
+      get: vi.fn(async () => ok(testSettings({ selectedTaskListIds: ["list-planning"] })))
+    };
+    api.tasks.list = vi.fn(async () =>
+      ok({
+        items: [
+          seededTaskDetail("task-done", {
+            dueAt: now
+          })
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      })
+    );
     api.calendar.listEvents = vi.fn(async () =>
       ok({
         items: [
@@ -343,11 +356,17 @@ describe("App calendar", () => {
     const monthGrid = screen.getByRole("grid", { name: "Calendar month view" });
     expect(within(monthGrid).getByRole("button", { name: "Launch freeze" })).toBeInTheDocument();
     expect(within(monthGrid).getByRole("button", { name: "Design sync" })).toBeInTheDocument();
-    expect(within(monthGrid).getByText("2 more")).toBeInTheDocument();
+    expect(within(monthGrid).getByText("3 more")).toBeInTheDocument();
 
-    await user.click(within(monthGrid).getByRole("button", { name: "Show 2 more calendar items" }));
+    await user.click(within(monthGrid).getByRole("button", { name: "Show 3 more calendar items" }));
 
-    const overflowDialog = screen.getByRole("dialog", { name: /More items for/ });
+    const overflowDialog = screen.getByRole("dialog", { name: /Items for/ });
+    const overflowButtons = within(overflowDialog).getAllByRole("button").slice(1);
+
+    expect(overflowButtons[0]).toHaveAccessibleName("Completed task Report shell-visible timing");
+    expect(within(overflowDialog).getByRole("button", { name: "All day Launch freeze" })).toBeInTheDocument();
+    expect(within(overflowDialog).getByRole("button", { name: "09:00-09:30 Design sync" })).toBeInTheDocument();
+    expect(within(overflowDialog).getByRole("button", { name: "10:00-10:30 Roadmap check" })).toBeInTheDocument();
     expect(within(overflowDialog).getByRole("button", { name: "11:00-11:30 Partner review" })).toBeInTheDocument();
     expect(within(overflowDialog).getByRole("button", { name: "12:00-12:30 Release notes" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 2, name: "New event" })).not.toBeInTheDocument();
@@ -379,7 +398,8 @@ describe("App calendar", () => {
     await user.click(within(tabs).getByRole("tab", { name: "Day" }));
     await user.click(screen.getByRole("button", { name: "Show 1 more calendar items" }));
 
-    const overflowDialog = screen.getByRole("dialog", { name: /More all-day items for/ });
+    const overflowDialog = screen.getByRole("dialog", { name: /Items for/ });
+    expect(within(overflowDialog).getByRole("button", { name: "All day All-day 1" })).toBeInTheDocument();
     expect(within(overflowDialog).getByRole("button", { name: "All day All-day 5" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 2, name: "New event" })).not.toBeInTheDocument();
   });

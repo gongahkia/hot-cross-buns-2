@@ -137,7 +137,19 @@ const eventCompletionScopeOptions: Array<{ id: CalendarEventCompletionScope; lab
 ];
 
 function eventCompleted(event: CalendarEventViewModel): boolean {
-  return event.completedAt !== null && event.completedAt !== undefined;
+  return event.completedAt !== null && event.completedAt !== undefined || event.taskStatus === "completed";
+}
+
+function compareOverflowEvents(left: CalendarEventViewModel, right: CalendarEventViewModel): number {
+  const leftCompleted = eventCompleted(left) ? 0 : 1;
+  const rightCompleted = eventCompleted(right) ? 0 : 1;
+
+  return (
+    leftCompleted - rightCompleted ||
+    left.startsAt.localeCompare(right.startsAt) ||
+    left.endsAt.localeCompare(right.endsAt) ||
+    left.id.localeCompare(right.id)
+  );
 }
 
 export function CalendarItemCompletionButton({
@@ -391,6 +403,8 @@ export function CalendarOverflowPopover({
   onToggleTask?: (taskId: string) => void;
   title: string;
 }): JSX.Element {
+  const orderedEvents = [...events].sort(compareOverflowEvents);
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-bg-tertiary/45 p-3 backdrop-blur-sm"
@@ -425,7 +439,7 @@ export function CalendarOverflowPopover({
           </button>
         </div>
         <div className="grid max-h-[60vh] gap-1 overflow-auto p-2">
-          {events.map((event) => (
+          {orderedEvents.map((event) => (
             <CalendarEventChip
               event={event}
               eventCompletionDefaultScope={eventCompletionDefaultScope}
