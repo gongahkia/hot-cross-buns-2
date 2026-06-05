@@ -239,7 +239,7 @@ describe("SQLite-backed domain services", () => {
     expect(updatedNote.body).toBe("Updated body");
     expect(deleted).toMatchObject({
       id: createdNote.id,
-      queued: false
+      queued: true
     });
     expect(performanceRepository.listRecent(20)).toEqual(
       expect.arrayContaining([

@@ -23,6 +23,12 @@ describe("service container integration", () => {
     });
 
     try {
+      services.localData.syncRepository.writeTaskLists(
+        "acct-1",
+        [{ id: "inbox", title: "Inbox", updatedAt: "2026-05-22T00:00:00.000Z" }],
+        "2026-05-22T00:00:00.000Z"
+      );
+
       const created = await services.mcpTools.callTool(
         "hcb_create_note",
         {
