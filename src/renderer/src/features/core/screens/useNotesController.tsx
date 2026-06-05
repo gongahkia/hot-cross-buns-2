@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Copy, Pencil, Save, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, Copy, Pencil, Save, Trash2, X } from "lucide-react";
 import type { TaskListSummary, TaskSummary } from "@shared/ipc/contracts";
 import { useInspector } from "../../../components/Inspector";
 import { Button } from "../../../components/primitives";
+import {
+  conversionCleanup,
+  dispatchConvertCommand,
+  type ConvertSourceCleanup
+} from "../conversionEvents";
 import { copiedTitle } from "../copyLabels";
 import type { CoreViewModelSource } from "../coreViewModelSource";
 import type { NoteViewModel } from "../coreViewModels";
@@ -110,6 +115,7 @@ export function useNotesController(source: CoreViewModelSource): {
   );
   const [draftCounter, setDraftCounter] = useState(1);
   const createNoteIds = useRef(new Set<string>());
+  const conversionCleanupByNoteId = useRef(new Map<string, ConvertSourceCleanup>());
   const lastNoteEditReportAt = useRef(0);
   const noteInspectorBodyRef = useRef<NoteInspectorBodyHandle | null>(null);
   const noteInspectorModeRef = useRef<"view" | "edit">("edit");
@@ -200,6 +206,15 @@ export function useNotesController(source: CoreViewModelSource): {
       const detail = (event as CustomEvent<{
         action: string;
         body?: string;
+        cleanup?: ConvertSourceCleanup;
+        draft?: {
+          body: string;
+          id?: string;
+          listId?: string;
+          listTitle?: string;
+          replaceSource?: boolean;
+          title: string;
+        };
         listId?: string;
         noteId?: string;
         title?: string;
@@ -220,6 +235,10 @@ export function useNotesController(source: CoreViewModelSource): {
 
       if (detail?.action === "open-note" && detail.noteId) {
         void selectNote(detail.noteId, "view");
+      }
+
+      if (detail?.action === "convert-to-note" && detail.draft) {
+        void openConvertedNoteDraft(detail.draft, detail.cleanup);
       }
     }
 
@@ -299,6 +318,18 @@ export function useNotesController(source: CoreViewModelSource): {
               <Copy aria-hidden="true" size={14} />
               Duplicate
             </Button>
+            {!localDraft ? (
+              <>
+                <Button onClick={() => convertNote(note, "task")} size="sm" variant="secondary">
+                  <ArrowRightLeft aria-hidden="true" size={14} />
+                  Convert to task
+                </Button>
+                <Button onClick={() => convertNote(note, "event")} size="sm" variant="secondary">
+                  <ArrowRightLeft aria-hidden="true" size={14} />
+                  Convert to event
+                </Button>
+              </>
+            ) : null}
           </div>
           <Button onClick={() => void closeInspector()} size="sm" variant="ghost">
             <X aria-hidden="true" size={14} />
@@ -333,6 +364,18 @@ export function useNotesController(source: CoreViewModelSource): {
           <Copy aria-hidden="true" size={14} />
           Duplicate
         </Button>
+        {!localDraft ? (
+          <>
+            <Button onClick={() => convertNote(note, "task")} size="sm" variant="secondary">
+              <ArrowRightLeft aria-hidden="true" size={14} />
+              Convert to task
+            </Button>
+            <Button onClick={() => convertNote(note, "event")} size="sm" variant="secondary">
+              <ArrowRightLeft aria-hidden="true" size={14} />
+              Convert to event
+            </Button>
+          </>
+        ) : null}
         <Button onClick={() => void closeInspector()} size="sm" variant="ghost">
           <X aria-hidden="true" size={14} />
           Close
@@ -432,7 +475,7 @@ export function useNotesController(source: CoreViewModelSource): {
     listId: string;
     listTitle: string;
     title: string;
-  }): void {
+  }): string {
     const fallbackId = `note-draft-${draftCounter}`;
     const fallbackNote: NoteViewModel = {
       id: fallbackId,
@@ -449,6 +492,145 @@ export function useNotesController(source: CoreViewModelSource): {
     setSelectedNoteId(fallbackId);
     createNoteIds.current.add(fallbackId);
     openNoteInspector(fallbackNote, "edit");
+
+    return fallbackId;
+  }
+
+  async function openConvertedNoteDraft(
+    seed: {
+      body: string;
+      id?: string;
+      listId?: string;
+      listTitle?: string;
+      replaceSource?: boolean;
+      title: string;
+    },
+    cleanup?: ConvertSourceCleanup
+  ): Promise<void> {
+    if (noteInspectorModeRef.current === "edit") {
+      await noteInspectorBodyRef.current?.flush();
+    }
+
+    const list = noteLists.find((candidate) => candidate.id === seed.listId) ?? noteLists[0];
+
+    if (!list) {
+      return;
+    }
+
+    if (seed.replaceSource && seed.id) {
+      const note: NoteViewModel = {
+        id: seed.id,
+        listId: list.id,
+        listTitle: seed.listTitle ?? list.title,
+        title: seed.title,
+        body: seed.body,
+        preview: buildNotePreview(seed.body),
+        updatedLabel: "Edited"
+      };
+
+      setNotes((current) => current.some((candidate) => candidate.id === note.id)
+        ? current.map((candidate) => candidate.id === note.id ? note : candidate)
+        : [note, ...current]
+      );
+      setSelectedNoteId(note.id);
+      createNoteIds.current.delete(note.id);
+      if (cleanup) {
+        conversionCleanupByNoteId.current.set(note.id, cleanup);
+      }
+      openNoteInspector(note, "edit");
+      return;
+    }
+
+    const draftId = openLocalNoteDraft({
+      title: seed.title,
+      body: seed.body,
+      listId: list.id,
+      listTitle: list.title
+    });
+
+    if (cleanup) {
+      conversionCleanupByNoteId.current.set(draftId, cleanup);
+    }
+  }
+
+  function convertNote(note: NoteViewModel, target: "event" | "task"): void {
+    if (note.id.startsWith("note-draft-")) {
+      return;
+    }
+
+    const liveDraft =
+      currentInspector?.kind === "note" && currentInspector.id === note.id
+        ? noteInspectorBodyRef.current?.getDraft()
+        : null;
+    const title = liveDraft?.title ?? note.title;
+    const body = liveDraft?.body ?? note.body;
+
+    if (target === "event") {
+      dispatchConvertCommand({
+        cleanup: conversionCleanup("note", note.id, target),
+        target,
+        eventDraft: {
+          title,
+          notes: body
+        }
+      });
+      return;
+    }
+
+    const replace = window.confirm(
+      "Remove the original note after saving the converted task? Cancel keeps the original note."
+    );
+    const dueDate = dateInputValue(new Date().toISOString());
+
+    dispatchConvertCommand({
+      target,
+      taskDraft: replace
+        ? {
+            mode: "edit",
+            id: note.id,
+            title,
+            notes: body,
+            dueDate,
+            listId: note.listId,
+            parentId: "",
+            priority: "none",
+            plannedStart: null,
+            plannedEnd: null,
+            durationMinutes: null,
+            lockedSchedule: false,
+            tags: []
+          }
+        : {
+            title,
+            notes: body,
+            dueDate,
+            listId: note.listId,
+            priority: "none",
+            plannedStart: null,
+            plannedEnd: null,
+            durationMinutes: null,
+            lockedSchedule: false,
+            tags: []
+          }
+    });
+  }
+
+  async function cleanupConvertedSource(noteId: string): Promise<string | null> {
+    const cleanup = conversionCleanupByNoteId.current.get(noteId);
+
+    if (!cleanup) {
+      return null;
+    }
+
+    conversionCleanupByNoteId.current.delete(noteId);
+
+    if (cleanup.kind === "event") {
+      const result = await window.hcb?.calendar.delete({ id: cleanup.id });
+      return result?.ok ? null : result?.error.message ?? "Original event was not removed.";
+    }
+
+    const result = await window.hcb?.tasks.delete({ id: cleanup.id });
+    return result?.ok ? null : result?.error.message ?? "Original task was not removed.";
   }
 
   async function createNoteWithTemplate(title: string, body: string, listId?: string): Promise<void> {
@@ -546,6 +728,10 @@ export function useNotesController(source: CoreViewModelSource): {
       return;
     }
 
+    const cleanupError = await cleanupConvertedSource(noteId);
+    if (cleanupError) {
+      window.alert(`Converted item was saved, but ${cleanupError}`);
+    }
     const persisted = noteFromTask(result.data, noteLists);
 
     setNotes((current) => current.map((candidate) => candidate.id === noteId ? persisted : candidate));
@@ -554,6 +740,7 @@ export function useNotesController(source: CoreViewModelSource): {
     createNoteIds.current.add(persisted.id);
     openNoteInspector(persisted, "edit");
     source.refreshUndoStatus();
+    source.refresh();
   }
 
   async function createNoteList(): Promise<void> {
@@ -660,12 +847,17 @@ export function useNotesController(source: CoreViewModelSource): {
         return false;
       }
 
+      const cleanupError = await cleanupConvertedSource(noteId);
+      if (cleanupError) {
+        window.alert(`Converted item was saved, but ${cleanupError}`);
+      }
       const persisted = noteFromTask(result.data, noteLists);
       setNotes((current) => current.map((candidate) => candidate.id === noteId ? persisted : candidate));
       setSelectedNoteId(persisted.id);
       createNoteIds.current.delete(noteId);
       createNoteIds.current.add(persisted.id);
       source.refreshUndoStatus();
+      source.refresh();
       return true;
     }
 
@@ -677,7 +869,12 @@ export function useNotesController(source: CoreViewModelSource): {
     });
 
     if (result?.ok) {
+      const cleanupError = await cleanupConvertedSource(noteId);
+      if (cleanupError) {
+        window.alert(`Converted item was saved, but ${cleanupError}`);
+      }
       source.refreshUndoStatus();
+      source.refresh();
     }
 
     return result?.ok ?? false;
@@ -723,6 +920,7 @@ export function useNotesController(source: CoreViewModelSource): {
     setNotes(nextNotes);
     setSelectedNoteId(nextNote?.id ?? null);
     createNoteIds.current.delete(note.id);
+    conversionCleanupByNoteId.current.delete(note.id);
 
     if (nextNote) {
       openNoteInspector(nextNote, "view");

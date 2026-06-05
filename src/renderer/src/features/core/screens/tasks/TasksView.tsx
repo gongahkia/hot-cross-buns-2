@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCoreViewModelSource } from "../../coreViewModelSource";
+import type { ConvertSourceCleanup } from "../../conversionEvents";
 import {
   readLocalStorageNumberRecord,
   readLocalStorageStringArray,
@@ -73,8 +74,9 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
     function handleTaskCommand(event: Event): void {
       const detail = (event as CustomEvent<{
         action: string;
+        cleanup?: ConvertSourceCleanup;
         taskId?: string;
-        draft?: Partial<Omit<TaskDraft, "mode">>;
+        draft?: Partial<Omit<TaskDraft, "mode">> | TaskDraft;
       }>).detail;
 
       if (detail?.action === "open-task" && detail.taskId) {
@@ -85,6 +87,11 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
       if (detail?.action === "new-task") {
         setSelectedBoardView({ mode: "lists", listIds: null });
         openNewTask(detail.draft ?? {});
+      }
+
+      if (detail?.action === "convert-to-task") {
+        setSelectedBoardView({ mode: "lists", listIds: null });
+        openNewTask(detail.draft ?? {}, detail.cleanup);
       }
     }
 

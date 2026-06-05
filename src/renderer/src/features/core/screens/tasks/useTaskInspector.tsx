@@ -503,9 +503,12 @@ function taskEventDraft(sourceDraft: TaskDraft): Partial<CalendarEventDraft> {
   }
 
   if (sourceDraft.dueDate) {
+    const start = new Date(`${sourceDraft.dueDate}T00:00:00.000Z`);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
     return {
       allDay: true,
-      endsAt: `${sourceDraft.dueDate}T00:00:00.000Z`,
+      endsAt: end,
       notes: sourceDraft.notes,
       startsAt: `${sourceDraft.dueDate}T00:00:00.000Z`,
       title: sourceDraft.title
