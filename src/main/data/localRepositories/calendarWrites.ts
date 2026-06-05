@@ -302,6 +302,7 @@ export function eventInsertOperation(input: {
   accountId: string;
   calendarId: string;
   googleId: string;
+  hcbKind?: "birthday" | null;
   timeZone: string;
   now: string;
 } & NormalizedCalendarWrite) {
@@ -310,9 +311,9 @@ export function eventInsertOperation(input: {
     sql: `INSERT INTO google_calendar_events (
       id, account_id, calendar_id, google_id, status, summary, description, location,
       start_at, start_time_zone, end_at, end_time_zone, is_all_day, recurrence_rule, local_time_zone,
-      color_id, attendee_emails_json, reminder_minutes_json,
+      hcb_kind, color_id, attendee_emails_json, reminder_minutes_json,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
     params: [
       input.id,
       input.accountId,
@@ -328,6 +329,7 @@ export function eventInsertOperation(input: {
       boolInt(input.allDay),
       input.recurrenceRule,
       input.timeZone,
+      input.hcbKind ?? null,
       input.colorId ?? null,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),
@@ -340,6 +342,7 @@ export function eventInsertOperation(input: {
 export function eventUpdateOperation(input: {
   id: string;
   calendarId: string;
+  hcbKind?: "birthday" | null;
   timeZone: string;
   now: string;
 } & NormalizedCalendarWrite) {
@@ -357,6 +360,7 @@ export function eventUpdateOperation(input: {
               is_all_day = ?,
               recurrence_rule = ?,
               local_time_zone = ?,
+              hcb_kind = COALESCE(?, hcb_kind),
               color_id = ?,
               attendee_emails_json = ?,
               reminder_minutes_json = ?,
@@ -374,6 +378,7 @@ export function eventUpdateOperation(input: {
       boolInt(input.allDay),
       input.recurrenceRule,
       input.timeZone,
+      input.hcbKind ?? null,
       input.colorId ?? null,
       JSON.stringify(input.guestEmails),
       JSON.stringify(input.reminderMinutes),

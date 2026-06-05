@@ -98,6 +98,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
         `SELECT
            instances.id AS id,
            events.id AS eventId,
+           events.hcb_kind AS hcbKind,
            events.account_id AS accountId,
            instances.calendar_id AS calendarId,
            calendars.summary AS calendarTitle,
@@ -186,6 +187,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
           id,
           accountId: calendar.accountId,
           googleId,
+          hcbKind: request.hcbKind ?? null,
           timeZone,
           now,
           ...normalized,
@@ -257,6 +259,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
       this.connection.executeTransaction([
         eventUpdateOperation({
           id: existing.eventId,
+          hcbKind: request.hcbKind ?? null,
           timeZone,
           now,
           ...normalized,
@@ -424,6 +427,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
         `SELECT
            COALESCE(instances.id, events.id) AS id,
            events.id AS eventId,
+           events.hcb_kind AS hcbKind,
            events.account_id AS accountId,
            events.calendar_id AS calendarId,
            calendars.summary AS calendarTitle,

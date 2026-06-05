@@ -21,6 +21,7 @@ export type GoogleCalendarEventStatus = "confirmed" | "tentative" | "cancelled";
 export interface GoogleCalendarEventMirror {
   id: string;
   calendarId: string;
+  hcbKind?: "birthday" | null;
   recurringEventId?: string | null;
   originalStartAt?: string | null;
   status: GoogleCalendarEventStatus;
@@ -141,6 +142,14 @@ interface GoogleEventDto {
   reminders?: GoogleEventRemindersDto;
   hangoutLink?: string;
   conferenceData?: GoogleEventConferenceDataDto;
+  eventType?: string;
+  birthdayProperties?: GoogleEventBirthdayPropertiesDto;
+}
+
+interface GoogleEventBirthdayPropertiesDto {
+  type?: string;
+  customTypeName?: string;
+  contact?: string;
 }
 
 interface GoogleEventDateDto {
@@ -192,7 +201,7 @@ interface GoogleEventMutationDto {
 const CALENDAR_LIST_FIELDS =
   "items(id,summary,description,timeZone,backgroundColor,foregroundColor,selected,hidden,primary,accessRole,etag)";
 const EVENTS_FIELDS =
-  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password)))";
+  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password)))";
 
 export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
   private readonly transport: GoogleApiTransport;
@@ -275,7 +284,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "POST",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(calendarId)}/events`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
       },
       body: eventMutationBody(input)
     });
@@ -288,7 +297,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "PATCH",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(input.calendarId)}/events/${encodeGooglePathComponent(input.eventId)}`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
       },
       body: eventMutationBody(input),
       ifMatch: input.ifMatch ?? undefined
@@ -325,6 +334,7 @@ function mapEvent(
   return {
     id: item.id,
     calendarId,
+    hcbKind: item.eventType === "birthday" || item.birthdayProperties !== undefined ? "birthday" : null,
     recurringEventId: item.recurringEventId ?? null,
     originalStartAt: item.originalStartTime === undefined ? null : eventDateToIso(item.originalStartTime, startAt),
     status: normalizeEventStatus(item.status),

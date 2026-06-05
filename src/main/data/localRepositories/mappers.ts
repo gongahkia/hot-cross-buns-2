@@ -145,6 +145,7 @@ export function calendarEventSummary(row: CalendarEventRow): CalendarEventSummar
     id: row.id,
     eventId: row.eventId,
     linkedTaskId: row.linkedTaskId ?? undefined,
+    hcbKind: row.hcbKind === "birthday" ? "birthday" : undefined,
     calendarId: row.calendarId,
     title: truncateText(row.title, textLimits.eventTitle),
     startsAt: row.startsAt,

@@ -400,6 +400,30 @@ CREATE INDEX IF NOT EXISTS idx_local_undo_entries_stack
 
       return operations;
     }
+  },
+  {
+    version: 12,
+    name: "calendar event hcb kind",
+    operations: (connection) => {
+      if (!tableExists(connection, "google_calendar_events")) {
+        return [];
+      }
+
+      const columns = new Set(
+        connection
+          .query<{ name: string }>("PRAGMA table_info(google_calendar_events);")
+          .map((row) => row.name)
+      );
+
+      return columns.has("hcb_kind")
+        ? []
+        : [
+            {
+              kind: "run",
+              sql: "ALTER TABLE google_calendar_events ADD COLUMN hcb_kind TEXT;"
+            }
+          ];
+    }
   }
 ];
 

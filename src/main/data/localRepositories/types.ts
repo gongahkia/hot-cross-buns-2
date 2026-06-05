@@ -65,6 +65,7 @@ export interface CalendarEventRow extends Record<string, unknown> {
   id: string;
   eventId: string;
   linkedTaskId?: string | null;
+  hcbKind?: "birthday" | null;
   accountId: string;
   calendarId: string;
   calendarTitle: string;

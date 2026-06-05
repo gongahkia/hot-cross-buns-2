@@ -99,11 +99,15 @@ export const calendarConferenceSchema = z
 
 export type CalendarConference = z.infer<typeof calendarConferenceSchema>;
 
+export const calendarEventHcbKindSchema = z.enum(["birthday"]);
+export type CalendarEventHcbKind = z.infer<typeof calendarEventHcbKindSchema>;
+
 export const calendarEventSummarySchema = z
   .object({
     id: idSchema,
     eventId: idSchema.optional(),
     linkedTaskId: idSchema.optional(),
+    hcbKind: calendarEventHcbKindSchema.optional(),
     calendarId: idSchema,
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     title: z.string().min(1).max(500),
@@ -188,6 +192,7 @@ const calendarEventWriteFieldsSchema = z
     reminderMinutes: z.array(reminderMinutesSchema).max(10).default([]),
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     recurrence: calendarEventRecurrenceSchema.nullable().optional(),
+    hcbKind: calendarEventHcbKindSchema.optional(),
     timeZone: z.string().trim().min(1).max(120).optional()
   })
   .strict()
@@ -229,6 +234,7 @@ export const calendarEventUpdateRequestSchema = z
     reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     recurrence: calendarEventRecurrenceSchema.nullable().optional(),
+    hcbKind: calendarEventHcbKindSchema.optional(),
     timeZone: z.string().trim().min(1).max(120).optional()
   })
   .strict()
@@ -245,6 +251,7 @@ export const calendarEventUpdateRequestSchema = z
       request.reminderMinutes !== undefined ||
       request.colorId !== undefined ||
       request.recurrence !== undefined ||
+      request.hcbKind !== undefined ||
       request.timeZone !== undefined,
     {
       message: "At least one event field must be supplied"
