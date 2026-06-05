@@ -365,7 +365,7 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Notes" })).toBeInTheDocument();
   });
 
-  it("uses total resource counts in primary navigation badges", async () => {
+  it("uses HCB2 section counts in primary navigation badges", async () => {
     const api = seededHcb();
 
     api.tasks.listTaskLists = async () =>
@@ -433,9 +433,9 @@ describe("App shell", () => {
     const navigation = primaryNavigation();
 
     await waitFor(() => {
-      expect(within(within(navigation).getByRole("button", { name: "Tasks" })).getByText("1200")).toBeInTheDocument();
+      expect(within(within(navigation).getByRole("button", { name: "Tasks" })).getByText("2")).toBeInTheDocument();
       expect(within(within(navigation).getByRole("button", { name: "Calendar" })).getByText("18000")).toBeInTheDocument();
-      expect(within(within(navigation).getByRole("button", { name: "Notes" })).getByText("321")).toBeInTheDocument();
+      expect(within(within(navigation).getByRole("button", { name: "Notes" })).getByText("1")).toBeInTheDocument();
     });
   });
 

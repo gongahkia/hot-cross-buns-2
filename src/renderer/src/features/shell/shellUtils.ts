@@ -34,7 +34,13 @@ export function isEditableShortcutTarget(target: EventTarget | null): boolean {
 
 export function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): string {
   if (sectionId === "tasks") {
-    return String(source.resourceCounts.tasks);
+    return String(
+      source.largeTaskWindow.filter((task) =>
+        task.parentId === null &&
+        task.dueDate !== null &&
+        (task.status === "open" || task.status === "completed")
+      ).length
+    );
   }
 
   if (sectionId === "calendar") {
@@ -42,7 +48,7 @@ export function sectionMetric(source: CoreViewModelSource, sectionId: SectionId)
   }
 
   if (sectionId === "notes") {
-    return String(source.resourceCounts.notes);
+    return String(source.noteLists.reduce((count, list) => count + list.noteCount, 0));
   }
 
   if (sectionId === "settings") {
