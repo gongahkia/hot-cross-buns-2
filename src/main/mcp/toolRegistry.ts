@@ -16,6 +16,9 @@ interface WriteHandler {
   apply: (argumentsObject: Record<string, unknown>) => Promise<JsonObject> | JsonObject;
 }
 
+type ConvertItemKind = "event" | "task" | "note";
+type ConvertSourceAction = "keep" | "replace";
+
 const readToolNames = [
   "hcb_doctor",
   "hcb_status",
@@ -49,6 +52,7 @@ const writeToolNames = [
   "hcb_update_task",
   "hcb_update_note",
   "hcb_update_event",
+  "hcb_convert_item",
   "hcb_complete_task",
   "hcb_reopen_task",
   "hcb_complete_event",
@@ -74,6 +78,7 @@ const destructiveToolNames = new Set<string>([
   "hcb_delete_event",
   "hcb_delete_task_list",
   "hcb_delete_note_list",
+  "hcb_convert_item",
   "hcb_cancel_mutation",
   "hcb_undo",
   "hcb_redo"
@@ -222,6 +227,25 @@ export const mcpToolDefinitions: readonly McpToolDefinition[] = [
     dryRun: booleanSchema("Preview without applying."),
     confirmationId: stringSchema("Confirmation id returned by a dry-run.")
   }, ["id", "patch"]),
+  writeTool("hcb_convert_item", "Convert an event, task, or note into another primitive. Always requires confirmation.", true, {
+    sourceKind: enumSchema(["event", "task", "note"]),
+    sourceId: stringSchema("Source item id."),
+    targetKind: enumSchema(["event", "task", "note"]),
+    sourceAction: enumSchema(["keep", "replace"]),
+    title: stringSchema("Optional target title override."),
+    notes: stringSchema("Optional target notes override."),
+    body: stringSchema("Optional target body override."),
+    details: stringSchema("Optional target event details override."),
+    dueDate: stringSchema("Optional target task due date."),
+    taskListId: stringSchema("Optional target task list id."),
+    noteListId: stringSchema("Optional target note list id."),
+    calendarId: stringSchema("Optional target calendar id."),
+    startDate: stringSchema("Optional target event start date or date-time."),
+    endDate: stringSchema("Optional target event end date or date-time."),
+    isAllDay: booleanSchema("Whether target event is all-day."),
+    dryRun: booleanSchema("Preview without applying."),
+    confirmationId: stringSchema("Confirmation id returned by a dry-run.")
+  }, ["sourceKind", "sourceId", "targetKind", "sourceAction"]),
   writeTool("hcb_complete_task", "Mark a task complete.", false, {
     id: stringSchema("Task id."),
     dryRun: booleanSchema("Preview without applying."),
@@ -663,6 +687,10 @@ export class McpToolRegistry {
             requiredObject(args, "patch")
           )
       },
+      hcb_convert_item: {
+        preview: (args) => this.convertItem(args, false),
+        apply: (args) => this.convertItem(args, true)
+      },
       hcb_complete_task: {
         preview: (args) => this.services.tasks.previewCompleteTask(requiredString(args, "id")),
         apply: (args) => this.services.tasks.completeTask(requiredString(args, "id"))
@@ -781,6 +809,98 @@ export class McpToolRegistry {
     };
   }
 
+  private async convertItem(args: Record<string, unknown>, apply: boolean): Promise<JsonObject> {
+    const sourceKind = requiredItemKind(args, "sourceKind");
+    const targetKind = requiredItemKind(args, "targetKind");
+    const sourceId = requiredString(args, "sourceId");
+    const sourceAction = requiredSourceAction(args);
+
+    if (sourceKind === targetKind) {
+      throw new McpToolError("INVALID_ARGUMENTS", "sourceKind and targetKind must differ.");
+    }
+
+    const source = await this.readConvertSource(sourceKind, sourceId);
+
+    if (sourceKind === "event" && optionalJsonString(source, "hcbKind") === "birthday") {
+      throw new McpToolError("INVALID_ARGUMENTS", "Birthday events cannot be converted.");
+    }
+
+    const targetPayload = convertTargetPayload(sourceKind, source, targetKind, args);
+
+    if (!apply) {
+      return {
+        kind: "conversion",
+        source: {
+          kind: sourceKind,
+          id: sourceId,
+          title: optionalJsonString(source, "title") ?? ""
+        },
+        target: {
+          kind: targetKind,
+          payload: targetPayload
+        },
+        sourceAction,
+        willRemoveSource: sourceAction === "replace"
+      };
+    }
+
+    const target = await this.createConvertTarget(targetKind, targetPayload);
+    const removedSource =
+      sourceAction === "replace"
+        ? await this.removeConvertSource(sourceKind, sourceId)
+        : null;
+
+    return {
+      kind: "conversion",
+      source: {
+        kind: sourceKind,
+        id: sourceId,
+        action: sourceAction,
+        removed: removedSource
+      },
+      target: {
+        kind: targetKind,
+        item: target
+      }
+    };
+  }
+
+  private readConvertSource(kind: ConvertItemKind, id: string): Promise<JsonObject> | JsonObject {
+    if (kind === "task") {
+      return this.services.tasks.getTask(id);
+    }
+
+    if (kind === "note") {
+      return this.services.notes.getNote(id);
+    }
+
+    return this.services.calendar.getEvent(id);
+  }
+
+  private createConvertTarget(kind: ConvertItemKind, payload: JsonObject): Promise<JsonObject> | JsonObject {
+    if (kind === "task") {
+      return this.services.tasks.createTask(payload);
+    }
+
+    if (kind === "note") {
+      return this.services.notes.createNote(payload);
+    }
+
+    return this.services.calendar.createEvent(payload);
+  }
+
+  private removeConvertSource(kind: ConvertItemKind, id: string): Promise<JsonObject> | JsonObject {
+    if (kind === "task") {
+      return this.services.tasks.deleteTask(id);
+    }
+
+    if (kind === "note") {
+      return this.services.notes.deleteNote(id);
+    }
+
+    return this.services.calendar.deleteEvent(id);
+  }
+
   private requireAdminServices(): McpAdminDomainServices {
     if (!this.adminServices) {
       throw new McpToolError("INVALID_ARGUMENTS", "MCP admin services are unavailable.");
@@ -808,6 +928,194 @@ function undoPreview(action: "undo" | "redo", status: JsonObject): JsonObject {
     title: label ?? action,
     canApply: true
   };
+}
+
+function requiredItemKind(args: Record<string, unknown>, key: string): ConvertItemKind {
+  const value = requiredString(args, key);
+
+  if (value === "event" || value === "task" || value === "note") {
+    return value;
+  }
+
+  throw new McpToolError("INVALID_ARGUMENTS", `${key} must be event, task, or note.`);
+}
+
+function requiredSourceAction(args: Record<string, unknown>): ConvertSourceAction {
+  const value = requiredString(args, "sourceAction");
+
+  if (value === "keep" || value === "replace") {
+    return value;
+  }
+
+  throw new McpToolError("INVALID_ARGUMENTS", "sourceAction must be keep or replace.");
+}
+
+function convertTargetPayload(
+  sourceKind: ConvertItemKind,
+  source: JsonObject,
+  targetKind: ConvertItemKind,
+  args: Record<string, unknown>
+): JsonObject {
+  if (targetKind === "task") {
+    return convertTaskPayload(source, args);
+  }
+
+  if (targetKind === "note") {
+    return convertNotePayload(sourceKind, source, args);
+  }
+
+  return convertEventPayload(sourceKind, source, args);
+}
+
+function convertTaskPayload(source: JsonObject, args: Record<string, unknown>): JsonObject {
+  return {
+    title: optionalString(args, "title") ?? optionalJsonString(source, "title") ?? "Untitled task",
+    notes:
+      optionalString(args, "notes") ??
+      optionalString(args, "body") ??
+      optionalString(args, "details") ??
+      optionalJsonString(source, "notes") ??
+      optionalJsonString(source, "body") ??
+      "",
+    ...(optionalString(args, "dueDate") === undefined
+      ? {}
+      : { dueDate: optionalString(args, "dueDate") }),
+    ...(optionalString(args, "taskListId") === undefined
+      ? {}
+      : { taskListId: optionalString(args, "taskListId") })
+  };
+}
+
+function convertNotePayload(
+  sourceKind: ConvertItemKind,
+  source: JsonObject,
+  args: Record<string, unknown>
+): JsonObject {
+  return {
+    title: optionalString(args, "title") ?? optionalJsonString(source, "title") ?? "Untitled note",
+    body:
+      optionalString(args, "body") ??
+      optionalString(args, "notes") ??
+      optionalString(args, "details") ??
+      convertNoteBody(sourceKind, source),
+    ...(optionalString(args, "noteListId") === undefined
+      ? {}
+      : { noteListId: optionalString(args, "noteListId") })
+  };
+}
+
+function convertEventPayload(
+  sourceKind: ConvertItemKind,
+  source: JsonObject,
+  args: Record<string, unknown>
+): JsonObject {
+  const startDate = eventStartDate(sourceKind, source, args);
+  const allDay = optionalBoolean(args, "isAllDay") ?? eventAllDay(sourceKind, source, args);
+  const endDate = optionalString(args, "endDate") ?? eventEndDate(sourceKind, source, startDate, allDay);
+
+  return {
+    title: optionalString(args, "title") ?? optionalJsonString(source, "title") ?? "Untitled event",
+    details:
+      optionalString(args, "details") ??
+      optionalString(args, "notes") ??
+      optionalString(args, "body") ??
+      optionalJsonString(source, "notes") ??
+      optionalJsonString(source, "body") ??
+      "",
+    startDate,
+    endDate,
+    isAllDay: allDay,
+    ...(optionalJsonString(source, "location") === undefined
+      ? {}
+      : { location: optionalJsonString(source, "location") }),
+    ...(optionalString(args, "calendarId") === undefined
+      ? {}
+      : { calendarId: optionalString(args, "calendarId") })
+  };
+}
+
+function convertNoteBody(sourceKind: ConvertItemKind, source: JsonObject): string {
+  if (sourceKind === "event") {
+    return [
+      optionalJsonString(source, "notes") ?? "",
+      `Event: ${optionalJsonString(source, "startsAt") ?? ""} - ${optionalJsonString(source, "endsAt") ?? ""}`,
+      optionalJsonString(source, "location") ? `Location: ${optionalJsonString(source, "location")}` : ""
+    ].filter(Boolean).join("\n\n");
+  }
+
+  return optionalJsonString(source, "notes") ?? optionalJsonString(source, "body") ?? "";
+}
+
+function eventStartDate(
+  sourceKind: ConvertItemKind,
+  source: JsonObject,
+  args: Record<string, unknown>
+): string {
+  const explicit = optionalString(args, "startDate");
+
+  if (explicit) {
+    return explicit;
+  }
+
+  if (sourceKind === "event") {
+    return optionalJsonString(source, "startsAt") ?? missingEventDateMessage(sourceKind);
+  }
+
+  const plannedStart = optionalJsonString(source, "plannedStart");
+  if (plannedStart) {
+    return plannedStart;
+  }
+
+  const dueAt = optionalJsonString(source, "dueAt");
+  if (dueAt) {
+    return dueAt;
+  }
+
+  throw new McpToolError("INVALID_ARGUMENTS", "Converting this item to an event requires --start-date.");
+}
+
+function eventEndDate(
+  sourceKind: ConvertItemKind,
+  source: JsonObject,
+  startDate: string,
+  allDay: boolean
+): string {
+  if (sourceKind === "event") {
+    return optionalJsonString(source, "endsAt") ?? startDate;
+  }
+
+  const plannedEnd = optionalJsonString(source, "plannedEnd");
+  if (plannedEnd) {
+    return plannedEnd;
+  }
+
+  const startMs = Date.parse(startDate);
+
+  if (!Number.isFinite(startMs)) {
+    return startDate;
+  }
+
+  return new Date(startMs + (allDay ? 24 : 1) * 60 * 60 * 1000).toISOString();
+}
+
+function eventAllDay(
+  sourceKind: ConvertItemKind,
+  source: JsonObject,
+  args: Record<string, unknown>
+): boolean {
+  if (optionalBoolean(args, "allDay") !== undefined) {
+    return optionalBoolean(args, "allDay") ?? false;
+  }
+
+  if (sourceKind === "event") {
+    return source.allDay === true;
+  }
+
+  return optionalJsonString(source, "plannedStart") === undefined;
+}
+
+function missingEventDateMessage(sourceKind: ConvertItemKind): never {
+  throw new McpToolError("INVALID_ARGUMENTS", `Converting ${sourceKind} to event requires --start-date.`);
 }
 
 async function withMcpPublicError(action: () => Promise<JsonObject> | JsonObject): Promise<JsonObject> {

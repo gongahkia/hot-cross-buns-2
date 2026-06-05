@@ -53,6 +53,7 @@ interface ParsedCommand {
     | "get"
     | "create"
     | "update"
+    | "convert"
     | "rename"
     | "complete"
     | "reopen"
@@ -72,6 +73,8 @@ interface ParsedCommand {
   action?: string;
   id?: string;
   target?: string;
+  to?: string;
+  sourceAction?: string;
   apply?: boolean;
   confirmationId?: string;
   title?: string;
@@ -258,6 +261,20 @@ export function parseCommand(argv: string[]): ParsedCommand {
       const value = args[index + 1];
       index += 1;
       parsed.title = optionValue(value, "--title");
+      continue;
+    }
+
+    if (arg === "--to") {
+      const value = args[index + 1];
+      index += 1;
+      parsed.to = parsePrimitiveTarget(value, "--to");
+      continue;
+    }
+
+    if (arg === "--source-action") {
+      const value = args[index + 1];
+      index += 1;
+      parsed.sourceAction = parseSourceAction(value);
       continue;
     }
 
@@ -550,6 +567,15 @@ export function parseCommand(argv: string[]): ParsedCommand {
     }
 
     validateUpdateCommand(parsed);
+  } else if (command === "convert") {
+    parsed.target = parsePrimitiveTarget(positional[0], "convert target");
+    parsed.id = positional[1];
+
+    if (!parsed.id || positional.length !== 2) {
+      throw new CliError("Usage: pnpm hcb -- convert <task|note|event> <id> --to <task|note|event> --source-action <keep|replace> [options]", 2);
+    }
+
+    validateConvertCommand(parsed);
   } else if (command === "rename") {
     parsed.target = parseRenameTarget(positional[0]);
     parsed.id = positional[1];
@@ -675,8 +701,8 @@ export function parseCommand(argv: string[]): ParsedCommand {
     throw new CliError("--scope is only supported by complete/reopen event.", 2);
   }
 
-  if (parsed.startDate !== undefined && command !== "week" && command !== "create" && command !== "update" && command !== "schedule") {
-    throw new CliError(`--start-date is only supported by week, create event, update event, and schedule task.`, 2);
+  if (parsed.startDate !== undefined && command !== "week" && command !== "create" && command !== "update" && command !== "schedule" && command !== "convert") {
+    throw new CliError(`--start-date is only supported by week, create event, update event, schedule task, and convert.`, 2);
   }
 
   if ((parsed.logLimit !== undefined || parsed.mutationLimit !== undefined) && command !== "doctor" && command !== "export-diagnostics") {
@@ -692,7 +718,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
   }
 
   if (hasWriteOnlyOptions(parsed) && !isWriteCommand(command)) {
-    throw new CliError("Write options are only supported by sync-now, retry-mutation, cancel-mutation, create, update, rename, complete, reopen, move, delete, undo, redo, schedule, settings, google, and mcp.", 2);
+    throw new CliError("Write options are only supported by sync-now, retry-mutation, cancel-mutation, create, update, convert, rename, complete, reopen, move, delete, undo, redo, schedule, settings, google, and mcp.", 2);
   }
 
   return parsed;
