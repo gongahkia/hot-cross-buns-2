@@ -212,7 +212,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
           accountId: calendar.accountId,
           resourceId: id,
           operation: "calendar.events.create",
-          payload: mutationPayload(normalized),
+          payload: mutationPayload(normalized, request.hcbKind ?? null),
           now
         })
       ]);
@@ -284,7 +284,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
           accountId: targetCalendar.accountId,
           resourceId: existing.eventId,
           operation: "calendar.events.update",
-          payload: mutationPayload(normalized),
+          payload: mutationPayload(normalized, request.hcbKind ?? existing.hcbKind ?? null),
           now
         })
       ]);

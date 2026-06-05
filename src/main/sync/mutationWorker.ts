@@ -1,4 +1,5 @@
 import { redactErrorMessage } from "@shared/redaction";
+import { addUtcDaysIso, startOfUtcDayIso } from "@shared/domain/calendar";
 import type { HcbErrorCode } from "@shared/ipc/result";
 import {
   GoogleApiError,
@@ -635,11 +636,31 @@ function calendarEventWriteInput(
   target: CalendarEventMutationTarget,
   mutation: PendingGoogleMutation
 ): GoogleCalendarEventWriteInput {
+  const hcbKind = textPayload(mutation, "hcbKind") === "birthday" || target.hcbKind === "birthday"
+    ? "birthday"
+    : null;
+  const summary = textPayload(mutation, "title") ?? target.summary;
+  const startAt = textPayload(mutation, "startsAt") ?? target.startAt;
+
+  if (hcbKind === "birthday") {
+    const birthdayStart = startOfUtcDayIso(startAt);
+    return {
+      hcbKind,
+      summary,
+      startAt: birthdayStart,
+      endAt: addUtcDaysIso(birthdayStart, 1),
+      isAllDay: true,
+      recurrenceRule: "RRULE:FREQ=YEARLY",
+      colorId: textPayload(mutation, "colorId") ?? target.colorId,
+      reminderMinutes: numberArrayPayload(mutation, "reminderMinutes") ?? target.reminderMinutes
+    };
+  }
+
   return {
-    summary: textPayload(mutation, "title") ?? target.summary,
+    summary,
     description: textPayload(mutation, "notes") ?? target.description ?? "",
     location: textPayload(mutation, "location") ?? target.location ?? "",
-    startAt: textPayload(mutation, "startsAt") ?? target.startAt,
+    startAt,
     startTimeZone: target.startTimeZone,
     endAt: textPayload(mutation, "endsAt") ?? target.endAt,
     endTimeZone: target.endTimeZone,

@@ -416,6 +416,7 @@ export function CalendarEventForm({
   const displayColor = draftDisplayColor(draft, selectedCalendar, eventColorOverrides);
   const sourceTimeZone = selectedCalendar?.timeZone ?? defaultTimeZone;
   const showSourceTimeZone = sourceTimeZone !== defaultTimeZone;
+  const isBirthdayDraft = draft.hcbKind === "birthday" || (draft.mode === "create" && createMode === "birthday");
 
   function setAllDay(allDay: boolean): void {
     if (allDay) {
@@ -464,7 +465,7 @@ export function CalendarEventForm({
       allDay: true,
       startsAt,
       endsAt: addUtcDaysIso(startsAt, 1),
-      repeatFrequency: createMode === "birthday" ? "yearly" : draft.repeatFrequency,
+      repeatFrequency: isBirthdayDraft ? "yearly" : draft.repeatFrequency,
       repeatWeekdays: [repeatWeekdayForIso(startsAt)]
     });
   }
@@ -574,10 +575,12 @@ export function CalendarEventForm({
     );
   }
 
-  if (draft.mode === "create" && createMode === "birthday") {
+  if (isBirthdayDraft) {
     return (
       <div className="grid gap-3">
-        <CalendarCreateModeTabs mode={createMode} onChange={onCreateModeChange} />
+        {draft.mode === "create" ? (
+          <CalendarCreateModeTabs mode={createMode} onChange={onCreateModeChange} />
+        ) : null}
         {error ? <ErrorState description={error} title="Birthday not saved" /> : null}
         <EmojiInput
           aria-label="Birthday title"
@@ -618,6 +621,27 @@ export function CalendarEventForm({
             selectedCalendar={selectedCalendar}
             setDraft={setDraft}
           />
+          <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+            <span className="inline-flex items-center gap-1">
+              <Bell aria-hidden="true" size={13} />
+              Reminder
+            </span>
+            <select
+              aria-label="Birthday reminder"
+              className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onChange={(event) => setDraft({ ...draft, reminderMinutes: event.target.value })}
+              value={draft.reminderMinutes}
+            >
+              <option value="">None</option>
+              <option value="0">At start</option>
+              <option value="5">5 minutes before</option>
+              <option value="10">10 minutes before</option>
+              <option value="15">15 minutes before</option>
+              <option value="30">30 minutes before</option>
+              <option value="60">1 hour before</option>
+              <option value="1440">1 day before</option>
+            </select>
+          </label>
           <p className="text-[var(--text-xs)] text-text-muted">
             Repeats yearly as an all-day calendar event.
           </p>

@@ -504,7 +504,7 @@ export function mutationInsertOperation(input: {
   };
 }
 
-export function mutationPayload(input: NormalizedCalendarWrite): object {
+export function mutationPayload(input: NormalizedCalendarWrite, hcbKind?: "birthday" | null): object {
   return {
     title: input.title,
     calendarId: input.calendarId,
@@ -516,6 +516,7 @@ export function mutationPayload(input: NormalizedCalendarWrite): object {
     guestEmails: input.guestEmails,
     reminderMinutes: input.reminderMinutes,
     colorId: input.colorId ?? null,
+    hcbKind: hcbKind ?? null,
     recurrence: recurrenceFromRule(input.recurrenceRule),
     recurrenceRule: input.recurrenceRule
   };

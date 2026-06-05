@@ -715,9 +715,53 @@ describe("App calendar", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "New birthday" })).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "Birthday title" }), "Alex");
+    expect(screen.getByLabelText("Birthday reminder")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event location" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event guests" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event notes" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Event repeat frequency")).not.toBeInTheDocument();
     await user.click(screen.getByTestId("inspector-close"));
 
     expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+  });
+
+  it("edits birthday events with strict birthday fields", async () => {
+    const api = seededHcb();
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [
+          {
+            id: "event-birthday-edit",
+            hcbKind: "birthday" as const,
+            calendarId: "cal-product",
+            title: "Alex",
+            startsAt: `${todayDate}T00:00:00.000Z`,
+            endsAt: `${tomorrowIso.slice(0, 10)}T00:00:00.000Z`,
+            allDay: true,
+            reminderMinutes: [15],
+            recurrenceRule: "RRULE:FREQ=YEARLY",
+            updatedAt: now
+          }
+        ],
+        page: { limit: 250, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    await user.click(within(await screen.findByRole("list", { name: "Calendar agenda" })).getByText("Alex"));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" }));
+
+    expect(await screen.findByRole("textbox", { name: "Birthday title" })).toHaveValue("Alex");
+    expect(screen.getByLabelText("Birthday date")).toBeInTheDocument();
+    expect(screen.getByLabelText("Birthday calendar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Birthday reminder")).toHaveValue("15");
+    expect(screen.queryByRole("textbox", { name: "Event location" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event guests" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event notes" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Event repeat frequency")).not.toBeInTheDocument();
   });
 
   it("opens calendar events in the inspector", async () => {

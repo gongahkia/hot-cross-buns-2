@@ -61,6 +61,7 @@ export interface GoogleCalendarReadTransport {
 }
 
 export interface GoogleCalendarEventWriteInput {
+  hcbKind?: "birthday" | null;
   summary: string;
   description?: string | null;
   location?: string | null;
@@ -188,8 +189,12 @@ interface GoogleEventMutationDto {
   summary: string;
   description?: string | null;
   location?: string | null;
+  eventType?: "birthday";
   start: GoogleEventDateDto;
   end: GoogleEventDateDto;
+  recurrence?: string[];
+  transparency?: string;
+  visibility?: string;
   attendees?: Array<{ email: string }>;
   reminders?: {
     useDefault: boolean;
@@ -286,7 +291,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       query: {
         fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
       },
-      body: eventMutationBody(input)
+      body: eventMutationBody(input, { includeEventType: true })
     });
 
     return mapEvent(response, calendarId, input.startTimeZone ?? null);
@@ -299,7 +304,7 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       query: {
         fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
       },
-      body: eventMutationBody(input),
+      body: eventMutationBody(input, { includeEventType: false }),
       ifMatch: input.ifMatch ?? undefined
     });
 
@@ -439,7 +444,14 @@ function normalizeReminderMinutes(reminders: GoogleEventRemindersDto | undefined
   return result.sort((left, right) => left - right);
 }
 
-function eventMutationBody(input: GoogleCalendarEventWriteInput): GoogleEventMutationDto {
+function eventMutationBody(
+  input: GoogleCalendarEventWriteInput,
+  options: { includeEventType: boolean }
+): GoogleEventMutationDto {
+  if (input.hcbKind === "birthday") {
+    return birthdayMutationBody(input, options);
+  }
+
   const attendeeEmails = normalizeAttendeeEmails(
     (input.attendeeEmails ?? []).map((email) => ({ email }))
   );
@@ -461,6 +473,34 @@ function eventMutationBody(input: GoogleCalendarEventWriteInput): GoogleEventMut
       ? {}
       : { attendees: attendeeEmails.map((email) => ({ email })) }),
     ...(reminderMinutes.length === 0
+      ? {}
+      : {
+          reminders: {
+            useDefault: false,
+            overrides: reminderMinutes.map((minutes) => ({ method: "popup", minutes }))
+          }
+        })
+  };
+}
+
+function birthdayMutationBody(
+  input: GoogleCalendarEventWriteInput,
+  options: { includeEventType: boolean }
+): GoogleEventMutationDto {
+  const reminderMinutes = normalizeReminderMinutes({
+    overrides: (input.reminderMinutes ?? []).map((minutes) => ({ method: "popup", minutes }))
+  });
+
+  return {
+    ...(options.includeEventType ? { eventType: "birthday" as const } : {}),
+    summary: input.summary,
+    start: eventMutationDate(input.startAt, null, true),
+    end: eventMutationDate(input.endAt, null, true),
+    recurrence: ["RRULE:FREQ=YEARLY"],
+    transparency: "transparent",
+    visibility: "private",
+    ...(input.colorId === undefined ? {} : { colorId: input.colorId }),
+    ...(input.reminderMinutes === undefined
       ? {}
       : {
           reminders: {

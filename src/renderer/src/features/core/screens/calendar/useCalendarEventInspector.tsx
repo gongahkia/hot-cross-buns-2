@@ -436,14 +436,20 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
       return;
     }
 
+    const isBirthdayDraft =
+      currentDraft.hcbKind === "birthday" ||
+      (currentDraft.mode === "create" && createModeRef.current === "birthday");
     const writePayload =
-      currentDraft.mode === "create" && createModeRef.current === "birthday"
+      isBirthdayDraft
         ? {
             ...payload,
             allDay: true,
             startsAt: startOfUtcDayIso(currentDraft.startsAt),
             endsAt: addUtcDaysIso(startOfUtcDayIso(currentDraft.startsAt), 1),
             hcbKind: "birthday" as const,
+            location: "",
+            notes: "",
+            guestEmails: [],
             recurrence: {
               frequency: "yearly" as const,
               interval: 1,

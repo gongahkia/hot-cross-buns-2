@@ -110,6 +110,7 @@ export interface CalendarEventMutationTarget extends Record<string, unknown> {
   googleId: string;
   calendarId: string;
   calendarGoogleId: string;
+  hcbKind: "birthday" | null;
   summary: string;
   description: string | null;
   location: string | null;

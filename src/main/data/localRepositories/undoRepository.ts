@@ -1433,6 +1433,7 @@ function calendarMutationPayload(event: CalendarEventSnapshot): JsonValue {
     guestEmails: parseJsonArray(event.attendeeEmailsJson),
     reminderMinutes: parseJsonArray(event.reminderMinutesJson),
     colorId: event.colorId,
+    hcbKind: event.hcbKind === "birthday" ? "birthday" : null,
     recurrence: null,
     recurrenceRule: event.recurrenceRule
   };

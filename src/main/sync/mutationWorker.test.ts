@@ -301,6 +301,16 @@ describe("Google pending mutation worker", () => {
       failedCount: 0,
       locked: false
     });
+    expect(calendar.insertEvent).toHaveBeenCalledWith("primary", {
+      hcbKind: "birthday",
+      summary: "Queue event create",
+      startAt: "2026-05-23T00:00:00.000Z",
+      endAt: "2026-05-24T00:00:00.000Z",
+      isAllDay: true,
+      recurrenceRule: "RRULE:FREQ=YEARLY",
+      colorId: null,
+      reminderMinutes: []
+    });
     expect(mutationRows(connection).map((row) => row.status)).toEqual(["applied", "applied"]);
     expect(
       connection.get<{ googleId: string; etag: string | null }>(
@@ -314,6 +324,68 @@ describe("Google pending mutation worker", () => {
         [createdEvent.id]
       )
     ).toEqual({ googleId: "remote-event-1", etag: "remote-event-etag", hcbKind: "birthday" });
+  });
+
+  it("updates birthday events with birthday-safe Google input", async () => {
+    const { planner, repository } = createHarness();
+    repository.writeCalendarEvents(
+      "acct-1",
+      "primary",
+      [
+        {
+          id: "birthday-existing",
+          calendarId: "primary",
+          hcbKind: "birthday",
+          status: "confirmed",
+          summary: "Birthday existing",
+          startAt: "2026-06-01T00:00:00.000Z",
+          endAt: "2026-06-02T00:00:00.000Z",
+          isAllDay: true,
+          recurrenceRule: "RRULE:FREQ=YEARLY",
+          updatedAt: now,
+          etag: "birthday-etag"
+        }
+      ],
+      { fullSync: false, now }
+    );
+    planner.updateCalendarEvent({
+      id: "acct-1:event:primary:birthday-existing",
+      title: "Birthday updated",
+      startsAt: "2026-06-03T00:00:00.000Z",
+      endsAt: "2026-06-04T00:00:00.000Z",
+      allDay: true,
+      location: "Should stay local-only",
+      notes: "Should stay local-only",
+      guestEmails: ["ada@example.com"],
+      reminderMinutes: [15],
+      hcbKind: "birthday"
+    });
+    const calendar = calendarWrites();
+    const worker = new GooglePendingMutationWorker({
+      repository,
+      tasks: taskWrites(),
+      calendar,
+      now: () => new Date(now)
+    });
+
+    await expect(worker.drainDue()).resolves.toMatchObject({
+      attemptedCount: 1,
+      appliedCount: 1,
+      failedCount: 0
+    });
+    expect(calendar.updateEvent).toHaveBeenCalledWith({
+      calendarId: "primary",
+      eventId: "birthday-existing",
+      ifMatch: "birthday-etag",
+      hcbKind: "birthday",
+      summary: "Birthday updated",
+      startAt: "2026-06-03T00:00:00.000Z",
+      endAt: "2026-06-04T00:00:00.000Z",
+      isAllDay: true,
+      recurrenceRule: "RRULE:FREQ=YEARLY",
+      colorId: null,
+      reminderMinutes: [15]
+    });
   });
 
   it("schedules retryable failures with bounded exponential backoff and later applies them", async () => {

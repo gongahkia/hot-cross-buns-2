@@ -231,4 +231,162 @@ describe("Google Calendar mapping", () => {
     });
     expect(String(getJsonCalls[0]?.query?.fields)).toContain("colorId");
   });
+
+  it("keeps normal event updates on the default event payload", async () => {
+    const getJsonCalls: Parameters<GoogleApiTransport["getJson"]>[0][] = [];
+    const getJson: GoogleApiTransport["getJson"] = async <T,>(
+      request: Parameters<GoogleApiTransport["getJson"]>[0]
+    ): Promise<T> => {
+      getJsonCalls.push(request);
+
+      return {
+        id: "event-1",
+        summary: "Design review",
+        start: { dateTime: "2026-05-22T09:00:00.000Z" },
+        end: { dateTime: "2026-05-22T10:00:00.000Z" }
+      } as T;
+    };
+    const adapter = new GoogleCalendarHttpAdapter({
+      getJson,
+      getJsonWithMetadata: vi.fn(),
+      send: vi.fn()
+    });
+
+    await adapter.updateEvent({
+      calendarId: "primary",
+      eventId: "event-1",
+      summary: "Design review",
+      startAt: "2026-05-22T09:00:00.000Z",
+      endAt: "2026-05-22T10:00:00.000Z",
+      isAllDay: false,
+      location: "Room 3",
+      attendeeEmails: ["ada@example.com"]
+    });
+
+    expect(getJsonCalls[0]).toMatchObject({
+      method: "PATCH",
+      body: expect.objectContaining({
+        summary: "Design review",
+        location: "Room 3",
+        attendees: [{ email: "ada@example.com" }]
+      })
+    });
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("eventType");
+  });
+
+  it("writes birthday creates with a strict Google birthday payload", async () => {
+    const getJsonCalls: Parameters<GoogleApiTransport["getJson"]>[0][] = [];
+    const getJson: GoogleApiTransport["getJson"] = async <T,>(
+      request: Parameters<GoogleApiTransport["getJson"]>[0]
+    ): Promise<T> => {
+      getJsonCalls.push(request);
+
+      return {
+        id: "birthday-1",
+        eventType: "birthday",
+        summary: "Alex",
+        colorId: "5",
+        start: { date: "2026-06-01" },
+        end: { date: "2026-06-02" },
+        recurrence: ["RRULE:FREQ=YEARLY"]
+      } as T;
+    };
+    const adapter = new GoogleCalendarHttpAdapter({
+      getJson,
+      getJsonWithMetadata: vi.fn(),
+      send: vi.fn()
+    });
+
+    await adapter.insertEvent("primary", {
+      hcbKind: "birthday",
+      summary: "Alex",
+      description: "local-only notes must not leak",
+      location: "local-only location",
+      startAt: "2026-06-01T00:00:00.000Z",
+      endAt: "2026-06-02T00:00:00.000Z",
+      isAllDay: true,
+      recurrenceRule: "RRULE:FREQ=YEARLY",
+      colorId: "5",
+      attendeeEmails: ["ada@example.com"],
+      reminderMinutes: [15]
+    });
+
+    expect(getJsonCalls[0]).toMatchObject({
+      method: "POST",
+      body: {
+        eventType: "birthday",
+        summary: "Alex",
+        start: { date: "2026-06-01" },
+        end: { date: "2026-06-02" },
+        recurrence: ["RRULE:FREQ=YEARLY"],
+        transparency: "transparent",
+        visibility: "private",
+        colorId: "5",
+        reminders: {
+          useDefault: false,
+          overrides: [{ method: "popup", minutes: 15 }]
+        }
+      }
+    });
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("birthdayProperties");
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("local-only");
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("ada@example.com");
+  });
+
+  it("writes birthday updates without immutable or unsupported fields", async () => {
+    const getJsonCalls: Parameters<GoogleApiTransport["getJson"]>[0][] = [];
+    const getJson: GoogleApiTransport["getJson"] = async <T,>(
+      request: Parameters<GoogleApiTransport["getJson"]>[0]
+    ): Promise<T> => {
+      getJsonCalls.push(request);
+
+      return {
+        id: "birthday-1",
+        eventType: "birthday",
+        summary: "Alex",
+        start: { date: "2026-06-03" },
+        end: { date: "2026-06-04" },
+        recurrence: ["RRULE:FREQ=YEARLY"]
+      } as T;
+    };
+    const adapter = new GoogleCalendarHttpAdapter({
+      getJson,
+      getJsonWithMetadata: vi.fn(),
+      send: vi.fn()
+    });
+
+    await adapter.updateEvent({
+      hcbKind: "birthday",
+      calendarId: "primary",
+      eventId: "birthday-1",
+      summary: "Alex",
+      description: "local-only notes must not leak",
+      location: "local-only location",
+      startAt: "2026-06-03T00:00:00.000Z",
+      endAt: "2026-06-04T00:00:00.000Z",
+      isAllDay: true,
+      attendeeEmails: ["ada@example.com"],
+      reminderMinutes: []
+    });
+
+    expect(getJsonCalls[0]).toMatchObject({
+      method: "PATCH",
+      body: {
+        summary: "Alex",
+        start: { date: "2026-06-03" },
+        end: { date: "2026-06-04" },
+        recurrence: ["RRULE:FREQ=YEARLY"],
+        transparency: "transparent",
+        visibility: "private",
+        reminders: {
+          useDefault: false,
+          overrides: []
+        }
+      }
+    });
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("eventType");
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("birthdayProperties");
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("local-only");
+    expect(JSON.stringify(getJsonCalls[0]?.body)).not.toContain("ada@example.com");
+  });
 });

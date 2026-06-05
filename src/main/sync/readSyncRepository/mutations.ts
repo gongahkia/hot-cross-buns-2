@@ -381,6 +381,7 @@ export function calendarEventMutationTarget(
     googleId: string;
     calendarId: string;
     calendarGoogleId: string;
+    hcbKind: "birthday" | null;
     summary: string;
     description: string | null;
     location: string | null;
@@ -402,6 +403,7 @@ export function calendarEventMutationTarget(
        events.google_id AS googleId,
        events.calendar_id AS calendarId,
        calendars.google_id AS calendarGoogleId,
+       events.hcb_kind AS hcbKind,
        events.summary AS summary,
        events.description AS description,
        events.location AS location,
@@ -431,6 +433,7 @@ export function calendarEventMutationTarget(
         googleId: row.googleId,
         calendarId: row.calendarId,
         calendarGoogleId: row.calendarGoogleId,
+        hcbKind: row.hcbKind === "birthday" ? "birthday" : null,
         summary: row.summary,
         description: row.description,
         location: row.location,
