@@ -210,9 +210,9 @@ export function writeCalendarEvents(
         id, account_id, calendar_id, google_id, recurring_event_id, original_start_at,
         status, summary, description, location, start_at, start_time_zone, end_at,
         end_time_zone, is_all_day, recurrence_rule, color_id, transparency, visibility, etag,
-        sequence, local_time_zone, attendee_emails_json, reminder_minutes_json, conference_json, google_updated_at,
+        sequence, local_time_zone, hcb_kind, attendee_emails_json, reminder_minutes_json, conference_json, google_updated_at,
         created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(account_id, calendar_id, google_id) DO UPDATE SET
         recurring_event_id = excluded.recurring_event_id,
         original_start_at = excluded.original_start_at,
@@ -232,6 +232,7 @@ export function writeCalendarEvents(
         etag = excluded.etag,
         sequence = excluded.sequence,
         local_time_zone = excluded.local_time_zone,
+        hcb_kind = COALESCE(excluded.hcb_kind, google_calendar_events.hcb_kind),
         attendee_emails_json = excluded.attendee_emails_json,
         reminder_minutes_json = excluded.reminder_minutes_json,
         conference_json = excluded.conference_json,
@@ -261,6 +262,7 @@ export function writeCalendarEvents(
         event.etag ?? null,
         event.sequence ?? null,
         localTimeZone,
+        event.hcbKind ?? null,
         JSON.stringify(normalizeGuestEmails(event.attendeeEmails)),
         JSON.stringify(normalizeReminderMinutes(event.reminderMinutes)),
         event.conference ? JSON.stringify(event.conference) : null,
