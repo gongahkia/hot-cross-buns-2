@@ -70,6 +70,10 @@ export function buildCoreViewModelSource(
   const events = snapshot.events.flatMap((event) => {
     const linkedTask = event.linkedTaskId ? taskById[event.linkedTaskId] : undefined;
 
+    if (event.linkedTaskId && !linkedTask) {
+      return [];
+    }
+
     if (event.linkedTaskId && linkedTask) {
       if (
         linkedTask.status !== "open" &&

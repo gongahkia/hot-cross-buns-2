@@ -520,6 +520,57 @@ describe("App calendar", () => {
     expect(api.tasks.reopen).toHaveBeenCalledWith({ id: "task-lawnet" });
   });
 
+  it("removes linked Google Calendar task projections when deleting the task from calendar", async () => {
+    const api = seededHcb();
+    const title = "Timed linked task";
+    api.tasks.list = vi.fn(async () =>
+      ok({
+        items: [
+          seededTaskDetail("task-lawnet", {
+            title,
+            dueAt: `${todayDate}T00:00:00.000Z`,
+            notes: "Task body"
+          })
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      })
+    );
+    api.calendar.listEvents = vi.fn(async () =>
+      ok({
+        items: [{
+          id: "event-task-projection",
+          eventId: "event-task-projection",
+          linkedTaskId: "task-lawnet",
+          calendarId: "cal-product",
+          title,
+          startsAt: `${todayDate}T07:00:00.000Z`,
+          endsAt: `${todayDate}T07:30:00.000Z`,
+          allDay: false,
+          notes: "Changes made to the title, description or attachments will not be saved. To make edits, please go to: https://tasks.google.com/task/1u__Kt1mliHUFzMf",
+          updatedAt: now
+        }],
+        page: { limit: 500, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    await user.click(within(screen.getByRole("tablist", { name: "Calendar views" })).getByRole("tab", { name: "Day" }));
+    await user.click(await screen.findByRole("button", { name: `07:00-07:30 ${title}` }));
+    expect(await screen.findByTestId("inspector-shell")).toHaveAttribute("data-inspector-kind", "task");
+
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Delete" }));
+
+    expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-lawnet" });
+    expect(api.calendar.delete).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: `07:00-07:30 ${title}` })).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
+  });
+
   it("renders multi-day all-day events as one spanning timeline segment", async () => {
     const api = seededHcb();
     api.calendar.listEvents = vi.fn(async () =>

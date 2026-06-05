@@ -368,10 +368,19 @@ export function useTaskMutations({
       }
 
       let previousTasks: TaskSummary[] = [];
+      let previousEvents: CalendarEventSummary[] = [];
       beginTaskMutation();
-      setTasksSnapshot((tasks) => {
-        previousTasks = tasks;
-        return tasks.filter((task) => task.id !== taskId);
+      setLoadState((current) => {
+        previousTasks = current.snapshot.tasks;
+        previousEvents = current.snapshot.events;
+        return {
+          ...current,
+          snapshot: {
+            ...current.snapshot,
+            events: current.snapshot.events.filter((event) => event.linkedTaskId !== taskId),
+            tasks: current.snapshot.tasks.filter((task) => task.id !== taskId)
+          }
+        };
       });
 
       const result = await window.hcb.tasks.delete({ id: taskId });
@@ -381,11 +390,18 @@ export function useTaskMutations({
         return true;
       }
 
-      setTasksSnapshot(() => previousTasks);
+      setLoadState((current) => ({
+        ...current,
+        snapshot: {
+          ...current.snapshot,
+          events: previousEvents,
+          tasks: previousTasks
+        }
+      }));
       failTaskMutation(result.error.message, () => void deleteTask(taskId));
       return false;
     },
-    [beginTaskMutation, failTaskMutation, finishTaskMutation, setTasksSnapshot]
+    [beginTaskMutation, failTaskMutation, finishTaskMutation, setLoadState]
   );
 
   const createTaskList = useCallback(
