@@ -4,12 +4,13 @@ import {
   googleCalendarEventColors,
   type SettingsSnapshot
 } from "@shared/ipc/contracts";
-import { Bell, CalendarPlus, Clock3, ExternalLink, FileText, Gift, ListPlus, MapPin, Phone, RotateCcw, Users, Video, type LucideIcon } from "lucide-react";
+import { Bell, CalendarPlus, Clock3, ExternalLink, FileText, Gift, ListPlus, MapPin, Phone, RotateCcw, Tag, Users, Video, type LucideIcon } from "lucide-react";
 import { EmojiInput, EmojiTextarea } from "../../../../components/EmojiTextField";
 import { Badge, Input, cx } from "../../../../components/primitives";
 import { ErrorState } from "../../../../components/states";
 import type { useCoreViewModelSource } from "../../coreViewModelSource";
 import { MarkdownPreview } from "../../MarkdownPreview";
+import { TagBadges, TagInput } from "../../TagInput";
 import {
   addUtcDaysIso,
   dateInputToIso,
@@ -320,6 +321,12 @@ export function CalendarEventDetails({
         </DetailLine>
       ) : null}
 
+      {draft.tags.length > 0 ? (
+        <DetailLine icon={Tag}>
+          <TagBadges tags={draft.tags} />
+        </DetailLine>
+      ) : null}
+
       <CalendarConferenceDetails conference={draft.conference} />
 
       {location ? (
@@ -544,6 +551,7 @@ export function CalendarEventForm({
           placeholder="Notes"
           value={draft.notes}
         />
+        <TagInput onChange={(tags) => setDraft({ ...draft, tags })} value={draft.tags} />
         <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
           <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">Date & list</legend>
           <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
@@ -788,6 +796,7 @@ export function CalendarEventForm({
             <option value="1440">1 day before</option>
           </select>
         </label>
+        <TagInput onChange={(tags) => setDraft({ ...draft, tags })} value={draft.tags} />
       </fieldset>
       <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
         <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">

@@ -97,6 +97,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
       allDay: true,
       startsAt,
       endsAt: addUtcDaysIso(startsAt, 1),
+      tags: [],
       repeatFrequency: "yearly",
       repeatCustomFrequency: "yearly",
       repeatEndMode: "never",
@@ -407,7 +408,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
           plannedEnd: sourceDraft.allDay ? null : sourceDraft.endsAt,
           durationMinutes: null,
           lockedSchedule: false,
-          tags: []
+          tags: sourceDraft.tags
         }
       });
       return;
@@ -419,6 +420,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
       noteDraft: {
         title: sourceDraft.title,
         body: eventNoteBody(sourceDraft),
+        tags: sourceDraft.tags,
         listId: defaultTaskListId(source)
       }
     });
@@ -510,7 +512,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
         plannedEnd: null,
         durationMinutes: null,
         lockedSchedule: false,
-        tags: []
+        tags: currentDraft.tags
       });
 
       if (!saved) {
@@ -540,6 +542,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
             hcbKind: "birthday" as const,
             location: "",
             notes: "",
+            tags: [],
             guestEmails: [],
             recurrence: {
               frequency: "yearly" as const,

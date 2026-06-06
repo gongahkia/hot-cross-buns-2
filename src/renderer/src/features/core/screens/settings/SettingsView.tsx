@@ -80,6 +80,11 @@ const settingsSearchTextByTab: Record<SettingsTabId, string> = {
     "Duplicate detection",
     "Title similarity threshold",
     "Custom filters",
+    "Auto tags",
+    "Rules",
+    "Prefix",
+    "Contains",
+    "Regex",
     "Task templates",
     "Event templates",
     "Note templates"

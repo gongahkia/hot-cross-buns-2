@@ -22,6 +22,7 @@ export interface CalendarEventDraft {
   allDay: boolean;
   location: string;
   notes: string;
+  tags: string[];
   guests: string;
   reminderMinutes: string;
   conference: CalendarEventViewModel["conference"];

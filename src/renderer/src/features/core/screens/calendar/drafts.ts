@@ -66,6 +66,7 @@ export function newCalendarDraft(
     allDay,
     location: "",
     notes: "",
+    tags: [],
     guests: "",
     reminderMinutes: "",
     conference: null,
@@ -97,6 +98,7 @@ export function editCalendarDraft(event: CalendarEventViewModel): CalendarEventD
     allDay: event.allDay,
     location: event.location === "Scheduled" || event.location === "All day" ? "" : event.location,
     notes: event.notes === "No notes" ? "" : event.notes,
+    tags: event.tags ?? [],
     guests: event.guestEmails.join(", "),
     reminderMinutes: event.reminderMinutes[0] === undefined ? "" : String(event.reminderMinutes[0]),
     conference: event.conference,
@@ -123,6 +125,7 @@ export function calendarEventPayload(draft: CalendarEventDraft): CalendarEventCr
     allDay: draft.allDay,
     location: draft.location,
     notes: draft.notes,
+    tags: draft.tags,
     guestEmails: normalizeGuestEmails(draft.guests.split(",")),
     reminderMinutes,
     recurrence: calendarDraftRecurrence(draft),
@@ -156,6 +159,7 @@ export function calendarEventDraftsEqual(
     left.allDay === right.allDay &&
     left.location === right.location &&
     left.notes === right.notes &&
+    left.tags.join("\u001f") === right.tags.join("\u001f") &&
     left.guests === right.guests &&
     left.reminderMinutes === right.reminderMinutes &&
     JSON.stringify(left.conference ?? null) === JSON.stringify(right.conference ?? null) &&
