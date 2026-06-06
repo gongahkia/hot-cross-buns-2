@@ -15,6 +15,7 @@ import { EmojiInput, EmojiTextarea } from "../../../components/EmojiTextField";
 import { Badge, Button, Input, cx } from "../../../components/primitives";
 import type { NoteViewModel } from "../coreViewModels";
 import { MarkdownPreview } from "../MarkdownPreview";
+import { TagBadges, TagInput } from "../TagInput";
 import {
   extractNoteLinks,
   extractNoteProperties,
@@ -25,6 +26,7 @@ import {
 export interface NoteDraftValue {
   title: string;
   body: string;
+  tags: string[];
 }
 
 export interface NoteInspectorBodyHandle {
@@ -53,7 +55,9 @@ interface NoteInspectorBodyProps {
 }
 
 function noteDraftValuesEqual(left: NoteDraftValue, right: NoteDraftValue): boolean {
-  return left.title === right.title && left.body === right.body;
+  return left.title === right.title &&
+    left.body === right.body &&
+    JSON.stringify(left.tags) === JSON.stringify(right.tags);
 }
 
 export function NoteInspectorSummary({
@@ -95,6 +99,9 @@ export function NoteInspectorSummary({
           {note.preview ? (
             <p className="mt-2 text-[var(--text-base)] leading-relaxed text-text-secondary">{note.preview}</p>
           ) : null}
+          <div className="mt-2">
+            <TagBadges tags={note.tags} />
+          </div>
         </div>
       </div>
 
@@ -178,7 +185,7 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
     { createMode = false, error, note, notes, onDraftChange, onOpenNote, onPersist, templates = [] },
     ref
   ): JSX.Element {
-    const dirty = useDirtyState<NoteDraftValue>({ title: note.title, body: note.body });
+    const dirty = useDirtyState<NoteDraftValue>({ title: note.title, body: note.body, tags: note.tags ?? [] });
     const { update } = useInspector();
     const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
     const [selectedTemplateId, setSelectedTemplateId] = useState("blank");
@@ -276,13 +283,13 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
     }, [createMode, note.id]);
 
     useEffect(() => {
-      const next = { title: note.title, body: note.body };
+      const next = { title: note.title, body: note.body, tags: note.tags ?? [] };
 
       if (!dirtyRef.current && !noteDraftValuesEqual(draftRef.current, next)) {
         lastNotifiedDraftRef.current = next;
         dirty.reset(next);
       }
-    }, [dirty.reset, note.body, note.id, note.title]);
+    }, [dirty.reset, note.body, note.id, note.tags, note.title]);
 
     useEffect(() => {
       draftRef.current = dirty.value;
@@ -496,6 +503,8 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
               </select>
             </label>
           ) : null}
+
+          <TagInput onChange={(tags) => patchDraft({ tags })} value={dirty.value.tags} />
 
           {error ? (
             <div

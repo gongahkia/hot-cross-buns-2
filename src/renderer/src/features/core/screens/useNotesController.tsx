@@ -60,6 +60,7 @@ function noteFromTask(
     title: task.title,
     body,
     preview: buildNotePreview(body),
+    tags: task.tags ?? [],
     updatedLabel
   };
 }
@@ -440,6 +441,7 @@ export function useNotesController(source: CoreViewModelSource): {
       title: "Untitled note",
       body: "",
       preview: "Empty note",
+      tags: [],
       updatedLabel: "Just now"
     };
 
@@ -453,7 +455,8 @@ export function useNotesController(source: CoreViewModelSource): {
       title: "Untitled note",
       notes: "",
       listId: list.id,
-      dueDate: null
+      dueDate: null,
+      tags: []
     });
 
     if (result?.ok) {
@@ -474,6 +477,7 @@ export function useNotesController(source: CoreViewModelSource): {
     body: string;
     listId: string;
     listTitle: string;
+    tags?: string[];
     title: string;
   }): string {
     const fallbackId = `note-draft-${draftCounter}`;
@@ -484,6 +488,7 @@ export function useNotesController(source: CoreViewModelSource): {
       title: seed.title,
       body: seed.body,
       preview: buildNotePreview(seed.body),
+      tags: seed.tags ?? [],
       updatedLabel: "Just now"
     };
 
@@ -503,6 +508,7 @@ export function useNotesController(source: CoreViewModelSource): {
       listId?: string;
       listTitle?: string;
       replaceSource?: boolean;
+      tags?: string[];
       title: string;
     },
     cleanup?: ConvertSourceCleanup
@@ -525,6 +531,7 @@ export function useNotesController(source: CoreViewModelSource): {
         title: seed.title,
         body: seed.body,
         preview: buildNotePreview(seed.body),
+        tags: seed.tags ?? [],
         updatedLabel: "Edited"
       };
 
@@ -538,13 +545,14 @@ export function useNotesController(source: CoreViewModelSource): {
         conversionCleanupByNoteId.current.set(note.id, cleanup);
       }
       openNoteInspector(note, "edit");
-      void persistNoteDraft(note.id, { title: note.title, body: note.body });
+      void persistNoteDraft(note.id, { title: note.title, body: note.body, tags: note.tags ?? [] });
       return;
     }
 
     const draftId = openLocalNoteDraft({
       title: seed.title,
       body: seed.body,
+      tags: seed.tags ?? [],
       listId: list.id,
       listTitle: list.title
     });
@@ -565,6 +573,7 @@ export function useNotesController(source: CoreViewModelSource): {
         : null;
     const title = liveDraft?.title ?? note.title;
     const body = liveDraft?.body ?? note.body;
+    const tags = liveDraft?.tags ?? note.tags ?? [];
 
     if (target === "event") {
       dispatchConvertCommand({
@@ -572,7 +581,8 @@ export function useNotesController(source: CoreViewModelSource): {
         target,
         eventDraft: {
           title,
-          notes: body
+          notes: body,
+          tags
         }
       });
       return;
@@ -599,7 +609,7 @@ export function useNotesController(source: CoreViewModelSource): {
             plannedEnd: null,
             durationMinutes: null,
             lockedSchedule: false,
-            tags: []
+            tags
           }
         : {
             title,
@@ -611,7 +621,7 @@ export function useNotesController(source: CoreViewModelSource): {
             plannedEnd: null,
             durationMinutes: null,
             lockedSchedule: false,
-            tags: []
+            tags
           }
     });
   }
@@ -652,6 +662,7 @@ export function useNotesController(source: CoreViewModelSource): {
       title,
       body,
       preview: buildNotePreview(body),
+      tags: [],
       updatedLabel: "Just now"
     };
 
@@ -665,7 +676,8 @@ export function useNotesController(source: CoreViewModelSource): {
       title,
       notes: body,
       listId: list.id,
-      dueDate: null
+      dueDate: null,
+      tags: []
     });
 
     if (result?.ok) {
@@ -700,6 +712,7 @@ export function useNotesController(source: CoreViewModelSource): {
     openLocalNoteDraft({
       title: copiedTitle(liveDraft?.title ?? note.title, "Untitled note"),
       body: liveDraft?.body ?? note.body,
+      tags: liveDraft?.tags ?? note.tags ?? [],
       listId: note.listId,
       listTitle: note.listTitle
     });
@@ -714,14 +727,16 @@ export function useNotesController(source: CoreViewModelSource): {
 
     const draft = noteInspectorBodyRef.current?.getDraft() ?? {
       title: note.title,
-      body: note.body
+      body: note.body,
+      tags: note.tags ?? []
     };
     setNoteActionError(undefined);
     const result = await window.hcb?.tasks.create({
       title: draft.title || "Untitled note",
       notes: draft.body,
       listId: note.listId,
-      dueDate: null
+      dueDate: null,
+      tags: draft.tags
     });
 
     if (!result?.ok) {
@@ -814,6 +829,7 @@ export function useNotesController(source: CoreViewModelSource): {
           title: draft.title,
           body: draft.body,
           preview: buildNotePreview(draft.body),
+          tags: draft.tags,
           updatedLabel: "Edited"
         };
       })
@@ -841,7 +857,8 @@ export function useNotesController(source: CoreViewModelSource): {
         title: draft.title || "Untitled note",
         notes: draft.body,
         listId: note.listId,
-        dueDate: null
+        dueDate: null,
+        tags: draft.tags
       });
 
       if (!result?.ok) {
@@ -866,7 +883,8 @@ export function useNotesController(source: CoreViewModelSource): {
       id: noteId,
       title: draft.title,
       notes: draft.body,
-      dueDate: null
+      dueDate: null,
+      tags: draft.tags
     });
 
     if (result?.ok) {

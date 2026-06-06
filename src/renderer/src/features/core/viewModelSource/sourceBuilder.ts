@@ -334,6 +334,7 @@ function taskBackedNoteViewModel(task: TaskViewModel): NoteViewModel {
     title: task.title,
     body,
     preview: body.length > 0 ? body : "Empty task note",
+    tags: task.tags ?? [],
     updatedLabel: task.updatedAt ? shortDateTime(task.updatedAt) : "Unknown"
   };
 }

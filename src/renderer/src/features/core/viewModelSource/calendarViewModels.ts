@@ -57,6 +57,7 @@ export function stableCalendarEventViewModel(
     event.notes ?? "",
     (event.guestEmails ?? []).join("\u001f"),
     (event.reminderMinutes ?? []).join("\u001f"),
+    (event.tags ?? []).join("\u001f"),
     event.conference ? JSON.stringify(event.conference) : "",
     event.mutationState ?? "",
     event.completedAt ?? "",
@@ -100,6 +101,7 @@ export function stableCalendarEventViewModel(
     notes: event.notes?.trim() || "No notes",
     guestEmails: event.guestEmails ?? [],
     reminderMinutes: event.reminderMinutes ?? [],
+    tags: event.tags ?? [],
     conference: event.conference ?? null,
     mutationState: event.mutationState,
     recurrenceRule: event.recurrenceRule ?? null
@@ -127,6 +129,7 @@ export function stableTaskCalendarEventViewModel(
     task.dueDate ?? "",
     task.status,
     task.mutationState ?? "",
+    (task.tags ?? []).join("\u001f"),
     task.list,
     defaultTimeZone
   ].join("\u001c");
@@ -161,6 +164,7 @@ export function stableTaskCalendarEventViewModel(
     notes: task.detail || "No notes",
     guestEmails: [],
     reminderMinutes: [],
+    tags: task.tags ?? [],
     conference: null,
     mutationState: task.mutationState,
     completedAt: null,
@@ -194,6 +198,7 @@ export function stableProjectedTaskCalendarEventViewModel(
     task.detail,
     task.status,
     task.mutationState ?? "",
+    (task.tags ?? []).join("\u001f"),
     task.list,
     timeZone
   ].join("\u001c");
@@ -230,6 +235,7 @@ export function stableProjectedTaskCalendarEventViewModel(
     notes: task.detail || "No notes",
     guestEmails: [],
     reminderMinutes: [],
+    tags: task.tags ?? [],
     conference: null,
     mutationState: task.mutationState,
     completedAt: null,

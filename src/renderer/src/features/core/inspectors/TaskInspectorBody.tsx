@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { Dispatch, KeyboardEvent, ReactNode, SetStateAction } from "react";
-import { CalendarClock, FileText, Flag, List, ListPlus } from "lucide-react";
+import { CalendarClock, FileText, Flag, List, ListPlus, Tag } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useDirtyState, useInspector } from "../../../components/Inspector";
 import { EmojiInput, EmojiTextarea } from "../../../components/EmojiTextField";
@@ -8,6 +8,7 @@ import { Badge, Button, cx, Input } from "../../../components/primitives";
 import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { CorePriority, TaskViewModel } from "../coreViewModels";
 import { MarkdownPreview } from "../MarkdownPreview";
+import { TagBadges, TagInput } from "../TagInput";
 
 export interface TaskDraft {
   mode: "create" | "edit";
@@ -166,6 +167,12 @@ export function TaskInspectorDetails({
         </TaskDetailLine>
       ) : null}
 
+      {draft.tags?.length ? (
+        <TaskDetailLine icon={Tag}>
+          <TagBadges tags={draft.tags} />
+        </TaskDetailLine>
+      ) : null}
+
       <TaskDetailLine icon={List}>
         {listTitle}
       </TaskDetailLine>
@@ -309,6 +316,7 @@ export function TaskInspectorBody({
           ))}
         </select>
       </label>
+      <TagInput onChange={(tags) => patchDraft({ tags })} value={dirty.value.tags ?? []} />
       <EmojiTextarea
         aria-label="Task notes"
         className="min-h-20 w-full resize-none rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary placeholder:text-text-muted transition-colors duration-fast ease-hcb focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

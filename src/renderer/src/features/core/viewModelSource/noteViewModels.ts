@@ -10,6 +10,7 @@ export function noteViewModel(note: NoteDetail | NoteSummary): NoteViewModel {
     title: note.title,
     body: "body" in note ? note.body : "",
     preview: note.preview,
+    tags: note.tags ?? [],
     updatedLabel: shortDateTime(note.updatedAt)
   };
 }

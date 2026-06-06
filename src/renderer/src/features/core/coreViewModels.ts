@@ -87,6 +87,7 @@ export interface CalendarEventViewModel {
   notes: string;
   guestEmails: string[];
   reminderMinutes: number[];
+  tags?: string[];
   conference: {
     solutionName?: string;
     videoUri?: string;
@@ -141,6 +142,7 @@ export interface NoteViewModel {
   title: string;
   body: string;
   preview: string;
+  tags?: string[];
   updatedLabel: string;
 }
 
