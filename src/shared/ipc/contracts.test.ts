@@ -138,6 +138,22 @@ describe("shared IPC contracts", () => {
         errorCode: null
       }
     });
+    const bootstrapShape = (ipcContracts.bootstrap.get.responseSchema as z.ZodObject<any>).shape;
+    expect(
+      bootstrapShape.tasks.safeParse({
+        items: Array.from({ length: MAX_LIST_LIMIT + 1 }, (_, index) => ({
+          id: `task-${index}`,
+          listId: "list-1",
+          title: `Task ${index}`,
+          status: "active",
+          updatedAt: "2026-05-22T00:00:00.000Z"
+        })),
+        page: {
+          limit: MAX_LIST_LIMIT,
+          totalKnown: MAX_LIST_LIMIT + 1
+        }
+      }).success
+    ).toBe(true);
   });
 
   it("applies bounded defaults to list requests", () => {

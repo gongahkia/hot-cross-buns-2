@@ -1,20 +1,50 @@
 import { z } from "zod";
 import {
-  calendarListResponseSchema,
+  calendarEventSummarySchema,
+  calendarListSummarySchema,
   calendarRangeRequestSchema,
-  calendarRangeResponseSchema,
-  scheduledTaskBlockListResponseSchema
+  scheduledTaskBlockSummarySchema
 } from "./calendar";
 import { googleStatusResponseSchema } from "./google";
 import { nativeCapabilitiesResponseSchema } from "./native";
-import { noteListResponseSchema } from "./notes";
+import { noteListSummarySchema, noteSummarySchema } from "./notes";
 import { settingsSnapshotSchema } from "./settings";
 import { syncStatusResponseSchema } from "./sync";
 import {
-  taskListResponseSchema,
-  taskListsResponseSchema
+  taskListSummarySchema,
+  taskSummarySchema
 } from "./tasks";
+import { pagedListResponseSchema } from "./core";
 import { undoStackStatusResponseSchema } from "./undo";
+
+const MAX_BOOTSTRAP_ITEMS = 50_000;
+
+const bootstrapTaskListsResponseSchema = pagedListResponseSchema(
+  taskListSummarySchema,
+  MAX_BOOTSTRAP_ITEMS
+);
+const bootstrapTaskListResponseSchema = pagedListResponseSchema(
+  taskSummarySchema,
+  MAX_BOOTSTRAP_ITEMS
+);
+const bootstrapCalendarListResponseSchema = pagedListResponseSchema(
+  calendarListSummarySchema,
+  MAX_BOOTSTRAP_ITEMS
+);
+const bootstrapCalendarRangeResponseSchema = pagedListResponseSchema(
+  calendarEventSummarySchema,
+  MAX_BOOTSTRAP_ITEMS
+);
+const bootstrapScheduledTaskBlockListResponseSchema = pagedListResponseSchema(
+  scheduledTaskBlockSummarySchema,
+  MAX_BOOTSTRAP_ITEMS
+);
+const bootstrapNoteListResponseSchema = pagedListResponseSchema(
+  noteSummarySchema,
+  MAX_BOOTSTRAP_ITEMS
+).extend({
+  lists: z.array(noteListSummarySchema).max(MAX_BOOTSTRAP_ITEMS)
+});
 
 export const bootstrapGetRequestSchema = z
   .object({
@@ -34,14 +64,14 @@ export const bootstrapResourceCountsSchema = z
 
 export const bootstrapGetResponseSchema = z
   .object({
-    taskLists: taskListsResponseSchema,
-    tasks: taskListResponseSchema,
-    hiddenTasks: taskListResponseSchema,
-    deletedTasks: taskListResponseSchema,
-    calendars: calendarListResponseSchema,
-    events: calendarRangeResponseSchema,
-    scheduledTaskBlocks: scheduledTaskBlockListResponseSchema,
-    notes: noteListResponseSchema,
+    taskLists: bootstrapTaskListsResponseSchema,
+    tasks: bootstrapTaskListResponseSchema,
+    hiddenTasks: bootstrapTaskListResponseSchema,
+    deletedTasks: bootstrapTaskListResponseSchema,
+    calendars: bootstrapCalendarListResponseSchema,
+    events: bootstrapCalendarRangeResponseSchema,
+    scheduledTaskBlocks: bootstrapScheduledTaskBlockListResponseSchema,
+    notes: bootstrapNoteListResponseSchema,
     settings: settingsSnapshotSchema,
     syncStatus: syncStatusResponseSchema,
     googleStatus: googleStatusResponseSchema,

@@ -46,6 +46,8 @@ const mode = "report-only" as const;
 const accountId = "perf-generated-account";
 const fixtureSize = parsePerfFixtureSize(process.env.HCB_PERF_FIXTURE_SIZE);
 const perfFixture = generatePerfFixtureSet(fixtureSize);
+const skipUiFlows = process.env.HCB_PERF_SKIP_UI_FLOWS === "1";
+const appShellTimeoutMs = parsePositiveInteger(process.env.HCB_PERF_APP_SHELL_TIMEOUT_MS) ?? 45_000;
 type DiagnosticsHealthResult = HcbResult<DiagnosticsHealthResponse> | null;
 
 interface QueryPlanRow extends Record<string, unknown> {
@@ -80,6 +82,15 @@ function parsePerfFixtureSize(value: string | undefined): PerfFixtureSize {
   }
 
   return "medium";
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function temporaryUserDataDir(): { root: string; userDataDir: string; cleanup: () => void } {
@@ -604,9 +615,7 @@ async function collectLaunchTiming(
       }
     });
 
-    const page = electronApp.windows()[0] ?? await electronApp.firstWindow({ timeout: 45_000 });
-
-    await page.getByTestId("app-shell").waitFor({ state: "visible", timeout: 45_000 });
+    const page = await waitForAppShellWindow(electronApp, appShellTimeoutMs);
     await page
       .waitForFunction(
         `(async () => {
@@ -644,7 +653,9 @@ async function collectLaunchTiming(
 
     const commandPaletteOpenMs = await measureCommandPaletteOpen(page);
     const rendererMeasurements = await collectRendererMeasurements(page, name);
-    const rendererFlowMeasurements = await collectRendererFlowMeasurements(page, name);
+    const rendererFlowMeasurements = skipUiFlows
+      ? []
+      : await collectRendererFlowMeasurements(page, name);
     const ipcMetrics = (await page.evaluate(`(async () => {
       const result = await window.hcb?.diagnostics.ipcMetrics();
       return result?.ok ? result.data : null;
@@ -687,6 +698,30 @@ async function collectLaunchTiming(
   } finally {
     await electronApp?.close();
   }
+}
+
+async function waitForAppShellWindow(
+  electronApp: ElectronApplication,
+  timeoutMs = 45_000
+): Promise<Page> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const pages = electronApp.windows().filter((page) => !page.isClosed());
+
+    for (const page of pages) {
+      try {
+        await page.getByTestId("app-shell").waitFor({ state: "visible", timeout: 250 });
+        return page;
+      } catch {
+        // ignore transient startup/sync windows
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error("App shell window did not appear before timeout.");
 }
 
 async function measureCommandPaletteOpen(page: Page): Promise<number> {
@@ -805,7 +840,7 @@ async function collectRendererFlowMeasurements(
         const quickCaptureButton = page.getByRole("button", { name: /^Quick capture$/ }).first();
 
         if (await quickCaptureInput.count() > 0) {
-          await quickCaptureButton.click();
+          await quickCaptureButton.click({ timeout: 5_000 });
           await quickCaptureInput.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
         }
       },
@@ -813,7 +848,7 @@ async function collectRendererFlowMeasurements(
         const quickCaptureInput = page.getByRole("textbox", { name: "Quick capture task" });
         const quickCaptureButton = page.getByRole("button", { name: /^Quick capture$/ }).first();
 
-        await quickCaptureButton.click();
+        await quickCaptureButton.click({ timeout: 5_000 });
         await quickCaptureInput.waitFor({ state: "visible", timeout: 5_000 });
       }
     )
@@ -920,7 +955,7 @@ async function collectRendererFlowMeasurements(
 }
 
 async function navigateToSection(page: Page, label: string): Promise<void> {
-  await page.getByRole("button", { name: new RegExp(`^${label}\\b`) }).click();
+  await page.getByRole("button", { name: new RegExp(`^${label}\\b`) }).click({ timeout: 5_000 });
   await page.locator("#planner-title").filter({ hasText: label }).waitFor({
     state: "visible",
     timeout: 5_000
@@ -1081,6 +1116,8 @@ async function main(): Promise<void> {
         "Report-only mode records numbers and query plans without failing on local timing variance.",
         "Fixture data is generated locally and deterministically; the harness does not call Google or read user app data.",
         `The ${fixtureSize} fixture is seeded into a temporary app data path before launch and deleted after reporting.`,
+        skipUiFlows ? "Renderer UI flow measurements were skipped for this run." : "Renderer UI flow measurements were enabled for this run.",
+        `App shell wait timeout: ${appShellTimeoutMs}ms.`,
         "Electron security settings and renderer isolation are left unchanged for measurement.",
         `Temporary database path during run: ${redactSensitiveText(seedResult.databasePath)}`
       ]
