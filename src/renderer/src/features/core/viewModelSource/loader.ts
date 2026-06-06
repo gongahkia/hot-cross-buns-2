@@ -102,7 +102,7 @@ export async function loadCoreData(
   const bootstrapDurationMs = performance.now() - bootstrapStartedAt;
 
   if (bootstrap?.ok) {
-    return snapshotFromBootstrap(bootstrap.data);
+    return snapshotFromBootstrap(bootstrap.data, { tasks: true, notes: true });
   }
 
   fallbackReason ??= "failed";
@@ -333,7 +333,10 @@ async function loadNoteHydration(): Promise<{
   }
 }
 
-function snapshotFromBootstrap(bootstrap: BootstrapGetResponse): CoreDataSnapshot {
+function snapshotFromBootstrap(
+  bootstrap: BootstrapGetResponse,
+  deferredCounts: Partial<Record<keyof CoreResourceCounts, boolean>> = {}
+): CoreDataSnapshot {
   return {
     taskLists: bootstrap.taskLists.items,
     tasks: uniqueTasks([
@@ -356,7 +359,11 @@ function snapshotFromBootstrap(bootstrap: BootstrapGetResponse): CoreDataSnapsho
     googleStatus: bootstrap.googleStatus,
     undoStatus: bootstrap.undoStatus,
     native: bootstrap.native,
-    resourceCounts: bootstrap.resourceCounts
+    resourceCounts: {
+      ...bootstrap.resourceCounts,
+      ...(deferredCounts.tasks ? { tasks: null } : {}),
+      ...(deferredCounts.notes ? { notes: null } : {})
+    }
   };
 }
 

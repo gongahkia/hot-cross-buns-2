@@ -34,6 +34,10 @@ export function isEditableShortcutTarget(target: EventTarget | null): boolean {
 
 export function sectionMetric(source: CoreViewModelSource, sectionId: SectionId): string {
   if (sectionId === "tasks") {
+    if (source.resourceCounts.tasks === null) {
+      return "...";
+    }
+
     return String(
       source.largeTaskWindow.filter((task) =>
         task.parentId === null &&
@@ -44,11 +48,16 @@ export function sectionMetric(source: CoreViewModelSource, sectionId: SectionId)
   }
 
   if (sectionId === "calendar") {
-    return String(source.resourceCounts.calendarEvents);
+    return formatCount(source.resourceCounts.calendarEvents);
   }
 
   if (sectionId === "notes") {
-    return String(source.noteLists.reduce((count, list) => count + list.noteCount, 0));
+    if (source.resourceCounts.notes === null) {
+      return "...";
+    }
+
+    const loadedNoteCount = source.noteLists.reduce((count, list) => count + list.noteCount, 0);
+    return String(source.noteLists.length > 0 ? loadedNoteCount : source.resourceCounts.notes);
   }
 
   if (sectionId === "settings") {
@@ -56,4 +65,8 @@ export function sectionMetric(source: CoreViewModelSource, sectionId: SectionId)
   }
 
   return source.todayViewModel.metrics[0]?.value ?? "0";
+}
+
+function formatCount(count: number | null): string {
+  return count === null ? "..." : String(count);
 }

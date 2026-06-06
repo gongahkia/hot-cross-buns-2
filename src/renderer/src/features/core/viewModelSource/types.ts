@@ -148,9 +148,9 @@ export interface CoreDataSnapshot {
 }
 
 export interface CoreResourceCounts {
-  calendarEvents: number;
-  notes: number;
-  tasks: number;
+  calendarEvents: number | null;
+  notes: number | null;
+  tasks: number | null;
 }
 
 export interface CoreDataLoadState {
