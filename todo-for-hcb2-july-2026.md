@@ -136,6 +136,7 @@ Status key:
 
 ### Accounts and sync scope
 
+- Status: `Missing`.
 - Promote the account mirror to first-class multi-account:
   - list and manage all connected Google accounts, not only the latest account status
   - keep OAuth tokens, sync checkpoints, mutation queues, task lists, calendars, tasks, and events isolated per account
@@ -147,22 +148,21 @@ Status key:
 
 ### Tasks and organisation
 
+- Status: `Verify` for Kanban parity; `Partial` for tags/auto-tagging; `Missing` for Areas and duplicate detection.
 - Verify/finish Kanban parity beyond the current Google-list board if original `KanbanGrouping` behavior is not covered.
-- Add first-class tags:
+- Finish first-class tags beyond current string-tag/auto-tag support:
   - tag repository
   - tag-task many-to-many table
   - tag colors
   - tag CRUD
   - `@tag` extraction
   - tag filters and saved views
-- Add rule-based auto-tagging and color assignment:
-  - regex/prefix/contains rules over title and body/details
-  - examples like title starts with `CODING:` -> tag `coding` and color red
-  - apply on create and update for tasks, events, and notes
-  - rule priority/order and conflict handling
-  - preview/test-rule UI before enabling
-  - optional strip/keep matched prefixes
+- Harden current rule-based auto-tagging and color assignment:
   - "why was this tagged?" inspector/audit detail
+- Add auto-tag bulk tools:
+  - dry-run preview against existing tasks/events/notes
+  - apply/reapply changed rules to selected scopes
+  - undo/coalesced mutation handling for bulk reapply
 - Add hierarchical Areas:
   - area schema
   - area sort order
@@ -174,6 +174,7 @@ Status key:
   - tag/untag
   - batched/coalesced undo and mutation entries
 - Add duplicate detection and duplicate-review UI for tasks, events, and notes.
+  - Note: duplicate create controls are already done; this item is only detection/review/merge/dismissal.
 - Finish snooze UX:
   - inspector controls for `snoozeUntil`
   - visible snoozed state in task lists/today/search
@@ -197,6 +198,7 @@ Status key:
 
 ### Calendar
 
+- Status: `Partial`; Agenda/Day/Multi-Day/Week/Month are present, Year view is missing.
 - Verify/implement Year view if not present in renderer calendar view modes.
   - 4x3 mini-month grid
   - heatmap/count indicators
@@ -231,12 +233,14 @@ Status key:
 
 ### Today and review surfaces
 
+- Status: `Verify`; CLI/MCP `today` exists, renderer coverage still needs feature-specific audit.
 - Verify dedicated Today/Home surface coverage.
 - If incomplete, add overdue, due-today, scheduled, next-up, upcoming events, and sidebar-filter-aware sections.
 - Add forecast/review summary builders if still missing from original parity.
 
 ## 3. Linked markdown and knowledge graph
 
+- Status: `Partial`; task-backed note link parsing/broken-link tests exist, universal entity graph/backlinks are still missing.
 - Add shared wikilink parser for every markdown surface:
   - `[[note:...]]`
   - `[[task:...]]`
@@ -263,6 +267,7 @@ Status key:
 
 ## 4. Search, filters, and command surfaces
 
+- Status: `Partial`; basic local search and MCP/CLI search exist. Advanced operators/DSL/semantic/LLM/chat surfaces remain missing.
 - Add advanced search operators:
   - regex mode
   - `attendee:`
@@ -310,6 +315,8 @@ Status key:
 
 ## 5. User customisation layer
 
+- Status: `Missing` beyond existing built-in appearance/theme settings and event color overrides.
+
 ### CSS tokens and snippets
 
 - Audit renderer styles and publish stable CSS custom properties for colors, typography, spacing, radii, shadow, and motion.
@@ -356,6 +363,7 @@ Status key:
 
 ## 6. Data, import/export, and local files
 
+- Status: `Missing` for portable import/export, attachments, ICS, and reports beyond current print/support docs.
 - Verify/finish portable `.hcbexport` / `.hcb2export` workflow:
   - manifest
   - state
@@ -386,6 +394,7 @@ Status key:
 
 ## 7. Security, native Mac integration, and release polish
 
+- Status: `Partial`; base macOS-native shell, diagnostics, MCP loopback, Keychain-backed secrets, updater metadata/docs, and notifications scaffolding exist, but the items below still need product hardening.
 - Verify/finish local cache encryption as an opt-in, data-safety-gated feature:
   - keep unencrypted SQLite as the default until encrypted-cache migration is proven by tests and manual recovery drills
   - evaluate `better-sqlite3-multiple-ciphers` against current Electron/Node/macOS packaging, maintenance, license, prebuild, and deprecation risk
@@ -444,6 +453,7 @@ Status key:
   - reschedule diagnostics
 - Add renderer History / Sync Issues window if diagnostics history is insufficient.
 - Expand agent-native MCP, CLI, and local automation surface:
+  - Note: base MCP/CLI read/write CRUD, sync, queue, undo/redo, and convert tools are already done.
   - add `hcb_brief` read tool/resource returning one structured today summary with blocking tasks, overdue items, conflicts, suggested reorder, sync risk, and next events
   - populate `promptRegistry.ts` with curated parameterized prompts for day planning, inbox triage, week review, standup-note summaries, reschedule planning, duplicate review, and support/debug
   - add an in-app floating Pending agent action tray for queued `confirmationId`s, with approve/reject/expiry states and sanitized dry-run summaries
@@ -454,6 +464,7 @@ Status key:
   - keep all agent/CLI/webhook output redacted and context-budgeted
   - add tests for resource discovery, prompt discovery, prompt args, `hcb_brief` schema stability, confirmation tray approvals, `hcb tail`, `hcb plan`, and webhook validation/delivery
 - Audit MCP tool catalogue parity with original:
+  - Status: `Partial`; current tool registry is broad and tested, but original parity must be checked explicitly before closing this.
   - exact tool names
   - aliases such as `hcb_today`, `hcb_week`, `hcb_search`, `hcb_create_task`
   - per-tool dry-run / confirm-write / allow-write modes
