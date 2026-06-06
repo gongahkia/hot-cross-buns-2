@@ -433,11 +433,66 @@ describe("App shell", () => {
 
     const navigation = primaryNavigation();
 
-    await waitFor(() => {
-      expect(within(within(navigation).getByRole("button", { name: "Tasks" })).getByText("2")).toBeInTheDocument();
-      expect(within(within(navigation).getByRole("button", { name: "Calendar" })).getByText("18000")).toBeInTheDocument();
-      expect(within(within(navigation).getByRole("button", { name: "Notes" })).getByText("1")).toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(within(within(navigation).getByRole("button", { name: "Tasks" })).getByText("2")).toBeInTheDocument();
+        expect(within(within(navigation).getByRole("button", { name: "Calendar" })).getByText("18000")).toBeInTheDocument();
+        expect(within(within(navigation).getByRole("button", { name: "Notes" })).getByText("1")).toBeInTheDocument();
+      },
+      { timeout: 2500 }
+    );
+  });
+
+  it("renders deferred task and note counts as loading placeholders before hydration", async () => {
+    const api = seededHcb();
+    const bootstrapResult = await api.bootstrap.get({
+      mode: "light",
+      calendarRange: {
+        start: `${todayDate}T00:00:00.000Z`,
+        end: `${todayDate}T23:59:59.999Z`,
+        limit: 500
+      }
     });
+
+    if (!bootstrapResult.ok) {
+      throw new Error("Expected seeded bootstrap fixture.");
+    }
+
+    api.bootstrap.get = vi.fn(async () =>
+      ok({
+        ...bootstrapResult.data,
+        tasks: { items: [], page: { limit: 1, totalKnown: 0 } },
+        hiddenTasks: { items: [], page: { limit: 1, totalKnown: 0 } },
+        deletedTasks: { items: [], page: { limit: 1, totalKnown: 0 } },
+        notes: { items: [], lists: [], page: { limit: 1, totalKnown: 0 } },
+        resourceCounts: {
+          ...bootstrapResult.data.resourceCounts,
+          tasks: 0,
+          notes: 0
+        }
+      })
+    );
+
+    installHcb(api);
+    render(<App />);
+
+    await screen.findByRole("heading", { level: 1, name: "Calendar" });
+    const navigation = primaryNavigation();
+    const tasksButton = within(navigation).getByRole("button", { name: "Tasks" });
+    const notesButton = within(navigation).getByRole("button", { name: "Notes" });
+
+    expect(within(tasksButton).getByText("...")).toBeInTheDocument();
+    expect(within(notesButton).getByText("...")).toBeInTheDocument();
+    expect(within(tasksButton).queryByText("0")).not.toBeInTheDocument();
+    expect(within(notesButton).queryByText("0")).not.toBeInTheDocument();
+
+    await waitFor(
+      () => {
+        expect(within(tasksButton).getByText("2")).toBeInTheDocument();
+        expect(within(notesButton).getByText("1")).toBeInTheDocument();
+      },
+      { timeout: 2500 }
+    );
   });
 
   it("opens notifications as a toolbar overlay instead of a primary navigation section", async () => {
