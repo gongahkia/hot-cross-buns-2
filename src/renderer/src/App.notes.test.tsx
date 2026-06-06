@@ -75,13 +75,15 @@ describe("App notes", () => {
         title: "Untitled note",
         notes: "",
         listId: "list-inbox",
-        dueDate: null
+        dueDate: null,
+        tags: []
       });
       expect(api.tasks.update).toHaveBeenCalledWith({
         id: "task-created-1",
         title: "Release note draft",
         notes: "Document planner flow.",
-        dueDate: null
+        dueDate: null,
+        tags: []
       });
     });
 

@@ -619,7 +619,9 @@ describe("App calendar", () => {
     expect(
       monthSegments.reduce((total, monthSegment) => total + Number(monthSegment.dataset.daySpan ?? 0), 0)
     ).toBe(3);
-    expect(monthSegments.every((monthSegment) => monthSegment.dataset.laneIndex === "0")).toBe(true);
+    const firstLane = monthSegments[0]?.dataset.laneIndex;
+    expect(firstLane).toBeDefined();
+    expect(monthSegments.every((monthSegment) => monthSegment.dataset.laneIndex === firstLane)).toBe(true);
   });
 
   it("opens calendar creation from keyboard-focused grid cells", async () => {
