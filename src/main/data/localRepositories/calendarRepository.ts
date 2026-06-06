@@ -278,7 +278,7 @@ export class CalendarLocalRepository extends TaskLocalRepository {
       const operations: SqliteWriteOperation[] = [
         eventUpdateOperation({
           id: existing.eventId,
-          hcbKind: request.hcbKind ?? null,
+          hcbKind: request.hcbKind ?? existing.hcbKind ?? null,
           localTagsJson,
           timeZone,
           now,

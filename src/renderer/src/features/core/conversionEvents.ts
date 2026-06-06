@@ -19,6 +19,7 @@ export interface ConvertCommandDetail {
     listId?: string;
     listTitle?: string;
     replaceSource?: boolean;
+    tags?: string[];
     title: string;
   };
   eventDraft?: Partial<CalendarEventDraft>;

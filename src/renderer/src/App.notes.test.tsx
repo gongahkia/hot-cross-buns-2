@@ -122,7 +122,8 @@ describe("App notes", () => {
         id: "task-note-startup",
         title: "Startup data flow",
         notes: expect.stringContaining("Pending close flush."),
-        dueDate: null
+        dueDate: null,
+        tags: []
       });
     });
     expect(screen.queryByTestId("inspector-shell")).not.toBeInTheDocument();
@@ -151,7 +152,8 @@ describe("App notes", () => {
         title: "Startup data flow (copy)",
         notes: "Renderer paints from SQLite before fresh sync completes.",
         listId: "list-inbox",
-        dueDate: null
+        dueDate: null,
+        tags: []
       });
     });
   });
@@ -209,7 +211,8 @@ describe("App notes", () => {
         id: "task-note-startup",
         title: "Startup data flow",
         notes: expect.stringContaining("Switch flush."),
-        dueDate: null
+        dueDate: null,
+        tags: []
       });
     });
     const inspector = await screen.findByTestId("inspector-shell");
@@ -322,7 +325,8 @@ describe("App notes", () => {
         title: "Untitled note",
         notes: "",
         listId: "list-side",
-        dueDate: null
+        dueDate: null,
+        tags: []
       });
     });
   });

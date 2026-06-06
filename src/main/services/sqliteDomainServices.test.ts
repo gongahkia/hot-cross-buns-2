@@ -1324,6 +1324,84 @@ describe("SQLite-backed domain services", () => {
     expect(updated.recurrenceRule).toBe("RRULE:FREQ=YEARLY;INTERVAL=1;COUNT=2");
   });
 
+  it("applies auto tag rules to task, note, and event creates", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const createdAt = "2026-06-06T00:00:00.000Z";
+
+    await domain.settings.update({
+      autoTagRules: [{
+        id: "auto-coding",
+        name: "Coding",
+        enabled: true,
+        targetKinds: ["task", "event", "note"],
+        matchField: "title",
+        matchType: "prefix",
+        pattern: "CODING",
+        tags: ["coding"],
+        stripMatchedPrefix: true,
+        eventColorId: "5",
+        overrideExistingEventColor: false,
+        createdAt,
+        updatedAt: createdAt
+      }]
+    });
+
+    const task = await domain.planner.createTask({
+      title: "CODING: Build rules",
+      notes: "",
+      dueDate: null,
+      listId: "acct-1:task-list:inbox",
+      tags: ["manual"]
+    });
+    const note = await domain.planner.createNote({
+      title: "CODING: Notes",
+      body: "",
+      listId: "acct-1:task-list:inbox"
+    });
+    const event = await domain.planner.createCalendarEvent({
+      title: "CODING: Review",
+      calendarId: "acct-1:calendar:product",
+      startsAt: "2026-05-22T11:00:00.000Z",
+      endsAt: "2026-05-22T12:00:00.000Z"
+    });
+
+    expect(task).toMatchObject({
+      title: "Build rules",
+      tags: ["manual", "coding"]
+    });
+    expect(note).toMatchObject({
+      title: "Notes",
+      tags: ["coding"]
+    });
+    expect(event).toMatchObject({
+      title: "Review",
+      colorId: "5",
+      tags: ["coding"]
+    });
+  });
+
+  it("updates event tags locally without adding a Google mutation", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const created = await domain.planner.createCalendarEvent({
+      title: "Tag-only event",
+      calendarId: "acct-1:calendar:product",
+      startsAt: "2026-05-22T11:00:00.000Z",
+      endsAt: "2026-05-22T12:00:00.000Z"
+    });
+    const before = syncRepository.listActivePendingMutations({ limit: 20 }).length;
+
+    const updated = await domain.planner.updateCalendarEvent({
+      id: created.id,
+      tags: ["local"]
+    });
+    const after = syncRepository.listActivePendingMutations({ limit: 20 }).length;
+
+    expect(updated.tags).toEqual(["local"]);
+    expect(after).toBe(before);
+  });
+
   it("uses the calendar visible-range index for calendar id and start/end paths", () => {
     const { syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);

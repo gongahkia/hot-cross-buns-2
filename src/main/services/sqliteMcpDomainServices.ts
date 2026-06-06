@@ -561,7 +561,7 @@ function searchDomainsForScope(scope: string | undefined): SearchQueryRequest["d
 function calendarEventRequestFromJson(
   repository: LocalPlannerRepository,
   input: DomainJsonObject
-) {
+): CalendarEventCreateRequest {
   const startsAt = optionalText(input, "startsAt") ?? requiredText(input, "startDate");
   const endsAt = optionalText(input, "endsAt") ?? optionalText(input, "endDate") ?? startsAt;
 
@@ -580,11 +580,12 @@ function calendarEventRequestFromJson(
       ? {}
       : { colorId: optionalNullableText(input, "colorId") }),
     ...(optionalText(input, "timeZone") === undefined ? {} : { timeZone: optionalText(input, "timeZone") }),
+    ...(optionalText(input, "hcbKind") === "birthday" ? { hcbKind: "birthday" as const } : {}),
     ...(optionalRecurrence(input) === undefined ? {} : { recurrence: optionalRecurrence(input) })
   };
 }
 
-function calendarEventPatchFromJson(patch: DomainJsonObject) {
+function calendarEventPatchFromJson(patch: DomainJsonObject): Omit<CalendarEventUpdateRequest, "id"> {
   return {
     ...(optionalText(patch, "title") === undefined ? {} : { title: optionalText(patch, "title") }),
     ...(optionalText(patch, "calendarId") === undefined ? {} : { calendarId: optionalText(patch, "calendarId") }),
@@ -605,6 +606,7 @@ function calendarEventPatchFromJson(patch: DomainJsonObject) {
       ? {}
       : { colorId: optionalNullableText(patch, "colorId") }),
     ...(optionalText(patch, "timeZone") === undefined ? {} : { timeZone: optionalText(patch, "timeZone") }),
+    ...(optionalText(patch, "hcbKind") === "birthday" ? { hcbKind: "birthday" as const } : {}),
     ...(optionalRecurrence(patch) === undefined ? {} : { recurrence: optionalRecurrence(patch) })
   };
 }
