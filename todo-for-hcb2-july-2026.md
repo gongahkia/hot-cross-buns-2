@@ -6,10 +6,102 @@ Consolidated from:
 - `prompts-to-run-july-2026-to-port-to-diff-devices.md`
 - `proposed-optimisations-for-hcb2-july-2026.md`
 
-This is the single July 2026 planning todo. Items with current static evidence of being present were omitted. Ports stay last.
+This is the single July 2026 planning todo. Ports stay last.
+
+Last repo audit for this file: 2026-06-06.
+
+Status key:
+
+- `Done`: static repo evidence found.
+- `Partial`: implemented enough to use, but named hardening/depth remains.
+- `Missing`: no static repo evidence found during this audit.
+- `Verify`: likely present or adjacent code exists, but needs a feature-specific audit before code.
+- `Deferred`: intentionally parked.
+
+## Current status snapshot
+
+### Done / verified present
+
+- Task-backed notes are the current app/MCP/CLI model. Old local-only SQLite note tables are dropped by migration evidence, and docs/specs say notes sync through Google Tasks.
+- MCP/CLI v1 exists with Git-like reads and writes:
+  - reads: `doctor`, `status`, `log`, `diff`, `show`, `search`, `today`, `week`, list/get commands, undo status, pending mutations
+  - writes: sync/retry/cancel queue, create/update/delete task/event/note/list, rename lists, complete/reopen task/event, move task, schedule task block, settings/OAuth/MCP admin, undo/redo, convert
+  - dry-run/confirmation behavior exists for writes, destructive tools are guarded, and CLI docs exist.
+- CRUD coverage for tasks, events, notes, task lists, and note lists exists through the shared domain services used by UI and MCP/CLI.
+- Event completion exists as local HCB state for calendar events, including renderer behavior and MCP/CLI complete/reopen tools.
+- Convert flows exist for task/event/note primitives; birthdays are explicitly excluded from conversion.
+- Duplicate controls exist for task/event/note/birthday inspector flows; copies use `(copy)` naming and open as editable drafts.
+- Birthday events are first-class HCB calendar events with `hcbKind: "birthday"`, strict UI fields, Google `eventType`/birthday metadata read mapping, strict birthday create/update payload tests, and birthday-safe mutation worker handling.
+- Google Calendar event `colorId` is cached, written, theme-mapped, and user-overridable in Appearance settings.
+- Rule-based auto-tagging/color assignment exists for tasks/events/notes with settings toggle, validation, preview, conflict visibility, reorder controls, invalid-regex auto-disable, and tests.
+- Calendar has Agenda/Day/Multi-Day/Week/Month modes, overflow popovers titled `Items for <date>`, all-item overflow contents, completed-first ordering in overflow, and task-linked Google Calendar projection cleanup on task deletion.
+- Google account disconnected state is surfaced as a user-visible issue while cached SQLite data can still render.
+- Sidebar task/note counts use HCB-visible task-backed counts instead of raw Google/cache totals.
+- Full unit suite was previously green after the latest auto-tag/settings hardening pass.
+
+### Partial / still worth drilling down
+
+- Tags exist as string metadata and auto-tag outputs, but there is no first-class tag repository, many-to-many table, tag CRUD UI, saved tag views, or tag analytics.
+- Auto-tagging lacks inspector-level "why was this tagged?" audit detail and bulk backfill/reapply controls.
+- Duplicate controls exist, but duplicate detection/review UI is still missing.
+- Conversion works, but should get one live/manual QA pass against real Google sync for replace-original cleanup and queued mutation replay.
+- MCP/CLI is featureful, but advanced agent-native surfaces like `hcb_brief`, prompt registry, `hcb tail`, `hcb plan`, webhooks, and pending agent action tray are still missing.
+- Birthday Google payload shape is unit-tested, but live Google API smoke for birthday create/update/delete is still the main external-risk test.
+- Quick-add/NL parsing has meaningful code and tests, including recurrence handling, but not the full chrono-style parser depth listed below.
+- Calendar recurrence UI exists, but full Google-safe recurring edit scope and RRULE depth still need audit/finish work.
+
+### Missing / not implemented yet
+
+- Startup bootstrap snapshot and schedule-suggestion deferral.
+- Near-immediate pending queue drain after CRUD.
+- First-class multi-account isolation and merged multi-account Today.
+- Hierarchical Areas.
+- Bulk operations with coalesced undo/mutation entries.
+- Year view.
+- Advanced search operators, custom-filter DSL, pinned filters.
+- Semantic search, local LLM provider, and conversational planning sidebar.
+- CSS snippets, JSON config/keymaps, and sandboxed user extensions.
+- Portable export/import, attachments, ICS import/subscriptions.
+- Cache encryption, sync mode selector, retention/cleanup settings.
+- Spotlight/Raycast/Alfred/App Intents/Shortcuts/Share Extension.
+- Rich notification actions.
+- Renderer History / Sync Issues window.
+- Linux/Windows ports.
+
+## Recommended next implementation order
+
+1. Startup/sync snappiness:
+   - defer `calendar.scheduleSuggest`
+   - add one bootstrap IPC snapshot
+   - trigger debounced queue drains after CRUD
+   - reason: highest direct UX payoff with no new product concept.
+2. Duplicate detection/review:
+   - find probable duplicate tasks/events/notes
+   - review, dismiss, merge/delete flows
+   - reason: duplicate controls now exist; detection is the matching cleanup surface.
+3. First-class tags:
+   - tag table/repository, tag CRUD, tag colors, filters, saved views
+   - auto-tag audit detail: "why was this tagged?"
+   - reason: auto-tagging currently creates tag value, but tags are not yet a durable product primitive.
+4. Recurrence correctness:
+   - recurring edit scope, deeper RRULE editor, round-trip tests
+   - reason: high-risk calendar behavior; better before broad calendar automation.
+5. Search/filter depth:
+   - advanced operators, custom DSL, saved queries, pinned filters
+   - reason: pays off after tags/areas exist.
+6. Agent-native MCP/CLI v2:
+   - `hcb_brief`, prompt registry, `hcb tail`, `hcb plan`, pending action tray
+   - reason: v1 CRUD/read surface is done; v2 should focus on planner-level summaries and safe proposed writes.
+7. Import/export and data safety:
+   - deterministic `.hcb2export`, dry-run import diff, backups
+   - reason: needed before real-user beta and before risky migrations/encryption.
+8. Release hardening:
+   - live Google smoke, external MCP client QA, notification actions, updater, packaging/signing checks
+   - reason: product-readiness work after feature slices stabilize.
 
 ## 0. Planning gate
 
+- 2026-06-06: this file was re-audited against the current repo. Repeat before any implementation slice.
 - Re-audit current repo and `../hot-cross-buns` before implementation.
 - For each item below, classify as `Present`, `Partial`, `Missing`, or `Deferred-with-reason` before code.
 - Inspect at minimum:
@@ -27,6 +119,7 @@ This is the single July 2026 planning todo. Items with current static evidence o
 
 ## 1. Startup and sync optimisations
 
+- Status: `Missing`; recommended next slice.
 - Defer `calendar.scheduleSuggest` until after first useful render.
   - Initial snapshot should render tasks, calendar, notes, settings, sync status, Google status, and native status without waiting for suggestions.
   - Today/schedule UI needs stable pending and empty states.
