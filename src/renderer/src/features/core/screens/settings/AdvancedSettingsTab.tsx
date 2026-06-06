@@ -16,6 +16,8 @@ import type {
   TaskListSummary
 } from "@shared/ipc/contracts";
 import {
+  ArrowDown,
+  ArrowUp,
   Archive,
   CalendarDays,
   ChevronRight,
@@ -30,7 +32,7 @@ import {
   Tag,
   Upload
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Input } from "../../../../components/primitives";
 import { EmptyState } from "../../../../components/states";
 import { parseTagText } from "../../TagInput";
@@ -66,6 +68,25 @@ const historyCategoryLabels: Record<keyof SettingsSnapshot["historyCategoryVisib
 };
 
 const autoTagTargetKinds: AutoTagTargetKind[] = ["task", "event", "note"];
+type AutoTagPreviewLocalKind = "normal" | "birthday";
+
+function autoTagRuleHasError(rule: AutoTagRule): boolean {
+  return validateAutoTagRule(rule).some((issue) => issue.severity === "error");
+}
+
+function autoDisableInvalidAutoTagRules(rules: AutoTagRule[], now: string): AutoTagRule[] {
+  let changed = false;
+  const nextRules = rules.map((rule) => {
+    if (!rule.enabled || !autoTagRuleHasError(rule)) {
+      return rule;
+    }
+
+    changed = true;
+    return { ...rule, enabled: false, updatedAt: now };
+  });
+
+  return changed ? nextRules : rules;
+}
 
 export function AdvancedSettingsTab({
   beginRecoveryAction,
@@ -82,20 +103,57 @@ export function AdvancedSettingsTab({
   const [autoTagPreviewKind, setAutoTagPreviewKind] = useState<AutoTagTargetKind>("task");
   const [autoTagPreviewTitle, setAutoTagPreviewTitle] = useState("CODING: Ship planner polish");
   const [autoTagPreviewBody, setAutoTagPreviewBody] = useState("");
+  const [autoTagPreviewExistingTags, setAutoTagPreviewExistingTags] = useState("");
+  const [autoTagPreviewExplicitTags, setAutoTagPreviewExplicitTags] = useState("");
+  const [autoTagPreviewExistingColorId, setAutoTagPreviewExistingColorId] = useState("");
+  const [autoTagPreviewRequestedColorId, setAutoTagPreviewRequestedColorId] = useState("");
+  const [autoTagPreviewLocalKind, setAutoTagPreviewLocalKind] = useState<AutoTagPreviewLocalKind>("normal");
+  const autoTagPreviewExistingTagValues = useMemo(
+    () => parseTagText(autoTagPreviewExistingTags),
+    [autoTagPreviewExistingTags]
+  );
+  const autoTagPreviewExplicitTagValues = useMemo(
+    () => parseTagText(autoTagPreviewExplicitTags),
+    [autoTagPreviewExplicitTags]
+  );
   const autoTagPreview = useMemo(
     () =>
       previewAutoTagRules(settings.autoTagRules, {
         kind: autoTagPreviewKind,
         title: autoTagPreviewTitle,
         body: autoTagPreviewBody,
-        explicitTags: [],
-        existingTags: []
+        explicitTags: autoTagPreviewExplicitTagValues,
+        existingTags: autoTagPreviewExistingTagValues,
+        existingEventColorId: autoTagPreviewExistingColorId || null,
+        requestedEventColorId: autoTagPreviewRequestedColorId || null,
+        hcbKind: autoTagPreviewLocalKind === "birthday" ? "birthday" : null
       }),
-    [autoTagPreviewBody, autoTagPreviewKind, autoTagPreviewTitle, settings.autoTagRules]
+    [
+      autoTagPreviewBody,
+      autoTagPreviewExistingColorId,
+      autoTagPreviewExistingTagValues,
+      autoTagPreviewExplicitTagValues,
+      autoTagPreviewKind,
+      autoTagPreviewLocalKind,
+      autoTagPreviewRequestedColorId,
+      autoTagPreviewTitle,
+      settings.autoTagRules
+    ]
   );
-  const autoTagErrors = autoTagPreview.issues.filter((issue) => issue.severity === "error");
-  const autoTagWarnings = autoTagPreview.issues.filter((issue) => issue.severity === "warning");
-  const autoTagMatchedTraces = autoTagPreview.traces.filter((trace) => trace.status === "matched");
+  const autoTagRuleIssues = useMemo(
+    () => settings.autoTagRules.flatMap((rule) => validateAutoTagRule(rule)),
+    [settings.autoTagRules]
+  );
+  const autoTagErrors = autoTagRuleIssues.filter((issue) => issue.severity === "error");
+  const autoTagWarnings = autoTagRuleIssues.filter((issue) => issue.severity === "warning");
+
+  useEffect(() => {
+    const nextRules = autoDisableInvalidAutoTagRules(settings.autoTagRules, new Date().toISOString());
+
+    if (nextRules !== settings.autoTagRules) {
+      updateSettings({ autoTagRules: nextRules });
+    }
+  }, [settings.autoTagRules, updateSettings]);
 
   function updatePerTabFilter(
     tab: keyof SettingsSnapshot["perTabListFilters"],
@@ -210,37 +268,57 @@ export function AdvancedSettingsTab({
     });
   }
 
+  function saveAutoTagRules(autoTagRules: AutoTagRule[]): void {
+    updateSettings({
+      autoTagRules: autoDisableInvalidAutoTagRules(autoTagRules, new Date().toISOString())
+    });
+  }
+
   function addAutoTagRule(): void {
     const now = new Date().toISOString();
-    updateSettings({
-      autoTagRules: [
-        ...settings.autoTagRules,
-        {
-          id: crypto.randomUUID(),
-          name: `Auto tag ${settings.autoTagRules.length + 1}`,
-          enabled: true,
-          targetKinds: ["task", "event", "note"],
-          matchField: "title",
-          matchType: "prefix",
-          pattern: "TODO",
-          tags: ["todo"],
-          stripMatchedPrefix: false,
-          eventColorId: null,
-          overrideExistingEventColor: false,
-          createdAt: now,
-          updatedAt: now
-        }
-      ]
-    });
+    saveAutoTagRules([
+      ...settings.autoTagRules,
+      {
+        id: crypto.randomUUID(),
+        name: `Auto tag ${settings.autoTagRules.length + 1}`,
+        enabled: true,
+        targetKinds: ["task", "event", "note"],
+        matchField: "title",
+        matchType: "prefix",
+        pattern: "TODO",
+        tags: ["todo"],
+        stripMatchedPrefix: false,
+        eventColorId: null,
+        overrideExistingEventColor: false,
+        createdAt: now,
+        updatedAt: now
+      }
+    ]);
+  }
+
+  function moveAutoTagRule(fromIndex: number, toIndex: number): void {
+    if (toIndex < 0 || toIndex >= settings.autoTagRules.length || fromIndex === toIndex) {
+      return;
+    }
+
+    const nextRules = [...settings.autoTagRules];
+    const [rule] = nextRules.splice(fromIndex, 1);
+
+    if (!rule) {
+      return;
+    }
+
+    nextRules.splice(toIndex, 0, rule);
+    saveAutoTagRules(nextRules);
   }
 
   function updateAutoTagRule(ruleId: string, patch: Partial<AutoTagRule>): void {
     const now = new Date().toISOString();
-    updateSettings({
-      autoTagRules: settings.autoTagRules.map((rule) =>
+    saveAutoTagRules(
+      settings.autoTagRules.map((rule) =>
         rule.id === ruleId ? { ...rule, ...patch, updatedAt: now } : rule
       )
-    });
+    );
   }
 
   function toggleAutoTagTarget(rule: AutoTagRule, kind: AutoTagTargetKind, checked: boolean): void {
@@ -266,7 +344,7 @@ export function AdvancedSettingsTab({
       ...(parsed.taskTemplates ? { taskTemplates: parsed.taskTemplates } : {}),
       ...(parsed.eventTemplates ? { eventTemplates: parsed.eventTemplates } : {}),
       ...(parsed.noteTemplates ? { noteTemplates: parsed.noteTemplates } : {}),
-      ...(parsed.autoTagRules ? { autoTagRules: parsed.autoTagRules } : {})
+      ...(parsed.autoTagRules ? { autoTagRules: autoDisableInvalidAutoTagRules(parsed.autoTagRules, new Date().toISOString()) } : {})
     });
   }
 
@@ -612,6 +690,68 @@ export function AdvancedSettingsTab({
             placeholder="Body preview"
             value={autoTagPreviewBody}
           />
+          <div className="grid gap-2 lg:grid-cols-3">
+            <Input
+              aria-label="Auto tag preview existing tags"
+              label="Existing tags"
+              onChange={(event) => setAutoTagPreviewExistingTags(event.currentTarget.value)}
+              placeholder="ops, coding"
+              value={autoTagPreviewExistingTags}
+            />
+            <Input
+              aria-label="Auto tag preview explicit tags"
+              label="Explicit tags"
+              onChange={(event) => setAutoTagPreviewExplicitTags(event.currentTarget.value)}
+              placeholder="manual, launch"
+              value={autoTagPreviewExplicitTags}
+            />
+            <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+              <span>Local kind</span>
+              <select
+                aria-label="Auto tag preview local kind"
+                className={settingsSelectClass}
+                onChange={(event) => setAutoTagPreviewLocalKind(event.target.value as AutoTagPreviewLocalKind)}
+                value={autoTagPreviewLocalKind}
+              >
+                <option value="normal">Normal</option>
+                <option value="birthday">Birthday</option>
+              </select>
+            </label>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-2">
+            <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+              <span>Requested event color</span>
+              <select
+                aria-label="Auto tag preview requested event color"
+                className={settingsSelectClass}
+                onChange={(event) => setAutoTagPreviewRequestedColorId(event.target.value)}
+                value={autoTagPreviewRequestedColorId}
+              >
+                <option value="">No requested color</option>
+                {googleCalendarEventColors.map((color) => (
+                  <option key={color.id} value={color.id}>
+                    {color.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+              <span>Existing event color</span>
+              <select
+                aria-label="Auto tag preview existing event color"
+                className={settingsSelectClass}
+                onChange={(event) => setAutoTagPreviewExistingColorId(event.target.value)}
+                value={autoTagPreviewExistingColorId}
+              >
+                <option value="">No existing color</option>
+                {googleCalendarEventColors.map((color) => (
+                  <option key={color.id} value={color.id}>
+                    {color.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="grid gap-2 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-sm)] text-text-secondary">
             <div className="flex flex-wrap gap-2">
               <Badge tone={autoTagPreview.matchedRuleCount > 0 ? "success" : "neutral"}>

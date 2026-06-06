@@ -97,11 +97,13 @@ export function SettingsSearchProvider({
 
 export function SettingsTabButton({
   active,
+  alertCount = 0,
   icon: Icon,
   label,
   onClick
 }: {
   active: boolean;
+  alertCount?: number;
   icon: LucideIcon;
   label: string;
   onClick: () => void;
@@ -120,6 +122,15 @@ export function SettingsTabButton({
     >
       <Icon aria-hidden="true" className="shrink-0" size={16} strokeWidth={2} />
       <span className="truncate">{label}</span>
+      {alertCount > 0 ? (
+        <span
+          aria-hidden="true"
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-bg-primary"
+          title={`${alertCount} ${alertCount === 1 ? "issue" : "issues"}`}
+        >
+          {alertCount}
+        </span>
+      ) : null}
     </button>
   );
 }

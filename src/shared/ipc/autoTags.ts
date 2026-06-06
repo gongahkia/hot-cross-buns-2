@@ -160,11 +160,6 @@ function evaluateAutoTagRules(
       tagsAfter: [...tags]
     };
 
-    if (!rule.enabled) {
-      traces.push({ ...baseTrace, status: "disabled" });
-      return;
-    }
-
     if (!rule.targetKinds.includes(input.kind)) {
       traces.push({ ...baseTrace, status: "target-mismatch" });
       return;
@@ -172,6 +167,11 @@ function evaluateAutoTagRules(
 
     if (ruleIssues.some((issue) => issue.severity === "error")) {
       traces.push({ ...baseTrace, status: "invalid" });
+      return;
+    }
+
+    if (!rule.enabled) {
+      traces.push({ ...baseTrace, status: "disabled" });
       return;
     }
 

@@ -4,6 +4,7 @@ import type {
   SettingsSnapshot,
   SettingsUpdateRequest
 } from "@shared/ipc/contracts";
+import { validateAutoTagRule } from "@shared/ipc/autoTags";
 import {
   appColorThemes,
   defaultAppColorTheme,
@@ -250,6 +251,13 @@ export function SettingsView({
       .filter(([, text]) => settingsSearchMatches(text, normalizedSettingsQuery))
       .map(([id]) => id);
   }, [normalizedSettingsQuery, settingsSearchTexts]);
+  const autoTagRuleErrorCount = useMemo(
+    () =>
+      settings.autoTagRules.filter((rule) =>
+        validateAutoTagRule(rule).some((issue) => issue.severity === "error")
+      ).length,
+    [settings.autoTagRules]
+  );
 
   useEffect(() => {
     setGoogleClientId(googleStatus.clientId ?? "");
@@ -487,6 +495,7 @@ export function SettingsView({
         />
         <SettingsTabButton
           active={selectedSettingsTab === "advanced"}
+          alertCount={autoTagRuleErrorCount}
           icon={SlidersHorizontal}
           label="Advanced"
           onClick={() => setSelectedSettingsTab("advanced")}
