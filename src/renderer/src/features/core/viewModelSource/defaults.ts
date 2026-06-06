@@ -37,6 +37,7 @@ export const emptySettings: SettingsSnapshot = {
   uiTextSizePoints: 13,
   perSurfaceFontOverrides: {},
   calendarEventColorOverrides: {},
+  autoTagRules: [],
   disableAnimations: false,
   uiLayoutScale: 1,
   navigationPlacement: "left",

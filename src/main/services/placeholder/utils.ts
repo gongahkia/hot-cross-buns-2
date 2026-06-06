@@ -175,6 +175,10 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
     patch.calendarEventColorOverrides = request.calendarEventColorOverrides;
   }
 
+  if (request.autoTagRules !== undefined) {
+    patch.autoTagRules = request.autoTagRules;
+  }
+
   if (request.disableAnimations !== undefined) {
     patch.disableAnimations = request.disableAnimations;
   }

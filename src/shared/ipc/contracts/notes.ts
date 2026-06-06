@@ -56,6 +56,7 @@ export const noteSummarySchema = z
     listTitle: z.string().min(1).max(200),
     title: z.string().min(1).max(500),
     preview: z.string().max(500),
+    tags: z.array(z.string().min(1).max(120)).max(64).optional(),
     updatedAt: isoDateTimeSchema
   })
   .strict();
@@ -79,7 +80,8 @@ export const noteCreateRequestSchema = z
   .object({
     listId: idSchema.optional(),
     title: z.string().min(1).max(500),
-    body: z.string().max(50_000).default("")
+    body: z.string().max(50_000).default(""),
+    tags: z.array(z.string().min(1).max(120)).max(64).optional()
   })
   .strict();
 
@@ -90,12 +92,20 @@ export const noteUpdateRequestSchema = z
     id: idSchema,
     listId: idSchema.optional(),
     title: z.string().min(1).max(500).optional(),
-    body: z.string().max(50_000).optional()
+    body: z.string().max(50_000).optional(),
+    tags: z.array(z.string().min(1).max(120)).max(64).optional()
   })
   .strict()
-  .refine((request) => request.title !== undefined || request.body !== undefined || request.listId !== undefined, {
-    message: "At least one note field must be supplied"
-  });
+  .refine(
+    (request) =>
+      request.title !== undefined ||
+      request.body !== undefined ||
+      request.listId !== undefined ||
+      request.tags !== undefined,
+    {
+      message: "At least one note field must be supplied"
+    }
+  );
 
 export type NoteUpdateRequest = z.input<typeof noteUpdateRequestSchema>;
 

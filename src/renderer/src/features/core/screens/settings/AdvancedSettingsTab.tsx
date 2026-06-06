@@ -193,7 +193,8 @@ export function AdvancedSettingsTab({
       ...(parsed.savedTaskViews ? { savedTaskViews: parsed.savedTaskViews } : {}),
       ...(parsed.taskTemplates ? { taskTemplates: parsed.taskTemplates } : {}),
       ...(parsed.eventTemplates ? { eventTemplates: parsed.eventTemplates } : {}),
-      ...(parsed.noteTemplates ? { noteTemplates: parsed.noteTemplates } : {})
+      ...(parsed.noteTemplates ? { noteTemplates: parsed.noteTemplates } : {}),
+      ...(parsed.autoTagRules ? { autoTagRules: parsed.autoTagRules } : {})
     });
   }
 

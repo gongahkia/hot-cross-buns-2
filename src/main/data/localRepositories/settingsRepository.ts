@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   uiTextSizePoints: 13,
   perSurfaceFontOverrides: {},
   calendarEventColorOverrides: {},
+  autoTagRules: [],
   disableAnimations: false,
   uiLayoutScale: 1,
   navigationPlacement: "left",
@@ -118,6 +119,7 @@ export class LocalSettingsRepository {
         "eventColorOverrides",
         DEFAULT_SETTINGS.calendarEventColorOverrides
       ),
+      autoTagRules: this.readSetting("tags", "autoRules", DEFAULT_SETTINGS.autoTagRules),
       disableAnimations: this.readSetting(
         "appearance",
         "disableAnimations",
@@ -407,6 +409,10 @@ export class LocalSettingsRepository {
 
     if (request.calendarEventColorOverrides !== undefined) {
       this.writeSetting("calendar", "eventColorOverrides", request.calendarEventColorOverrides, now);
+    }
+
+    if (request.autoTagRules !== undefined) {
+      this.writeSetting("tags", "autoRules", request.autoTagRules, now);
     }
 
     if (request.disableAnimations !== undefined) {

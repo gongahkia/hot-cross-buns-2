@@ -132,6 +132,29 @@ export const calendarEventColorOverridesSchema = z
   .record(z.enum(googleCalendarEventColorIds), calendarEventColorOverrideSchema)
   .default({});
 
+export const autoTagRuleMatchKindSchema = z.enum(["prefix", "contains", "regex"]);
+export const autoTagRuleTargetKindSchema = z.enum(["task", "event", "note"]);
+export const autoTagRuleMatchFieldSchema = z.enum(["title", "body", "anyText"]);
+export const autoTagRuleSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().trim().min(1).max(80),
+    enabled: z.boolean(),
+    targetKinds: z.array(autoTagRuleTargetKindSchema).min(1).max(3),
+    matchField: autoTagRuleMatchFieldSchema,
+    matchType: autoTagRuleMatchKindSchema,
+    pattern: z.string().trim().min(1).max(500),
+    tags: z.array(z.string().trim().min(1).max(120)).max(64),
+    stripMatchedPrefix: z.boolean(),
+    eventColorId: z.enum(googleCalendarEventColorIds).nullable(),
+    overrideExistingEventColor: z.boolean(),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type AutoTagRule = z.infer<typeof autoTagRuleSchema>;
+
 export const savedSearchViewSchema = z
   .object({
     id: idSchema,
@@ -221,6 +244,7 @@ export const settingsSnapshotSchema = z
     uiTextSizePoints: uiTextSizePointsSchema,
     perSurfaceFontOverrides: perSurfaceFontOverridesSchema,
     calendarEventColorOverrides: calendarEventColorOverridesSchema,
+    autoTagRules: z.array(autoTagRuleSchema).max(200),
     disableAnimations: z.boolean(),
     uiLayoutScale: z.number().min(0.8).max(1.5),
     navigationPlacement: navigationPlacementSchema,
@@ -298,6 +322,7 @@ export const settingsUpdateRequestSchema = z
     uiTextSizePoints: uiTextSizePointsSchema.optional(),
     perSurfaceFontOverrides: perSurfaceFontOverridesSchema.optional(),
     calendarEventColorOverrides: calendarEventColorOverridesSchema.optional(),
+    autoTagRules: z.array(autoTagRuleSchema).max(200).optional(),
     disableAnimations: z.boolean().optional(),
     uiLayoutScale: z.number().min(0.8).max(1.5).optional(),
     navigationPlacement: navigationPlacementSchema.optional(),

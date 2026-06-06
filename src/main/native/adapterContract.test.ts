@@ -19,6 +19,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     uiTextSizePoints: 13,
     perSurfaceFontOverrides: {},
     calendarEventColorOverrides: {},
+    autoTagRules: [],
     disableAnimations: false,
     uiLayoutScale: 1,
     navigationPlacement: "left",
