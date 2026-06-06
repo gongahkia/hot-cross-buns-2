@@ -65,6 +65,7 @@ describe("shared IPC contracts", () => {
 
   it("defines every required domain namespace", () => {
     expect(hcbDomainSchema.options).toEqual([
+      "bootstrap",
       "tasks",
       "calendar",
       "notes",
@@ -77,6 +78,43 @@ describe("shared IPC contracts", () => {
       "native",
       "diagnostics"
     ]);
+  });
+
+  it("validates bootstrap and drain-only sync contracts", () => {
+    expect(
+      ipcContracts.bootstrap.get.requestSchema.parse({
+        calendarRange: {
+          start: "2026-05-22T00:00:00.000Z",
+          end: "2026-05-23T00:00:00.000Z"
+        }
+      })
+    ).toMatchObject({
+      calendarRange: {
+        limit: 100
+      }
+    });
+    expect(
+      ipcContracts.sync.runNow.requestSchema.parse({
+        drainOnly: true
+      })
+    ).toEqual({
+      drainOnly: true,
+      full: false,
+      dryRun: false
+    });
+    expect(
+      ipcContracts.sync.runNow.responseSchema.parse({
+        accepted: true,
+        dryRun: false,
+        drainOnly: true,
+        resources: []
+      })
+    ).toEqual({
+      accepted: true,
+      dryRun: false,
+      drainOnly: true,
+      resources: []
+    });
   });
 
   it("applies bounded defaults to list requests", () => {

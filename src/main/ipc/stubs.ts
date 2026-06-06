@@ -13,6 +13,7 @@ function stub(contract: IpcContract, message: string): IpcHandlerDefinition {
 
 export function createStubIpcHandlers(): IpcHandlerDefinition[] {
   return [
+    stub(ipcContracts.bootstrap.get, "Bootstrap loading is not implemented yet"),
     stub(ipcContracts.tasks.list, "Task listing is not implemented yet"),
     stub(ipcContracts.tasks.get, "Task detail loading is not implemented yet"),
     stub(ipcContracts.calendar.listEvents, "Calendar range loading is not implemented yet"),

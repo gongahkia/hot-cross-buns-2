@@ -70,32 +70,27 @@ Status key:
 
 ## Recommended next implementation order
 
-1. Startup/sync snappiness:
-   - defer `calendar.scheduleSuggest`
-   - add one bootstrap IPC snapshot
-   - trigger debounced queue drains after CRUD
-   - reason: highest direct UX payoff with no new product concept.
-2. Duplicate detection/review:
+1. Duplicate detection/review:
    - find probable duplicate tasks/events/notes
    - review, dismiss, merge/delete flows
    - reason: duplicate controls now exist; detection is the matching cleanup surface.
-3. First-class tags:
+2. First-class tags:
    - tag table/repository, tag CRUD, tag colors, filters, saved views
    - auto-tag audit detail: "why was this tagged?"
    - reason: auto-tagging currently creates tag value, but tags are not yet a durable product primitive.
-4. Recurrence correctness:
+3. Recurrence correctness:
    - recurring edit scope, deeper RRULE editor, round-trip tests
    - reason: high-risk calendar behavior; better before broad calendar automation.
-5. Search/filter depth:
+4. Search/filter depth:
    - advanced operators, custom DSL, saved queries, pinned filters
    - reason: pays off after tags/areas exist.
-6. Agent-native MCP/CLI v2:
+5. Agent-native MCP/CLI v2:
    - `hcb_brief`, prompt registry, `hcb tail`, `hcb plan`, pending action tray
    - reason: v1 CRUD/read surface is done; v2 should focus on planner-level summaries and safe proposed writes.
-7. Import/export and data safety:
+6. Import/export and data safety:
    - deterministic `.hcb2export`, dry-run import diff, backups
    - reason: needed before real-user beta and before risky migrations/encryption.
-8. Release hardening:
+7. Release hardening:
    - live Google smoke, external MCP client QA, notification actions, updater, packaging/signing checks
    - reason: product-readiness work after feature slices stabilize.
 
@@ -119,7 +114,7 @@ Status key:
 
 ## 1. Startup and sync optimisations
 
-- Status: `Missing`; recommended next slice.
+- Status: `Done`; implemented 2026-06-06.
 - Defer `calendar.scheduleSuggest` until after first useful render.
   - Initial snapshot should render tasks, calendar, notes, settings, sync status, Google status, and native status without waiting for suggestions.
   - Today/schedule UI needs stable pending and empty states.

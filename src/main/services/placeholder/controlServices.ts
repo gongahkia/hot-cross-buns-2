@@ -19,9 +19,12 @@ export function createPlaceholderControlServices(
     sync: {
       status: () => ({ ...state.sync }),
       runNow: (request) => {
-        const resources = [...new Set(request.resources ?? ["tasks", "calendar"])] as Array<
-          "tasks" | "calendar"
-        >;
+        const drainOnly = request.drainOnly ?? false;
+        const resources = drainOnly
+          ? []
+          : [...new Set(request.resources ?? ["tasks", "calendar"])] as Array<
+              "tasks" | "calendar"
+            >;
 
         if (!request.dryRun) {
           state.sync = {
@@ -34,6 +37,7 @@ export function createPlaceholderControlServices(
         return {
           accepted: true,
           dryRun: request.dryRun ?? false,
+          drainOnly,
           resources
         } satisfies SyncRunNowResponse;
       }

@@ -1,4 +1,5 @@
 import type {
+  BootstrapGetResponse,
   CalendarListRequest,
   CalendarListResponse,
   CalendarRangeRequest,
@@ -13,7 +14,7 @@ import type {
   TaskListsRequest,
   TaskListsResponse
 } from "@shared/ipc/contracts";
-import { dateOnlyFromLocalDate, visibleCalendarRange } from "./dateFormat";
+import { visibleCalendarRange } from "./dateFormat";
 import { unwrap } from "./result";
 import { uniqueTasks } from "./taskViewModels";
 import type { CoreDataSnapshot } from "./types";
@@ -77,6 +78,20 @@ export async function loadCoreData(
   }
 
   const hcb = window.hcb;
+  const bootstrap = hcb.bootstrap?.get
+    ? await hcb.bootstrap.get({
+        calendarRange: {
+          start: calendarRange.start,
+          end: calendarRange.end,
+          limit: 500
+        }
+      })
+    : null;
+
+  if (bootstrap?.ok) {
+    return snapshotFromBootstrap(bootstrap.data);
+  }
+
   const settingsLoad =
     settingsPromise ?? hcb.settings.get().then((result) => unwrap(result, "Settings failed"));
   const [
@@ -135,25 +150,17 @@ export async function loadCoreData(
     hcb.undo.status().then((result) => unwrap(result, "Undo status failed")),
     hcb.native.capabilities().then((result) => unwrap(result, "Native status failed"))
   ]);
-  const scheduleDate = dateOnlyFromLocalDate(new Date());
-  const scheduleSuggestion = await hcb.calendar
-    .scheduleSuggest({
-      date: scheduleDate,
-      capacityMinutes: settings.todayCapacityMinutes,
-      workingHours: {
-        start: settings.todayWorkingHoursStart,
-        end: settings.todayWorkingHoursEnd
-      }
-    })
-    .then((result) => unwrap(result, "Schedule suggestion failed"));
-
   return {
     taskLists: taskLists.items,
     tasks: uniqueTasks([...tasks.items, ...hiddenTasks.items, ...deletedTasks.items]),
     calendars: calendars.items,
     events: events.items,
     scheduledTaskBlocks: scheduledTaskBlocks.items,
-    scheduleSuggestion,
+    scheduleSuggestion: {
+      slots: [],
+      unscheduled: [],
+      overloadMinutes: 0
+    },
     notes: notes.items,
     noteLists: notes.lists,
     settings,
@@ -172,5 +179,32 @@ export async function loadCoreData(
           knownTotal(hiddenTasks.page.totalKnown, hiddenTasks.items.length) +
           knownTotal(deletedTasks.page.totalKnown, deletedTasks.items.length)
     }
+  };
+}
+
+function snapshotFromBootstrap(bootstrap: BootstrapGetResponse): CoreDataSnapshot {
+  return {
+    taskLists: bootstrap.taskLists.items,
+    tasks: uniqueTasks([
+      ...bootstrap.tasks.items,
+      ...bootstrap.hiddenTasks.items,
+      ...bootstrap.deletedTasks.items
+    ]),
+    calendars: bootstrap.calendars.items,
+    events: bootstrap.events.items,
+    scheduledTaskBlocks: bootstrap.scheduledTaskBlocks.items,
+    scheduleSuggestion: {
+      slots: [],
+      unscheduled: [],
+      overloadMinutes: 0
+    },
+    notes: bootstrap.notes.items,
+    noteLists: bootstrap.notes.lists,
+    settings: bootstrap.settings,
+    syncStatus: bootstrap.syncStatus,
+    googleStatus: bootstrap.googleStatus,
+    undoStatus: bootstrap.undoStatus,
+    native: bootstrap.native,
+    resourceCounts: bootstrap.resourceCounts
   };
 }

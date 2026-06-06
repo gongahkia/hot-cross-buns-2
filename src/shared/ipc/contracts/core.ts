@@ -22,6 +22,7 @@ export const MAX_RANGE_WINDOW_DAYS = 397;
 export const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
 export const hcbDomainSchema = z.enum([
+  "bootstrap",
   "tasks",
   "calendar",
   "notes",

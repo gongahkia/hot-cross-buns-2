@@ -70,18 +70,22 @@ export class LocalSyncControlService implements SyncControlDomainService {
 
   async runNow(request: SyncRunNowRequest): Promise<SyncRunNowResponse> {
     const settings = this.settingsRepository.get();
-    const resources = normalizedResources(request.resources).filter((resource) => {
-      if (resource === "tasks") {
-        return settings.syncTasksEnabled;
-      }
+    const drainOnly = request.drainOnly ?? false;
+    const resources = drainOnly
+      ? []
+      : normalizedResources(request.resources).filter((resource) => {
+          if (resource === "tasks") {
+            return settings.syncTasksEnabled;
+          }
 
-      return settings.syncCalendarEventsEnabled;
-    });
+          return settings.syncCalendarEventsEnabled;
+        });
 
     if (request.dryRun) {
       return {
         accepted: true,
         dryRun: true,
+        drainOnly,
         resources
       };
     }
@@ -90,6 +94,7 @@ export class LocalSyncControlService implements SyncControlDomainService {
       return {
         accepted: false,
         dryRun: false,
+        drainOnly,
         resources
       };
     }
@@ -121,6 +126,7 @@ export class LocalSyncControlService implements SyncControlDomainService {
     return {
       accepted: true,
       dryRun: false,
+      drainOnly,
       resources
     };
   }

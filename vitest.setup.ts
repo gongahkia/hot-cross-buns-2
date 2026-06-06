@@ -95,6 +95,55 @@ function testCalendarEvent(overrides: Partial<CalendarEventDetail> = {}): Calend
 }
 
 const hcbApi: HcbApi = {
+  bootstrap: {
+    get: vi.fn(async (request) =>
+      ok({
+        taskLists: await hcbApi.tasks.listTaskLists({ limit: 100 }).then((result) => result.ok ? result.data : { items: [], page: { limit: 100, totalKnown: 0 } }),
+        tasks: await hcbApi.tasks.list({ status: "all", limit: 100 }).then((result) => result.ok ? result.data : { items: [], page: { limit: 100, totalKnown: 0 } }),
+        hiddenTasks: await hcbApi.tasks.list({ status: "hidden", limit: 100 }).then((result) => result.ok ? result.data : { items: [], page: { limit: 100, totalKnown: 0 } }),
+        deletedTasks: await hcbApi.tasks.list({ status: "deleted", limit: 100 }).then((result) => result.ok ? result.data : { items: [], page: { limit: 100, totalKnown: 0 } }),
+        calendars: await hcbApi.calendar.listCalendars({ limit: 100 }).then((result) => result.ok ? result.data : { items: [], page: { limit: 100, totalKnown: 0 } }),
+        events: await hcbApi.calendar.listEvents(request.calendarRange).then((result) => result.ok ? result.data : { items: [], page: { limit: request.calendarRange.limit ?? 100, totalKnown: 0 } }),
+        scheduledTaskBlocks: await hcbApi.calendar.listScheduledTaskBlocks(request.calendarRange).then((result) => result.ok ? result.data : { items: [], page: { limit: request.calendarRange.limit ?? 100, totalKnown: 0 } }),
+        notes: await hcbApi.notes.list({ limit: 50 }).then((result) => result.ok ? result.data : { items: [], lists: [], page: { limit: 50, totalKnown: 0 } }),
+        settings: await hcbApi.settings.get().then((result) => {
+          if (!result.ok) {
+            throw new Error("settings fixture failed");
+          }
+          return result.data;
+        }),
+        syncStatus: await hcbApi.sync.status().then((result) => {
+          if (!result.ok) {
+            throw new Error("sync fixture failed");
+          }
+          return result.data;
+        }),
+        googleStatus: await hcbApi.google.status().then((result) => {
+          if (!result.ok) {
+            throw new Error("google fixture failed");
+          }
+          return result.data;
+        }),
+        undoStatus: await hcbApi.undo.status().then((result) => {
+          if (!result.ok) {
+            throw new Error("undo fixture failed");
+          }
+          return result.data;
+        }),
+        native: await hcbApi.native.capabilities().then((result) => {
+          if (!result.ok) {
+            throw new Error("native fixture failed");
+          }
+          return result.data;
+        }),
+        resourceCounts: {
+          calendarEvents: 0,
+          notes: 0,
+          tasks: 0
+        }
+      })
+    )
+  },
   tasks: {
     listTaskLists: vi.fn(async (request = {}) =>
       ok({
@@ -415,7 +464,8 @@ const hcbApi: HcbApi = {
       ok({
         accepted: true,
         dryRun: request.dryRun ?? false,
-        resources: request.resources ?? ["tasks", "calendar"]
+        drainOnly: request.drainOnly ?? false,
+        resources: request.drainOnly ? [] : request.resources ?? ["tasks", "calendar"]
       })
     ),
     subscribeStatus: vi.fn(() => () => undefined)

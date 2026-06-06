@@ -281,6 +281,147 @@ export function connectedGoogleStatus(overrides: Partial<GoogleStatusResponse> =
   };
 }
 
+function unwrapFixture<T>(result: { ok: true; data: T } | { ok: false }): T {
+  if (!result.ok) {
+    throw new Error("Fixture preload call failed.");
+  }
+
+  return result.data;
+}
+
+type FixturePageRequest = Record<string, unknown> & { cursor?: string };
+type FixturePagedResponse<Item> = {
+  items: Item[];
+  page: {
+    limit: number;
+    nextCursor?: string;
+    totalKnown?: number;
+  };
+};
+
+async function loadAllFixturePages<
+  Item,
+  Response extends FixturePagedResponse<Item>
+>(
+  request: FixturePageRequest,
+  loadPage: (request: any) => Promise<Response>
+): Promise<Response> {
+  const items: Item[] = [];
+  let firstPage: Response | null = null;
+  let lastPage: Response | null = null;
+  let cursor = request.cursor;
+
+  do {
+    const page = await loadPage({
+      ...request,
+      ...(cursor === undefined ? {} : { cursor })
+    });
+
+    firstPage ??= page;
+    lastPage = page;
+    items.push(...page.items);
+    cursor = page.page.nextCursor;
+  } while (cursor !== undefined);
+
+  if (!firstPage || !lastPage) {
+    throw new Error("Paged fixture request returned no data.");
+  }
+
+  const { nextCursor: _nextCursor, ...pageMetadata } = lastPage.page;
+
+  return {
+    ...lastPage,
+    items,
+    page: {
+      ...pageMetadata,
+      totalKnown: lastPage.page.totalKnown ?? firstPage.page.totalKnown ?? items.length
+    }
+  } as Response;
+}
+
+function bootstrapFixture(api: HcbApi): HcbApi["bootstrap"] {
+  return {
+    get: vi.fn(async (request) => {
+      const [
+        taskLists,
+        tasks,
+        hiddenTasks,
+        deletedTasks,
+        calendars,
+        events,
+        scheduledTaskBlocks,
+        notes,
+        settings,
+        syncStatus,
+        googleStatus,
+        undoStatus,
+        native
+      ] = await Promise.all([
+        loadAllFixturePages({ limit: 100 }, (pageRequest) =>
+          api.tasks.listTaskLists(pageRequest).then(unwrapFixture)
+        ),
+        loadAllFixturePages({ status: "all", limit: 100 }, (pageRequest) =>
+          api.tasks.list(pageRequest).then(unwrapFixture)
+        ),
+        loadAllFixturePages({ status: "hidden", limit: 100 }, (pageRequest) =>
+          api.tasks.list(pageRequest).then(unwrapFixture)
+        ),
+        loadAllFixturePages({ status: "deleted", limit: 100 }, (pageRequest) =>
+          api.tasks.list(pageRequest).then(unwrapFixture)
+        ),
+        loadAllFixturePages({ limit: 100 }, (pageRequest) =>
+          api.calendar.listCalendars(pageRequest).then(unwrapFixture)
+        ),
+        loadAllFixturePages(request.calendarRange, (pageRequest) =>
+          api.calendar.listEvents(pageRequest).then(unwrapFixture)
+        ),
+        loadAllFixturePages({
+          start: request.calendarRange.start,
+          end: request.calendarRange.end,
+          limit: 500
+        }, (pageRequest) =>
+          api.calendar.listScheduledTaskBlocks(pageRequest).then(unwrapFixture)
+        ),
+        loadAllFixturePages({ limit: 50 }, (pageRequest) =>
+          api.notes.list(pageRequest).then(unwrapFixture)
+        ),
+        api.settings.get().then(unwrapFixture),
+        api.sync.status().then(unwrapFixture),
+        api.google.status().then(unwrapFixture),
+        api.undo.status().then(unwrapFixture),
+        api.native.capabilities().then(unwrapFixture)
+      ]);
+
+      return ok({
+        taskLists,
+        tasks,
+        hiddenTasks,
+        deletedTasks,
+        calendars,
+        events,
+        scheduledTaskBlocks,
+        notes,
+        settings,
+        syncStatus,
+        googleStatus,
+        undoStatus,
+        native,
+        resourceCounts: {
+          calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)
+            ? calendars.items.reduce((count, calendar) => count + (calendar.eventCount ?? 0), 0)
+            : events.page.totalKnown ?? events.items.length,
+          notes: notes.page.totalKnown ?? notes.items.length,
+          tasks: taskLists.items.every((taskList) => taskList.taskCount !== undefined)
+            ? taskLists.items.reduce((count, taskList) => count + (taskList.taskCount ?? 0), 0)
+            : (tasks.page.totalKnown ?? tasks.items.length) +
+              (hiddenTasks.page.totalKnown ?? hiddenTasks.items.length) +
+              (deletedTasks.page.totalKnown ?? deletedTasks.items.length)
+        }
+      });
+    })
+  };
+}
+
 export function signedOutGoogleStatus(overrides: Partial<GoogleStatusResponse> = {}): GoogleStatusResponse {
   return {
     oauthClientConfigured: false,
@@ -329,7 +470,7 @@ export function seededHcb(): HcbApi {
   const api = originalHcb!;
   let createdTaskCount = 0;
 
-  return {
+  const seededApi: HcbApi = {
     ...api,
     tasks: {
       ...api.tasks,
@@ -757,6 +898,9 @@ export function seededHcb(): HcbApi {
       redo: vi.fn(async () => ok({ action: "redo" as const, applied: false }))
     }
   };
+
+  seededApi.bootstrap = bootstrapFixture(seededApi);
+  return seededApi;
 }
 
 export function onboardingHcb(
@@ -808,6 +952,9 @@ export function loadingHcb(): HcbApi {
 
   return {
     ...api,
+    bootstrap: {
+      get: vi.fn(() => pendingRead)
+    },
     tasks: {
       ...api.tasks,
       listTaskLists: vi.fn(() => pendingRead)
@@ -819,11 +966,14 @@ export function settingsLoadingHcb(): HcbApi {
   const api = seededHcb();
   const pendingRead = new Promise<never>(() => undefined);
 
-  return {
+  const loadingApi: HcbApi = {
     ...api,
     settings: {
       ...api.settings,
       get: vi.fn(() => pendingRead)
     }
   };
+
+  loadingApi.bootstrap = bootstrapFixture(loadingApi);
+  return loadingApi;
 }

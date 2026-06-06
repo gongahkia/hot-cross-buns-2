@@ -25,6 +25,14 @@ export {
 } from "./contracts/core";
 
 export {
+  bootstrapGetRequestSchema,
+  bootstrapGetResponseSchema,
+  bootstrapResourceCountsSchema,
+  type BootstrapGetRequest,
+  type BootstrapGetResponse
+} from "./contracts/bootstrap";
+
+export {
   taskCompletionRequestSchema,
   taskCreateRequestSchema,
   taskDeleteRequestSchema,

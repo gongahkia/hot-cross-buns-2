@@ -11,7 +11,7 @@ import type {
 } from "@shared/ipc/contracts";
 import type { CalendarEventViewModel, TaskViewModel } from "../coreViewModels";
 import { emptySnapshot } from "./defaults";
-import { visibleCalendarRange } from "./dateFormat";
+import { dateOnlyFromLocalDate, visibleCalendarRange } from "./dateFormat";
 import { loadAllPages, loadCoreData } from "./loader";
 import { unwrap } from "./result";
 import { useSettingsMutations } from "./settingsMutations";
@@ -107,6 +107,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
   const [prefersDark, setPrefersDark] = useState(systemPrefersDark);
   const cachedDataReported = useRef(false);
   const googleStatusRequested = useRef(false);
+  const scheduleSuggestionRequested = useRef(false);
   const loadedCalendarRanges = useRef<CalendarRangeLoadRequest[]>([]);
   const pendingCalendarRangeLoads = useRef(new Map<string, Promise<boolean>>());
   const taskViewModelCache = useRef(new Map<string, { signature: string; viewModel: TaskViewModel }>());
@@ -216,6 +217,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
       state: hasSnapshotData(current.snapshot) ? "stale" : "loading",
       errorMessage: undefined
     }));
+    scheduleSuggestionRequested.current = false;
 
     const settingsPromise = window.hcb.settings
       .get()
@@ -389,6 +391,46 @@ function usePreloadCoreSource(): CoreViewModelSource {
 
     return () => window.clearTimeout(timeout);
   }, [loadState.state, refreshGoogleStatus]);
+
+  useEffect(() => {
+    if (
+      scheduleSuggestionRequested.current ||
+      !window.hcb ||
+      (loadState.state !== "ready" && loadState.state !== "empty")
+    ) {
+      return;
+    }
+
+    scheduleSuggestionRequested.current = true;
+    const settings = loadState.snapshot.settings;
+    const scheduleDate = dateOnlyFromLocalDate(new Date());
+
+    void window.hcb.calendar
+      .scheduleSuggest({
+        date: scheduleDate,
+        capacityMinutes: settings.todayCapacityMinutes,
+        workingHours: {
+          start: settings.todayWorkingHoursStart,
+          end: settings.todayWorkingHoursEnd
+        }
+      })
+      .then((result) => {
+        if (!result?.ok) {
+          return;
+        }
+
+        setLoadState((current) => ({
+          ...current,
+          snapshot: {
+            ...current.snapshot,
+            scheduleSuggestion: result.data
+          }
+        }));
+      });
+  }, [
+    loadState.snapshot.settings,
+    loadState.state
+  ]);
 
   useEffect(() => {
     return window.hcb?.sync.subscribeStatus((syncStatus) => {

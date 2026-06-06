@@ -89,6 +89,10 @@ async function invokeContract<T>(
 
 export function createHcbApi(ipc: IpcBridge): HcbApi {
   return freezeApi({
+    bootstrap: {
+      get: (request) =>
+        invokeContract(ipc, ipcContracts.bootstrap.get, request, "Bootstrap request failed")
+    },
     tasks: {
       listTaskLists: (request = {}) =>
         invokeContract(

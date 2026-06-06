@@ -409,6 +409,7 @@ function syncRunNowRequestFromJson(input: DomainJsonObject): SyncRunNowRequest {
 
   return {
     ...(resources === undefined || resources.length === 0 ? {} : { resources }),
+    drainOnly: optionalBoolean(input, "drainOnly") ?? false,
     full: optionalBoolean(input, "full") ?? false,
     dryRun: optionalBoolean(input, "dryRun") ?? false
   };

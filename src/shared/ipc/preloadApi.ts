@@ -1,6 +1,8 @@
 import type {
   AvailabilityExportRequest,
   AvailabilityExportResponse,
+  BootstrapGetRequest,
+  BootstrapGetResponse,
   CalendarRangeRequest,
   CalendarRangeResponse,
   CalendarScheduleSuggestRequest,
@@ -94,6 +96,9 @@ import type {
 import type { HcbResult } from "./result";
 
 export interface HcbApi {
+  bootstrap: {
+    get: (request: BootstrapGetRequest) => Promise<HcbResult<BootstrapGetResponse>>;
+  };
   tasks: {
     listTaskLists: (request?: TaskListsRequest) => Promise<HcbResult<TaskListsResponse>>;
     list: (request?: TaskListRequest) => Promise<HcbResult<TaskListResponse>>;

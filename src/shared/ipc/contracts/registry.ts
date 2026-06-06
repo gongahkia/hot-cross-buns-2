@@ -1,5 +1,9 @@
 import { hcbResultSchema } from "../result";
 import {
+  bootstrapGetRequestSchema,
+  bootstrapGetResponseSchema
+} from "./bootstrap";
+import {
   defineIpcContract,
   entityByIdRequestSchema,
   mutationAckSchema,
@@ -127,6 +131,14 @@ import {
 } from "./tasks";
 
 export const ipcContracts = {
+  bootstrap: {
+    get: defineIpcContract(
+      "bootstrap",
+      "get",
+      bootstrapGetRequestSchema,
+      bootstrapGetResponseSchema
+    )
+  },
   tasks: {
     listTaskLists: defineIpcContract(
       "tasks",

@@ -1,6 +1,7 @@
 import {
   ipcContracts,
   type AvailabilityExportRequest,
+  type BootstrapGetRequest,
   type CalendarEventCompletionRequest,
   type CalendarListRequest,
   type CalendarEventCreateRequest,
@@ -40,11 +41,25 @@ import {
   type TaskMoveRequest,
   type TaskUpdateRequest
 } from "@shared/ipc/contracts";
+import { appLogger } from "../diagnostics/appLogger";
 import type { AppDomainServices } from "../services/domainInterfaces";
 import type { IpcHandlerDefinition } from "./registry";
 
 export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDefinition[] {
+  const scheduleMutationDrain = createMutationDrainScheduler(services);
+  const withMutationDrain = <Request, Response>(
+    handle: (request: Request) => Promise<Response> | Response
+  ) => async (request: Request): Promise<Response> => {
+    const response = await handle(request);
+    scheduleMutationDrain();
+    return response;
+  };
+
   return [
+    {
+      contract: ipcContracts.bootstrap.get,
+      handle: (request) => bootstrapSnapshot(services, request as BootstrapGetRequest)
+    },
     {
       contract: ipcContracts.tasks.listTaskLists,
       handle: (request) => services.planner.listTaskLists(request as TaskListsRequest)
@@ -59,39 +74,57 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     },
     {
       contract: ipcContracts.tasks.create,
-      handle: (request) => services.planner.createTask(request as TaskCreateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.createTask(request as TaskCreateRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.update,
-      handle: (request) => services.planner.updateTask(request as TaskUpdateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.updateTask(request as TaskUpdateRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.complete,
-      handle: (request) => services.planner.completeTask(request as TaskCompletionRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.completeTask(request as TaskCompletionRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.reopen,
-      handle: (request) => services.planner.reopenTask(request as TaskCompletionRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.reopenTask(request as TaskCompletionRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.move,
-      handle: (request) => services.planner.moveTask(request as TaskMoveRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.moveTask(request as TaskMoveRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.delete,
-      handle: (request) => services.planner.deleteTask(request as TaskDeleteRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.deleteTask(request as TaskDeleteRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.createTaskList,
-      handle: (request) => services.planner.createTaskList(request as TaskListCreateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.createTaskList(request as TaskListCreateRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.renameTaskList,
-      handle: (request) => services.planner.renameTaskList(request as TaskListRenameRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.renameTaskList(request as TaskListRenameRequest)
+      )
     },
     {
       contract: ipcContracts.tasks.deleteTaskList,
-      handle: (request) => services.planner.deleteTaskList(request as TaskListDeleteRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.deleteTaskList(request as TaskListDeleteRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.listCalendars,
@@ -107,11 +140,15 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     },
     {
       contract: ipcContracts.calendar.create,
-      handle: (request) => services.planner.createCalendarEvent(request as CalendarEventCreateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.createCalendarEvent(request as CalendarEventCreateRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.update,
-      handle: (request) => services.planner.updateCalendarEvent(request as CalendarEventUpdateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.updateCalendarEvent(request as CalendarEventUpdateRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.complete,
@@ -123,7 +160,9 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     },
     {
       contract: ipcContracts.calendar.delete,
-      handle: (request) => services.planner.deleteCalendarEvent(request as CalendarEventDeleteRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.deleteCalendarEvent(request as CalendarEventDeleteRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.listScheduledTaskBlocks,
@@ -132,18 +171,21 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     },
     {
       contract: ipcContracts.calendar.scheduleTaskBlock,
-      handle: (request) =>
+      handle: withMutationDrain((request) =>
         services.planner.scheduleTaskBlock(request as ScheduledTaskBlockCreateRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.moveScheduledTaskBlock,
-      handle: (request) =>
+      handle: withMutationDrain((request) =>
         services.planner.moveScheduledTaskBlock(request as ScheduledTaskBlockMoveRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.unscheduleTaskBlock,
-      handle: (request) =>
+      handle: withMutationDrain((request) =>
         services.planner.unscheduleTaskBlock(request as ScheduledTaskBlockUnscheduleRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.scheduleSuggest,
@@ -161,15 +203,21 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     },
     {
       contract: ipcContracts.notes.createList,
-      handle: (request) => services.planner.createNoteList(request as NoteListCreateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.createNoteList(request as NoteListCreateRequest)
+      )
     },
     {
       contract: ipcContracts.notes.renameList,
-      handle: (request) => services.planner.renameNoteList(request as NoteListRenameRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.renameNoteList(request as NoteListRenameRequest)
+      )
     },
     {
       contract: ipcContracts.notes.deleteList,
-      handle: (request) => services.planner.deleteNoteList(request as NoteListDeleteRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.deleteNoteList(request as NoteListDeleteRequest)
+      )
     },
     {
       contract: ipcContracts.notes.get,
@@ -177,15 +225,21 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
     },
     {
       contract: ipcContracts.notes.create,
-      handle: (request) => services.planner.createNote(request as NoteCreateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.createNote(request as NoteCreateRequest)
+      )
     },
     {
       contract: ipcContracts.notes.update,
-      handle: (request) => services.planner.updateNote(request as NoteUpdateRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.updateNote(request as NoteUpdateRequest)
+      )
     },
     {
       contract: ipcContracts.notes.delete,
-      handle: (request) => services.planner.deleteNote(request as NoteDeleteRequest)
+      handle: withMutationDrain((request) =>
+        services.planner.deleteNote(request as NoteDeleteRequest)
+      )
     },
     {
       contract: ipcContracts.notes.linkSuggest,
@@ -270,4 +324,189 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
       handle: () => services.native.listFontFamilies()
     }
   ];
+}
+
+async function bootstrapSnapshot(services: AppDomainServices, request: BootstrapGetRequest) {
+  const [
+    taskLists,
+    tasks,
+    hiddenTasks,
+    deletedTasks,
+    calendars,
+    events,
+    scheduledTaskBlocks,
+    notes,
+    settings,
+    syncStatus,
+    googleStatus,
+    undoStatus,
+    native
+  ] = await Promise.all([
+    loadAllBootstrapPages({ limit: 100 }, (pageRequest) =>
+      services.planner.listTaskLists(pageRequest)
+    ),
+    loadAllBootstrapPages({ status: "all", limit: 100 }, (pageRequest) =>
+      services.planner.listTasks(pageRequest)
+    ),
+    loadAllBootstrapPages({ status: "hidden", limit: 100 }, (pageRequest) =>
+      services.planner.listTasks(pageRequest)
+    ),
+    loadAllBootstrapPages({ status: "deleted", limit: 100 }, (pageRequest) =>
+      services.planner.listTasks(pageRequest)
+    ),
+    loadAllBootstrapPages({ limit: 100 }, (pageRequest) =>
+      services.planner.listCalendars(pageRequest)
+    ),
+    loadAllBootstrapPages(
+      {
+        start: request.calendarRange.start,
+        end: request.calendarRange.end,
+        limit: request.calendarRange.limit ?? 500
+      },
+      (pageRequest) => services.planner.listCalendarEvents(pageRequest)
+    ),
+    loadAllBootstrapPages(
+      {
+        start: request.calendarRange.start,
+        end: request.calendarRange.end,
+        limit: 500
+      },
+      (pageRequest) => services.planner.listScheduledTaskBlocks(pageRequest)
+    ),
+    loadAllBootstrapPages({ limit: 50 }, (pageRequest) =>
+      services.planner.listNotes(pageRequest)
+    ),
+    services.settings.get(),
+    services.sync.status(),
+    services.google.status(),
+    services.undo.status(),
+    services.native.capabilities()
+  ]);
+
+  return {
+    taskLists,
+    tasks,
+    hiddenTasks,
+    deletedTasks,
+    calendars,
+    events,
+    scheduledTaskBlocks,
+    notes,
+    settings,
+    syncStatus,
+    googleStatus,
+    undoStatus,
+    native,
+    resourceCounts: {
+      calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)
+        ? calendars.items.reduce((count, calendar) => count + (calendar.eventCount ?? 0), 0)
+        : knownTotal(events.page.totalKnown, events.items.length),
+      notes: knownTotal(notes.page.totalKnown, notes.items.length),
+      tasks: taskLists.items.every((taskList) => taskList.taskCount !== undefined)
+        ? taskLists.items.reduce((count, taskList) => count + (taskList.taskCount ?? 0), 0)
+        : knownTotal(tasks.page.totalKnown, tasks.items.length) +
+          knownTotal(hiddenTasks.page.totalKnown, hiddenTasks.items.length) +
+          knownTotal(deletedTasks.page.totalKnown, deletedTasks.items.length)
+    }
+  };
+}
+
+function knownTotal(pageTotal: number | undefined, itemCount: number): number {
+  return pageTotal ?? itemCount;
+}
+
+type BootstrapPageRequest = Record<string, unknown> & { cursor?: string };
+type BootstrapPagedResponse<Item> = {
+  items: Item[];
+  page: {
+    limit: number;
+    nextCursor?: string;
+    totalKnown?: number;
+  };
+};
+
+async function loadAllBootstrapPages<
+  Item,
+  Response extends BootstrapPagedResponse<Item>
+>(
+  request: BootstrapPageRequest,
+  loadPage: (request: any) => Promise<Response> | Response
+): Promise<Response> {
+  const items: Item[] = [];
+  let firstPage: Response | null = null;
+  let lastPage: Response | null = null;
+  let cursor = request.cursor;
+
+  do {
+    const page = await loadPage({
+      ...request,
+      ...(cursor === undefined ? {} : { cursor })
+    });
+
+    firstPage ??= page;
+    lastPage = page;
+    items.push(...page.items);
+    cursor = page.page.nextCursor;
+  } while (cursor !== undefined);
+
+  if (!firstPage || !lastPage) {
+    throw new Error("Paged bootstrap request returned no data.");
+  }
+
+  const { nextCursor: _nextCursor, ...pageMetadata } = lastPage.page;
+
+  return {
+    ...lastPage,
+    items,
+    page: {
+      ...pageMetadata,
+      totalKnown: lastPage.page.totalKnown ?? firstPage.page.totalKnown ?? items.length
+    }
+  } as Response;
+}
+
+function createMutationDrainScheduler(services: AppDomainServices): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let running = false;
+  let requested = false;
+
+  const schedule = (delayMs = 1_000): void => {
+    requested = true;
+    if (timer) {
+      clearTimeout(timer);
+    }
+
+    timer = setTimeout(() => {
+      timer = undefined;
+      void run();
+    }, delayMs);
+  };
+
+  const run = async (): Promise<void> => {
+    if (running) {
+      return;
+    }
+
+    running = true;
+    requested = false;
+
+    try {
+      const result = await services.sync.runNow({ drainOnly: true });
+
+      if (!result.accepted) {
+        schedule(2_000);
+      }
+    } catch (thrown) {
+      appLogger.warn("post-write mutation drain failed", "sync", {
+        message: thrown instanceof Error ? thrown.message : String(thrown)
+      });
+    } finally {
+      running = false;
+      if (requested) {
+        schedule();
+      }
+    }
+  };
+
+  return schedule;
 }

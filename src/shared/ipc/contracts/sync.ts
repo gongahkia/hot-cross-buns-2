@@ -22,6 +22,7 @@ export type SyncStatusResponse = z.infer<typeof syncStatusResponseSchema>;
 export const syncRunNowRequestSchema = z
   .object({
     resources: z.array(z.enum(["tasks", "calendar"])).min(1).max(2).optional(),
+    drainOnly: z.boolean().default(false),
     full: z.boolean().default(false),
     dryRun: z.boolean().default(false)
   })
@@ -33,7 +34,8 @@ export const syncRunNowResponseSchema = z
   .object({
     accepted: z.boolean(),
     dryRun: z.boolean(),
-    resources: z.array(z.enum(["tasks", "calendar"])).min(1).max(2)
+    drainOnly: z.boolean().default(false),
+    resources: z.array(z.enum(["tasks", "calendar"])).max(2)
   })
   .strict();
 
