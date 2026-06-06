@@ -133,7 +133,8 @@ describe("preload bridge", () => {
       ["sync", "runNow", { resources: [] }],
       ["settings", "update", {}],
       ["mcp", "setEnabled", {}],
-      ["diagnostics", "markShellVisible", { rendererNowMs: -1 }]
+      ["diagnostics", "markShellVisible", { rendererNowMs: -1 }],
+      ["diagnostics", "recordTiming", { kind: "startup", name: "", durationMs: -1 }]
     ];
 
     for (const [domain, method, payload] of calls) {

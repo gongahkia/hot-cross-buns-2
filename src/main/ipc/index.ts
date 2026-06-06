@@ -20,7 +20,7 @@ export function registerHcbIpc(
     ipcMain,
     [
       ...createDiagnosticsIpcHandlers(metrics, services.performance, services, lifecycleHooks),
-      ...createCoreIpcHandlers(services.domain)
+      ...createCoreIpcHandlers(services.domain, services.performance)
     ],
     {
       metrics,

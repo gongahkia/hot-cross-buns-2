@@ -43,6 +43,7 @@ export function createDiagnosticsIpcHandlers(
       kind: LocalPerformanceTiming["kind"];
       name: string;
       durationMs: number;
+      metadata?: Record<string, string | number | boolean | null>;
     }) => void;
   },
   services?: ServiceContainer,
@@ -103,6 +104,30 @@ export function createDiagnosticsIpcHandlers(
             ? [...(performanceTimings?.listRecent((request as DiagnosticsPerformanceRequest).limit ?? 50) ?? [])]
             : []
         };
+      }
+    },
+    {
+      contract: ipcContracts.diagnostics.recordTiming,
+      handle: (request) => {
+        if (!performanceTimings?.record) {
+          return { recorded: false };
+        }
+
+        const timing = request as {
+          kind: LocalPerformanceTiming["kind"];
+          name: string;
+          durationMs: number;
+          metadata?: Record<string, string | number | boolean | null>;
+        };
+
+        performanceTimings.record({
+          kind: timing.kind,
+          name: timing.name,
+          durationMs: timing.durationMs,
+          ...(timing.metadata === undefined ? {} : { metadata: timing.metadata })
+        });
+
+        return { recorded: true };
       }
     },
     {
@@ -587,6 +612,7 @@ function buildDiagnosticBundleText(input: {
   const pendingMutations =
     input.services?.localData.syncRepository.listActivePendingMutations({ limit: 200 }) ?? [];
   const history = input.services?.localData.historyRepository.listRecent(200) ?? [];
+  const performanceTimings = input.services?.performance.listRecent(50) ?? [];
   const sections = [
     "=== Hot Cross Buns 2 Diagnostic Bundle ===",
     buildDiagnosticSummaryText(input),
@@ -600,6 +626,9 @@ function buildDiagnosticBundleText(input: {
         `${entry.timestamp} [${entry.kind}] ${entry.summary}${entry.metadataLine ? ` ${entry.metadataLine}` : ""}`
       )
       .join("\n") || "none",
+    "",
+    `=== Performance Timings (${performanceTimings.length}) ===`,
+    safeDiagnosticJson(performanceTimings),
     "",
     "=== Recent Logs ===",
     appLogger.loadPersistedLog() || appLogger.recentEntries(500, "debug").map((entry) => entry.formattedLine).join("\n") || "none",

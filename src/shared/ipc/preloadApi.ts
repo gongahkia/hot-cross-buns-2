@@ -30,6 +30,8 @@ import type {
   DiagnosticsPendingMutationActionResponse,
   DiagnosticsPendingMutationsRequest,
   DiagnosticsPendingMutationsResponse,
+  DiagnosticsRecordTimingRequest,
+  DiagnosticsRecordTimingResponse,
   DiagnosticsRescheduleNotificationsResponse,
   DiagnosticsRevealLogsFolderResponse,
   DiagnosticsSummaryResponse,
@@ -205,6 +207,9 @@ export interface HcbApi {
     performance: (
       request?: DiagnosticsPerformanceRequest
     ) => Promise<HcbResult<DiagnosticsPerformanceResponse>>;
+    recordTiming: (
+      request: DiagnosticsRecordTimingRequest
+    ) => Promise<HcbResult<DiagnosticsRecordTimingResponse>>;
     summary: () => Promise<HcbResult<DiagnosticsSummaryResponse>>;
     logs: (request?: DiagnosticsLogsRequest) => Promise<HcbResult<DiagnosticsLogsResponse>>;
     clearLogs: () => Promise<HcbResult<DiagnosticsClearLogsResponse>>;

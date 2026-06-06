@@ -383,6 +383,13 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           request,
           "Performance metrics request failed"
         ),
+      recordTiming: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.diagnostics.recordTiming,
+          request,
+          "Performance timing record failed"
+        ),
       summary: () =>
         invokeContract(
           ipc,

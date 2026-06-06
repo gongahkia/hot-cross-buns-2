@@ -26,7 +26,8 @@ import type { HcbResult } from "../src/shared/ipc/result";
 import { redactSensitiveText } from "../src/shared/redaction";
 import {
   generatePerfFixtureSet,
-  summarizeAllPerfFixtureSets
+  summarizeAllPerfFixtureSets,
+  type PerfFixtureSize
 } from "./perf/fixtures";
 import {
   writePerformanceReport,
@@ -43,7 +44,8 @@ const rootDir = process.cwd();
 const artifactDir = resolve(rootDir, "artifacts", "perf");
 const mode = "report-only" as const;
 const accountId = "perf-generated-account";
-const mediumFixture = generatePerfFixtureSet("medium");
+const fixtureSize = parsePerfFixtureSize(process.env.HCB_PERF_FIXTURE_SIZE);
+const perfFixture = generatePerfFixtureSet(fixtureSize);
 type DiagnosticsHealthResult = HcbResult<DiagnosticsHealthResponse> | null;
 
 interface QueryPlanRow extends Record<string, unknown> {
@@ -72,6 +74,14 @@ function roundMs(value: number): number {
   return Math.max(0, Math.round(value * 100) / 100);
 }
 
+function parsePerfFixtureSize(value: string | undefined): PerfFixtureSize {
+  if (value === "small" || value === "medium" || value === "large") {
+    return value;
+  }
+
+  return "medium";
+}
+
 function temporaryUserDataDir(): { root: string; userDataDir: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hcb2-perf-"));
   const userDataDir = join(root, "user-data");
@@ -85,7 +95,7 @@ function temporaryUserDataDir(): { root: string; userDataDir: string; cleanup: (
   };
 }
 
-function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
+function seedPerfFixtureDatabase(userDataDir: string): SeedResult {
   const startedAt = performance.now();
   const connection = createAppSqliteConnection({ appSupportDirectory: userDataDir });
 
@@ -93,11 +103,11 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
     runLocalDataMigrations(connection);
     const syncRepository = new GoogleSyncRepository(connection);
     const settingsRepository = new LocalSettingsRepository(connection);
-    const now = mediumFixture.baseTime;
+    const now = perfFixture.baseTime;
 
     settingsRepository.update({
-      selectedTaskListIds: mediumFixture.taskLists.map((list) => taskListLocalId(accountId, list.id)),
-      selectedCalendarIds: mediumFixture.calendars.map((calendar) => calendarLocalId(accountId, calendar.id)),
+      selectedTaskListIds: perfFixture.taskLists.map((list) => taskListLocalId(accountId, list.id)),
+      selectedCalendarIds: perfFixture.calendars.map((calendar) => calendarLocalId(accountId, calendar.id)),
       setupCompletedAt: now
     });
 
@@ -117,7 +127,7 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
     });
     syncRepository.writeTaskLists(
       accountId,
-      mediumFixture.taskLists.map((list) => ({
+      perfFixture.taskLists.map((list) => ({
         id: list.id,
         title: list.title,
         updatedAt: now
@@ -125,11 +135,11 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
       now
     );
 
-    for (const taskList of mediumFixture.taskLists) {
+    for (const taskList of perfFixture.taskLists) {
       syncRepository.writeTasks(
         accountId,
         taskList.id,
-        mediumFixture.tasks
+        perfFixture.tasks
           .filter((task) => task.taskListId === taskList.id)
           .map((task) => ({
             id: task.id,
@@ -154,7 +164,7 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
 
     syncRepository.writeCalendarLists(
       accountId,
-      mediumFixture.calendars.map((calendar, index) => ({
+      perfFixture.calendars.map((calendar, index) => ({
         id: calendar.id,
         summary: calendar.title,
         timeZone: "UTC",
@@ -166,11 +176,11 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
       now
     );
 
-    for (const calendar of mediumFixture.calendars) {
+    for (const calendar of perfFixture.calendars) {
       syncRepository.writeCalendarEvents(
         accountId,
         calendar.id,
-        mediumFixture.eventInstances
+        perfFixture.eventInstances
           .filter((event) => event.calendarId === calendar.id)
           .map((event) => ({
             id: event.id,
@@ -192,7 +202,7 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
     }
 
     connection.executeTransaction(
-      mediumFixture.notes.map((note, index) => ({
+      perfFixture.notes.map((note, index) => ({
         kind: "run",
         sql: `INSERT INTO google_tasks (
           id, account_id, task_list_id, google_id, parent_task_id, title, notes,
@@ -210,7 +220,7 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
         params: [
           note.id,
           accountId,
-          taskListLocalId(accountId, mediumFixture.taskLists[0].id),
+          taskListLocalId(accountId, perfFixture.taskLists[0].id),
           note.id,
           note.title,
           note.body,
@@ -224,19 +234,19 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
     syncRepository.saveCheckpoint({
       accountId,
       resourceType: "tasks",
-      resourceId: mediumFixture.taskLists[0].id,
+      resourceId: perfFixture.taskLists[0].id,
       checkpointType: "syncToken",
       checkpointValue: "generated-task-checkpoint",
-      metadata: { fixture: "medium" },
+      metadata: { fixture: fixtureSize },
       now
     });
     syncRepository.saveCheckpoint({
       accountId,
       resourceType: "calendar",
-      resourceId: mediumFixture.calendars[0].id,
+      resourceId: perfFixture.calendars[0].id,
       checkpointType: "syncToken",
       checkpointValue: "generated-calendar-checkpoint",
-      metadata: { fixture: "medium" },
+      metadata: { fixture: fixtureSize },
       now
     });
     connection.run(
@@ -252,7 +262,7 @@ function seedMediumFixtureDatabase(userDataDir: string): SeedResult {
         "perf-pending-mutation-1",
         accountId,
         "task",
-        taskLocalId(accountId, mediumFixture.taskLists[0].id, mediumFixture.tasks[0].id),
+        taskLocalId(accountId, perfFixture.taskLists[0].id, perfFixture.tasks[0].id),
         "update",
         JSON.stringify({ generated: true }),
         "pending",
@@ -282,28 +292,28 @@ function collectSqliteBaseline(userDataDir: string): SqliteBaselineResult {
     const syncRepository = new GoogleSyncRepository(connection);
     const measurements: PerfMeasurement[] = [];
 
-    measure(measurements, "sqlite.task-lists.medium", () =>
+    measure(measurements, `sqlite.task-lists.${fixtureSize}`, () =>
       plannerRepository.listTaskLists({ limit: 100 })
     );
-    measure(measurements, "sqlite.tasks.active-list.medium", () =>
+    measure(measurements, `sqlite.tasks.active-list.${fixtureSize}`, () =>
       plannerRepository.listTasks({
-        listId: taskListLocalId(accountId, mediumFixture.taskLists[0].id),
+        listId: taskListLocalId(accountId, perfFixture.taskLists[0].id),
         status: "active",
         limit: 100
       })
     );
-    measure(measurements, "sqlite.events.visible-range.medium", () =>
+    measure(measurements, `sqlite.events.visible-range.${fixtureSize}`, () =>
       plannerRepository.listCalendarEvents({
-        calendarIds: [calendarLocalId(accountId, mediumFixture.calendars[0].id)],
-        start: mediumFixture.baseTime,
+        calendarIds: [calendarLocalId(accountId, perfFixture.calendars[0].id)],
+        start: perfFixture.baseTime,
         end: "2026-02-10T00:00:00.000Z",
         limit: 250
       })
     );
-    measure(measurements, "sqlite.notes.recent.medium", () =>
+    measure(measurements, `sqlite.notes.recent.${fixtureSize}`, () =>
       plannerRepository.listNotes({ limit: 50 })
     );
-    measure(measurements, "search.medium-local", () =>
+    measure(measurements, `search.${fixtureSize}-local`, () =>
       plannerRepository.search({
         query: "generated",
         limit: 30
@@ -313,7 +323,7 @@ function collectSqliteBaseline(userDataDir: string): SqliteBaselineResult {
       syncRepository.readCheckpoint({
         accountId,
         resourceType: "tasks",
-        resourceId: mediumFixture.taskLists[0].id,
+        resourceId: perfFixture.taskLists[0].id,
         checkpointType: "syncToken"
       })
     );
@@ -323,7 +333,7 @@ function collectSqliteBaseline(userDataDir: string): SqliteBaselineResult {
          FROM google_pending_mutations
          WHERE status IN ('pending', 'failed', 'applying')
            AND (next_retry_at IS NULL OR next_retry_at <= ?);`,
-        [mediumFixture.baseTime]
+        [perfFixture.baseTime]
       )
     );
 
@@ -367,12 +377,12 @@ function measure(measurements: PerfMeasurement[], name: string, operation: () =>
 }
 
 function collectQueryPlans(connection: SqliteConnection): PerfQueryPlanReport[] {
-  const taskListId = taskListLocalId(accountId, mediumFixture.taskLists[0].id);
-  const calendarId = calendarLocalId(accountId, mediumFixture.calendars[0].id);
-  const parentTask = mediumFixture.tasks.find((task) => task.parentTaskId !== null);
+  const taskListId = taskListLocalId(accountId, perfFixture.taskLists[0].id);
+  const calendarId = calendarLocalId(accountId, perfFixture.calendars[0].id);
+  const parentTask = perfFixture.tasks.find((task) => task.parentTaskId !== null);
   const parentTaskId =
     parentTask?.parentTaskId === null || parentTask?.parentTaskId === undefined
-      ? taskLocalId(accountId, mediumFixture.taskLists[0].id, mediumFixture.tasks[0].id)
+      ? taskLocalId(accountId, perfFixture.taskLists[0].id, perfFixture.tasks[0].id)
       : taskLocalId(accountId, parentTask.taskListId, parentTask.parentTaskId);
   const ftsQuery = "generated*";
 
@@ -422,7 +432,7 @@ function collectQueryPlans(connection: SqliteConnection): PerfQueryPlanReport[] 
               AND events.calendar_id IN (?)
             ORDER BY events.start_at ASC, events.end_at ASC, events.id ASC
             LIMIT ? OFFSET ?`,
-      params: ["2026-02-10T00:00:00.000Z", mediumFixture.baseTime, calendarId, 250, 0]
+      params: ["2026-02-10T00:00:00.000Z", perfFixture.baseTime, calendarId, 250, 0]
     }),
     queryPlan(connection, {
       name: "note.recent",
@@ -497,7 +507,7 @@ function collectQueryPlans(connection: SqliteConnection): PerfQueryPlanReport[] 
               AND resource_type = ?
               AND resource_id = ?
               AND checkpoint_type = ?`,
-      params: [accountId, "tasks", mediumFixture.taskLists[0].id, "syncToken"]
+      params: [accountId, "tasks", perfFixture.taskLists[0].id, "syncToken"]
     }),
     queryPlan(connection, {
       name: "pending-mutation.ready",
@@ -508,7 +518,7 @@ function collectQueryPlans(connection: SqliteConnection): PerfQueryPlanReport[] 
               AND (next_retry_at IS NULL OR next_retry_at <= ?)
             ORDER BY next_retry_at ASC, created_at ASC
             LIMIT ?`,
-      params: [mediumFixture.baseTime, 50]
+      params: [perfFixture.baseTime, 50]
     })
   ];
 }
@@ -701,6 +711,7 @@ async function collectRendererMeasurements(
 ): Promise<PerfMeasurement[]> {
   return page.evaluate(`(async () => {
     const evaluatedLaunchName = ${JSON.stringify(launchName)};
+    const evaluatedFixtureSize = ${JSON.stringify(fixtureSize)};
 
     async function measureIpc(name, operation) {
       const startedAt = performance.now();
@@ -721,6 +732,33 @@ async function collectRendererMeasurements(
       }
     }
 
+    async function measureBootstrap() {
+      const startedAt = performance.now();
+
+      try {
+        const result = await window.hcb.bootstrap.get({
+          calendarRange: {
+            start: "2026-01-05T00:00:00.000Z",
+            end: "2026-02-10T00:00:00.000Z",
+            limit: 500
+          }
+        });
+        const payloadBytes = new Blob([JSON.stringify(result)]).size;
+        return {
+          name: evaluatedLaunchName + ".ipc.bootstrap-roundtrip",
+          status: "collected",
+          valueMs: Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100),
+          reason: "payloadBytes=" + payloadBytes
+        };
+      } catch (error) {
+        return {
+          name: evaluatedLaunchName + ".ipc.bootstrap-roundtrip",
+          status: "skipped",
+          reason: error instanceof Error ? error.message.slice(0, 160) : "Bootstrap measurement failed."
+        };
+      }
+    }
+
     if (!window.hcb) {
       return [
         {
@@ -732,6 +770,7 @@ async function collectRendererMeasurements(
     }
 
     return [
+      await measureBootstrap(),
       await measureIpc("ipc.health-roundtrip", async () => window.hcb.diagnostics.health()),
       await measureIpc("ipc.tasks-list-roundtrip", async () =>
         window.hcb.tasks.list({ status: "active", limit: 100 })
@@ -743,7 +782,7 @@ async function collectRendererMeasurements(
           limit: 250
         })
       ),
-      await measureIpc("search.medium-local", async () =>
+      await measureIpc("search." + evaluatedFixtureSize + "-local", async () =>
         window.hcb.search.query({ query: "generated", limit: 30 })
       )
     ];
@@ -994,7 +1033,7 @@ async function main(): Promise<void> {
     const fixtureStartedAt = performance.now();
     const fixtures = summarizeAllPerfFixtureSets();
     const fixtureGenerationMs = roundMs(performance.now() - fixtureStartedAt);
-    const seedResult = seedMediumFixtureDatabase(temp.userDataDir);
+    const seedResult = seedPerfFixtureDatabase(temp.userDataDir);
     const sqlite = collectSqliteBaseline(temp.userDataDir);
     const cold = await collectLaunchTiming("cold", temp.userDataDir);
     const warm = await collectLaunchTiming("warm", temp.userDataDir);
@@ -1023,7 +1062,7 @@ async function main(): Promise<void> {
           valueMs: fixtureGenerationMs
         },
         {
-          name: "fixtures.seed-medium-sqlite",
+          name: `fixtures.seed-${fixtureSize}-sqlite`,
           status: "collected",
           valueMs: seedResult.durationMs
         },
@@ -1041,7 +1080,7 @@ async function main(): Promise<void> {
       notes: [
         "Report-only mode records numbers and query plans without failing on local timing variance.",
         "Fixture data is generated locally and deterministically; the harness does not call Google or read user app data.",
-        "The medium fixture is seeded into a temporary app data path before launch and deleted after reporting.",
+        `The ${fixtureSize} fixture is seeded into a temporary app data path before launch and deleted after reporting.`,
         "Electron security settings and renderer isolation are left unchanged for measurement.",
         `Temporary database path during run: ${redactSensitiveText(seedResult.databasePath)}`
       ]

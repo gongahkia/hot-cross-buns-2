@@ -404,6 +404,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
     scheduleSuggestionRequested.current = true;
     const settings = loadState.snapshot.settings;
     const scheduleDate = dateOnlyFromLocalDate(new Date());
+    const startedAt = performance.now();
 
     void window.hcb.calendar
       .scheduleSuggest({
@@ -416,8 +417,29 @@ function usePreloadCoreSource(): CoreViewModelSource {
       })
       .then((result) => {
         if (!result?.ok) {
+          recordRendererTiming({
+            kind: "startup",
+            name: "startup.schedule-suggest.deferred",
+            durationMs: performance.now() - startedAt,
+            metadata: {
+              outcome: "failed",
+              errorCode: result && !result.ok ? result.error.code : null
+            }
+          });
           return;
         }
+
+        recordRendererTiming({
+          kind: "startup",
+          name: "startup.schedule-suggest.deferred",
+          durationMs: performance.now() - startedAt,
+          metadata: {
+            outcome: "success",
+            slots: result.data.slots.length,
+            unscheduled: result.data.unscheduled.length,
+            overloadMinutes: result.data.overloadMinutes
+          }
+        });
 
         setLoadState((current) => ({
           ...current,
@@ -426,6 +448,16 @@ function usePreloadCoreSource(): CoreViewModelSource {
             scheduleSuggestion: result.data
           }
         }));
+      })
+      .catch(() => {
+        recordRendererTiming({
+          kind: "startup",
+          name: "startup.schedule-suggest.deferred",
+          durationMs: performance.now() - startedAt,
+          metadata: {
+            outcome: "threw"
+          }
+        });
       });
   }, [
     loadState.snapshot.settings,
@@ -546,4 +578,13 @@ function usePreloadCoreSource(): CoreViewModelSource {
       updateTask
     ]
   );
+}
+
+function recordRendererTiming(request: {
+  kind: "startup" | "cached_render" | "ipc" | "sqlite_query" | "search";
+  name: string;
+  durationMs: number;
+  metadata?: Record<string, string | number | boolean | null>;
+}): void {
+  void window.hcb?.diagnostics.recordTiming(request);
 }

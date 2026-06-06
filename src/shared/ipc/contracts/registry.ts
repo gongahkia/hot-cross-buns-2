@@ -52,6 +52,8 @@ import {
   diagnosticsPendingMutationActionResponseSchema,
   diagnosticsPendingMutationsRequestSchema,
   diagnosticsPendingMutationsResponseSchema,
+  diagnosticsRecordTimingRequestSchema,
+  diagnosticsRecordTimingResponseSchema,
   diagnosticsRescheduleNotificationsRequestSchema,
   diagnosticsRescheduleNotificationsResponseSchema,
   diagnosticsRevealLogsFolderRequestSchema,
@@ -398,6 +400,12 @@ export const ipcContracts = {
       "performance",
       diagnosticsPerformanceRequestSchema,
       diagnosticsPerformanceResponseSchema
+    ),
+    recordTiming: defineIpcContract(
+      "diagnostics",
+      "recordTiming",
+      diagnosticsRecordTimingRequestSchema,
+      diagnosticsRecordTimingResponseSchema
     ),
     summary: defineIpcContract(
       "diagnostics",

@@ -33,6 +33,7 @@ export function createStubIpcHandlers(): IpcHandlerDefinition[] {
       "Notification permission requests are not implemented yet"
     ),
     stub(ipcContracts.native.listFontFamilies, "Native font family listing is not implemented yet"),
+    stub(ipcContracts.diagnostics.recordTiming, "Diagnostics timing recording is not implemented yet"),
     stub(ipcContracts.diagnostics.summary, "Diagnostics summary is not implemented yet")
   ];
 }

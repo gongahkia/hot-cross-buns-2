@@ -37,14 +37,26 @@ export class LocalPerformanceRepository {
       kind: LocalPerformanceTiming["kind"];
       name: string;
       durationMs: number;
+      metadataJson: string | null;
       createdAt: string;
     }>(
-      `SELECT id, kind, name, duration_ms AS durationMs, created_at AS createdAt
+      `SELECT id, kind, name, duration_ms AS durationMs, metadata_json AS metadataJson, created_at AS createdAt
        FROM local_performance_timings
        ORDER BY created_at DESC, id DESC
        LIMIT ?;`,
       [safeLimit]
-    );
+    ).map((row) => {
+      const metadata = parseMetadata(row.metadataJson);
+
+      return {
+        id: row.id,
+        kind: row.kind,
+        name: row.name,
+        durationMs: row.durationMs,
+        ...(metadata === undefined ? {} : { metadata }),
+        createdAt: row.createdAt
+      };
+    });
   }
 
   listSlowSqliteQueries(limit = 10): Array<{ name: string; durationMs: number; createdAt: string }> {
@@ -58,5 +70,38 @@ export class LocalPerformanceRepository {
        LIMIT ?;`,
       [safeLimit]
     );
+  }
+}
+
+function parseMetadata(
+  metadataJson: string | null
+): Record<string, string | number | boolean | null> | undefined {
+  if (!metadataJson) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(metadataJson);
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const metadata: Record<string, string | number | boolean | null> = {};
+
+    for (const [key, value] of Object.entries(parsed)) {
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        value === null
+      ) {
+        metadata[key] = value;
+      }
+    }
+
+    return Object.keys(metadata).length === 0 ? undefined : metadata;
+  } catch {
+    return undefined;
   }
 }

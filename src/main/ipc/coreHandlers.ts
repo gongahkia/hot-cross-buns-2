@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import {
   ipcContracts,
   type AvailabilityExportRequest,
@@ -39,14 +40,27 @@ import {
   type TaskListsRequest,
   type TaskListRequest,
   type TaskMoveRequest,
-  type TaskUpdateRequest
+  type TaskUpdateRequest,
+  type LocalPerformanceTiming
 } from "@shared/ipc/contracts";
 import { appLogger } from "../diagnostics/appLogger";
 import type { AppDomainServices } from "../services/domainInterfaces";
 import type { IpcHandlerDefinition } from "./registry";
 
-export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDefinition[] {
-  const scheduleMutationDrain = createMutationDrainScheduler(services);
+type PerformanceTimingRecorder = {
+  record?: (timing: {
+    kind: LocalPerformanceTiming["kind"];
+    name: string;
+    durationMs: number;
+    metadata?: Record<string, string | number | boolean | null>;
+  }) => void;
+};
+
+export function createCoreIpcHandlers(
+  services: AppDomainServices,
+  performanceTimings?: PerformanceTimingRecorder
+): IpcHandlerDefinition[] {
+  const scheduleMutationDrain = createMutationDrainScheduler(services, performanceTimings);
   const withMutationDrain = <Request, Response>(
     handle: (request: Request) => Promise<Response> | Response
   ) => async (request: Request): Promise<Response> => {
@@ -58,7 +72,8 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
   return [
     {
       contract: ipcContracts.bootstrap.get,
-      handle: (request) => bootstrapSnapshot(services, request as BootstrapGetRequest)
+      handle: (request) =>
+        bootstrapSnapshot(services, request as BootstrapGetRequest, performanceTimings)
     },
     {
       contract: ipcContracts.tasks.listTaskLists,
@@ -326,89 +341,123 @@ export function createCoreIpcHandlers(services: AppDomainServices): IpcHandlerDe
   ];
 }
 
-async function bootstrapSnapshot(services: AppDomainServices, request: BootstrapGetRequest) {
-  const [
-    taskLists,
-    tasks,
-    hiddenTasks,
-    deletedTasks,
-    calendars,
-    events,
-    scheduledTaskBlocks,
-    notes,
-    settings,
-    syncStatus,
-    googleStatus,
-    undoStatus,
-    native
-  ] = await Promise.all([
-    loadAllBootstrapPages({ limit: 100 }, (pageRequest) =>
-      services.planner.listTaskLists(pageRequest)
-    ),
-    loadAllBootstrapPages({ status: "all", limit: 100 }, (pageRequest) =>
-      services.planner.listTasks(pageRequest)
-    ),
-    loadAllBootstrapPages({ status: "hidden", limit: 100 }, (pageRequest) =>
-      services.planner.listTasks(pageRequest)
-    ),
-    loadAllBootstrapPages({ status: "deleted", limit: 100 }, (pageRequest) =>
-      services.planner.listTasks(pageRequest)
-    ),
-    loadAllBootstrapPages({ limit: 100 }, (pageRequest) =>
-      services.planner.listCalendars(pageRequest)
-    ),
-    loadAllBootstrapPages(
-      {
-        start: request.calendarRange.start,
-        end: request.calendarRange.end,
-        limit: request.calendarRange.limit ?? 500
-      },
-      (pageRequest) => services.planner.listCalendarEvents(pageRequest)
-    ),
-    loadAllBootstrapPages(
-      {
-        start: request.calendarRange.start,
-        end: request.calendarRange.end,
-        limit: 500
-      },
-      (pageRequest) => services.planner.listScheduledTaskBlocks(pageRequest)
-    ),
-    loadAllBootstrapPages({ limit: 50 }, (pageRequest) =>
-      services.planner.listNotes(pageRequest)
-    ),
-    services.settings.get(),
-    services.sync.status(),
-    services.google.status(),
-    services.undo.status(),
-    services.native.capabilities()
-  ]);
+async function bootstrapSnapshot(
+  services: AppDomainServices,
+  request: BootstrapGetRequest,
+  performanceTimings?: PerformanceTimingRecorder
+) {
+  const startedAt = performance.now();
 
-  return {
-    taskLists,
-    tasks,
-    hiddenTasks,
-    deletedTasks,
-    calendars,
-    events,
-    scheduledTaskBlocks,
-    notes,
-    settings,
-    syncStatus,
-    googleStatus,
-    undoStatus,
-    native,
-    resourceCounts: {
-      calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)
-        ? calendars.items.reduce((count, calendar) => count + (calendar.eventCount ?? 0), 0)
-        : knownTotal(events.page.totalKnown, events.items.length),
-      notes: knownTotal(notes.page.totalKnown, notes.items.length),
-      tasks: taskLists.items.every((taskList) => taskList.taskCount !== undefined)
-        ? taskLists.items.reduce((count, taskList) => count + (taskList.taskCount ?? 0), 0)
-        : knownTotal(tasks.page.totalKnown, tasks.items.length) +
-          knownTotal(hiddenTasks.page.totalKnown, hiddenTasks.items.length) +
-          knownTotal(deletedTasks.page.totalKnown, deletedTasks.items.length)
-    }
-  };
+  try {
+    const [
+      taskLists,
+      tasks,
+      hiddenTasks,
+      deletedTasks,
+      calendars,
+      events,
+      scheduledTaskBlocks,
+      notes,
+      settings,
+      syncStatus,
+      googleStatus,
+      undoStatus,
+      native
+    ] = await Promise.all([
+      loadAllBootstrapPages({ limit: 100 }, (pageRequest) =>
+        services.planner.listTaskLists(pageRequest)
+      ),
+      loadAllBootstrapPages({ status: "all", limit: 100 }, (pageRequest) =>
+        services.planner.listTasks(pageRequest)
+      ),
+      loadAllBootstrapPages({ status: "hidden", limit: 100 }, (pageRequest) =>
+        services.planner.listTasks(pageRequest)
+      ),
+      loadAllBootstrapPages({ status: "deleted", limit: 100 }, (pageRequest) =>
+        services.planner.listTasks(pageRequest)
+      ),
+      loadAllBootstrapPages({ limit: 100 }, (pageRequest) =>
+        services.planner.listCalendars(pageRequest)
+      ),
+      loadAllBootstrapPages(
+        {
+          start: request.calendarRange.start,
+          end: request.calendarRange.end,
+          limit: request.calendarRange.limit ?? 500
+        },
+        (pageRequest) => services.planner.listCalendarEvents(pageRequest)
+      ),
+      loadAllBootstrapPages(
+        {
+          start: request.calendarRange.start,
+          end: request.calendarRange.end,
+          limit: 500
+        },
+        (pageRequest) => services.planner.listScheduledTaskBlocks(pageRequest)
+      ),
+      loadAllBootstrapPages({ limit: 50 }, (pageRequest) =>
+        services.planner.listNotes(pageRequest)
+      ),
+      services.settings.get(),
+      services.sync.status(),
+      services.google.status(),
+      services.undo.status(),
+      services.native.capabilities()
+    ]);
+
+    const snapshot = {
+      taskLists,
+      tasks,
+      hiddenTasks,
+      deletedTasks,
+      calendars,
+      events,
+      scheduledTaskBlocks,
+      notes,
+      settings,
+      syncStatus,
+      googleStatus,
+      undoStatus,
+      native,
+      resourceCounts: {
+        calendarEvents: calendars.items.every((calendar) => calendar.eventCount !== undefined)
+          ? calendars.items.reduce((count, calendar) => count + (calendar.eventCount ?? 0), 0)
+          : knownTotal(events.page.totalKnown, events.items.length),
+        notes: knownTotal(notes.page.totalKnown, notes.items.length),
+        tasks: taskLists.items.every((taskList) => taskList.taskCount !== undefined)
+          ? taskLists.items.reduce((count, taskList) => count + (taskList.taskCount ?? 0), 0)
+          : knownTotal(tasks.page.totalKnown, tasks.items.length) +
+            knownTotal(hiddenTasks.page.totalKnown, hiddenTasks.items.length) +
+            knownTotal(deletedTasks.page.totalKnown, deletedTasks.items.length)
+      }
+    };
+
+    recordPerformanceTiming(performanceTimings, {
+      kind: "startup",
+      name: "startup.bootstrap.get",
+      durationMs: performance.now() - startedAt,
+      metadata: {
+        outcome: "used",
+        tasks: snapshot.resourceCounts.tasks,
+        calendarEvents: snapshot.resourceCounts.calendarEvents,
+        notes: snapshot.resourceCounts.notes,
+        payloadBytes: payloadBytes(snapshot)
+      }
+    });
+
+    return snapshot;
+  } catch (thrown) {
+    recordPerformanceTiming(performanceTimings, {
+      kind: "startup",
+      name: "startup.bootstrap.get",
+      durationMs: performance.now() - startedAt,
+      metadata: {
+        outcome: "failed"
+      }
+    });
+
+    throw thrown;
+  }
 }
 
 function knownTotal(pageTotal: number | undefined, itemCount: number): number {
@@ -465,7 +514,10 @@ async function loadAllBootstrapPages<
   } as Response;
 }
 
-function createMutationDrainScheduler(services: AppDomainServices): () => void {
+function createMutationDrainScheduler(
+  services: AppDomainServices,
+  performanceTimings?: PerformanceTimingRecorder
+): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false;
   let requested = false;
@@ -489,14 +541,37 @@ function createMutationDrainScheduler(services: AppDomainServices): () => void {
 
     running = true;
     requested = false;
+    const startedAt = performance.now();
 
     try {
+      const before = await Promise.resolve(services.sync.status()).catch(() => undefined);
       const result = await services.sync.runNow({ drainOnly: true });
+      const after = await Promise.resolve(services.sync.status()).catch(() => undefined);
+
+      recordPerformanceTiming(performanceTimings, {
+        kind: "ipc",
+        name: "sync.post-crud-drain",
+        durationMs: performance.now() - startedAt,
+        metadata: {
+          accepted: result.accepted,
+          pendingBefore: before?.pendingMutationCount ?? null,
+          pendingAfter: after?.pendingMutationCount ?? null
+        }
+      });
 
       if (!result.accepted) {
         schedule(2_000);
       }
     } catch (thrown) {
+      recordPerformanceTiming(performanceTimings, {
+        kind: "ipc",
+        name: "sync.post-crud-drain",
+        durationMs: performance.now() - startedAt,
+        metadata: {
+          accepted: false,
+          outcome: "failed"
+        }
+      });
       appLogger.warn("post-write mutation drain failed", "sync", {
         message: thrown instanceof Error ? thrown.message : String(thrown)
       });
@@ -509,4 +584,29 @@ function createMutationDrainScheduler(services: AppDomainServices): () => void {
   };
 
   return schedule;
+}
+
+function recordPerformanceTiming(
+  performanceTimings: PerformanceTimingRecorder | undefined,
+  timing: {
+    kind: LocalPerformanceTiming["kind"];
+    name: string;
+    durationMs: number;
+    metadata?: Record<string, string | number | boolean | null>;
+  }
+): void {
+  performanceTimings?.record?.({
+    kind: timing.kind,
+    name: timing.name,
+    durationMs: timing.durationMs,
+    ...(timing.metadata === undefined ? {} : { metadata: timing.metadata })
+  });
+}
+
+function payloadBytes(value: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value), "utf8");
+  } catch {
+    return 0;
+  }
 }

@@ -109,6 +109,7 @@ export const localPerformanceTimingSchema = z
     kind: z.enum(["startup", "cached_render", "ipc", "sqlite_query", "search"]),
     name: z.string().min(1).max(160),
     durationMs: z.number().nonnegative(),
+    metadata: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
     createdAt: isoDateTimeSchema
   })
   .strict();
@@ -133,6 +134,24 @@ export const diagnosticsPerformanceResponseSchema = z
 
 export type DiagnosticsPerformanceResponse = z.infer<
   typeof diagnosticsPerformanceResponseSchema
+>;
+
+export const diagnosticsRecordTimingRequestSchema = localPerformanceTimingSchema
+  .omit({ id: true, createdAt: true })
+  .strict();
+
+export type DiagnosticsRecordTimingRequest = z.input<
+  typeof diagnosticsRecordTimingRequestSchema
+>;
+
+export const diagnosticsRecordTimingResponseSchema = z
+  .object({
+    recorded: z.boolean()
+  })
+  .strict();
+
+export type DiagnosticsRecordTimingResponse = z.infer<
+  typeof diagnosticsRecordTimingResponseSchema
 >;
 
 export const diagnosticsSummaryRequestSchema = emptyRequestSchema;

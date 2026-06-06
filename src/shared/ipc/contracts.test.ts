@@ -115,6 +115,29 @@ describe("shared IPC contracts", () => {
       drainOnly: true,
       resources: []
     });
+    expect(
+      ipcContracts.diagnostics.recordTiming.requestSchema.parse({
+        kind: "startup",
+        name: "startup.bootstrap.get",
+        durationMs: 12.4,
+        metadata: {
+          outcome: "used",
+          payloadBytes: 1234,
+          accepted: true,
+          errorCode: null
+        }
+      })
+    ).toEqual({
+      kind: "startup",
+      name: "startup.bootstrap.get",
+      durationMs: 12.4,
+      metadata: {
+        outcome: "used",
+        payloadBytes: 1234,
+        accepted: true,
+        errorCode: null
+      }
+    });
   });
 
   it("applies bounded defaults to list requests", () => {

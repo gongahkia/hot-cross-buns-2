@@ -78,20 +78,31 @@ export async function loadCoreData(
   }
 
   const hcb = window.hcb;
-  const bootstrap = hcb.bootstrap?.get
-    ? await hcb.bootstrap.get({
+  const bootstrapGet = (hcb as { bootstrap?: { get?: typeof hcb.bootstrap.get } }).bootstrap?.get;
+  const bootstrapStartedAt = performance.now();
+  let fallbackReason: "missing" | "failed" | "threw" | null = bootstrapGet
+    ? null
+    : "missing";
+  const bootstrap = bootstrapGet
+    ? await bootstrapGet({
         calendarRange: {
           start: calendarRange.start,
           end: calendarRange.end,
           limit: 500
         }
+      }).catch(() => {
+        fallbackReason = "threw";
+        return null;
       })
     : null;
+  const bootstrapDurationMs = performance.now() - bootstrapStartedAt;
 
   if (bootstrap?.ok) {
     return snapshotFromBootstrap(bootstrap.data);
   }
 
+  fallbackReason ??= "failed";
+  const fallbackStartedAt = performance.now();
   const settingsLoad =
     settingsPromise ?? hcb.settings.get().then((result) => unwrap(result, "Settings failed"));
   const [
@@ -150,7 +161,7 @@ export async function loadCoreData(
     hcb.undo.status().then((result) => unwrap(result, "Undo status failed")),
     hcb.native.capabilities().then((result) => unwrap(result, "Native status failed"))
   ]);
-  return {
+  const snapshot = {
     taskLists: taskLists.items,
     tasks: uniqueTasks([...tasks.items, ...hiddenTasks.items, ...deletedTasks.items]),
     calendars: calendars.items,
@@ -180,6 +191,21 @@ export async function loadCoreData(
           knownTotal(deletedTasks.page.totalKnown, deletedTasks.items.length)
     }
   };
+
+  recordRendererTiming({
+    kind: "startup",
+    name: "startup.bootstrap.fallback-fanout",
+    durationMs: performance.now() - fallbackStartedAt,
+    metadata: {
+      reason: fallbackReason,
+      bootstrapDurationMs: Math.max(0, Math.round(bootstrapDurationMs * 100) / 100),
+      tasks: snapshot.resourceCounts.tasks,
+      calendarEvents: snapshot.resourceCounts.calendarEvents,
+      notes: snapshot.resourceCounts.notes
+    }
+  });
+
+  return snapshot;
 }
 
 function snapshotFromBootstrap(bootstrap: BootstrapGetResponse): CoreDataSnapshot {
@@ -207,4 +233,13 @@ function snapshotFromBootstrap(bootstrap: BootstrapGetResponse): CoreDataSnapsho
     native: bootstrap.native,
     resourceCounts: bootstrap.resourceCounts
   };
+}
+
+function recordRendererTiming(request: {
+  kind: "startup" | "cached_render" | "ipc" | "sqlite_query" | "search";
+  name: string;
+  durationMs: number;
+  metadata?: Record<string, string | number | boolean | null>;
+}): void {
+  void window.hcb?.diagnostics.recordTiming(request);
 }

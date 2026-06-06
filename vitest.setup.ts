@@ -845,6 +845,11 @@ const hcbApi: HcbApi = {
         timings: []
       })
     ),
+    recordTiming: vi.fn(async () =>
+      ok({
+        recorded: true
+      })
+    ),
     summary: vi.fn(async () =>
       ok({
         status: "ok" as const,
