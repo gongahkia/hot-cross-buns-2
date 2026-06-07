@@ -7,7 +7,8 @@ import {
   type NativeImage
 } from "electron";
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   NativeMenuBarItem,
@@ -140,6 +141,11 @@ function trayIconImage(iconDefinition: TrayIconDefinition): NativeImage {
     return nativeImage.createEmpty();
   }
 
+  const pngImage = nativeImage.createFromPath(templateIconPngPath(iconDefinition.body));
+  if (!pngImage.isEmpty()) {
+    return pngImage;
+  }
+
   const image = nativeImage.createFromDataURL(templateIconDataUrl(iconDefinition.body));
   if (!image.isEmpty()) {
     return image;
@@ -162,8 +168,23 @@ function templateIconPath(body: string): string {
   return filePath;
 }
 
+function templateIconPngPath(body: string): string {
+  const svgPath = templateIconPath(body);
+  const pngPath = svgPath.replace(/\.svg$/, ".png");
+  if (!existsSync(pngPath)) {
+    try {
+      execFileSync("/usr/bin/sips", ["-s", "format", "png", svgPath, "--out", pngPath], {
+        stdio: "ignore"
+      });
+    } catch {
+      return pngPath;
+    }
+  }
+  return pngPath;
+}
+
 function templateIconSvg(body: string): string {
-  return menuBarIconSvg(body, "#000");
+  return menuBarIconSvg(body, "#000", 18);
 }
 
 function menuBarPanelMenu(actions: NativeTrayActions, snapshot: NativeMenuBarSnapshot): Menu {

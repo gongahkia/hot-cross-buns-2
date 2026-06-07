@@ -27,9 +27,9 @@ export function sanitizeMenuBarIconSvg(input: string): string | null {
   return inner.length > 0 ? inner : null;
 }
 
-export function menuBarIconSvg(body: string, stroke = "currentColor"): string {
+export function menuBarIconSvg(body: string, stroke = "currentColor", size = 24): string {
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`,
     body,
     "</svg>"
   ].join("");
