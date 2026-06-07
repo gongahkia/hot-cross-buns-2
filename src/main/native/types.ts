@@ -97,6 +97,10 @@ export interface NativeMenuBarSection {
 export interface NativeMenuBarSnapshot {
   panelStyle: SettingsSnapshot["menuBarPanelStyle"];
   iconName: SettingsSnapshot["menuBarIconName"];
+  calendarIconId: SettingsSnapshot["menuBarCalendarIconId"];
+  calendarDoneMode: SettingsSnapshot["menuBarCalendarDoneMode"];
+  customMenuBarIcons: SettingsSnapshot["customMenuBarIcons"];
+  calendarDone: boolean;
   primaryClickAction: SettingsSnapshot["trayClickAction"];
   title: string;
   subtitle?: string;
