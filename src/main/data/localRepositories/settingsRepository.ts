@@ -49,6 +49,9 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   trayClickAction: "open-menu",
   menuBarPanelStyle: "adaptive",
   menuBarIconName: "calendar",
+  menuBarCalendarIconId: "calendar",
+  menuBarCalendarDoneMode: "visibleTodayDone",
+  customMenuBarIcons: [],
   showMenuBarBadge: true,
   showDockBadge: true,
   notificationsEnabled: false,
@@ -240,6 +243,15 @@ export class LocalSettingsRepository {
       ),
       menuBarIconName: normalizeMenuBarIconName(
         this.readSetting("tray", "iconName", DEFAULT_SETTINGS.menuBarIconName)
+      ),
+      menuBarCalendarIconId: normalizeMenuBarCalendarIconId(
+        this.readSetting("tray", "calendarIconId", DEFAULT_SETTINGS.menuBarCalendarIconId)
+      ),
+      menuBarCalendarDoneMode: normalizeMenuBarCalendarDoneMode(
+        this.readSetting("tray", "calendarDoneMode", DEFAULT_SETTINGS.menuBarCalendarDoneMode)
+      ),
+      customMenuBarIcons: normalizeCustomMenuBarIcons(
+        this.readSetting("tray", "customIcons", DEFAULT_SETTINGS.customMenuBarIcons)
       ),
       showMenuBarBadge: this.readSetting("tray", "showBadge", DEFAULT_SETTINGS.showMenuBarBadge),
       showDockBadge: this.readSetting("dock", "showBadge", DEFAULT_SETTINGS.showDockBadge),
@@ -573,6 +585,18 @@ export class LocalSettingsRepository {
 
     if (request.menuBarIconName !== undefined) {
       this.writeSetting("tray", "iconName", request.menuBarIconName, now);
+    }
+
+    if (request.menuBarCalendarIconId !== undefined) {
+      this.writeSetting("tray", "calendarIconId", request.menuBarCalendarIconId, now);
+    }
+
+    if (request.menuBarCalendarDoneMode !== undefined) {
+      this.writeSetting("tray", "calendarDoneMode", request.menuBarCalendarDoneMode, now);
+    }
+
+    if (request.customMenuBarIcons !== undefined) {
+      this.writeSetting("tray", "customIcons", request.customMenuBarIcons, now);
     }
 
     if (request.showMenuBarBadge !== undefined) {
@@ -976,4 +1000,49 @@ function normalizeMenuBarIconName(value: unknown): SettingsSnapshot["menuBarIcon
   }
 
   return "calendar";
+}
+
+function normalizeMenuBarCalendarIconId(
+  value: unknown
+): SettingsSnapshot["menuBarCalendarIconId"] {
+  if (typeof value === "string" && value.trim().length > 0 && value.trim().length <= 120) {
+    return value.trim();
+  }
+
+  return "calendar";
+}
+
+function normalizeMenuBarCalendarDoneMode(
+  value: unknown
+): SettingsSnapshot["menuBarCalendarDoneMode"] {
+  if (value === "visibleTodayDone" || value === "tasksOnly" || value === "neverAutoSwitch") {
+    return value;
+  }
+
+  return "visibleTodayDone";
+}
+
+function normalizeCustomMenuBarIcons(value: unknown): SettingsSnapshot["customMenuBarIcons"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((icon): icon is SettingsSnapshot["customMenuBarIcons"][number] => {
+      if (!icon || typeof icon !== "object") {
+        return false;
+      }
+      const candidate = icon as Partial<SettingsSnapshot["customMenuBarIcons"][number]>;
+      return (
+        typeof candidate.id === "string" &&
+        candidate.id.trim().length > 0 &&
+        typeof candidate.name === "string" &&
+        candidate.name.trim().length > 0 &&
+        typeof candidate.svg === "string" &&
+        candidate.svg.trim().length > 0 &&
+        typeof candidate.createdAt === "string" &&
+        typeof candidate.updatedAt === "string"
+      );
+    })
+    .slice(0, 50);
 }

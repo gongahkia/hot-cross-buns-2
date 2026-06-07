@@ -69,6 +69,20 @@ export const menuBarIconNames = [
 ] as const;
 export const completionSoundIdSchema = z.enum(completionSoundIds);
 export const menuBarIconNameSchema = z.enum(menuBarIconNames);
+export const menuBarCalendarDoneModeSchema = z.enum([
+  "visibleTodayDone",
+  "tasksOnly",
+  "neverAutoSwitch"
+]);
+export const customMenuBarIconSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().trim().min(1).max(80),
+    svg: z.string().trim().min(1).max(20_000),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
 export const perTabListFilterSchema = z
   .object({
     useCustomFilter: z.boolean(),
@@ -263,6 +277,9 @@ export const settingsSnapshotSchema = z
     trayClickAction: trayClickActionSchema,
     menuBarPanelStyle: menuBarPanelStyleSchema,
     menuBarIconName: menuBarIconNameSchema,
+    menuBarCalendarIconId: z.string().trim().min(1).max(120),
+    menuBarCalendarDoneMode: menuBarCalendarDoneModeSchema,
+    customMenuBarIcons: z.array(customMenuBarIconSchema).max(50),
     showMenuBarBadge: z.boolean(),
     showDockBadge: z.boolean(),
     notificationsEnabled: z.boolean(),
@@ -341,6 +358,9 @@ export const settingsUpdateRequestSchema = z
     trayClickAction: trayClickActionSchema.optional(),
     menuBarPanelStyle: menuBarPanelStyleSchema.optional(),
     menuBarIconName: menuBarIconNameSchema.optional(),
+    menuBarCalendarIconId: z.string().trim().min(1).max(120).optional(),
+    menuBarCalendarDoneMode: menuBarCalendarDoneModeSchema.optional(),
+    customMenuBarIcons: z.array(customMenuBarIconSchema).max(50).optional(),
     showMenuBarBadge: z.boolean().optional(),
     showDockBadge: z.boolean().optional(),
     notificationsEnabled: z.boolean().optional(),
