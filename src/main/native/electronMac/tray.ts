@@ -15,7 +15,7 @@ import type {
 import {
   calendarCheckMenuBarIconBody,
   calendarMenuBarIconBody,
-  menuBarIconDataUrl
+  menuBarIconSvg
 } from "@shared/menuBarIcons";
 import { MenuBarPanelController } from "./menuBarPanelController";
 import { unsupported } from "./operationResults";
@@ -137,9 +137,13 @@ function trayIconImage(iconDefinition: TrayIconDefinition): NativeImage {
     return nativeImage.createEmpty();
   }
 
-  const image = nativeImage.createFromDataURL(menuBarIconDataUrl(iconDefinition.body));
+  const image = nativeImage.createFromDataURL(templateIconDataUrl(iconDefinition.body));
 
   return image.isEmpty() ? nativeImage.createEmpty() : image;
+}
+
+function templateIconDataUrl(body: string): string {
+  return `data:image/svg+xml;base64,${Buffer.from(menuBarIconSvg(body, "#000")).toString("base64")}`;
 }
 
 function menuBarPanelMenu(actions: NativeTrayActions, snapshot: NativeMenuBarSnapshot): Menu {
