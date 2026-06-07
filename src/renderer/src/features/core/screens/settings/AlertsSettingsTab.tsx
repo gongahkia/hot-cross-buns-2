@@ -1,6 +1,6 @@
 import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contracts";
 import { useState } from "react";
-import { Bell, Download, Play, Upload, Volume2 } from "lucide-react";
+import { Bell, Download, Play, Volume2 } from "lucide-react";
 import { Badge, Button, cx } from "../../../../components/primitives";
 import { playCompletionSound } from "../../completionSounds";
 import {
@@ -258,19 +258,8 @@ export function AlertsSettingsTab({
                 Close
               </Button>
             </div>
-            <a
-              className={cx(
-                "inline-flex h-8 w-fit items-center justify-center gap-2 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] font-medium text-text-primary transition-colors duration-fast ease-hcb hover:bg-surface-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              )}
-              href="https://lucide.dev/icons/"
-              rel="noreferrer"
-              target="_blank"
-            >
-              <ExternalLink aria-hidden="true" size={14} />
-              Open Lucide icons
-            </a>
             <p className="text-[var(--text-sm)] text-text-secondary">
-              Pick a Lucide icon, copy its SVG, paste it here, and give it a HCB2 name.
+              Choose a transparent PNG and give it a HCB2 name.
             </p>
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem]">
               <div className="grid gap-3">
@@ -283,24 +272,25 @@ export function AlertsSettingsTab({
                   />
                 </label>
                 <label className="grid gap-1 text-[var(--text-sm)] font-medium text-text-secondary">
-                  SVG
-                  <textarea
-                    className="min-h-32 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary"
-                    onChange={(event) => setCustomIconSvg(event.target.value)}
-                    value={customIconSvg}
+                  PNG
+                  <input
+                    accept="image/png"
+                    className={cx(settingsSelectClass, "w-full")}
+                    onChange={(event) => void selectCustomIconFile(event.target.files?.[0] ?? null)}
+                    type="file"
                   />
                 </label>
+                {customIconFileName ? (
+                  <p className="truncate text-[var(--text-sm)] text-text-secondary">{customIconFileName}</p>
+                ) : null}
               </div>
               <div className="grid content-start gap-2">
                 <div className="grid aspect-square w-32 place-items-center rounded-hcbMd border border-border bg-surface-1 text-text-primary">
-                  {customIconPreviewSvg ? (
-                    <span
-                      aria-label="Menu bar icon preview"
-                      className="block h-8 w-8"
-                      dangerouslySetInnerHTML={{
-                        __html: menuBarIconSvg(customIconPreviewSvg)
-                      }}
-                      role="img"
+                  {customIconPreviewUrl ? (
+                    <img
+                      alt="Menu bar icon preview"
+                      className="h-8 w-8 object-contain"
+                      src={customIconPreviewUrl}
                     />
                   ) : (
                     <span className="text-[var(--text-xs)] text-text-secondary">Preview</span>
@@ -313,7 +303,7 @@ export function AlertsSettingsTab({
               <Button onClick={() => setCustomIconOpen(false)} variant="ghost">
                 Cancel
               </Button>
-              <Button onClick={saveCustomIcon} variant="primary">
+              <Button onClick={() => void saveCustomIcon()} variant="primary">
                 Save
               </Button>
             </div>
@@ -324,14 +314,6 @@ export function AlertsSettingsTab({
   );
 }
 
-function selectedMenuBarIconName(settings: SettingsSnapshot): string {
-  if (settings.menuBarCalendarIconId === "calendar") {
-    return "Calendar";
-  }
-
-  return settings.customMenuBarIcons.find((icon) => icon.id === settings.menuBarCalendarIconId)?.name ?? "Calendar";
-}
-
 function selectedMenuBarIconId(settings: SettingsSnapshot): string {
   if (settings.menuBarCalendarIconId === "calendar") {
     return "calendar";
@@ -340,6 +322,17 @@ function selectedMenuBarIconId(settings: SettingsSnapshot): string {
   return settings.customMenuBarIcons.some((icon) => icon.id === settings.menuBarCalendarIconId)
     ? settings.menuBarCalendarIconId
     : "calendar";
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+
+  return btoa(binary);
 }
 
 function SoundPicker({
