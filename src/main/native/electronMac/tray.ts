@@ -6,9 +6,7 @@ import {
   type MenuItemConstructorOptions,
   type NativeImage
 } from "electron";
-import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   NativeMenuBarItem,
@@ -16,15 +14,11 @@ import type {
   NativeOperationResult,
   NativeTrayActions
 } from "../types";
-import {
-  calendarCheckMenuBarIconBody,
-  calendarMenuBarIconBody,
-  menuBarIconSvg
-} from "@shared/menuBarIcons";
+import { brandAssetPath } from "../brandAssets";
 import { MenuBarPanelController } from "./menuBarPanelController";
 import { unsupported } from "./operationResults";
 
-type TrayIconDefinition = { body: string } | "none";
+type TrayIconDefinition = { path: string } | "none";
 
 export class MacTrayController {
   private tray: Tray | undefined;
@@ -128,11 +122,11 @@ function trayIconDefinition(snapshot: NativeMenuBarSnapshot): TrayIconDefinition
 
   const customIcon = snapshot.customMenuBarIcons.find((icon) => icon.id === snapshot.calendarIconId);
   if (customIcon) {
-    return { body: customIcon.svg };
+    return { path: customMenuBarIconPath(customIcon.fileName) };
   }
 
   return {
-    body: snapshot.calendarDone ? calendarCheckMenuBarIconBody : calendarMenuBarIconBody
+    path: brandAssetPath(snapshot.calendarDone ? "menu-bar-calendar-check.png" : "menu-bar-calendar.png")
   };
 }
 
@@ -141,50 +135,25 @@ function trayIconImage(iconDefinition: TrayIconDefinition): NativeImage {
     return nativeImage.createEmpty();
   }
 
-  const pngImage = nativeImage.createFromPath(templateIconPngPath(iconDefinition.body));
-  if (!pngImage.isEmpty()) {
-    return pngImage;
+  return menuBarIconImage(iconDefinition.path);
+}
+
+function customMenuBarIconPath(fileName: string): string {
+  return join(app.getPath("userData"), "menu-bar-icons", "custom", fileName);
+}
+
+function menuBarIconImage(path: string): NativeImage {
+  const image = existsSync(path) ? nativeImage.createFromPath(path) : nativeImage.createEmpty();
+  const retinaPath = path.replace(/\.png$/i, "@2x.png");
+
+  if (!image.isEmpty() && existsSync(retinaPath)) {
+    image.addRepresentation({
+      scaleFactor: 2,
+      dataURL: `data:image/png;base64,${readFileSync(retinaPath).toString("base64")}`
+    });
   }
 
-  const image = nativeImage.createFromDataURL(templateIconDataUrl(iconDefinition.body));
-  if (!image.isEmpty()) {
-    return image;
-  }
-
-  const pathImage = nativeImage.createFromPath(templateIconPath(iconDefinition.body));
-  return pathImage.isEmpty() ? nativeImage.createEmpty() : pathImage;
-}
-
-function templateIconDataUrl(body: string): string {
-  return `data:image/svg+xml;base64,${Buffer.from(templateIconSvg(body)).toString("base64")}`;
-}
-
-function templateIconPath(body: string): string {
-  const svg = templateIconSvg(body);
-  const directory = join(app.getPath("userData"), "menu-bar-icons");
-  const filePath = join(directory, `${createHash("sha1").update(svg).digest("hex")}.svg`);
-  mkdirSync(directory, { recursive: true });
-  writeFileSync(filePath, svg);
-  return filePath;
-}
-
-function templateIconPngPath(body: string): string {
-  const svgPath = templateIconPath(body);
-  const pngPath = svgPath.replace(/\.svg$/, ".png");
-  if (!existsSync(pngPath)) {
-    try {
-      execFileSync("/usr/bin/sips", ["-s", "format", "png", svgPath, "--out", pngPath], {
-        stdio: "ignore"
-      });
-    } catch {
-      return pngPath;
-    }
-  }
-  return pngPath;
-}
-
-function templateIconSvg(body: string): string {
-  return menuBarIconSvg(body, "#000", 18);
+  return image;
 }
 
 function menuBarPanelMenu(actions: NativeTrayActions, snapshot: NativeMenuBarSnapshot): Menu {

@@ -77,6 +77,8 @@ import {
   nativeCapabilitiesResponseSchema,
   nativeFontFamiliesRequestSchema,
   nativeFontFamiliesResponseSchema,
+  nativeImportMenuBarIconRequestSchema,
+  nativeImportMenuBarIconResponseSchema,
   nativeNotificationPermissionRequestSchema,
   nativeNotificationPermissionResponseSchema
 } from "./native";
@@ -368,6 +370,12 @@ export const ipcContracts = {
       "listFontFamilies",
       nativeFontFamiliesRequestSchema,
       nativeFontFamiliesResponseSchema
+    ),
+    importMenuBarIcon: defineIpcContract(
+      "native",
+      "importMenuBarIcon",
+      nativeImportMenuBarIconRequestSchema,
+      nativeImportMenuBarIconResponseSchema
     )
   },
   diagnostics: {

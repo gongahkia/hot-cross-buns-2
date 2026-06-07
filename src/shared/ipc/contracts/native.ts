@@ -210,6 +210,26 @@ export const nativeFontFamiliesResponseSchema = z
 
 export type NativeFontFamiliesResponse = z.infer<typeof nativeFontFamiliesResponseSchema>;
 
+export const nativeImportMenuBarIconRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    dataBase64: z.string().trim().min(1).max(1_000_000)
+  })
+  .strict();
+
+export const nativeImportMenuBarIconResponseSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().trim().min(1).max(80),
+    fileName: z.string().trim().min(1).max(200),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema
+  })
+  .strict();
+
+export type NativeImportMenuBarIconRequest = z.infer<typeof nativeImportMenuBarIconRequestSchema>;
+export type NativeImportMenuBarIconResponse = z.infer<typeof nativeImportMenuBarIconResponseSchema>;
+
 export const nativeRouteSchema = z
   .object({
     kind: z.enum([

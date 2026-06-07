@@ -78,7 +78,7 @@ export const customMenuBarIconSchema = z
   .object({
     id: idSchema,
     name: z.string().trim().min(1).max(80),
-    svg: z.string().trim().min(1).max(20_000),
+    fileName: z.string().trim().min(1).max(200),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema
   })

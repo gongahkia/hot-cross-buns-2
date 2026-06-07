@@ -1,7 +1,6 @@
 import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contracts";
-import { menuBarIconSvg, sanitizeMenuBarIconSvg } from "@shared/menuBarIcons";
 import { useState } from "react";
-import { Bell, Download, ExternalLink, Play, Volume2 } from "lucide-react";
+import { Bell, Download, Play, Upload, Volume2 } from "lucide-react";
 import { Badge, Button, cx } from "../../../../components/primitives";
 import { playCompletionSound } from "../../completionSounds";
 import {

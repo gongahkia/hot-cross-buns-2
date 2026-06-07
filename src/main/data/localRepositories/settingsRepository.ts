@@ -111,6 +111,13 @@ export class LocalSettingsRepository {
 
     const previousCache = this.settingsReadCache;
     this.settingsReadCache = this.readSettingsMap();
+    const customMenuBarIcons = normalizeCustomMenuBarIcons(
+      this.readSetting("tray", "customIcons", DEFAULT_SETTINGS.customMenuBarIcons)
+    );
+    const menuBarCalendarIconId = normalizeMenuBarCalendarIconId(
+      this.readSetting("tray", "calendarIconId", DEFAULT_SETTINGS.menuBarCalendarIconId),
+      customMenuBarIcons
+    );
 
     try {
       const snapshot: SettingsSnapshot = {
@@ -244,15 +251,11 @@ export class LocalSettingsRepository {
       menuBarIconName: normalizeMenuBarIconName(
         this.readSetting("tray", "iconName", DEFAULT_SETTINGS.menuBarIconName)
       ),
-      menuBarCalendarIconId: normalizeMenuBarCalendarIconId(
-        this.readSetting("tray", "calendarIconId", DEFAULT_SETTINGS.menuBarCalendarIconId)
-      ),
+      menuBarCalendarIconId,
       menuBarCalendarDoneMode: normalizeMenuBarCalendarDoneMode(
         this.readSetting("tray", "calendarDoneMode", DEFAULT_SETTINGS.menuBarCalendarDoneMode)
       ),
-      customMenuBarIcons: normalizeCustomMenuBarIcons(
-        this.readSetting("tray", "customIcons", DEFAULT_SETTINGS.customMenuBarIcons)
-      ),
+      customMenuBarIcons,
       showMenuBarBadge: this.readSetting("tray", "showBadge", DEFAULT_SETTINGS.showMenuBarBadge),
       showDockBadge: this.readSetting("dock", "showBadge", DEFAULT_SETTINGS.showDockBadge),
       notificationsEnabled: this.readSetting(
@@ -1003,9 +1006,19 @@ function normalizeMenuBarIconName(value: unknown): SettingsSnapshot["menuBarIcon
 }
 
 function normalizeMenuBarCalendarIconId(
-  value: unknown
+  value: unknown,
+  customIcons: SettingsSnapshot["customMenuBarIcons"]
 ): SettingsSnapshot["menuBarCalendarIconId"] {
-  if (typeof value === "string" && value.trim().length > 0 && value.trim().length <= 120) {
+  if (value === "calendar") {
+    return "calendar";
+  }
+
+  if (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.trim().length <= 120 &&
+    customIcons.some((icon) => icon.id === value.trim())
+  ) {
     return value.trim();
   }
 
@@ -1038,8 +1051,8 @@ function normalizeCustomMenuBarIcons(value: unknown): SettingsSnapshot["customMe
         candidate.id.trim().length > 0 &&
         typeof candidate.name === "string" &&
         candidate.name.trim().length > 0 &&
-        typeof candidate.svg === "string" &&
-        candidate.svg.trim().length > 0 &&
+        typeof candidate.fileName === "string" &&
+        candidate.fileName.trim().length > 0 &&
         typeof candidate.createdAt === "string" &&
         typeof candidate.updatedAt === "string"
       );

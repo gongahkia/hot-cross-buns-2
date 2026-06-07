@@ -332,6 +332,13 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
         ),
       listFontFamilies: () =>
         invokeContract(ipc, ipcContracts.native.listFontFamilies, {}, "Native font list request failed"),
+      importMenuBarIcon: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.native.importMenuBarIcon,
+          request,
+          "Menu bar icon import failed"
+        ),
       subscribeAction: (listener) => {
         if (!ipc.on || !ipc.removeListener) {
           return () => undefined;

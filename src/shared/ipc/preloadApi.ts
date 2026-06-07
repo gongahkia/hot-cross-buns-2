@@ -47,6 +47,8 @@ import type {
   NativeAction,
   NativeCapabilitiesResponse,
   NativeFontFamiliesResponse,
+  NativeImportMenuBarIconRequest,
+  NativeImportMenuBarIconResponse,
   NativeNotificationPermissionResponse,
   NoteCreateRequest,
   NoteDeleteRequest,
@@ -193,6 +195,9 @@ export interface HcbApi {
       HcbResult<NativeNotificationPermissionResponse>
     >;
     listFontFamilies: () => Promise<HcbResult<NativeFontFamiliesResponse>>;
+    importMenuBarIcon: (
+      request: NativeImportMenuBarIconRequest
+    ) => Promise<HcbResult<NativeImportMenuBarIconResponse>>;
     subscribeAction: (listener: (action: NativeAction) => void) => () => void;
   };
   diagnostics: {

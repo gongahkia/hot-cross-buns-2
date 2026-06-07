@@ -1,4 +1,8 @@
 import { performance } from "node:perf_hooks";
+import { app } from "electron";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   ipcContracts,
   type AvailabilityExportRequest,
@@ -16,6 +20,7 @@ import {
   type GoogleSaveOAuthClientRequest,
   type McpSetEnabledRequest,
   type NativeCapabilitiesResponse,
+  type NativeImportMenuBarIconRequest,
   type NoteBrokenLinksRequest,
   type NoteCreateRequest,
   type NoteDeleteRequest,
@@ -344,8 +349,49 @@ export function createCoreIpcHandlers(
     {
       contract: ipcContracts.native.listFontFamilies,
       handle: () => services.native.listFontFamilies()
+    },
+    {
+      contract: ipcContracts.native.importMenuBarIcon,
+      handle: (request) => importMenuBarIcon(request as NativeImportMenuBarIconRequest)
     }
   ];
+}
+
+function importMenuBarIcon(request: NativeImportMenuBarIconRequest) {
+  const buffer = Buffer.from(request.dataBase64, "base64");
+  if (!isPng(buffer)) {
+    throw new Error("Menu bar icon must be a PNG file.");
+  }
+
+  const now = new Date().toISOString();
+  const uuid = randomUUID();
+  const id = `custom:${uuid}`;
+  const fileName = `custom-${uuid}.png`;
+  const directory = join(app.getPath("userData"), "menu-bar-icons", "custom");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, fileName), buffer);
+
+  return {
+    id,
+    name: request.name.trim(),
+    fileName,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function isPng(buffer: Buffer): boolean {
+  return (
+    buffer.length > 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  );
 }
 
 async function bootstrapSnapshot(
