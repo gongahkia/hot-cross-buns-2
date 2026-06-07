@@ -5,9 +5,13 @@ import { menuBarPanelDataUrl, menuBarPanelHtml } from "./menuBarPanelHtml";
 describe("menu bar panel HTML", () => {
   it("escapes snapshot text before rendering the panel", () => {
     const snapshot: NativeMenuBarSnapshot = {
-      panelStyle: "adaptive",
-      iconName: "calendar",
-      primaryClickAction: "open-menu",
+    panelStyle: "adaptive",
+    iconName: "calendar",
+    calendarIconId: "calendar",
+    calendarDoneMode: "visibleTodayDone",
+    customMenuBarIcons: [],
+    calendarDone: false,
+    primaryClickAction: "open-menu",
       title: "<script>&\"'",
       syncLabel: "Sync <ok>",
       tooltip: "Tooltip",
@@ -38,9 +42,13 @@ describe("menu bar panel HTML", () => {
 
   it("renders agenda rows without leading icons", () => {
     const snapshot: NativeMenuBarSnapshot = {
-      panelStyle: "adaptive",
-      iconName: "calendar",
-      primaryClickAction: "open-menu",
+    panelStyle: "adaptive",
+    iconName: "calendar",
+    calendarIconId: "calendar",
+    calendarDoneMode: "visibleTodayDone",
+    customMenuBarIcons: [],
+    calendarDone: false,
+    primaryClickAction: "open-menu",
       title: "Agenda",
       syncLabel: "Synced",
       tooltip: "Tooltip",
@@ -68,6 +76,10 @@ describe("menu bar panel HTML", () => {
     const snapshot: NativeMenuBarSnapshot = {
       panelStyle: "adaptive",
       iconName: "calendar",
+      calendarIconId: "calendar",
+      calendarDoneMode: "visibleTodayDone",
+      customMenuBarIcons: [],
+      calendarDone: false,
       primaryClickAction: "open-menu",
       title: "Agenda",
       syncLabel: "Synced",
@@ -91,6 +103,10 @@ describe("menu bar panel HTML", () => {
     const snapshot: NativeMenuBarSnapshot = {
       panelStyle: "adaptive",
       iconName: "calendar",
+      calendarIconId: "calendar",
+      calendarDoneMode: "visibleTodayDone",
+      customMenuBarIcons: [],
+      calendarDone: false,
       primaryClickAction: "open-menu",
       title: "Agenda",
       syncLabel: "Synced",

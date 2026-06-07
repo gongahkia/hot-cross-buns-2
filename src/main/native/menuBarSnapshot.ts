@@ -103,6 +103,10 @@ export function buildNativeMenuBarSnapshot(
   return {
     panelStyle: settings.menuBarPanelStyle,
     iconName: settings.menuBarIconName,
+    calendarIconId: settings.menuBarCalendarIconId,
+    calendarDoneMode: settings.menuBarCalendarDoneMode,
+    customMenuBarIcons: settings.customMenuBarIcons,
+    calendarDone: isCalendarDone(settings, todayTasks, todayEvents),
     primaryClickAction: settings.trayClickAction,
     title,
     subtitle,
@@ -139,6 +143,22 @@ function calendarEvents(
   } catch {
     return [];
   }
+}
+
+function isCalendarDone(
+  settings: SettingsSnapshot,
+  todayTasks: TaskSummary[],
+  todayEvents: CalendarEventSummary[]
+): boolean {
+  if (settings.menuBarCalendarDoneMode === "neverAutoSwitch") {
+    return false;
+  }
+
+  if (settings.menuBarCalendarDoneMode === "tasksOnly") {
+    return todayTasks.length === 0;
+  }
+
+  return todayTasks.length === 0 && todayEvents.every((event) => Boolean(event.completedAt));
 }
 
 function menuBarSections(

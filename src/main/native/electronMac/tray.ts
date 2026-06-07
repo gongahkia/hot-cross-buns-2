@@ -18,12 +18,11 @@ import { unsupported } from "./operationResults";
 const fallbackTrayIconBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOUlEQVR4nGNgGArgP7macGGyDSHZufgMwGkgPqcT5SKKDCBFM1UMoV0gUmQAPu+QBKiSEklyLtkAAHbWV6m7KwjdAAAAAElFTkSuQmCC";
 
-type MenuBarIconName = NativeMenuBarSnapshot["iconName"];
-type TrayIconName = MenuBarIconName | "none";
+type TrayIconDefinition = { body: string } | "none";
 
-const templateIconSvgBodies: Record<MenuBarIconName, string> = {
-  calendar: '<rect x="3" y="4.1" width="12" height="10.6" rx="2"/><path d="M6 2.7v3"/><path d="M12 2.7v3"/><path d="M3 7.3h12"/><path d="M6.2 10h.1"/><path d="M9 10h.1"/><path d="M11.8 10h.1"/>'
-};
+const calendarIconBody =
+  '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>';
+const calendarCheckIconBody = `${calendarIconBody}<path d="m9 16 2 2 4-4"/>`;
 
 export class MacTrayController {
   private tray: Tray | undefined;
@@ -36,7 +35,7 @@ export class MacTrayController {
     }
 
     try {
-      const image = trayIconImage(trayIconName(actions.snapshot()));
+      const image = trayIconImage(trayIconDefinition(actions.snapshot()));
       image.setTemplateImage(true);
       this.tray?.destroy();
       this.clearRefreshTimer();
@@ -98,7 +97,7 @@ export class MacTrayController {
 
   private refreshPresentation(actions: NativeTrayActions): NativeMenuBarSnapshot {
     const snapshot = actions.snapshot();
-    const image = trayIconImage(trayIconName(snapshot));
+    const image = trayIconImage(trayIconDefinition(snapshot));
     image.setTemplateImage(true);
     const title = snapshot.statusLabel ?? snapshot.badgeLabel ?? "";
 
@@ -120,26 +119,34 @@ export class MacTrayController {
   }
 }
 
-function trayIconName(snapshot: NativeMenuBarSnapshot): TrayIconName {
-  return snapshot.panelStyle === "calendar" ? snapshot.iconName : "none";
+function trayIconDefinition(snapshot: NativeMenuBarSnapshot): TrayIconDefinition {
+  if (snapshot.panelStyle !== "calendar") {
+    return "none";
+  }
+
+  const customIcon = snapshot.customMenuBarIcons.find((icon) => icon.id === snapshot.calendarIconId);
+  if (customIcon) {
+    return { body: customIcon.svg };
+  }
+
+  return { body: snapshot.calendarDone ? calendarCheckIconBody : calendarIconBody };
 }
 
-function trayIconImage(iconName: TrayIconName): NativeImage {
-  if (iconName === "none") {
+function trayIconImage(iconDefinition: TrayIconDefinition): NativeImage {
+  if (iconDefinition === "none") {
     return nativeImage.createEmpty();
   }
 
-  const image = nativeImage.createFromDataURL(templateIconDataUrl(iconName));
+  const image = nativeImage.createFromDataURL(templateIconDataUrl(iconDefinition.body));
 
   return image.isEmpty()
     ? nativeImage.createFromDataURL(`data:image/png;base64,${fallbackTrayIconBase64}`)
     : image;
 }
 
-function templateIconDataUrl(iconName: MenuBarIconName): string {
-  const body = templateIconSvgBodies[iconName];
+function templateIconDataUrl(body: string): string {
   const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#000" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
     body,
     "</svg>"
   ].join("");

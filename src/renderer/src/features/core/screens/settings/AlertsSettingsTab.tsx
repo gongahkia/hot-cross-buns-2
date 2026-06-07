@@ -1,4 +1,6 @@
 import type { SettingsSnapshot, SettingsUpdateRequest } from "@shared/ipc/contracts";
+import { sanitizeMenuBarIconSvg } from "@shared/menuBarIcons";
+import { useState } from "react";
 import { Bell, Download, ExternalLink, Play, Volume2 } from "lucide-react";
 import { Badge, Button, cx } from "../../../../components/primitives";
 import { playCompletionSound } from "../../completionSounds";
@@ -37,12 +39,37 @@ export function AlertsSettingsTab({
   settings,
   updateSettings
 }: AlertsSettingsTabProps): JSX.Element {
+  const [customIconOpen, setCustomIconOpen] = useState(false);
+  const [customIconName, setCustomIconName] = useState("");
+  const [customIconSvg, setCustomIconSvg] = useState("");
+  const [customIconError, setCustomIconError] = useState<string | null>(null);
+
   async function enableNotifications(checked: boolean): Promise<void> {
     if (checked) {
       await window.hcb?.native.requestNotificationPermission();
     }
 
     updateSettings({ notificationsEnabled: checked });
+  }
+
+  function saveCustomIcon(): void {
+    const name = customIconName.trim();
+    const svg = sanitizeMenuBarIconSvg(customIconSvg);
+    if (!name || !svg) {
+      setCustomIconError("Enter a name and a safe Lucide SVG.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const id = `custom:${crypto.randomUUID()}`;
+    updateSettings({
+      customMenuBarIcons: [...settings.customMenuBarIcons, { id, name, svg, createdAt: now, updatedAt: now }],
+      menuBarCalendarIconId: id
+    });
+    setCustomIconOpen(false);
+    setCustomIconName("");
+    setCustomIconSvg("");
+    setCustomIconError(null);
   }
 
   return (
@@ -133,24 +160,39 @@ export function AlertsSettingsTab({
             value={settings.menuBarPanelStyle}
           />
         </SettingsControlRow>
-        <SettingsControlRow
-          description="Calendar is the only built-in icon; pick new Lucide names externally."
-          label="Menu bar icon"
-        >
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <Badge>{settings.menuBarIconName}</Badge>
-            <a
-              className={cx(
-                "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] font-medium text-text-primary transition-colors duration-fast ease-hcb hover:bg-surface-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              )}
-              href="https://lucide.dev/icons/"
-              rel="noreferrer"
-              target="_blank"
+        <SettingsControlRow description="Calendar is the only built-in icon." label="Menu bar icon">
+          <div className="grid justify-items-end gap-2">
+            <select
+              aria-label="Calendar menu bar icon"
+              className={settingsSelectClass}
+              onChange={() => updateSettings({ menuBarCalendarIconId: "calendar", menuBarIconName: "calendar" })}
+              value="calendar"
             >
-              <ExternalLink aria-hidden="true" size={14} />
-              Browse Lucide
-            </a>
+              <option value="calendar">Calendar</option>
+            </select>
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+              <Badge>{selectedMenuBarIconName(settings)}</Badge>
+              <Button onClick={() => setCustomIconOpen(true)} variant="secondary">
+                Select custom...
+              </Button>
+            </div>
           </div>
+        </SettingsControlRow>
+        <SettingsControlRow label="Calendar done icon">
+          <select
+            aria-label="Calendar done icon"
+            className={settingsSelectClass}
+            onChange={(event) =>
+              updateSettings({
+                menuBarCalendarDoneMode: event.target.value as SettingsSnapshot["menuBarCalendarDoneMode"]
+              })
+            }
+            value={settings.menuBarCalendarDoneMode}
+          >
+            <option value="visibleTodayDone">Visible today done</option>
+            <option value="tasksOnly">Tasks only</option>
+            <option value="neverAutoSwitch">Never auto-switch</option>
+          </select>
         </SettingsControlRow>
         <SettingsSwitch
           checked={settings.showMenuBarBadge}
@@ -166,8 +208,71 @@ export function AlertsSettingsTab({
           onChange={(checked) => updateSettings({ showDockBadge: checked })}
         />
       </SettingsGroup>
+      {customIconOpen ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+          role="dialog"
+        >
+          <div className="grid w-full max-w-lg gap-3 rounded-hcbLg border border-border bg-surface-0 p-4 shadow-hcbLg">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-[var(--text-lg)] font-semibold text-text-primary">Select custom icon</h3>
+              <Button onClick={() => setCustomIconOpen(false)} variant="ghost">
+                Close
+              </Button>
+            </div>
+            <a
+              className={cx(
+                "inline-flex h-8 w-fit items-center justify-center gap-2 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] font-medium text-text-primary transition-colors duration-fast ease-hcb hover:bg-surface-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              )}
+              href="https://lucide.dev/icons/"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink aria-hidden="true" size={14} />
+              Open Lucide icons
+            </a>
+            <p className="text-[var(--text-sm)] text-text-secondary">
+              Pick a Lucide icon, copy its SVG, paste it here, and give it a HCB2 name.
+            </p>
+            <label className="grid gap-1 text-[var(--text-sm)] font-medium text-text-secondary">
+              Name
+              <input
+                className={cx(settingsSelectClass, "w-full")}
+                onChange={(event) => setCustomIconName(event.target.value)}
+                value={customIconName}
+              />
+            </label>
+            <label className="grid gap-1 text-[var(--text-sm)] font-medium text-text-secondary">
+              SVG
+              <textarea
+                className="min-h-32 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary"
+                onChange={(event) => setCustomIconSvg(event.target.value)}
+                value={customIconSvg}
+              />
+            </label>
+            {customIconError ? <p className="text-[var(--text-sm)] text-danger">{customIconError}</p> : null}
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setCustomIconOpen(false)} variant="ghost">
+                Cancel
+              </Button>
+              <Button onClick={saveCustomIcon} variant="primary">
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function selectedMenuBarIconName(settings: SettingsSnapshot): string {
+  if (settings.menuBarCalendarIconId === "calendar") {
+    return "Calendar";
+  }
+
+  return settings.customMenuBarIcons.find((icon) => icon.id === settings.menuBarCalendarIconId)?.name ?? "Calendar";
 }
 
 function SoundPicker({
