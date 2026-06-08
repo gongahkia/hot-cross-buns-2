@@ -471,7 +471,7 @@ function tagBackfillOperations(connection: SqliteConnection): SqliteWriteOperati
        FROM google_tasks
        WHERE local_tags_json IS NOT NULL;`
     )) {
-      const kind = row.deletedAt == null &&
+      const kind: "task" | "note" = row.deletedAt == null &&
         row.isHidden !== 1 &&
         row.status !== "completed" &&
         row.parentId === null &&

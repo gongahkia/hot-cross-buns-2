@@ -110,6 +110,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     diagnosticsIncludePerformance: true,
     rawGoogleDiagnosticsEnabled: false,
     savedSearchViews: [],
+    pinnedSavedSearchViewIds: [],
     savedTaskViews: [],
     ...overrides
   };

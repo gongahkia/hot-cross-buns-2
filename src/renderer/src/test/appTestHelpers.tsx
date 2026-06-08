@@ -189,6 +189,7 @@ export function testSettings(overrides: Partial<SettingsSnapshot> = {}): Setting
     diagnosticsIncludePerformance: true,
     rawGoogleDiagnosticsEnabled: false,
     savedSearchViews: [],
+    pinnedSavedSearchViewIds: [],
     savedTaskViews: [],
     ...overrides
   };
@@ -354,6 +355,7 @@ function bootstrapFixture(api: HcbApi): HcbApi["bootstrap"] {
         events,
         scheduledTaskBlocks,
         notes,
+        tags,
         settings,
         syncStatus,
         googleStatus,
@@ -388,6 +390,9 @@ function bootstrapFixture(api: HcbApi): HcbApi["bootstrap"] {
         loadAllFixturePages({ limit: 50 }, (pageRequest) =>
           api.notes.list(pageRequest).then(unwrapFixture)
         ),
+        loadAllFixturePages({ limit: 100 }, (pageRequest) =>
+          api.tags.list(pageRequest).then(unwrapFixture)
+        ),
         api.settings.get().then(unwrapFixture),
         api.sync.status().then(unwrapFixture),
         api.google.status().then(unwrapFixture),
@@ -404,6 +409,7 @@ function bootstrapFixture(api: HcbApi): HcbApi["bootstrap"] {
         events,
         scheduledTaskBlocks,
         notes,
+        tags,
         settings,
         syncStatus,
         googleStatus,
@@ -836,6 +842,66 @@ export function seededHcb(): HcbApi {
         return ok({ items: items.slice(0, request.limit ?? 8) });
       }),
       listBrokenLinks: vi.fn(async () => ok({ items: [] }))
+    },
+    tags: {
+      ...api.tags,
+      list: vi.fn(async () =>
+        ok({
+          items: [
+            {
+              id: "tag-ops",
+              name: "ops",
+              color: null,
+              taskCount: 1,
+              eventCount: 0,
+              noteCount: 0,
+              totalCount: 1,
+              createdAt: now,
+              updatedAt: now
+            }
+          ],
+          page: { limit: 100, totalKnown: 1 }
+        })
+      ),
+      create: vi.fn(async (request) =>
+        ok({
+          id: `tag-${request.name}`,
+          queued: false,
+          revision: now,
+          tag: {
+            id: `tag-${request.name}`,
+            name: request.name,
+            color: request.color ?? null,
+            taskCount: 0,
+            eventCount: 0,
+            noteCount: 0,
+            totalCount: 0,
+            createdAt: now,
+            updatedAt: now
+          }
+        })
+      ),
+      update: vi.fn(async (request) =>
+        ok({
+          id: request.id,
+          queued: false,
+          revision: now,
+          tag: {
+            id: request.id,
+            name: request.name ?? "ops",
+            color: request.color ?? null,
+            taskCount: 1,
+            eventCount: 0,
+            noteCount: 0,
+            totalCount: 1,
+            createdAt: now,
+            updatedAt: now
+          }
+        })
+      ),
+      delete: vi.fn(async (request) => ok({ id: request.id, queued: false, revision: now })),
+      merge: vi.fn(async (request) => ok({ id: request.targetId, queued: false, revision: now })),
+      bulkApply: vi.fn(async () => ok({ id: "bulk-tags", queued: false, revision: now }))
     },
     search: {
       query: vi.fn(async (request) => {

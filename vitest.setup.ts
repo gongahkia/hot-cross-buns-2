@@ -106,6 +106,7 @@ const hcbApi: HcbApi = {
         events: await hcbApi.calendar.listEvents(request.calendarRange).then((result) => result.ok ? result.data : { items: [], page: { limit: request.calendarRange.limit ?? 100, totalKnown: 0 } }),
         scheduledTaskBlocks: await hcbApi.calendar.listScheduledTaskBlocks(request.calendarRange).then((result) => result.ok ? result.data : { items: [], page: { limit: request.calendarRange.limit ?? 100, totalKnown: 0 } }),
         notes: await hcbApi.notes.list({ limit: 50 }).then((result) => result.ok ? result.data : { items: [], lists: [], page: { limit: 50, totalKnown: 0 } }),
+        tags: await hcbApi.tags.list({ limit: 100 }).then((result) => result.ok ? result.data : { items: [], page: { limit: 100, totalKnown: 0 } }),
         settings: await hcbApi.settings.get().then((result) => {
           if (!result.ok) {
             throw new Error("settings fixture failed");
@@ -442,6 +443,56 @@ const hcbApi: HcbApi = {
     linkSuggest: vi.fn(async () => ok({ items: [] })),
     listBrokenLinks: vi.fn(async () => ok({ items: [] }))
   },
+  tags: {
+    list: vi.fn(async (request = {}) =>
+      ok({
+        items: [],
+        page: {
+          limit: request.limit ?? 100,
+          totalKnown: 0
+        }
+      })
+    ),
+    create: vi.fn(async (request) =>
+        ok({
+        id: `tag-${request.name}`,
+        queued: false,
+        revision: now,
+        tag: {
+          id: `tag-${request.name}`,
+          name: request.name,
+          color: request.color ?? null,
+          taskCount: 0,
+          eventCount: 0,
+          noteCount: 0,
+          totalCount: 0,
+          createdAt: now,
+          updatedAt: now
+        }
+      })
+    ),
+    update: vi.fn(async (request) =>
+      ok({
+        id: request.id,
+        queued: false,
+        revision: now,
+        tag: {
+          id: request.id,
+          name: request.name ?? request.id,
+          color: request.color ?? null,
+          taskCount: 0,
+          eventCount: 0,
+          noteCount: 0,
+          totalCount: 0,
+          createdAt: now,
+          updatedAt: now
+        }
+      })
+    ),
+    delete: vi.fn(async (request) => ok({ id: request.id, queued: false, revision: now })),
+    merge: vi.fn(async (request) => ok({ id: request.targetId, queued: false, revision: now })),
+    bulkApply: vi.fn(async () => ok({ id: "bulk-tags", queued: false, revision: now }))
+  },
   search: {
     query: vi.fn(async (request) =>
       ok({
@@ -602,6 +653,7 @@ const hcbApi: HcbApi = {
         diagnosticsIncludePerformance: true,
         rawGoogleDiagnosticsEnabled: false,
         savedSearchViews: [],
+        pinnedSavedSearchViewIds: [],
         savedTaskViews: []
       })
     ),
@@ -686,6 +738,7 @@ const hcbApi: HcbApi = {
         diagnosticsIncludePerformance: request.diagnosticsIncludePerformance ?? true,
         rawGoogleDiagnosticsEnabled: request.rawGoogleDiagnosticsEnabled ?? false,
         savedSearchViews: request.savedSearchViews ?? [],
+        pinnedSavedSearchViewIds: request.pinnedSavedSearchViewIds ?? [],
         savedTaskViews: request.savedTaskViews ?? []
       })
     ),

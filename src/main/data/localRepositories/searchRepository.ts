@@ -37,7 +37,7 @@ import {
   noteSearchPredicates,
   taskSearchPredicates
 } from "./searchPredicates";
-import { countRows, notFound, pageBounds, pageFromRows, validationFailure } from "./shared";
+import { countRows, notFound, pageBounds, pageFromRows, parseStringArray, validationFailure } from "./shared";
 import type { SearchDomain } from "./types";
 
 interface TaskBackedNoteRow extends Record<string, unknown> {

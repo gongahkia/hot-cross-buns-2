@@ -525,6 +525,7 @@ describe("shared IPC contracts", () => {
         rawGoogleDiagnosticsEnabled: false,
         keybindings: defaultKeybindings,
         savedSearchViews: [],
+        pinnedSavedSearchViewIds: [],
         savedTaskViews: []
       }).setupCompletedAt
     ).toBeNull();
