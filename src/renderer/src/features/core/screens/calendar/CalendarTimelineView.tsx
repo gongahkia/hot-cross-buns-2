@@ -451,6 +451,7 @@ function CalendarTimelineView({
       return null;
     }
 
+    pointerEvent.preventDefault();
     const pointerAt = calendarPointerTimeIso(dayKey, hour, pointerEvent, source.settings.defaultTimeZone);
     const nextSelection = calendarTimeBlock(drag.startsAt, pointerAt, source.settings.defaultTimeZone);
 
@@ -475,6 +476,7 @@ function CalendarTimelineView({
       return;
     }
 
+    pointerEvent.preventDefault();
     const startsAt = calendarPointerTimeIso(dayKey, hour, pointerEvent, source.settings.defaultTimeZone);
     const initialSelection = calendarTimeBlock(startsAt, startsAt, source.settings.defaultTimeZone);
 

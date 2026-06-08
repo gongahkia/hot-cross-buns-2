@@ -66,7 +66,8 @@ export function MonthView({
     [weeks, visibleCalendarIds]
   );
   const visibleWeekIds = visibleWeeks.map((week) => week.id).join("|");
-  const dragRangeRef = useRef<{ moved: boolean; start: string } | null>(null);
+  const dragRangeRef = useRef<{ last: string; moved: boolean; start: string } | null>(null);
+  const monthGridRef = useRef<HTMLDivElement | null>(null);
   const todayCellRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -90,32 +91,72 @@ export function MonthView({
     return dayKey >= range.start && dayKey <= range.end;
   }
 
+  function dayKeyFromPointer(pointerEvent: PointerEvent<HTMLElement>): string | null {
+    const rows = monthGridRef.current?.querySelectorAll<HTMLElement>("[data-calendar-month-week-row]");
+
+    if (!rows) {
+      return null;
+    }
+
+    for (let weekIndex = 0; weekIndex < rows.length; weekIndex += 1) {
+      const rect = rows[weekIndex].getBoundingClientRect();
+
+      if (
+        pointerEvent.clientY < rect.top ||
+        pointerEvent.clientY > rect.bottom ||
+        pointerEvent.clientX < rect.left ||
+        pointerEvent.clientX > rect.right
+      ) {
+        continue;
+      }
+
+      const dayIndex = Math.max(
+        0,
+        Math.min(6, Math.floor(((pointerEvent.clientX - rect.left) / Math.max(1, rect.width)) * 7))
+      );
+      const day = visibleWeeks[weekIndex]?.days[dayIndex]?.day;
+
+      return day ? day.id.slice("month-".length) : null;
+    }
+
+    return null;
+  }
+
+  function updateDayPointerDrag(pointerEvent: PointerEvent<HTMLElement>): string | null {
+    const drag = dragRangeRef.current;
+
+    if (!drag || (pointerEvent.buttons !== 1 && pointerEvent.type !== "pointerup")) {
+      return null;
+    }
+
+    pointerEvent.preventDefault();
+    const dayKey = dayKeyFromPointer(pointerEvent) ?? drag.last;
+    drag.moved = drag.moved || drag.start !== dayKey;
+    drag.last = dayKey;
+    setRangeSelection({ start: drag.start, end: dayKey });
+    return dayKey;
+  }
+
   function handleDayPointerDown(pointerEvent: PointerEvent<HTMLDivElement>, dayKey: string): void {
     if (pointerEvent.button !== 0) {
       return;
     }
 
-    dragRangeRef.current = { moved: false, start: dayKey };
+    pointerEvent.preventDefault();
+    pointerEvent.currentTarget.setPointerCapture?.(pointerEvent.pointerId);
+    dragRangeRef.current = { last: dayKey, moved: false, start: dayKey };
     setRangeSelection({ start: dayKey, end: dayKey });
   }
 
-  function handleDayPointerEnter(dayKey: string): void {
-    if (!dragRangeRef.current) {
-      return;
-    }
-
-    dragRangeRef.current.moved = true;
-    setRangeSelection({ start: dragRangeRef.current.start, end: dayKey });
-  }
-
-  function handleDayPointerUp(dayKey: string): void {
+  function handleDayPointerUp(pointerEvent: PointerEvent<HTMLElement>): void {
     if (!dragRangeRef.current) {
       return;
     }
 
     const start = dragRangeRef.current.start;
-    const moved = dragRangeRef.current.moved || start !== dayKey;
-    const range = orderedRange(start, dayKey);
+    const end = updateDayPointerDrag(pointerEvent) ?? dragRangeRef.current.last;
+    const moved = dragRangeRef.current.moved || start !== end;
+    const range = orderedRange(start, end);
     dragRangeRef.current = null;
     setRangeSelection(null);
 
@@ -132,7 +173,7 @@ export function MonthView({
   }
 
   return (
-    <div className="flex min-h-[680px] flex-col overflow-hidden rounded-hcbMd border border-border bg-bg-secondary" role="grid" aria-label="Calendar month view">
+    <div className="flex min-h-[680px] select-none flex-col overflow-hidden rounded-hcbMd border border-border bg-bg-secondary" role="grid" aria-label="Calendar month view">
       <div className="grid grid-cols-7 border-b border-border bg-bg-primary/40 text-center text-[var(--text-xs)] font-semibold text-text-muted" role="row">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((weekday) => (
           <div className="border-r border-border px-2 py-2 last:border-r-0" key={weekday} role="columnheader">
@@ -140,10 +181,21 @@ export function MonthView({
           </div>
         ))}
       </div>
-      <div className="grid flex-1 grid-rows-6" role="rowgroup">
-        {visibleWeeks.map((week) => (
+      <div
+        className="grid flex-1 grid-rows-6"
+        onPointerCancel={() => {
+          dragRangeRef.current = null;
+          setRangeSelection(null);
+        }}
+        onPointerMove={updateDayPointerDrag}
+        onPointerUp={handleDayPointerUp}
+        ref={monthGridRef}
+        role="rowgroup"
+      >
+        {visibleWeeks.map((week, weekIndex) => (
           <div
             className="grid gap-y-1 border-b border-border last:border-b-0"
+            data-calendar-month-week-row
             key={week.id}
             role="row"
             style={{
@@ -179,8 +231,6 @@ export function MonthView({
                     )
                   }
                   onPointerDown={(event) => handleDayPointerDown(event, dayKey)}
-                  onPointerEnter={() => handleDayPointerEnter(dayKey)}
-                  onPointerUp={() => handleDayPointerUp(dayKey)}
                   ref={(node) => {
                     if (isCurrentDay) {
                       todayCellRef.current = node;

@@ -645,6 +645,47 @@ describe("App calendar", () => {
     );
   });
 
+  it("creates all-day month range drafts from pointer drags", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Calendar");
+    const tabs = screen.getByRole("tablist", { name: "Calendar views" });
+    await user.click(within(tabs).getByRole("tab", { name: "Month" }));
+
+    const monthGrid = screen.getByRole("grid", { name: "Calendar month view" });
+    const row = monthGrid.querySelector<HTMLElement>("[data-calendar-month-week-row]");
+    const cells = within(monthGrid).getAllByRole("gridcell");
+
+    expect(row).not.toBeNull();
+    Object.defineProperty(row, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 140,
+        height: 140,
+        left: 0,
+        right: 700,
+        top: 0,
+        width: 700,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      })
+    });
+
+    fireEvent.pointerDown(cells[1], { button: 0, buttons: 1, clientX: 150, clientY: 40, pointerId: 1 });
+    fireEvent.pointerMove(monthGrid, { buttons: 1, clientX: 350, clientY: 40, pointerId: 1 });
+    fireEvent.pointerUp(monthGrid, { button: 0, buttons: 0, clientX: 350, clientY: 40, pointerId: 1 });
+
+    expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
+    const startsInput = screen.getByLabelText("Event starts") as HTMLInputElement;
+    const endsInput = screen.getByLabelText("Event ends") as HTMLInputElement;
+
+    expect(startsInput).toHaveAttribute("type", "date");
+    expect(startsInput.value).not.toBe(endsInput.value);
+  });
+
   it("creates timed calendar drafts from day planning slots", async () => {
     installHcb(seededHcb());
     const user = userEvent.setup();
