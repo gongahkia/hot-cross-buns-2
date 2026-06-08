@@ -126,4 +126,63 @@ describe("local search query DSL", () => {
       })
     ).toBe(true);
   });
+
+  it("parses and matches tag, attendee, duration, relative date, and regex filters", () => {
+    const parsed = parseLocalSearchQuery(
+      "tag:focus duration:30m..90m due<+7d regex:^Draft",
+      { now }
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.filters.duration).toEqual({
+      fromMinutes: 30,
+      toMinutes: 90,
+      label: "30m to 90m"
+    });
+    expect(parsed.filters.due).toMatchObject({
+      to: "2026-05-29T00:00:00.000Z",
+      label: "before +7d"
+    });
+    expect(
+      matchesLocalSearchItem(parsed, {
+        domain: "tasks",
+        title: "Draft roadmap",
+        body: "ship",
+        tags: ["focus"],
+        durationMinutes: 45,
+        dueAt: "2026-05-24T09:00:00.000Z"
+      })
+    ).toBe(true);
+    expect(
+      matchesLocalSearchItem(parsed, {
+        domain: "tasks",
+        title: "Review roadmap",
+        tags: ["focus"],
+        durationMinutes: 45,
+        dueAt: "2026-05-24T09:00:00.000Z"
+      })
+    ).toBe(false);
+
+    const event = parseLocalSearchQuery("attendee:ada start>today tag:launch", { now });
+    expect(event.errors).toEqual([]);
+    expect(resolveLocalSearchDomains(event)).toEqual(["calendar"]);
+    expect(
+      matchesLocalSearchItem(event, {
+        domain: "calendar",
+        title: "Launch review",
+        attendeeEmails: ["ada@example.com"],
+        tags: ["launch"],
+        startAt: "2026-05-23T09:00:00.000Z"
+      })
+    ).toBe(true);
+  });
+
+  it("reports invalid duration and regex syntax", () => {
+    const parsed = parseLocalSearchQuery("duration:90m..30m regex:[", { now });
+
+    expect(parsed.errors.map((error) => error.code)).toEqual([
+      "invalid_duration",
+      "invalid_regex"
+    ]);
+  });
 });

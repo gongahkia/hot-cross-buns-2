@@ -14,7 +14,7 @@ import { formatDateTime } from "./diagnosticsFormatting";
 
 type DiagnosticsMessage = { tone: "success" | "warning" | "danger"; text: string };
 
-export function useDiagnosticsOverlay(onClose: () => void): {
+export function useDiagnosticsOverlay(onClose: () => void, initialTab: DiagnosticsTab = "overview"): {
   cancelMutation: (id: string) => Promise<void>;
   clearLogs: () => Promise<void>;
   copyDiagnosticSummary: () => Promise<void>;
@@ -49,7 +49,7 @@ export function useDiagnosticsOverlay(onClose: () => void): {
 } {
   const source = useCoreViewModelSource();
   const dialogRef = useRef<HTMLElement | null>(null);
-  const [tab, setTab] = useState<DiagnosticsTab>("overview");
+  const [tab, setTab] = useState<DiagnosticsTab>(initialTab);
   const [summary, setSummary] = useState<DiagnosticsSummaryResponse | null>(
     source.diagnosticsSummary ?? null
   );

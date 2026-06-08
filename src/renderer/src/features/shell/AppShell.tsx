@@ -7,6 +7,7 @@ import { primaryPlannerSections, type SectionId } from "../../data/mockPlanner";
 import { getAppNotifications } from "../core/appNotifications";
 import type { ConvertCommandDetail } from "../core/conversionEvents";
 import { DiagnosticsOverlay } from "../core/DiagnosticsOverlay";
+import type { DiagnosticsTab } from "../core/DiagnosticsTabs";
 import type { TaskSurfaceCommand } from "../core/CoreScreens";
 import { useCoreViewModelSource } from "../core/coreViewModelSource";
 import { eventMatchesAccelerator } from "../core/hotkeys";
@@ -81,6 +82,7 @@ export function AppShell(): JSX.Element {
   const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnosticsInitialTab, setDiagnosticsInitialTab] = useState<DiagnosticsTab>("overview");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -182,8 +184,9 @@ export function AppShell(): JSX.Element {
     setSettingsOpen(true);
   }, []);
 
-  const openDiagnosticsPanel = useCallback((): void => {
+  const openDiagnosticsPanel = useCallback((tab: DiagnosticsTab = "overview"): void => {
     setCommandPaletteOpen(false);
+    setDiagnosticsInitialTab(tab);
     setNotificationsOpen(false);
     setSettingsOpen(false);
     setDiagnosticsOpen(true);
@@ -498,6 +501,16 @@ export function AppShell(): JSX.Element {
     window.addEventListener("hcb:open-entity", handleOpenEntity);
     return () => window.removeEventListener("hcb:open-entity", handleOpenEntity);
   }, [navigateToSection]);
+
+  useEffect(() => {
+    function handleOpenDiagnostics(event: Event): void {
+      const tab = (event as CustomEvent<{ tab?: DiagnosticsTab }>).detail?.tab ?? "overview";
+      openDiagnosticsPanel(tab);
+    }
+
+    window.addEventListener("hcb:open-diagnostics", handleOpenDiagnostics);
+    return () => window.removeEventListener("hcb:open-diagnostics", handleOpenDiagnostics);
+  }, [openDiagnosticsPanel]);
 
   const runHotkeyAction = useCallback(
     (actionId: keyof SettingsSnapshot["keybindings"]): void => {
@@ -963,7 +976,7 @@ export function AppShell(): JSX.Element {
         />
       ) : null}
       {diagnosticsOpen ? (
-        <DiagnosticsOverlay onClose={() => setDiagnosticsOpen(false)} />
+        <DiagnosticsOverlay initialTab={diagnosticsInitialTab} onClose={() => setDiagnosticsOpen(false)} />
       ) : null}
       {settingsOpen ? (
         <SettingsOverlay

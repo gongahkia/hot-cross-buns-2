@@ -15,6 +15,12 @@ export interface LocalSearchDateFilter {
   label: string;
 }
 
+export interface LocalSearchDurationFilter {
+  fromMinutes?: number;
+  toMinutes?: number;
+  label: string;
+}
+
 export interface LocalSearchFilters {
   domains?: LocalSearchDomain[];
   taskStatus?: LocalSearchTaskStatus;
@@ -24,6 +30,10 @@ export interface LocalSearchFilters {
   listTitle?: string;
   calendarTitle?: string;
   hasBody?: boolean;
+  tag?: string;
+  attendee?: string;
+  duration?: LocalSearchDurationFilter;
+  regex?: string;
 }
 
 export interface LocalSearchFilterChip {
@@ -56,6 +66,9 @@ export interface LocalSearchMatcherItem {
   listTitle?: string | null;
   startAt?: string | null;
   calendarTitle?: string | null;
+  tags?: readonly string[];
+  attendeeEmails?: readonly string[];
+  durationMinutes?: number | null;
 }
 
 interface ParseOptions {
@@ -78,7 +91,11 @@ const FILTER_KEYS = new Set([
   "calendar",
   "cal",
   "notes",
-  "body"
+  "body",
+  "tag",
+  "attendee",
+  "duration",
+  "regex"
 ]);
 
 const DOMAIN_ALIASES: Record<string, LocalSearchDomain | undefined> = {
@@ -120,6 +137,8 @@ const PRIORITY_ALIASES: Record<string, LocalSearchPriority | undefined> = {
 const TRUE_VALUES = new Set(["yes", "true", "1", "has", "present", "any"]);
 const FALSE_VALUES = new Set(["no", "false", "0", "none", "missing", "empty"]);
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const RELATIVE_DAY_PATTERN = /^\+(\d{1,3})d$/;
+const MAX_REGEX_LENGTH = 120;
 
 export function parseLocalSearchQuery(
   input: string,
@@ -134,7 +153,7 @@ export function parseLocalSearchQuery(
   const now = normalizedNow(options.now);
 
   for (const token of tokenized.tokens) {
-    const parsedFilter = parseFilterToken(token);
+    const parsedFilter = parseComparisonFilterToken(token) ?? parseFilterToken(token);
 
     if (!parsedFilter) {
       textTerms.push(token);
@@ -227,7 +246,9 @@ export function parseLocalSearchQuery(
     }
 
     if (key === "due" || key === "start") {
-      const dateFilter = parseDateFilter(key, value, now);
+      const dateFilter = parsedFilter.operator
+        ? parseDateComparisonFilter(key, parsedFilter.operator, value, now)
+        : parseDateFilter(key, value, now);
 
       if (!dateFilter) {
         errors.push({
@@ -245,6 +266,28 @@ export function parseLocalSearchQuery(
 
       filters[key] = dateFilter;
       chips.push({ id: key, label: titleCase(key), value: dateFilter.label });
+      continue;
+    }
+
+    if (key === "duration") {
+      const durationFilter = parseDurationFilter(value, parsedFilter.operator);
+
+      if (!durationFilter) {
+        errors.push({
+          code: "invalid_duration",
+          message: `Unsupported duration "${value}". Use duration>30m, duration<2h, or duration:30m..90m.`,
+          token
+        });
+        continue;
+      }
+
+      if (filters.duration !== undefined) {
+        errors.push(duplicateFilter("duration", token));
+        continue;
+      }
+
+      filters.duration = durationFilter;
+      chips.push({ id: "duration", label: "Duration", value: durationFilter.label });
       continue;
     }
 
@@ -289,6 +332,50 @@ export function parseLocalSearchQuery(
 
       filters.hasBody = hasBody;
       chips.push({ id: "body", label: "Body", value: hasBody ? "yes" : "no" });
+      continue;
+    }
+
+    if (key === "tag") {
+      if (filters.tag !== undefined) {
+        errors.push(duplicateFilter("tag", token));
+        continue;
+      }
+
+      filters.tag = value;
+      chips.push({ id: "tag", label: "Tag", value });
+      continue;
+    }
+
+    if (key === "attendee") {
+      if (filters.attendee !== undefined) {
+        errors.push(duplicateFilter("attendee", token));
+        continue;
+      }
+
+      filters.attendee = value;
+      chips.push({ id: "attendee", label: "Attendee", value });
+      continue;
+    }
+
+    if (key === "regex") {
+      const regex = parseRegexFilter(value);
+
+      if (!regex) {
+        errors.push({
+          code: "invalid_regex",
+          message: "Use a valid regex pattern up to 120 chars.",
+          token
+        });
+        continue;
+      }
+
+      if (filters.regex !== undefined) {
+        errors.push(duplicateFilter("regex", token));
+        continue;
+      }
+
+      filters.regex = regex;
+      chips.push({ id: "regex", label: "Regex", value });
     }
   }
 
@@ -319,12 +406,17 @@ export function resolveLocalSearchDomains(
     parsed.filters.taskStatus !== undefined ||
     parsed.filters.priority !== undefined ||
     parsed.filters.due !== undefined ||
-    parsed.filters.listTitle !== undefined
+    parsed.filters.listTitle !== undefined ||
+    parsed.filters.duration !== undefined
   ) {
     domains = intersectDomains(domains, ["tasks"]);
   }
 
-  if (parsed.filters.start !== undefined || parsed.filters.calendarTitle !== undefined) {
+  if (
+    parsed.filters.start !== undefined ||
+    parsed.filters.calendarTitle !== undefined ||
+    parsed.filters.attendee !== undefined
+  ) {
     domains = intersectDomains(domains, ["calendar"]);
   }
 
@@ -344,6 +436,10 @@ export function matchesLocalSearchItem(
   }
 
   if (!matchesText(parsed.text, item)) {
+    return false;
+  }
+
+  if (parsed.filters.regex !== undefined && !matchesRegex(parsed.filters.regex, item)) {
     return false;
   }
 
@@ -393,6 +489,22 @@ export function matchesLocalSearchItem(
     }
   }
 
+  if (parsed.filters.tag !== undefined && !matchesTag(item.tags ?? [], parsed.filters.tag)) {
+    return false;
+  }
+
+  if (parsed.filters.attendee !== undefined) {
+    if (item.domain !== "calendar" || !matchesListFragment(item.attendeeEmails ?? [], parsed.filters.attendee)) {
+      return false;
+    }
+  }
+
+  if (parsed.filters.duration !== undefined) {
+    if (item.domain !== "tasks" || !matchesDuration(item.durationMinutes ?? null, parsed.filters.duration)) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -433,7 +545,7 @@ function tokenize(input: string): TokenizeResult {
   return { tokens, errors };
 }
 
-function parseFilterToken(token: string): { key: string; value: string } | null {
+function parseFilterToken(token: string): { key: string; value: string; operator?: "<" | ">" } | null {
   if (token.includes("://")) {
     return null;
   }
@@ -453,6 +565,20 @@ function parseFilterToken(token: string): { key: string; value: string } | null 
   return {
     key,
     value: token.slice(separatorIndex + 1).trim()
+  };
+}
+
+function parseComparisonFilterToken(token: string): { key: string; value: string; operator: "<" | ">" } | null {
+  const match = /^(due|start|duration)([<>])(.+)$/i.exec(token);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    key: match[1].toLowerCase(),
+    operator: match[2] as "<" | ">",
+    value: match[3].trim()
   };
 }
 
@@ -576,6 +702,118 @@ function parseDateFilter(
       };
 }
 
+function parseDateComparisonFilter(
+  field: LocalSearchDateField,
+  operator: "<" | ">",
+  value: string,
+  now: Date
+): LocalSearchDateFilter | null {
+  const date = parseDateAlias(value, now);
+
+  if (date === null) {
+    return null;
+  }
+
+  return operator === "<"
+    ? {
+        field,
+        mode: "range",
+        to: date,
+        label: `before ${value}`
+      }
+    : {
+        field,
+        mode: "range",
+        from: date,
+        label: `on/after ${value}`
+      };
+}
+
+function parseDateAlias(value: string, now: Date): string | null {
+  const normalized = value.toLowerCase();
+  const relative = RELATIVE_DAY_PATTERN.exec(normalized);
+
+  if (relative) {
+    return addUtcDaysIso(startOfUtcDayIso(now), Number.parseInt(relative[1], 10));
+  }
+
+  if (normalized === "today") {
+    return startOfUtcDayIso(now);
+  }
+
+  if (normalized === "tomorrow") {
+    return addUtcDaysIso(startOfUtcDayIso(now), 1);
+  }
+
+  if (normalized === "yesterday") {
+    return addUtcDaysIso(startOfUtcDayIso(now), -1);
+  }
+
+  return parseDateOnly(value);
+}
+
+function parseDurationFilter(value: string, operator?: "<" | ">"): LocalSearchDurationFilter | null {
+  if (operator) {
+    const minutes = parseDurationMinutes(value);
+
+    if (minutes === null) {
+      return null;
+    }
+
+    return operator === "<"
+      ? { toMinutes: minutes, label: `< ${durationLabel(minutes)}` }
+      : { fromMinutes: minutes + 1, label: `> ${durationLabel(minutes)}` };
+  }
+
+  if (!value.includes("..")) {
+    return null;
+  }
+
+  const [fromValue, toValue] = value.split("..");
+  const fromMinutes = parseDurationMinutes(fromValue);
+  const toMinutes = parseDurationMinutes(toValue);
+
+  if (fromMinutes === null || toMinutes === null || fromMinutes > toMinutes) {
+    return null;
+  }
+
+  return {
+    fromMinutes,
+    toMinutes,
+    label: `${durationLabel(fromMinutes)} to ${durationLabel(toMinutes)}`
+  };
+}
+
+function parseDurationMinutes(value: string | undefined): number | null {
+  const match = /^(\d{1,4})(m|h)$/i.exec(value?.trim() ?? "");
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number.parseInt(match[1], 10);
+  const minutes = match[2].toLowerCase() === "h" ? amount * 60 : amount;
+
+  return minutes > 0 && minutes <= 24 * 60 ? minutes : null;
+}
+
+function durationLabel(minutes: number): string {
+  return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
+}
+
+function parseRegexFilter(value: string): string | null {
+  if (value.length === 0 || value.length > MAX_REGEX_LENGTH) {
+    return null;
+  }
+
+  try {
+    new RegExp(value, "i");
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 function parseDateOnly(value: string | undefined): string | null {
   if (value === undefined || !DATE_ONLY_PATTERN.test(value)) {
     return null;
@@ -598,6 +836,35 @@ function normalizedNow(value: string | Date | undefined): Date {
   const parsed = typeof value === "string" ? new Date(value) : value;
 
   return Number.isFinite(parsed.getTime()) ? parsed : new Date();
+}
+
+function matchesTag(tags: readonly string[], query: string): boolean {
+  return tags.some((tag) => containsNormalized(tag, query));
+}
+
+function matchesListFragment(values: readonly string[], query: string): boolean {
+  return values.some((value) => containsNormalized(value, query));
+}
+
+function matchesDuration(minutes: number | null, filter: LocalSearchDurationFilter): boolean {
+  if (minutes === null || !Number.isFinite(minutes)) {
+    return false;
+  }
+
+  if (filter.fromMinutes !== undefined && minutes < filter.fromMinutes) {
+    return false;
+  }
+
+  if (filter.toMinutes !== undefined && minutes > filter.toMinutes) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesRegex(pattern: string, item: LocalSearchMatcherItem): boolean {
+  const regex = new RegExp(pattern, "i");
+  return regex.test(`${item.title}\n${item.body ?? ""}`);
 }
 
 function duplicateFilter(key: string, token: string): LocalSearchQueryIssue {

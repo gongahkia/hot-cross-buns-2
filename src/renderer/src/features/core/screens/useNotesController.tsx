@@ -292,6 +292,7 @@ export function useNotesController(source: CoreViewModelSource): {
         onDraftChange={updateNoteDraft}
         onOpenNote={(noteId) => selectNote(noteId, "view")}
         onPersist={persistNoteDraft}
+        rules={source.settings.autoTagRules}
         templates={noteTemplateOptions}
         createMode={createNoteIds.current.has(note.id)}
         error={currentInspector?.id === note.id ? noteActionError : undefined}

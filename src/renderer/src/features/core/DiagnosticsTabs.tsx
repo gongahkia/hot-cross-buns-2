@@ -133,6 +133,15 @@ export function SyncTab({
   runRecovery: (action: "refresh" | "forceFullResync" | "clearGoogleCache") => Promise<void>;
   working: boolean;
 }): JSX.Element {
+  const failed = pendingMutations.filter((mutation) => mutation.status === "failed");
+  const retryable = pendingMutations.filter((mutation) => mutation.status !== "failed" && (mutation.attemptCount > 0 || Boolean(mutation.lastErrorMessage)));
+  const active = pendingMutations.filter((mutation) => !failed.includes(mutation) && !retryable.includes(mutation));
+  const groups = [
+    { id: "failed", title: "Failed mutations", mutations: failed },
+    { id: "retryable", title: "Retryable/auth-paused mutations", mutations: retryable },
+    { id: "active", title: "Queued mutations", mutations: active }
+  ].filter((group) => group.mutations.length > 0);
+
   return (
     <div className="grid gap-3">
       <DiagnosticSection title="Recovery">

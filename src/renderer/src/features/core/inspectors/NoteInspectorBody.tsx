@@ -10,9 +10,11 @@ import {
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AlertTriangle, Link2, Pencil, RotateCcw, Search } from "lucide-react";
 import type { NoteLinkSuggestResponse } from "@shared/ipc/contracts";
+import type { AutoTagRule } from "@shared/ipc/contracts";
 import { useDirtyState, useInspector } from "../../../components/Inspector";
 import { EmojiInput, EmojiTextarea } from "../../../components/EmojiTextField";
 import { Badge, Button, Input, cx } from "../../../components/primitives";
+import { AutoTagAudit } from "../AutoTagAudit";
 import type { NoteViewModel } from "../coreViewModels";
 import { MarkdownPreview } from "../MarkdownPreview";
 import { TagBadges, TagInput } from "../TagInput";
@@ -51,6 +53,7 @@ interface NoteInspectorBodyProps {
   onDraftChange: (noteId: string, draft: NoteDraftValue) => void;
   onOpenNote: (noteId: string) => Promise<void> | void;
   onPersist: (noteId: string, draft: NoteDraftValue) => Promise<boolean>;
+  rules: readonly AutoTagRule[];
   templates?: NoteTemplateOption[];
 }
 
@@ -182,7 +185,7 @@ function linkButtonClass(tone: "accent" | "warning" | "neutral"): string {
 
 export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspectorBodyProps>(
   function NoteInspectorBody(
-    { createMode = false, error, note, notes, onDraftChange, onOpenNote, onPersist, templates = [] },
+    { createMode = false, error, note, notes, onDraftChange, onOpenNote, onPersist, rules, templates = [] },
     ref
   ): JSX.Element {
     const dirty = useDirtyState<NoteDraftValue>({ title: note.title, body: note.body, tags: note.tags ?? [] });
@@ -505,6 +508,15 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
           ) : null}
 
           <TagInput onChange={(tags) => patchDraft({ tags })} value={dirty.value.tags} />
+          <AutoTagAudit
+            input={{
+              kind: "note",
+              title: dirty.value.title,
+              body: dirty.value.body,
+              existingTags: dirty.value.tags
+            }}
+            rules={rules}
+          />
 
           {error ? (
             <div

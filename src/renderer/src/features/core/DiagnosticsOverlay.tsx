@@ -1,6 +1,7 @@
 import { Gauge, X } from "lucide-react";
 import { IconButton, StatusBanner, cx } from "../../components/primitives";
 import {
+  type DiagnosticsTab,
   diagnosticsTabs,
   HistoryTab,
   LogsTab,
@@ -11,10 +12,11 @@ import {
 import { useDiagnosticsOverlay } from "./useDiagnosticsOverlay";
 
 interface DiagnosticsOverlayProps {
+  initialTab?: DiagnosticsTab;
   onClose: () => void;
 }
 
-export function DiagnosticsOverlay({ onClose }: DiagnosticsOverlayProps): JSX.Element {
+export function DiagnosticsOverlay({ initialTab = "overview", onClose }: DiagnosticsOverlayProps): JSX.Element {
   const {
     cancelMutation,
     clearLogs,
@@ -47,7 +49,7 @@ export function DiagnosticsOverlay({ onClose }: DiagnosticsOverlayProps): JSX.El
     summary,
     tab,
     working
-  } = useDiagnosticsOverlay(onClose);
+  } = useDiagnosticsOverlay(onClose, initialTab);
 
   return (
     <div

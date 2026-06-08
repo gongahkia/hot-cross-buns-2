@@ -201,6 +201,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
           draft={nextDraft}
           eventColorOverrides={source.settings.calendarEventColorOverrides}
           key={`view-${calendarInspectorInstanceRef.current}`}
+          rules={source.settings.autoTagRules}
         />
       );
     }
@@ -215,6 +216,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
         eventColorOverrides={source.settings.calendarEventColorOverrides}
         key={calendarInspectorInstanceRef.current}
         onCreateModeChange={setCreateMode}
+        rules={source.settings.autoTagRules}
         setDraft={(next) => setDraft(next)}
         setTaskListId={setCreateTaskListId}
         taskListId={createTaskListId}

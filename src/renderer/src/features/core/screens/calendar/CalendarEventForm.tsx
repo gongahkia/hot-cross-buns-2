@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import {
+  type AutoTagRule,
   googleCalendarEventColor,
   googleCalendarEventColors,
   type SettingsSnapshot
@@ -11,6 +12,7 @@ import { ErrorState } from "../../../../components/states";
 import type { useCoreViewModelSource } from "../../coreViewModelSource";
 import { MarkdownPreview } from "../../MarkdownPreview";
 import { TagBadges, TagInput } from "../../TagInput";
+import { AutoTagAudit } from "../../AutoTagAudit";
 import {
   addUtcDaysIso,
   dateInputToIso,
@@ -251,12 +253,14 @@ export function CalendarEventDetails({
   calendars,
   defaultTimeZone,
   draft,
-  eventColorOverrides
+  eventColorOverrides,
+  rules
 }: {
   calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
   defaultTimeZone: string;
   draft: CalendarEventDraft;
   eventColorOverrides: CalendarEventColorOverrides;
+  rules: readonly AutoTagRule[];
 }): JSX.Element {
   const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
   const displayColor = draftDisplayColor(draft, selectedCalendar, eventColorOverrides);
@@ -353,6 +357,18 @@ export function CalendarEventDetails({
           {calendarRecurrenceSummary(draft)}
         </DetailLine>
       ) : null}
+
+      <AutoTagAudit
+        input={{
+          kind: "event",
+          title: draft.title,
+          body: draft.notes,
+          existingTags: draft.tags,
+          existingEventColorId: draft.colorId || undefined,
+          hcbKind: draft.hcbKind
+        }}
+        rules={rules}
+      />
     </div>
   );
 }
@@ -403,6 +419,7 @@ export function CalendarEventForm({
   error,
   eventColorOverrides,
   onCreateModeChange,
+  rules,
   setDraft,
   setTaskListId,
   taskListId,
@@ -415,6 +432,7 @@ export function CalendarEventForm({
   error?: string;
   eventColorOverrides: CalendarEventColorOverrides;
   onCreateModeChange: (mode: CalendarCreateMode) => void;
+  rules: readonly AutoTagRule[];
   setDraft: (draft: CalendarEventDraft) => void;
   setTaskListId: (listId: string) => void;
   taskListId: string;
@@ -798,6 +816,18 @@ export function CalendarEventForm({
           </select>
         </label>
         <TagInput onChange={(tags) => setDraft({ ...draft, tags })} value={draft.tags} />
+        <AutoTagAudit
+          input={{
+            kind: "event",
+            title: draft.title,
+            body: draft.notes,
+            existingTags: draft.tags,
+            existingEventColorId: draft.colorId || undefined,
+            requestedEventColorId: draft.colorId || undefined,
+            hcbKind: draft.hcbKind
+          }}
+          rules={rules}
+        />
       </fieldset>
       <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
         <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">
