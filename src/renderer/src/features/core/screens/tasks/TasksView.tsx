@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCoreViewModelSource } from "../../coreViewModelSource";
+import { DuplicateReviewPanel } from "../../DuplicateReviewPanel";
 import type { ConvertSourceCleanup } from "../../conversionEvents";
 import {
   readLocalStorageNumberRecord,
@@ -188,6 +189,7 @@ export function TasksView({ command }: { command?: TaskSurfaceCommand | null }):
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <TaskMutationErrorBanner source={source} />
+      <DuplicateReviewPanel onOpenTask={selectTask} source={source} />
 
       <div className="grid min-h-0 flex-1 gap-3">
         {source.dataState === "stale" ? <TaskRefreshPanel /> : null}

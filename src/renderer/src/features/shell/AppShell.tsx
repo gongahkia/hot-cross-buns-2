@@ -459,6 +459,46 @@ export function AppShell(): JSX.Element {
     return () => window.removeEventListener("hcb:convert-command", handleConvertCommand);
   }, [navigateToSection]);
 
+  useEffect(() => {
+    function handleOpenEntity(event: Event): void {
+      const detail = (event as CustomEvent<{ id?: string; kind?: "task" | "event" | "note" }>).detail;
+
+      if (!detail?.id || !detail.kind) {
+        return;
+      }
+
+      if (detail.kind === "task") {
+        navigateToSection("tasks");
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("hcb:task-command", {
+            detail: { action: "open-task", taskId: detail.id }
+          }));
+        }, 0);
+        return;
+      }
+
+      if (detail.kind === "note") {
+        navigateToSection("notes");
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("hcb:note-command", {
+            detail: { action: "open-note", noteId: detail.id }
+          }));
+        }, 0);
+        return;
+      }
+
+      navigateToSection("calendar");
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("hcb:calendar-command", {
+          detail: { action: "open-event", eventId: detail.id }
+        }));
+      }, 0);
+    }
+
+    window.addEventListener("hcb:open-entity", handleOpenEntity);
+    return () => window.removeEventListener("hcb:open-entity", handleOpenEntity);
+  }, [navigateToSection]);
+
   const runHotkeyAction = useCallback(
     (actionId: keyof SettingsSnapshot["keybindings"]): void => {
       if (actionId === "task.create") {
