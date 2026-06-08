@@ -187,7 +187,7 @@ export function SyncTab({
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate font-mono text-[var(--text-sm)] text-text-primary">
-                          {operationLabel(mutation.operation)} · {selectionText(mutation.resourceType, mutation.resourceId)}
+                          {operationLabel(mutation.operation)} · {mutation.resourceType}:{mutation.resourceId}
                         </div>
                         <div className="truncate font-mono text-[var(--text-xs)] text-text-muted">
                           {formatDateTime(mutation.createdAt)} · {mutation.attemptCount} attempts
