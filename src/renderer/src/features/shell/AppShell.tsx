@@ -78,6 +78,12 @@ export function AppShell(): JSX.Element {
   const source = useCoreViewModelSource();
   useAppliedTheme(source.settings);
   const paneWorkspace = usePaneWorkspace();
+  const pinnedSearchFilters = useMemo(() => {
+    const pinnedIds = new Set(source.settings.pinnedSavedSearchViewIds);
+    return source.settings.savedSearchViews
+      .filter((filter) => pinnedIds.has(filter.id))
+      .map((filter) => ({ id: filter.id, name: filter.name, query: filter.query }));
+  }, [source.settings.pinnedSavedSearchViewIds, source.settings.savedSearchViews]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [taskCommand, setTaskCommand] = useState<TaskSurfaceCommand | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -957,6 +963,7 @@ export function AppShell(): JSX.Element {
             onNavigate={navigateOrOpenSettings}
             onOpenChange={setCommandPaletteOpen}
             open={commandPaletteOpen}
+            pinnedFilters={pinnedSearchFilters}
           />
         </Suspense>
       </RenderTimingBoundary>

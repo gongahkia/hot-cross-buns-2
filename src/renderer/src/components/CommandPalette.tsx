@@ -20,6 +20,7 @@ interface CommandPaletteProps {
   onNavigate: (sectionId: SectionId) => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  pinnedFilters?: Array<{ id: string; name: string; query: string }>;
 }
 
 function commandMatches(command: PlannerAction, query: string): boolean {
@@ -112,7 +113,8 @@ export function CommandPalette({
   onCommand,
   onNavigate,
   onOpenChange,
-  open
+  open,
+  pinnedFilters = []
 }: CommandPaletteProps): JSX.Element | null {
   const { t } = useI18n();
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -285,6 +287,21 @@ export function CommandPalette({
               value={query}
             />
           </div>
+          {pinnedFilters.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Pinned filters">
+              {pinnedFilters.map((filter) => (
+                <button
+                  className="max-w-full truncate rounded-hcbMd border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] font-medium text-text-secondary hover:bg-surface-1 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  key={filter.id}
+                  onClick={() => setQuery(filter.query)}
+                  title={filter.query}
+                  type="button"
+                >
+                  {filter.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="max-h-[360px] overflow-y-auto p-2" id="command-palette-options" role="listbox">

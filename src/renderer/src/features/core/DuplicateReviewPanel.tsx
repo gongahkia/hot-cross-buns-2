@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, Check, FileText, ListChecks, RefreshCw, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, FileText, GitMerge, ListChecks, RefreshCw, Trash2, X } from "lucide-react";
 import { Badge, Button, IconButton, cx } from "../../components/primitives";
 import type { CoreViewModelSource } from "./coreViewModelSource";
 import type { CalendarEventViewModel, NoteViewModel, TaskViewModel } from "./coreViewModels";
@@ -79,6 +79,32 @@ export function DuplicateReviewPanel({ onOpenTask, source }: DuplicateReviewPane
     }));
   }
 
+  async function mergeGroup(group: DuplicateGroup): Promise<void> {
+    if (group.items.length < 2 || !window.confirm(`Merge ${group.items.length} duplicate ${group.kind}s into the first item?`)) {
+      return;
+    }
+
+    const [winnerItem, ...loserItems] = group.items;
+
+    if (!winnerItem) {
+      return;
+    }
+
+    const merged = group.kind === "task"
+      ? await mergeTaskDuplicates(winnerItem.id, loserItems.map((item) => item.id), source)
+      : group.kind === "event"
+        ? await mergeEventDuplicates(winnerItem.id, loserItems.map((item) => item.id), source)
+        : await mergeNoteDuplicates(winnerItem.id, loserItems.map((item) => item.id), source);
+
+    if (!merged) {
+      return;
+    }
+
+    await dismissGroup(group.id);
+    source.refreshUndoStatus();
+    source.refresh();
+  }
+
   return (
     <section className="overflow-hidden rounded-hcbLg border border-border bg-bg-secondary">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
@@ -103,6 +129,7 @@ export function DuplicateReviewPanel({ onOpenTask, source }: DuplicateReviewPane
                   <div className="truncate text-[var(--text-sm)] font-semibold text-text-primary">{group.title}</div>
                   <div className="truncate text-[var(--text-xs)] text-text-muted">{group.reason} · {group.keyLabel}</div>
                 </div>
+                <IconButton icon={GitMerge} label="Merge duplicate group" onClick={() => void mergeGroup(group)} variant="ghost" />
                 <IconButton icon={X} label="Dismiss duplicate group" onClick={() => void dismissGroup(group.id)} variant="ghost" />
               </div>
               <div className="grid gap-1.5">
@@ -130,6 +157,162 @@ export function DuplicateReviewPanel({ onOpenTask, source }: DuplicateReviewPane
       </div>
     </section>
   );
+}
+
+async function mergeTaskDuplicates(
+  winnerId: string,
+  loserIds: string[],
+  source: CoreViewModelSource
+): Promise<boolean> {
+  const tasks = [winnerId, ...loserIds]
+    .map((id) => source.largeTaskWindow.find((task) => task.id === id))
+    .filter((task): task is TaskViewModel => task !== undefined);
+  const winner = tasks[0];
+
+  if (!winner || tasks.length < 2) {
+    window.alert("Merge failed: duplicate tasks are no longer loaded.");
+    return false;
+  }
+
+  const ok = await source.updateTask({
+    id: winner.id,
+    notes: mergeText(tasks.map((task) => task.detail), 10_000),
+    priority: highestPriority(tasks.map((task) => task.priority)),
+    tags: uniqueText(tasks.flatMap((task) => task.tags ?? [])),
+    durationMinutes: maxNullable(tasks.map((task) => task.durationMinutes ?? null)),
+    snoozeUntil: minIso(tasks.map((task) => task.snoozeUntil ?? null))
+  });
+
+  if (!ok) {
+    window.alert("Merge failed: winner task update did not apply.");
+    return false;
+  }
+
+  for (const loserId of loserIds) {
+    if (!await source.deleteTask(loserId)) {
+      window.alert(`Merge partially applied: could not delete duplicate task ${loserId}.`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function mergeEventDuplicates(
+  winnerId: string,
+  loserIds: string[],
+  source: CoreViewModelSource
+): Promise<boolean> {
+  const events = [winnerId, ...loserIds]
+    .map((id) => source.calendarAgendaEvents.find((event) => event.id === id))
+    .filter((event): event is CalendarEventViewModel => event !== undefined);
+  const winner = events[0];
+
+  if (!winner || events.length < 2) {
+    window.alert("Merge failed: duplicate events are no longer loaded.");
+    return false;
+  }
+
+  const update = await window.hcb?.calendar.update({
+    id: winner.id,
+    notes: mergeText(events.map((event) => event.notes), 20_000),
+    guestEmails: uniqueText(events.flatMap((event) => event.guestEmails)),
+    reminderMinutes: uniqueNumbers(events.flatMap((event) => event.reminderMinutes)),
+    tags: uniqueText(events.flatMap((event) => event.tags ?? [])),
+    colorId: winner.colorId ?? events.find((event) => event.colorId)?.colorId ?? null
+  });
+
+  if (!update?.ok) {
+    window.alert(update?.error.message ?? "Merge failed: winner event update did not apply.");
+    return false;
+  }
+
+  for (const loserId of loserIds) {
+    const deleted = await window.hcb?.calendar.delete({ id: loserId });
+
+    if (!deleted?.ok) {
+      window.alert(deleted?.error.message ?? `Merge partially applied: could not delete duplicate event ${loserId}.`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function mergeNoteDuplicates(
+  winnerId: string,
+  loserIds: string[],
+  source: CoreViewModelSource
+): Promise<boolean> {
+  const notes = [winnerId, ...loserIds]
+    .map((id) => source.initialNotes.find((note) => note.id === id))
+    .filter((note): note is NoteViewModel => note !== undefined);
+  const winner = notes[0];
+
+  if (!winner || notes.length < 2) {
+    window.alert("Merge failed: duplicate notes are no longer loaded.");
+    return false;
+  }
+
+  const update = await window.hcb?.notes.update({
+    id: winner.id,
+    body: mergeText(notes.map((note) => note.body), 50_000),
+    tags: uniqueText(notes.flatMap((note) => note.tags ?? []))
+  });
+
+  if (!update?.ok) {
+    window.alert(update?.error.message ?? "Merge failed: winner note update did not apply.");
+    return false;
+  }
+
+  for (const loserId of loserIds) {
+    const deleted = await window.hcb?.notes.delete({ id: loserId });
+
+    if (!deleted?.ok) {
+      window.alert(deleted?.error.message ?? `Merge partially applied: could not delete duplicate note ${loserId}.`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function mergeText(values: readonly string[], maxLength: number): string {
+  const merged = values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .join("\n\n--- merged duplicate ---\n\n");
+
+  return merged.length <= maxLength ? merged : merged.slice(0, maxLength);
+}
+
+function uniqueText(values: readonly string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function uniqueNumbers(values: readonly number[]): number[] {
+  return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function maxNullable(values: readonly Array<number | null>): number | null {
+  const numbers = values.filter((value): value is number => typeof value === "number" && value >= 0);
+  return numbers.length === 0 ? null : Math.max(...numbers);
+}
+
+function minIso(values: readonly Array<string | null>): string | null {
+  const dates = values.filter((value): value is string => Boolean(value));
+  return dates.length === 0 ? null : dates.sort()[0] ?? null;
+}
+
+function highestPriority(values: readonly TaskViewModel["priority"][]): TaskViewModel["priority"] {
+  const order: Record<TaskViewModel["priority"], number> = {
+    none: 0,
+    low: 1,
+    medium: 2,
+    high: 3
+  };
+  return values.reduce((best, value) => order[value] > order[best] ? value : best, "none");
 }
 
 export function duplicateGroups(source: CoreViewModelSource): DuplicateGroup[] {
