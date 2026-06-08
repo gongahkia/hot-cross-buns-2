@@ -552,6 +552,32 @@ describe("shared IPC contracts", () => {
     ).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ menuBarIconName: "calendar" }).success).toBe(true);
     expect(settingsUpdateRequestSchema.safeParse({ menuBarIconName: "bolt" }).success).toBe(false);
+    expect(
+      settingsUpdateRequestSchema.safeParse({
+        customMenuBarIcons: [
+          {
+            id: "custom:test",
+            name: "test",
+            fileName: "custom-test.png",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z"
+          }
+        ]
+      }).success
+    ).toBe(true);
+    expect(
+      settingsUpdateRequestSchema.safeParse({
+        customMenuBarIcons: [
+          {
+            id: "custom:test",
+            name: "test",
+            svg: "<svg></svg>",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z"
+          }
+        ]
+      }).success
+    ).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ calendarTimelineDensity: "comfortable" }).success).toBe(true);
     expect(settingsUpdateRequestSchema.safeParse({ calendarTimelineDensity: "huge" }).success).toBe(false);
     expect(settingsUpdateRequestSchema.safeParse({ taskCompletionSoundId: "coin" }).success).toBe(true);

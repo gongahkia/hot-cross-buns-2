@@ -6,6 +6,7 @@ import type {
   UndoStackStatusResponse
 } from "@shared/ipc/contracts";
 import type { SqliteConnection, SqliteWriteOperation } from "../sqliteConnection";
+import { LocalHistoryRepository } from "./historyRepository";
 
 type UndoStack = "undo" | "redo";
 type UndoResourceKind = NonNullable<UndoApplyResponse["resourceKind"]>;
@@ -161,8 +162,11 @@ export interface UndoChangeInput {
 
 export class LocalUndoRepository {
   readonly sessionId = `session:${randomUUID()}`;
+  private readonly history: LocalHistoryRepository;
 
-  constructor(private readonly connection: SqliteConnection) {}
+  constructor(private readonly connection: SqliteConnection) {
+    this.history = new LocalHistoryRepository(connection);
+  }
 
   status(): UndoStackStatusResponse {
     const undo = this.topEntry("undo");
@@ -465,6 +469,7 @@ export class LocalUndoRepository {
     ];
 
     this.connection.executeTransaction(operations);
+    this.recordApplyHistory(stack, entry, payload);
 
     return {
       action: stack,
@@ -563,6 +568,23 @@ export class LocalUndoRepository {
        LIMIT 1;`,
       [this.sessionId, stack]
     ) ?? null;
+  }
+
+  private recordApplyHistory(stack: UndoStack, entry: UndoEntryRow, payload: UndoPayload): void {
+    const title = titleFromUndoPayload(payload);
+
+    this.history.record({
+      kind: `${stack}.apply`,
+      resourceId: entry.resourceId,
+      summary: `${stack === "undo" ? "Undo" : "Redo"}: ${entry.label}`,
+      metadata: {
+        actionKind: entry.actionKind,
+        resourceKind: entry.resourceKind,
+        resourceId: entry.resourceId,
+        label: entry.label,
+        ...(title === undefined ? {} : { title })
+      }
+    });
   }
 }
 
@@ -740,6 +762,36 @@ function pickJson(
   }
 
   return output;
+}
+
+function titleFromUndoPayload(payload: UndoPayload): string | undefined {
+  return titleFromSnapshot(payload.target) ?? titleFromSnapshot(payload.opposite);
+}
+
+function titleFromSnapshot(value: JsonValue): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const title = value.title;
+  if (typeof title === "string" && title.trim().length > 0) {
+    return title;
+  }
+
+  const summary = value.summary;
+  if (typeof summary === "string" && summary.trim().length > 0) {
+    return summary;
+  }
+
+  const event = value.event;
+  if (event !== null && typeof event === "object" && !Array.isArray(event)) {
+    const eventSummary = event.summary;
+    if (typeof eventSummary === "string" && eventSummary.trim().length > 0) {
+      return eventSummary;
+    }
+  }
+
+  return undefined;
 }
 
 function taskOperations(

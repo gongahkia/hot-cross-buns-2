@@ -803,6 +803,15 @@ const hcbApi: HcbApi = {
         families: ["Avenir", "SF Pro Text"]
       })
     ),
+    importMenuBarIcon: vi.fn(async (request) =>
+      ok({
+        id: "custom:test",
+        name: request.name,
+        fileName: "custom-test.png",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      })
+    ),
     subscribeAction: vi.fn(() => () => undefined)
   },
   diagnostics: {

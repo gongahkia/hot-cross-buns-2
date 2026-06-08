@@ -369,6 +369,10 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
         summary: "Created task",
         metadata: { queued: true, taskListId: list.id }
       });
+      const created = this.requireTaskForMutation(id);
+      if (isHistoryNoteTask(created)) {
+        this.recordNoteHistory("note.create", created, "Created note");
+      }
 
       return this.getTask(id);
     });
@@ -510,6 +514,7 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
         summary: "Edited task",
         metadata: { queued: googleBackedPatch, taskListId: targetList.id }
       });
+      this.recordNoteUpdateHistory(existing, this.requireTaskForMutation(request.id));
 
       return this.getTask(request.id);
     });
@@ -569,6 +574,9 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
         summary: "Deleted task",
         metadata: { queued: true, taskListId: existing.listId }
       });
+      if (isHistoryNoteTask(existing)) {
+        this.recordNoteHistory("note.delete", existing, "Deleted note");
+      }
 
       return { id: request.id, queued: true, revision: now };
     });
@@ -738,6 +746,39 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
       });
 
       return this.getTask(id);
+    });
+  }
+
+  private recordNoteUpdateHistory(before: TaskRow, after: TaskRow): void {
+    const wasNote = isHistoryNoteTask(before);
+    const isNote = isHistoryNoteTask(after);
+
+    if (!wasNote && isNote) {
+      this.recordNoteHistory("note.create", after, "Created note");
+      return;
+    }
+
+    if (wasNote && !isNote) {
+      this.recordNoteHistory("note.delete", before, "Deleted note");
+      return;
+    }
+
+    if (wasNote && isNote && noteFieldsChanged(before, after)) {
+      this.recordNoteHistory("note.edit", after, "Edited note");
+    }
+  }
+
+  private recordNoteHistory(kind: "note.create" | "note.edit" | "note.delete", row: TaskRow, summary: string): void {
+    this.recordHistory({
+      kind,
+      resourceId: row.id,
+      summary: `${summary} "${row.title}"`,
+      metadata: {
+        queued: true,
+        title: row.title,
+        taskListId: row.listId,
+        taskListTitle: row.listTitle
+      }
     });
   }
 
@@ -916,4 +957,19 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
       ]
     };
   }
+}
+
+function isHistoryNoteTask(row: TaskRow): boolean {
+  return row.deletedAt == null &&
+    row.isHidden !== 1 &&
+    row.status !== "completed" &&
+    row.parentId === null &&
+    row.dueAt === null;
+}
+
+function noteFieldsChanged(before: TaskRow, after: TaskRow): boolean {
+  return before.title !== after.title ||
+    (before.notes ?? "") !== (after.notes ?? "") ||
+    before.listId !== after.listId ||
+    (before.tagsJson ?? "[]") !== (after.tagsJson ?? "[]");
 }

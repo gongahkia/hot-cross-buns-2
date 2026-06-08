@@ -57,6 +57,28 @@ function testConnection() {
   return temp.connection;
 }
 
+interface HistoryRow extends Record<string, unknown> {
+  kind: string;
+  resourceId: string | null;
+  summary: string;
+  metadataJson: string;
+}
+
+function historyRows(): HistoryRow[] {
+  return testConnection().query<HistoryRow>(
+    `SELECT kind,
+            resource_id AS resourceId,
+            summary,
+            metadata_json AS metadataJson
+     FROM local_history_entries
+     ORDER BY rowid ASC;`
+  );
+}
+
+function historyMetadata(row: HistoryRow): Record<string, unknown> {
+  return JSON.parse(row.metadataJson) as Record<string, unknown>;
+}
+
 function seedGoogleMirrors(syncRepository: GoogleSyncRepository): void {
   syncRepository.writeTaskLists(
     "acct-1",
@@ -249,6 +271,40 @@ describe("SQLite-backed domain services", () => {
     );
   });
 
+  it("records task-backed note create/edit/delete history with title metadata", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+
+    const created = await domain.planner.createNote({
+      title: "History note",
+      body: "Initial body"
+    });
+    await domain.planner.updateNote({
+      id: created.id,
+      body: "Changed body"
+    });
+    await domain.planner.updateNote({
+      id: created.id,
+      title: "History note",
+      body: "Changed body",
+      tags: []
+    });
+    await domain.planner.deleteNote({ id: created.id });
+
+    const noteRows = historyRows().filter((row) => row.kind.startsWith("note."));
+    expect(noteRows.map((row) => row.kind)).toEqual(["note.create", "note.edit", "note.delete"]);
+    expect(noteRows.map((row) => row.summary)).toEqual([
+      'Created note "History note"',
+      'Edited note "History note"',
+      'Deleted note "History note"'
+    ]);
+    expect(noteRows.map((row) => historyMetadata(row))).toEqual([
+      expect.objectContaining({ title: "History note", taskListTitle: "Inbox" }),
+      expect.objectContaining({ title: "History note", taskListTitle: "Inbox" }),
+      expect.objectContaining({ title: "History note", taskListTitle: "Inbox" })
+    ]);
+  });
+
   it("migrates the old Cmd+T pane shortcut to web tabs", async () => {
     const { domain } = createTestServices();
     const migrated = await domain.settings.update({
@@ -334,6 +390,23 @@ describe("SQLite-backed domain services", () => {
       { operation: "task.update" },
       { operation: "task.update" }
     ]);
+    const undoHistory = historyRows().filter((row) => row.kind === "undo.apply" || row.kind === "redo.apply");
+    expect(undoHistory.map((row) => row.kind)).toEqual(["undo.apply", "redo.apply"]);
+    expect(undoHistory.map((row) => row.summary)).toEqual(["Undo: Edit task", "Redo: Edit task"]);
+    expect(undoHistory.map((row) => historyMetadata(row))).toEqual([
+      expect.objectContaining({
+        actionKind: "task.update",
+        resourceKind: "task",
+        resourceId: id,
+        title: "Draft inbox triage rules"
+      }),
+      expect.objectContaining({
+        actionKind: "task.update",
+        resourceKind: "task",
+        resourceId: id,
+        title: "Updated task title"
+      })
+    ]);
   });
 
   it("blocks undo when the task changed after the undoable write", async () => {
@@ -367,6 +440,7 @@ describe("SQLite-backed domain services", () => {
       canUndo: true,
       canRedo: false
     });
+    expect(historyRows().filter((row) => row.kind === "undo.apply" || row.kind === "redo.apply")).toEqual([]);
   });
 
   it("blocks redo when the task changed after undo", async () => {
