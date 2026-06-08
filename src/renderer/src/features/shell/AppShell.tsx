@@ -326,6 +326,14 @@ export function AppShell(): JSX.Element {
         openDiagnosticsPanel();
         return true;
       }
+      if (command.id === "diagnostics.history") {
+        openDiagnosticsPanel("history");
+        return true;
+      }
+      if (command.id === "diagnostics.sync") {
+        openDiagnosticsPanel("sync");
+        return true;
+      }
 
       if (command.sectionId === "settings") {
         openSettingsPanel();
