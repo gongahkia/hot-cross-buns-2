@@ -719,6 +719,15 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
                 WHERE task_list_id = ? AND deleted_at IS NULL;`,
           params: [now, now, request.id]
         },
+        {
+          kind: "run",
+          sql: `DELETE FROM local_entity_tags
+                WHERE entity_kind IN ('task', 'note')
+                  AND entity_id IN (
+                    SELECT id FROM google_tasks WHERE task_list_id = ?
+                  );`,
+          params: [request.id]
+        },
         this.pendingMutationOperation({
           id: `mutation:${randomUUID()}`,
           accountId: existing.accountId,
