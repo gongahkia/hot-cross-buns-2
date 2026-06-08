@@ -815,7 +815,7 @@ describe("SQLite-backed domain services", () => {
       limit: 10
     });
     const regexEventBodySearch = await domain.planner.search({
-      query: "source:calendar regex:^Review",
+      query: "source:calendar regex:Review",
       limit: 10
     });
 
