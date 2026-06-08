@@ -604,7 +604,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
   }
 
   async function updateCalendarEventTime(
-    request: Pick<CalendarEventUpdateRequest, "id" | "startsAt" | "endsAt" | "allDay">
+    request: Pick<CalendarEventUpdateRequest, "id" | "startsAt" | "endsAt" | "allDay" | "scope">
   ): Promise<void> {
     const result = await window.hcb?.calendar.update(request);
 

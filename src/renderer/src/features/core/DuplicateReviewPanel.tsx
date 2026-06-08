@@ -295,12 +295,12 @@ function uniqueNumbers(values: readonly number[]): number[] {
   return [...new Set(values)].sort((left, right) => left - right);
 }
 
-function maxNullable(values: readonly Array<number | null>): number | null {
+function maxNullable(values: ReadonlyArray<number | null>): number | null {
   const numbers = values.filter((value): value is number => typeof value === "number" && value >= 0);
   return numbers.length === 0 ? null : Math.max(...numbers);
 }
 
-function minIso(values: readonly Array<string | null>): string | null {
+function minIso(values: ReadonlyArray<string | null>): string | null {
   const dates = values.filter((value): value is string => Boolean(value));
   return dates.length === 0 ? null : dates.sort()[0] ?? null;
 }

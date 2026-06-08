@@ -51,24 +51,22 @@ Status key:
 
 ### Partial / still worth drilling down
 
-- Tags exist as string metadata and auto-tag outputs, but there is no first-class tag repository, many-to-many table, tag CRUD UI, saved tag views, or tag analytics.
-- Auto-tagging lacks inspector-level "why was this tagged?" audit detail and bulk backfill/reapply controls.
+- Tags now have a first-class local catalog, many-to-many entity links, tag CRUD/merge UI, tag colors, bootstrap/IPC/preload/source plumbing, and backfill from existing task/event tag JSON. Saved tag analytics remain basic count totals.
+- Auto-tagging has inspector-level audit detail and settings-level bulk reapply for loaded tasks/events/notes. Full background reapply across unloaded cache windows and coalesced undo remain open.
 - Multi-account plumbing is partially present: account IDs, account-scoped tokens/cache/checkpoints/mutations, latest-account transport, and multi-account docs/tests exist. Full connected-account management UX, account badges/filters, explicit target account selection, and merged multi-account Today remain open.
-- Duplicate detection/review exists for tasks/events/notes with dismiss/open/delete flows. Merge, coalesced cleanup, and deeper duplicate-resolution UX remain open.
+- Duplicate detection/review exists for tasks/events/notes with dismiss/open/delete/merge flows. Coalesced cleanup and deeper duplicate-resolution QA remain open.
 - Conversion works, but should get one live/manual QA pass against real Google sync for replace-original cleanup and queued mutation replay.
-- MCP/CLI is featureful, and prompt/resource registries now exist. Advanced agent-native surfaces like `hcb_brief`, `hcb tail`, `hcb plan`, webhooks, and pending agent action tray are still missing.
+- MCP/CLI is featureful, and prompt/resource registries now include `hcb_brief`, `hcb tail`, `hcb plan`, `hcb://brief`, `hcb://plan`, and `hcb://tail`. Webhooks and a durable pending agent action tray are still missing.
 - Birthday Google payload shape is unit-tested, but live Google API smoke for birthday create/update/delete is still the main external-risk test.
 - Quick-add/NL parsing has meaningful code and tests, including recurrence handling, but not the full chrono-style parser depth listed below.
-- Calendar recurrence UI exists, but full Google-safe recurring edit scope and RRULE depth still need audit/finish work.
-- Search/filter depth is partial: advanced parser-backed operators and saved-search settings exist; boolean `AND`/`OR`/`NOT`, pinned filters, semantic search, local LLM, and chat sidebar remain open.
+- Calendar recurrence UI exists, and recurring write scopes are now explicit in contracts with fail-fast validation for unsupported occurrence/future edits. Full Google-safe recurring exception edits and deeper RRULE depth still need audit/finish work.
+- Search/filter depth is partial: advanced parser-backed operators, boolean `AND`/`OR`/`NOT`, saved-search settings, pinned filters, and command-palette pinned filter chips exist. Semantic search, local LLM, and chat sidebar remain open.
 - Portable data is partial/verify: settings/docs/local backups exist, but source-backed portable export/import and attachment implementation need a focused audit before closing.
 
 ### Missing / not implemented yet
 
 - Hierarchical Areas.
 - Bulk operations with coalesced undo/mutation entries.
-- Year view.
-- Boolean custom-filter DSL and pinned filters.
 - Semantic search, local LLM provider, and conversational planning sidebar.
 - CSS snippets, JSON config/keymaps, and sandboxed user extensions.
 - Source-verified portable export/import, source-verified attachments, ICS import/subscriptions.
@@ -80,24 +78,23 @@ Status key:
 ## Recommended next implementation order
 
 1. First-class tags:
-   - tag table/repository, tag CRUD, tag colors, filters, saved views
-   - auto-tag audit detail: "why was this tagged?"
-   - reason: auto-tagging currently creates tag value, but tags are not yet a durable product primitive.
+   - Status: `Partial`; implemented local tag catalog/repository, tag/entity tables, CRUD/merge UI, tag colors, counts, filters via tag search, pinned saved filters, inspector audit, and loaded-data bulk reapply.
+   - Remaining: full-cache/background auto-tag reapply, richer tag analytics, and coalesced undo for bulk changes.
 2. Recurrence correctness:
    - recurring edit scope, deeper RRULE editor, round-trip tests, live Google smoke
    - reason: high-risk calendar behavior; better before broad calendar automation.
 3. Boolean/custom search and pinned filters:
-   - boolean DSL, saved-query polish, pinned filters
-   - reason: pays off after tags/areas exist.
+   - Status: `Partial`; boolean DSL and pinned saved filters are implemented.
+   - Remaining: semantic search, local LLM, and conversational planning sidebar.
 4. Duplicate merge/coalesced cleanup:
-   - merge, delete batch, dismissal reset, coalesced undo/mutation entries
-   - reason: duplicate detection/review is now present; cleanup is the remaining product gap.
+   - Status: `Partial`; duplicate group merge is implemented for loaded tasks/events/notes.
+   - Remaining: coalesced undo/mutation entries and deeper duplicate-resolution QA.
 5. Portable export/import verification or implementation:
    - source audit, deterministic `.hcb2export`, dry-run import diff, attachment bundling, backups
    - reason: docs/settings exist, but implementation evidence was not closed in the static audit.
 6. Agent-native MCP/CLI v2:
-   - `hcb_brief`, curated prompt expansion, `hcb tail`, `hcb plan`, pending action tray
-   - reason: v1 CRUD/read surface is done; v2 should focus on planner-level summaries and safe proposed writes.
+   - Status: `Partial`; `hcb brief`, `hcb tail`, `hcb plan`, `hcb_brief`, `hcb_tail`, `hcb_plan`, resources, and prompts are implemented.
+   - Remaining: webhooks and durable pending agent action tray/proposed-write store.
 7. Release hardening:
    - live Google smoke, external MCP client QA, notification actions, updater, packaging/signing checks
    - reason: product-readiness work after feature slices stabilize.
@@ -203,11 +200,7 @@ Status key:
 
 ### Calendar
 
-- Status: `Partial`; Agenda/Day/Multi-Day/Week/Month are present, Year view is missing.
-- Verify/implement Year view if not present in renderer calendar view modes.
-  - 4x3 mini-month grid
-  - heatmap/count indicators
-  - keyboard navigation
+- Status: `Partial`; Agenda/Day/Multi-Day/Week/Month are present.
 - Verify/finish drag-to-create on calendar grids.
 - Add month/week day-agenda popover from cell/day click.
 - Add smart-reschedule:
