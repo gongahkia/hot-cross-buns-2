@@ -96,7 +96,7 @@ Status key:
    - source audit, deterministic `.hcb2export`, dry-run import diff, attachment bundling, backups
    - reason: docs/settings exist, but implementation evidence was not closed in the static audit.
 6. Agent-native MCP/CLI v2:
-   - `hcb_brief`, prompt registry, `hcb tail`, `hcb plan`, pending action tray
+   - `hcb_brief`, curated prompt expansion, `hcb tail`, `hcb plan`, pending action tray
    - reason: v1 CRUD/read surface is done; v2 should focus on planner-level summaries and safe proposed writes.
 7. Release hardening:
    - live Google smoke, external MCP client QA, notification actions, updater, packaging/signing checks
@@ -123,15 +123,15 @@ Status key:
 ## 1. Startup and sync optimisations
 
 - Status: `Done`; implemented 2026-06-06 and statically rechecked 2026-06-08.
-- Defer `calendar.scheduleSuggest` until after first useful render.
+- Done: defer `calendar.scheduleSuggest` until after first useful render.
   - Initial snapshot should render tasks, calendar, notes, settings, sync status, Google status, and native status without waiting for suggestions.
   - Today/schedule UI needs stable pending and empty states.
   - Update tests that assume startup waits on `scheduleSuggest`.
-- Add one bootstrap IPC snapshot for initial app load.
+- Done: add one bootstrap IPC snapshot for initial app load.
   - Replace startup IPC fan-out with one typed bootstrap endpoint where safe.
   - Keep paging and lazy calendar range loading separate.
   - Treat bootstrap contract changes as high blast-radius.
-- Trigger near-immediate pending-mutation queue drain after CRUD.
+- Done: trigger near-immediate pending-mutation queue drain after CRUD.
   - Debounce and batch drains.
   - Respect offline mode, disconnected accounts, sync-paused state, and app quit/startup sync.
 
@@ -272,20 +272,18 @@ Status key:
 
 ## 4. Search, filters, and command surfaces
 
-- Status: `Partial`; basic local search and MCP/CLI search exist. Advanced operators/DSL/semantic/LLM/chat surfaces remain missing.
-- Add advanced search operators:
+- Status: `Partial`; local search, MCP/CLI search, advanced parser-backed operators, and saved-search settings exist. Boolean DSL, pinned filters, semantic search, local LLM, and chat surfaces remain missing.
+- Keep parser-backed advanced search operators covered:
   - regex mode
   - `attendee:`
   - `duration>30m`
-  - `has:notes`
+  - `notes:yes` / `body:yes`
   - `due<+7d`
   - list/tag/calendar/status/priority combinations
-- Add custom-filter DSL:
-  - `list:`
-  - `tag:`
+- Finish custom-filter DSL:
   - `AND` / `OR` / `NOT`
   - relative dates
-  - saved queries
+  - saved-query UX polish
   - validation and explain output
 - Add local semantic search layered on existing search:
   - evaluate `sqlite-vec` vs SQLite `Vec1` for packaging stability
@@ -320,7 +318,7 @@ Status key:
 
 ## 5. User customisation layer
 
-- Status: `Missing` beyond existing built-in appearance/theme settings and event color overrides.
+- Status: `Partial` for built-in appearance/theme, event color overrides, and in-app hotkeys; `Missing` for user CSS snippets, app-data JSON config/keymaps, and sandboxed extensions.
 
 ### CSS tokens and snippets
 
@@ -338,6 +336,7 @@ Status key:
 
 ### JSON config and keymaps
 
+- Note: built-in keybinding settings and conflict detection exist; this item is specifically external app-data JSON config/keymap support.
 - Add app-data `settings.json` for layout, density, panel visibility/order, default view, sidebar contents, and safe feature toggles.
 - Add app-data `keymap.json`:
   - keys
@@ -368,7 +367,7 @@ Status key:
 
 ## 6. Data, import/export, and local files
 
-- Status: `Missing` for portable import/export, attachments, ICS, and reports beyond current print/support docs.
+- Status: `Verify` / `Partial` for portable import/export and attachments because settings/docs/local backup evidence exists but source-backed implementation was not closed in the 2026-06-08 static audit. `Missing` for ICS import/subscriptions.
 - Verify/finish portable `.hcbexport` / `.hcb2export` workflow:
   - manifest
   - state
@@ -399,7 +398,7 @@ Status key:
 
 ## 7. Security, native Mac integration, and release polish
 
-- Status: `Partial`; base macOS-native shell, diagnostics, MCP loopback, Keychain-backed secrets, updater metadata/docs, and notifications scaffolding exist, but the items below still need product hardening.
+- Status: `Partial`; base macOS-native shell, diagnostics, History/Sync Issues, MCP loopback/resources/prompts, Keychain-backed secrets, sync modes, retention settings, updater metadata/docs, local backups, and notifications scaffolding exist, but the items below still need product hardening.
 - Verify/finish local cache encryption as an opt-in, data-safety-gated feature:
   - keep unencrypted SQLite as the default until encrypted-cache migration is proven by tests and manual recovery drills
   - evaluate `better-sqlite3-multiple-ciphers` against current Electron/Node/macOS packaging, maintenance, license, prebuild, and deprecation risk
@@ -411,12 +410,15 @@ Status key:
   - support explicit decrypt/export recovery while the user still has Keychain access
   - document key-loss behavior clearly: encrypted cache is unrecoverable without the stored key, but Google source data can be re-synced after reconnect
   - do not ship the settings toggle until migration, downgrade, backup restore, corrupt-key, missing-Keychain, and interrupted-write tests pass
-- Add sync mode selector:
+- Sync mode selector:
+  - Status: `Done` by static evidence; keep live scheduler QA before release sign-off.
   - manual
   - balanced
   - near-real-time
-- Add past-event retention cutoff where `0` means keep forever.
-- Add past-task/overdue cleanup behavior settings.
+- Past-event retention cutoff:
+  - Status: `Done` by static evidence; `0` means keep forever.
+- Past-task cleanup settings:
+  - Status: `Partial`; completed-task retention exists, but overdue cleanup behavior still needs product/implementation audit.
 - Verify/finish in-app GitHub Releases update checker:
   - version compare
   - latest release state
@@ -456,11 +458,13 @@ Status key:
   - event notification defaults
   - 64-notification cap behavior
   - reschedule diagnostics
-- Add renderer History / Sync Issues window if diagnostics history is insufficient.
+- Renderer History / Sync Issues:
+  - Status: `Done` for Diagnostics tabs and command-palette entry points.
+  - Add a separate window only if later UX requires it.
 - Expand agent-native MCP, CLI, and local automation surface:
   - Note: base MCP/CLI read/write CRUD, sync, queue, undo/redo, and convert tools are already done.
   - add `hcb_brief` read tool/resource returning one structured today summary with blocking tasks, overdue items, conflicts, suggested reorder, sync risk, and next events
-  - populate `promptRegistry.ts` with curated parameterized prompts for day planning, inbox triage, week review, standup-note summaries, reschedule planning, duplicate review, and support/debug
+  - expand `promptRegistry.ts`; current prompts cover sync/debug/today/week/support, while day planning, inbox triage, standup summaries, reschedule planning, and duplicate review remain open
   - add an in-app floating Pending agent action tray for queued `confirmationId`s, with approve/reject/expiry states and sanitized dry-run summaries
   - add `hcb tail` CLI for live sync/log/mutation state, polling first and SSE only if the MCP transport grows stream support
   - add `hcb plan` CLI that reads piped markdown, parses tasks/events/notes through shared NL parsing, previews candidates by default, and applies only with `--apply`
