@@ -17,6 +17,14 @@ import type {
   SettingsSnapshot,
   SettingsUpdateRequest,
   SyncStatusResponse,
+  TagBulkApplyRequest,
+  TagCreateRequest,
+  TagDeleteRequest,
+  TagListResponse,
+  TagMergeRequest,
+  TagMutationResponse,
+  TagSummary,
+  TagUpdateRequest,
   UndoApplyResponse,
   UndoStackStatusResponse,
   TaskCreateRequest,
@@ -62,6 +70,7 @@ export interface CoreViewModelSource {
   hydrationState: CoreHydrationState;
   initialNotes: NoteViewModel[];
   noteLists: NoteListSummary[];
+  tags: TagSummary[];
   ensureCalendarRange: (range: CalendarRangeLoadRequest) => Promise<boolean>;
   isOffline: boolean;
   isStale: boolean;
@@ -78,6 +87,11 @@ export interface CoreViewModelSource {
   settingsMutationError?: string;
   settingsMutationPending: boolean;
   updateSettings: (request: SettingsUpdateRequest) => Promise<boolean>;
+  createTag: (request: TagCreateRequest) => Promise<TagMutationResponse | null>;
+  updateTag: (request: TagUpdateRequest) => Promise<TagMutationResponse | null>;
+  deleteTag: (request: TagDeleteRequest) => Promise<TagMutationResponse | null>;
+  mergeTags: (request: TagMergeRequest) => Promise<TagMutationResponse | null>;
+  bulkApplyTags: (request: TagBulkApplyRequest) => Promise<TagMutationResponse | null>;
   runRecoveryAction: (
     request: SettingsRecoveryActionRequest
   ) => Promise<SettingsRecoveryActionResponse | null>;
@@ -139,6 +153,7 @@ export interface CoreDataSnapshot {
   scheduleSuggestion: CalendarScheduleSuggestResponse;
   notes: NoteSummary[];
   noteLists: NoteListSummary[];
+  tags: TagSummary[];
   settings: SettingsSnapshot;
   syncStatus: SyncStatusResponse;
   googleStatus: GoogleStatusResponse;
@@ -201,6 +216,11 @@ export interface CoreViewModelSourceOptions {
   taskMutation: TaskMutationUiState;
   settingsMutation: SettingsMutationUiState;
   updateSettings: (request: SettingsUpdateRequest) => Promise<boolean>;
+  createTag: (request: TagCreateRequest) => Promise<TagMutationResponse | null>;
+  updateTag: (request: TagUpdateRequest) => Promise<TagMutationResponse | null>;
+  deleteTag: (request: TagDeleteRequest) => Promise<TagMutationResponse | null>;
+  mergeTags: (request: TagMergeRequest) => Promise<TagMutationResponse | null>;
+  bulkApplyTags: (request: TagBulkApplyRequest) => Promise<TagMutationResponse | null>;
   runRecoveryAction: (
     request: SettingsRecoveryActionRequest
   ) => Promise<SettingsRecoveryActionResponse | null>;

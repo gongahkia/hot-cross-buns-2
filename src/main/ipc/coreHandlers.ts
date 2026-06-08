@@ -463,6 +463,7 @@ async function bootstrapSnapshot(
     let events: Awaited<ReturnType<AppDomainServices["planner"]["listCalendarEvents"]>>;
     let scheduledTaskBlocks: Awaited<ReturnType<AppDomainServices["planner"]["listScheduledTaskBlocks"]>>;
     let notesPage: NoteListResponse;
+    let tags: Awaited<ReturnType<AppDomainServices["planner"]["listTags"]>>;
     let settings: Awaited<ReturnType<AppDomainServices["settings"]["get"]>>;
     let syncStatus: SyncStatusResponse;
     let googleStatus: GoogleStatusResponse;
@@ -497,6 +498,8 @@ async function bootstrapSnapshot(
         ? await scheduledTaskBlocksValue
         : scheduledTaskBlocksValue;
       notesPage = timedCommon("notes", () => emptyNotesResponse()) as NoteListResponse;
+      const tagsValue = timedCommon("tags", () => services.planner.listTags({ limit: 100 }));
+      tags = isPromiseLike(tagsValue) ? await tagsValue : tagsValue;
       const settingsValue = timedCommon("settings", () => services.settings.get());
       settings = isPromiseLike(settingsValue) ? await settingsValue : settingsValue;
       syncStatus = timedCommon("syncStatus", () => deferredSyncStatus()) as SyncStatusResponse;
@@ -510,6 +513,7 @@ async function bootstrapSnapshot(
         events,
         scheduledTaskBlocks,
         notesPage,
+        tags,
         settings,
         syncStatus,
         googleStatus,
@@ -540,6 +544,9 @@ async function bootstrapSnapshot(
         ),
         loadAllBootstrapPages({ limit: 50 }, (pageRequest) =>
           services.planner.listNotes(pageRequest)
+        ),
+        loadAllBootstrapPages({ limit: 100 }, (pageRequest) =>
+          services.planner.listTags(pageRequest)
         ),
         services.settings.get(),
         services.sync.status(),
@@ -575,6 +582,7 @@ async function bootstrapSnapshot(
       events,
       scheduledTaskBlocks,
       notes,
+      tags,
       settings,
       syncStatus,
       googleStatus,
@@ -624,6 +632,7 @@ async function bootstrapSnapshot(
         calendarEvents: snapshot.resourceCounts.calendarEvents,
         notes: snapshot.resourceCounts.notes,
         loadedNotes: notes.items.length,
+        tags: tags.items.length,
         payloadBytes: snapshotPayloadBytes
       }
     });

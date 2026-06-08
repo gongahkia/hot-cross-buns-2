@@ -22,6 +22,7 @@ import { HcbPublicError } from "@shared/ipc/result";
 import {
   hasRunnableLocalSearch,
   matchesLocalSearchTextRegex,
+  matchesLocalSearchItem,
   parseLocalSearchQuery,
   resolveLocalSearchDomains,
   type ParsedLocalSearchQuery
@@ -78,7 +79,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         const ftsQuery = ftsMatchQuery(parsed.text);
         const results: SearchResultItem[] = [];
 
-        if (!hasRunnableLocalSearch(parsed) || (!ftsQuery && parsed.chips.length === 0)) {
+        if (!hasRunnableLocalSearch(parsed) || (!ftsQuery && parsed.chips.length === 0 && parsed.boolean === undefined)) {
           return {
             items: [],
             page: {
@@ -319,9 +320,24 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
   }
 
   private queryLimitClause(parsed: ParsedLocalSearchQuery, limit: number): { sql: string; params: number[] } {
-    return parsed.filters.regex === undefined
+    return parsed.filters.regex === undefined && parsed.boolean === undefined
       ? { sql: "LIMIT ?", params: [limit] }
-      : { sql: "", params: [] };
+      : parsed.boolean === undefined
+        ? { sql: "", params: [] }
+        : { sql: "LIMIT ?", params: [Math.max(200, limit * 10)] };
+  }
+
+  private filterSearchRows<T extends { title: string }>(
+    parsed: ParsedLocalSearchQuery,
+    rows: T[],
+    bodyForRow: (row: T) => string | null | undefined,
+    itemForRow: (row: T) => Parameters<typeof matchesLocalSearchItem>[1]
+  ): T[] {
+    const regexFiltered = this.filterRegexRows(parsed, rows, bodyForRow);
+
+    return parsed.boolean === undefined
+      ? regexFiltered
+      : regexFiltered.filter((row) => matchesLocalSearchItem(parsed, itemForRow(row)));
   }
 
   private filterRegexRows<T extends { title: string }>(
@@ -377,6 +393,11 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
           body: string | null;
           snoozeUntil: string | null;
           tagsJson: string | null;
+          listTitle: string | null;
+          taskStatus: "active" | "completed" | "hidden" | "deleted";
+          dueAt: string | null;
+          priority: "none" | "low" | "medium" | "high" | null;
+          durationMinutes: number | null;
           updatedAt: string;
         }>(
           `SELECT
@@ -386,6 +407,16 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
              tasks.notes AS body,
              tasks.local_snooze_until AS snoozeUntil,
              tasks.local_tags_json AS tagsJson,
+             lists.title AS listTitle,
+             CASE
+               WHEN tasks.deleted_at IS NOT NULL THEN 'deleted'
+               WHEN tasks.is_hidden = 1 THEN 'hidden'
+               WHEN tasks.status = 'completed' THEN 'completed'
+               ELSE 'active'
+             END AS taskStatus,
+             tasks.due_at AS dueAt,
+             COALESCE(tasks.local_priority, 'none') AS priority,
+             tasks.local_duration_minutes AS durationMinutes,
              tasks.updated_at AS updatedAt
            FROM google_tasks tasks
            INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
@@ -399,7 +430,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
           [...params, ...limitClause.params]
         );
 
-      return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
+      return this.filterSearchRows(parsed, rows, (row) => row.body, taskBooleanItem).slice(0, limit)
         .map((row) => ({
           id: row.id,
           domain: "tasks" as const,
@@ -419,6 +450,11 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         body: string | null;
         snoozeUntil: string | null;
         tagsJson: string | null;
+        listTitle: string | null;
+        taskStatus: "active" | "completed" | "hidden" | "deleted";
+        dueAt: string | null;
+        priority: "none" | "low" | "medium" | "high" | null;
+        durationMinutes: number | null;
         updatedAt: string;
       }>(
         `WITH matches AS (
@@ -447,6 +483,16 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
              tasks.notes AS body,
              tasks.local_snooze_until AS snoozeUntil,
              tasks.local_tags_json AS tagsJson,
+             lists.title AS listTitle,
+             CASE
+               WHEN tasks.deleted_at IS NOT NULL THEN 'deleted'
+               WHEN tasks.is_hidden = 1 THEN 'hidden'
+               WHEN tasks.status = 'completed' THEN 'completed'
+               ELSE 'active'
+             END AS taskStatus,
+             tasks.due_at AS dueAt,
+             COALESCE(tasks.local_priority, 'none') AS priority,
+             tasks.local_duration_minutes AS durationMinutes,
              tasks.updated_at AS updatedAt
          FROM ranked
          INNER JOIN google_tasks tasks ON tasks.rowid = ranked.taskRowid
@@ -457,7 +503,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         [ftsQuery, ftsQuery, ...params, ...limitClause.params]
       );
 
-    return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
+    return this.filterSearchRows(parsed, rows, (row) => row.body, taskBooleanItem).slice(0, limit)
       .map((row) => ({
         id: row.id,
         domain: "tasks" as const,
@@ -486,7 +532,10 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
           snippet: string | null;
           tagsJson: string | null;
           accountId: string;
+          calendarTitle: string | null;
           description: string | null;
+          startAt: string | null;
+          attendeeEmailsJson: string | null;
           updatedAt: string;
         }>(
           `SELECT
@@ -495,7 +544,10 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
              COALESCE(events.description, events.location, calendars.summary) AS snippet,
              events.local_tags_json AS tagsJson,
              events.account_id AS accountId,
+             calendars.summary AS calendarTitle,
              events.description AS description,
+             events.start_at AS startAt,
+             events.attendee_emails_json AS attendeeEmailsJson,
              events.updated_at AS updatedAt
            FROM google_calendar_events events
            INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
@@ -505,7 +557,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
           [...params, ...limitClause.params]
         );
 
-      return this.calendarSearchItems(this.filterRegexRows(parsed, rows, (row) => row.description)).slice(0, limit);
+      return this.calendarSearchItems(this.filterSearchRows(parsed, rows, (row) => row.description, eventBooleanItem)).slice(0, limit);
     }
 
     const rows = this.connection
@@ -515,7 +567,10 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         snippet: string | null;
         tagsJson: string | null;
         accountId: string;
+        calendarTitle: string | null;
         description: string | null;
+        startAt: string | null;
+        attendeeEmailsJson: string | null;
         updatedAt: string;
       }>(
         `WITH matches AS (
@@ -543,7 +598,10 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
            COALESCE(events.description, events.location, calendars.summary) AS snippet,
            events.local_tags_json AS tagsJson,
            events.account_id AS accountId,
+           calendars.summary AS calendarTitle,
            events.description AS description,
+           events.start_at AS startAt,
+           events.attendee_emails_json AS attendeeEmailsJson,
            events.updated_at AS updatedAt
          FROM ranked
          INNER JOIN google_calendar_events events ON events.rowid = ranked.eventRowid
@@ -554,7 +612,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         [ftsQuery, ftsQuery, ...params, ...limitClause.params]
       );
 
-    return this.calendarSearchItems(this.filterRegexRows(parsed, rows, (row) => row.description)).slice(0, limit);
+    return this.calendarSearchItems(this.filterSearchRows(parsed, rows, (row) => row.description, eventBooleanItem)).slice(0, limit);
   }
 
   private searchNotes(
@@ -588,7 +646,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
           [...params, ...limitClause.params]
         );
 
-      return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
+      return this.filterSearchRows(parsed, rows, (row) => row.body, noteBooleanItem).slice(0, limit)
         .map((row) => ({
           id: row.id,
           domain: "notes" as const,
@@ -622,7 +680,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         [ftsQuery, ...params, ...limitClause.params]
       );
 
-    return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
+    return this.filterSearchRows(parsed, rows, (row) => row.body, noteBooleanItem).slice(0, limit)
       .map((row) => ({
         id: row.id,
         domain: "notes" as const,
@@ -924,4 +982,59 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
       AND ${taskAlias}.due_at IS NULL
       AND ${listAlias}.deleted_at IS NULL`;
   }
+}
+
+function taskBooleanItem(row: {
+  title: string;
+  body: string | null;
+  tagsJson: string | null;
+  listTitle: string | null;
+  taskStatus: "active" | "completed" | "hidden" | "deleted";
+  dueAt: string | null;
+  priority: "none" | "low" | "medium" | "high" | null;
+  durationMinutes: number | null;
+}): Parameters<typeof matchesLocalSearchItem>[1] {
+  return {
+    domain: "tasks",
+    title: row.title,
+    body: row.body,
+    tags: parseTagsJson(row.tagsJson),
+    listTitle: row.listTitle,
+    taskStatus: row.taskStatus,
+    dueAt: row.dueAt,
+    priority: row.priority,
+    durationMinutes: row.durationMinutes
+  };
+}
+
+function eventBooleanItem(row: {
+  title: string;
+  description: string | null;
+  tagsJson: string | null;
+  calendarTitle: string | null;
+  startAt: string | null;
+  attendeeEmailsJson: string | null;
+}): Parameters<typeof matchesLocalSearchItem>[1] {
+  return {
+    domain: "calendar",
+    title: row.title,
+    body: row.description,
+    tags: parseTagsJson(row.tagsJson),
+    calendarTitle: row.calendarTitle,
+    startAt: row.startAt,
+    attendeeEmails: parseStringArray(row.attendeeEmailsJson)
+  };
+}
+
+function noteBooleanItem(row: {
+  title: string;
+  body: string;
+  tagsJson: string | null;
+}): Parameters<typeof matchesLocalSearchItem>[1] {
+  return {
+    domain: "notes",
+    title: row.title,
+    body: row.body,
+    tags: parseTagsJson(row.tagsJson)
+  };
 }

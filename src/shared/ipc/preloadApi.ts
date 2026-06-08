@@ -80,6 +80,14 @@ import type {
   SyncRunNowRequest,
   SyncRunNowResponse,
   SyncStatusResponse,
+  TagBulkApplyRequest,
+  TagCreateRequest,
+  TagDeleteRequest,
+  TagListRequest,
+  TagListResponse,
+  TagMergeRequest,
+  TagMutationResponse,
+  TagUpdateRequest,
   UndoApplyResponse,
   UndoStackStatusResponse,
   TaskCompletionRequest,
@@ -159,6 +167,14 @@ export interface HcbApi {
   };
   search: {
     query: (request: SearchQueryRequest) => Promise<HcbResult<SearchQueryResponse>>;
+  };
+  tags: {
+    list: (request?: TagListRequest) => Promise<HcbResult<TagListResponse>>;
+    create: (request: TagCreateRequest) => Promise<HcbResult<TagMutationResponse>>;
+    update: (request: TagUpdateRequest) => Promise<HcbResult<TagMutationResponse>>;
+    delete: (request: TagDeleteRequest) => Promise<HcbResult<TagMutationResponse>>;
+    merge: (request: TagMergeRequest) => Promise<HcbResult<TagMutationResponse>>;
+    bulkApply: (request: TagBulkApplyRequest) => Promise<HcbResult<TagMutationResponse>>;
   };
   sync: {
     status: () => Promise<HcbResult<SyncStatusResponse>>;

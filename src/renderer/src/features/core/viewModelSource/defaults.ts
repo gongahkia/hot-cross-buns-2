@@ -193,6 +193,7 @@ export const emptySnapshot: CoreDataSnapshot = {
   },
   notes: [],
   noteLists: [],
+  tags: [],
   settings: emptySettings,
   syncStatus: emptySyncStatus,
   googleStatus: emptyGoogleStatus,

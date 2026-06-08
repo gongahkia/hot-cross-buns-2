@@ -54,7 +54,13 @@ export interface ParsedLocalSearchQuery {
   filters: LocalSearchFilters;
   chips: LocalSearchFilterChip[];
   errors: LocalSearchQueryIssue[];
+  boolean?: LocalSearchBooleanNode;
 }
+
+export type LocalSearchBooleanNode =
+  | { kind: "term"; token: string }
+  | { kind: "not"; child: LocalSearchBooleanNode }
+  | { kind: "and" | "or"; left: LocalSearchBooleanNode; right: LocalSearchBooleanNode };
 
 export interface LocalSearchMatcherItem {
   domain: LocalSearchDomain;
@@ -154,8 +160,14 @@ export function parseLocalSearchQuery(
   const tokenized = tokenize(raw);
   const errors = [...tokenized.errors];
   const now = normalizedNow(options.now);
+  const boolean = parseBooleanExpression(tokenized.tokens, errors);
+  const booleanMode = boolean !== undefined;
 
   for (const token of tokenized.tokens) {
+    if (isBooleanSyntaxToken(token)) {
+      continue;
+    }
+
     const comparisonIssue = parseMalformedComparisonFilterToken(token);
 
     if (comparisonIssue !== null) {
@@ -166,11 +178,18 @@ export function parseLocalSearchQuery(
     const parsedFilter = parseComparisonFilterToken(token) ?? parseFilterToken(token);
 
     if (!parsedFilter) {
+      if (booleanMode) {
+        continue;
+      }
       textTerms.push(token);
       continue;
     }
 
     const { key, value } = parsedFilter;
+
+    if (booleanMode) {
+      continue;
+    }
 
     if (!FILTER_KEYS.has(key)) {
       errors.push({
@@ -394,12 +413,14 @@ export function parseLocalSearchQuery(
     text: textTerms.join(" ").trim(),
     filters,
     chips,
-    errors
+    errors,
+    ...(boolean === undefined ? {} : { boolean })
   };
 }
 
 export function hasRunnableLocalSearch(parsed: ParsedLocalSearchQuery): boolean {
-  return parsed.errors.length === 0 && (parsed.text.length > 0 || parsed.chips.length > 0);
+  return parsed.errors.length === 0 &&
+    (parsed.text.length > 0 || parsed.chips.length > 0 || parsed.boolean !== undefined);
 }
 
 export function resolveLocalSearchDomains(
@@ -442,6 +463,10 @@ export function matchesLocalSearchItem(
   }
 
   if (!resolveLocalSearchDomains(parsed).includes(item.domain)) {
+    return false;
+  }
+
+  if (parsed.boolean !== undefined && !matchesBooleanNode(parsed.boolean, item)) {
     return false;
   }
 
@@ -530,6 +555,15 @@ function tokenize(input: string): TokenizeResult {
       continue;
     }
 
+    if (!inQuote && (character === "(" || character === ")")) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = "";
+      }
+      tokens.push(character);
+      continue;
+    }
+
     if (/\s/.test(character) && !inQuote) {
       if (current.length > 0) {
         tokens.push(current);
@@ -553,6 +587,211 @@ function tokenize(input: string): TokenizeResult {
   }
 
   return { tokens, errors };
+}
+
+function parseBooleanExpression(
+  tokens: readonly string[],
+  errors: LocalSearchQueryIssue[]
+): LocalSearchBooleanNode | undefined {
+  if (!tokens.some(isBooleanSyntaxToken)) {
+    return undefined;
+  }
+
+  const parser = new BooleanQueryParser(tokens);
+  const node = parser.parse();
+
+  errors.push(...parser.errors);
+  return node ?? undefined;
+}
+
+function isBooleanSyntaxToken(token: string): boolean {
+  const upper = token.toUpperCase();
+  return upper === "AND" || upper === "OR" || upper === "NOT" || token === "(" || token === ")";
+}
+
+class BooleanQueryParser {
+  readonly errors: LocalSearchQueryIssue[] = [];
+  private index = 0;
+
+  constructor(private readonly tokens: readonly string[]) {}
+
+  parse(): LocalSearchBooleanNode | null {
+    const node = this.parseOr();
+
+    if (this.index < this.tokens.length) {
+      this.errors.push({
+        code: "invalid_boolean_query",
+        message: `Unexpected boolean token "${this.tokens[this.index]}".`,
+        token: this.tokens[this.index]
+      });
+    }
+
+    return node;
+  }
+
+  private parseOr(): LocalSearchBooleanNode | null {
+    let left = this.parseAnd();
+
+    while (this.match("OR")) {
+      const right = this.parseAnd();
+      if (!left || !right) {
+        this.errors.push({
+          code: "invalid_boolean_query",
+          message: "Add a search term on both sides of OR."
+        });
+        return left ?? right;
+      }
+      left = { kind: "or", left, right };
+    }
+
+    return left;
+  }
+
+  private parseAnd(): LocalSearchBooleanNode | null {
+    let left = this.parseNot();
+
+    while (this.match("AND")) {
+      const right = this.parseNot();
+      if (!left || !right) {
+        this.errors.push({
+          code: "invalid_boolean_query",
+          message: "Add a search term on both sides of AND."
+        });
+        return left ?? right;
+      }
+      left = { kind: "and", left, right };
+    }
+
+    return left;
+  }
+
+  private parseNot(): LocalSearchBooleanNode | null {
+    if (this.match("NOT")) {
+      const child = this.parseNot();
+      if (!child) {
+        this.errors.push({
+          code: "invalid_boolean_query",
+          message: "Add a search term after NOT."
+        });
+        return null;
+      }
+      return { kind: "not", child };
+    }
+
+    return this.parsePrimary();
+  }
+
+  private parsePrimary(): LocalSearchBooleanNode | null {
+    const token = this.tokens[this.index];
+
+    if (token === undefined) {
+      return null;
+    }
+
+    if (token === "(") {
+      this.index += 1;
+      const node = this.parseOr();
+      if (!this.match(")")) {
+        this.errors.push({
+          code: "invalid_boolean_query",
+          message: "Close the boolean search group with )."
+        });
+      }
+      return node;
+    }
+
+    if (token === ")") {
+      return null;
+    }
+
+    if (isBooleanSyntaxToken(token)) {
+      this.errors.push({
+        code: "invalid_boolean_query",
+        message: `Unexpected boolean operator "${token}".`,
+        token
+      });
+      this.index += 1;
+      return null;
+    }
+
+    this.index += 1;
+    return { kind: "term", token };
+  }
+
+  private match(token: string): boolean {
+    const current = this.tokens[this.index];
+    if (current === undefined) {
+      return false;
+    }
+
+    if (token === ")" ? current === ")" : current.toUpperCase() === token) {
+      this.index += 1;
+      return true;
+    }
+
+    return false;
+  }
+}
+
+function matchesBooleanNode(node: LocalSearchBooleanNode, item: LocalSearchMatcherItem): boolean {
+  if (node.kind === "term") {
+    return matchesBooleanTerm(node.token, item);
+  }
+
+  if (node.kind === "not") {
+    return !matchesBooleanNode(node.child, item);
+  }
+
+  if (node.kind === "and") {
+    return matchesBooleanNode(node.left, item) && matchesBooleanNode(node.right, item);
+  }
+
+  return matchesBooleanNode(node.left, item) || matchesBooleanNode(node.right, item);
+}
+
+function matchesBooleanTerm(token: string, item: LocalSearchMatcherItem): boolean {
+  const parsedFilter = parseComparisonFilterToken(token) ?? parseFilterToken(token);
+
+  if (!parsedFilter) {
+    return matchesText(token, item);
+  }
+
+  const { key, value } = parsedFilter;
+
+  if ((key === "source" || key === "domain") && value) {
+    return parseDomains(value).includes(item.domain);
+  }
+
+  if (key === "tag" && value) {
+    return matchesTag(item.tags ?? [], value);
+  }
+
+  if ((key === "notes" || key === "body") && value) {
+    const hasBody = parseBoolean(value);
+    return hasBody === undefined ? false : hasContent(item.body) === hasBody;
+  }
+
+  if (key === "status" && value) {
+    return item.domain === "tasks" && item.taskStatus === STATUS_ALIASES[value.toLowerCase()];
+  }
+
+  if (key === "priority" && value) {
+    return item.domain === "tasks" && (item.priority ?? "none") === PRIORITY_ALIASES[value.toLowerCase()];
+  }
+
+  if (key === "list" && value) {
+    return item.domain === "tasks" && containsNormalized(item.listTitle ?? "", value);
+  }
+
+  if ((key === "calendar" || key === "cal") && value) {
+    return item.domain === "calendar" && containsNormalized(item.calendarTitle ?? "", value);
+  }
+
+  if (key === "attendee" && value) {
+    return item.domain === "calendar" && matchesListFragment(item.attendeeEmails ?? [], value);
+  }
+
+  return matchesText(value, item);
 }
 
 function parseFilterToken(token: string): { key: string; value: string; operator?: "<" | ">" } | null {

@@ -11,6 +11,9 @@ import type {
   ScheduledTaskBlockListRequest,
   ScheduledTaskBlockListResponse,
   SettingsSnapshot,
+  TagListRequest,
+  TagListResponse,
+  TagSummary,
   TaskListRequest,
   TaskListResponse,
   TaskSummary,
@@ -119,6 +122,7 @@ export async function loadCoreData(
     events,
     scheduledTaskBlocks,
     notes,
+    tags,
     settings,
     syncStatus,
     googleStatus,
@@ -160,6 +164,10 @@ export async function loadCoreData(
       { limit: 50 },
       (request) => hcb.notes.list(request).then((result) => unwrap(result, "Notes failed"))
     ),
+    loadAllPages<TagListRequest, TagListResponse>(
+      { limit: 100 },
+      (request) => hcb.tags.list(request).then((result) => unwrap(result, "Tags failed"))
+    ),
     settingsLoad,
     hcb.sync.status().then((result) => unwrap(result, "Sync status failed")),
     hcb.google.status().then((result) => unwrap(result, "Google status failed")),
@@ -179,6 +187,7 @@ export async function loadCoreData(
     },
     notes: notes.items,
     noteLists: notes.lists,
+    tags: tags.items,
     settings,
     syncStatus,
     googleStatus,
@@ -219,6 +228,7 @@ export interface CoreDataHydrationSnapshot {
   tasks?: TaskSummary[];
   notes?: NoteSummary[];
   noteLists?: NoteListSummary[];
+  tags?: TagSummary[];
   resourceCounts: Partial<CoreResourceCounts>;
 }
 
@@ -379,6 +389,7 @@ function snapshotFromBootstrap(
     },
     notes: bootstrap.notes.items,
     noteLists: bootstrap.notes.lists,
+    tags: bootstrap.tags.items,
     settings: bootstrap.settings,
     syncStatus: bootstrap.syncStatus,
     googleStatus: bootstrap.googleStatus,

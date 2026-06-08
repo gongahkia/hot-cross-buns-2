@@ -260,6 +260,20 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
       query: (request) =>
         invokeContract(ipc, ipcContracts.search.query, request, "Search request failed")
     },
+    tags: {
+      list: (request = {}) =>
+        invokeContract(ipc, ipcContracts.tags.list, request, "Tag list request failed"),
+      create: (request) =>
+        invokeContract(ipc, ipcContracts.tags.create, request, "Tag create request failed"),
+      update: (request) =>
+        invokeContract(ipc, ipcContracts.tags.update, request, "Tag update request failed"),
+      delete: (request) =>
+        invokeContract(ipc, ipcContracts.tags.delete, request, "Tag delete request failed"),
+      merge: (request) =>
+        invokeContract(ipc, ipcContracts.tags.merge, request, "Tag merge request failed"),
+      bulkApply: (request) =>
+        invokeContract(ipc, ipcContracts.tags.bulkApply, request, "Tag bulk apply request failed")
+    },
     sync: {
       status: () => invokeContract(ipc, ipcContracts.sync.status, {}, "Sync status failed"),
       runNow: (request = {}) =>

@@ -441,6 +441,61 @@ function usePreloadCoreSource(): CoreViewModelSource {
     setLoadState
   });
 
+  const createTag = useCallback(async (request: Parameters<NonNullable<typeof window.hcb>["tags"]["create"]>[0]) => {
+    const result = await window.hcb?.tags.create(request);
+
+    if (!result?.ok) {
+      return null;
+    }
+
+    load();
+    return result.data;
+  }, [load]);
+
+  const updateTag = useCallback(async (request: Parameters<NonNullable<typeof window.hcb>["tags"]["update"]>[0]) => {
+    const result = await window.hcb?.tags.update(request);
+
+    if (!result?.ok) {
+      return null;
+    }
+
+    load();
+    return result.data;
+  }, [load]);
+
+  const deleteTag = useCallback(async (request: Parameters<NonNullable<typeof window.hcb>["tags"]["delete"]>[0]) => {
+    const result = await window.hcb?.tags.delete(request);
+
+    if (!result?.ok) {
+      return null;
+    }
+
+    load();
+    return result.data;
+  }, [load]);
+
+  const mergeTags = useCallback(async (request: Parameters<NonNullable<typeof window.hcb>["tags"]["merge"]>[0]) => {
+    const result = await window.hcb?.tags.merge(request);
+
+    if (!result?.ok) {
+      return null;
+    }
+
+    load();
+    return result.data;
+  }, [load]);
+
+  const bulkApplyTags = useCallback(async (request: Parameters<NonNullable<typeof window.hcb>["tags"]["bulkApply"]>[0]) => {
+    const result = await window.hcb?.tags.bulkApply(request);
+
+    if (!result?.ok) {
+      return null;
+    }
+
+    load();
+    return result.data;
+  }, [load]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -702,6 +757,11 @@ function usePreloadCoreSource(): CoreViewModelSource {
       taskMutation,
       settingsMutation,
       updateSettings,
+      createTag,
+      updateTag,
+      deleteTag,
+      mergeTags,
+      bulkApplyTags,
       runRecoveryAction,
       undo: runUndo,
       redo: runRedo,
@@ -727,8 +787,11 @@ function usePreloadCoreSource(): CoreViewModelSource {
       clearTaskMutationError,
       completeEvent,
       completeTask,
+      bulkApplyTags,
+      createTag,
       createTask,
       createTaskList,
+      deleteTag,
       deleteTask,
       deleteTaskList,
       ensureCalendarRange,
@@ -736,6 +799,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
       loadState,
       moveTask,
       moveScheduledTaskBlock,
+      mergeTags,
       prefersDark,
       refreshGoogleStatus,
       refreshUndoStatus,
@@ -752,6 +816,7 @@ function usePreloadCoreSource(): CoreViewModelSource {
       taskMutation,
       unscheduleTaskBlock,
       updateSettings,
+      updateTag,
       updateTask
     ]
   );
