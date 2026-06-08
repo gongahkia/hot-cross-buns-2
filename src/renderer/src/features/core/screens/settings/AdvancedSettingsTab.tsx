@@ -13,6 +13,12 @@ import type {
   SettingsRecoveryActionRequest,
   SettingsSnapshot,
   SettingsUpdateRequest,
+  TagCreateRequest,
+  TagDeleteRequest,
+  TagMergeRequest,
+  TagMutationResponse,
+  TagSummary,
+  TagUpdateRequest,
   TaskListSummary
 } from "@shared/ipc/contracts";
 import {
@@ -28,8 +34,11 @@ import {
   History,
   Layers3,
   ListChecks,
+  Pin,
   RotateCcw,
+  Save,
   Tag,
+  Trash2,
   Upload
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -47,7 +56,12 @@ interface AdvancedSettingsTabProps {
   beginRecoveryAction: (action: SettingsRecoveryActionRequest["action"]) => void;
   calendarSources: CalendarListSummary[];
   settings: SettingsSnapshot;
+  tags: TagSummary[];
   taskLists: TaskListSummary[];
+  createTag: (request: TagCreateRequest) => Promise<TagMutationResponse | null>;
+  updateTag: (request: TagUpdateRequest) => Promise<TagMutationResponse | null>;
+  deleteTag: (request: TagDeleteRequest) => Promise<TagMutationResponse | null>;
+  mergeTags: (request: TagMergeRequest) => Promise<TagMutationResponse | null>;
   updateSelectedCalendar: (calendarId: string, selected: boolean) => void;
   updateSelectedTaskList: (taskListId: string, selected: boolean) => void;
   updateSettings: (request: SettingsUpdateRequest) => void;
@@ -91,8 +105,13 @@ function autoDisableInvalidAutoTagRules(rules: AutoTagRule[], now: string): Auto
 export function AdvancedSettingsTab({
   beginRecoveryAction,
   calendarSources,
+  createTag,
+  deleteTag,
+  mergeTags,
   settings,
+  tags,
   taskLists,
+  updateTag,
   updateSelectedCalendar,
   updateSelectedTaskList,
   updateSettings
@@ -100,6 +119,11 @@ export function AdvancedSettingsTab({
   const selectedTaskLists = new Set(settings.selectedTaskListIds);
   const selectedCalendars = new Set(settings.selectedCalendarIds);
   const noteTemplates = settings.noteTemplates ?? [];
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#7C3AED");
+  const [tagDrafts, setTagDrafts] = useState<Record<string, { color: string; name: string }>>({});
+  const [tagMergeSourceId, setTagMergeSourceId] = useState("");
+  const [tagMergeTargetId, setTagMergeTargetId] = useState("");
   const [autoTagPreviewKind, setAutoTagPreviewKind] = useState<AutoTagTargetKind>("task");
   const [autoTagPreviewTitle, setAutoTagPreviewTitle] = useState("CODING: Ship planner polish");
   const [autoTagPreviewBody, setAutoTagPreviewBody] = useState("");
@@ -212,6 +236,109 @@ export function AdvancedSettingsTab({
         }
       ]
     });
+  }
+
+  function updateSavedFilter(
+    filterId: string,
+    patch: Partial<SettingsSnapshot["savedSearchViews"][number]>
+  ): void {
+    const now = new Date().toISOString();
+    updateSettings({
+      savedSearchViews: settings.savedSearchViews.map((filter) =>
+        filter.id === filterId ? { ...filter, ...patch, updatedAt: now } : filter
+      )
+    });
+  }
+
+  function removeSavedFilter(filterId: string): void {
+    updateSettings({
+      savedSearchViews: settings.savedSearchViews.filter((candidate) => candidate.id !== filterId),
+      pinnedSavedSearchViewIds: settings.pinnedSavedSearchViewIds.filter((candidate) => candidate !== filterId)
+    });
+  }
+
+  function togglePinnedSavedFilter(filterId: string): void {
+    const pinned = new Set(settings.pinnedSavedSearchViewIds);
+
+    if (pinned.has(filterId)) {
+      pinned.delete(filterId);
+    } else {
+      pinned.add(filterId);
+    }
+
+    updateSettings({ pinnedSavedSearchViewIds: [...pinned].slice(0, 20) });
+  }
+
+  async function addTag(): Promise<void> {
+    const name = newTagName.trim();
+
+    if (!name) {
+      return;
+    }
+
+    const result = await createTag({ name, color: newTagColor || null });
+
+    if (result) {
+      setNewTagName("");
+    }
+  }
+
+  function tagDraft(tag: TagSummary): { color: string; name: string } {
+    return tagDrafts[tag.id] ?? { color: tag.color ?? "#7C3AED", name: tag.name };
+  }
+
+  function setTagDraft(tag: TagSummary, patch: Partial<{ color: string; name: string }>): void {
+    const current = tagDraft(tag);
+    setTagDrafts({
+      ...tagDrafts,
+      [tag.id]: { ...current, ...patch }
+    });
+  }
+
+  async function saveTag(tag: TagSummary): Promise<void> {
+    const draft = tagDraft(tag);
+    const name = draft.name.trim();
+    const color = draft.color || null;
+
+    if (!name) {
+      return;
+    }
+
+    if (name === tag.name && color === tag.color) {
+      return;
+    }
+
+    const result = await updateTag({
+      id: tag.id,
+      ...(name === tag.name ? {} : { name }),
+      ...(color === tag.color ? {} : { color })
+    });
+
+    if (result) {
+      const { [tag.id]: _removed, ...rest } = tagDrafts;
+      setTagDrafts(rest);
+    }
+  }
+
+  async function removeTag(tag: TagSummary): Promise<void> {
+    if (!window.confirm(`Delete tag "${tag.name}"? Existing entity tag values are removed locally.`)) {
+      return;
+    }
+
+    await deleteTag({ id: tag.id });
+  }
+
+  async function mergeSelectedTags(): Promise<void> {
+    if (!tagMergeSourceId || !tagMergeTargetId || tagMergeSourceId === tagMergeTargetId) {
+      return;
+    }
+
+    const result = await mergeTags({ sourceId: tagMergeSourceId, targetId: tagMergeTargetId });
+
+    if (result) {
+      setTagMergeSourceId("");
+      setTagMergeTargetId("");
+    }
   }
 
   function addTaskTemplate(): void {
@@ -633,19 +760,140 @@ export function AdvancedSettingsTab({
         {settings.savedSearchViews.length === 0 ? (
           <EmptyState description="No custom filters yet." title="No filters" />
         ) : settings.savedSearchViews.map((filter) => (
-          <SettingsControlRow key={filter.id} label={filter.name} description={filter.query}>
-            <Button
-              onClick={() =>
-                updateSettings({
-                  savedSearchViews: settings.savedSearchViews.filter((candidate) => candidate.id !== filter.id)
-                })
-              }
-              variant="ghost"
-            >
-              Remove
-            </Button>
-          </SettingsControlRow>
+          <div className="grid gap-2 border-b border-border px-3 py-3 last:border-b-0" key={filter.id}>
+            <div className="grid gap-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto_auto]">
+              <Input
+                aria-label={`Saved filter name ${filter.name}`}
+                onChange={(event) => updateSavedFilter(filter.id, { name: event.currentTarget.value })}
+                value={filter.name}
+              />
+              <Input
+                aria-label={`Saved filter query ${filter.name}`}
+                onChange={(event) => updateSavedFilter(filter.id, { query: event.currentTarget.value })}
+                value={filter.query}
+              />
+              <Button
+                onClick={() => togglePinnedSavedFilter(filter.id)}
+                size="sm"
+                variant={settings.pinnedSavedSearchViewIds.includes(filter.id) ? "primary" : "secondary"}
+              >
+                <Pin aria-hidden="true" size={14} />
+                {settings.pinnedSavedSearchViewIds.includes(filter.id) ? "Pinned" : "Pin"}
+              </Button>
+              <Button onClick={() => removeSavedFilter(filter.id)} size="sm" variant="ghost">
+                <Trash2 aria-hidden="true" size={14} />
+                Remove
+              </Button>
+            </div>
+          </div>
         ))}
+      </SettingsGroup>
+
+      <SettingsGroup title="Tags">
+        <SettingsControlRow
+          description={`${tags.length} tag${tags.length === 1 ? "" : "s"} in the local catalog.`}
+          icon={Tag}
+          label="Tag catalog"
+        >
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,12rem)_3rem_auto]">
+            <Input
+              aria-label="New tag name"
+              onChange={(event) => setNewTagName(event.currentTarget.value)}
+              placeholder="tag"
+              value={newTagName}
+            />
+            <input
+              aria-label="New tag color"
+              className="h-8 w-12 rounded-hcbMd border border-border bg-surface-0 p-1"
+              onChange={(event) => setNewTagColor(event.currentTarget.value)}
+              type="color"
+              value={newTagColor}
+            />
+            <Button disabled={!newTagName.trim()} onClick={() => void addTag()} variant="secondary">
+              <FilePlus2 aria-hidden="true" size={14} />
+              Add
+            </Button>
+          </div>
+        </SettingsControlRow>
+        {tags.length > 1 ? (
+          <SettingsControlRow description="Moves entity links from the source tag into the target tag." label="Merge tags">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <select
+                aria-label="Merge source tag"
+                className={settingsSelectClass}
+                onChange={(event) => setTagMergeSourceId(event.target.value)}
+                value={tagMergeSourceId}
+              >
+                <option value="">Source</option>
+                {tags.map((tag) => (
+                  <option key={tag.id} value={tag.id}>{tag.name}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Merge target tag"
+                className={settingsSelectClass}
+                onChange={(event) => setTagMergeTargetId(event.target.value)}
+                value={tagMergeTargetId}
+              >
+                <option value="">Target</option>
+                {tags.map((tag) => (
+                  <option key={tag.id} value={tag.id}>{tag.name}</option>
+                ))}
+              </select>
+              <Button
+                disabled={!tagMergeSourceId || !tagMergeTargetId || tagMergeSourceId === tagMergeTargetId}
+                onClick={() => void mergeSelectedTags()}
+                variant="secondary"
+              >
+                Merge
+              </Button>
+            </div>
+          </SettingsControlRow>
+        ) : null}
+        {tags.length === 0 ? (
+          <EmptyState description="No tags have been created or backfilled yet." title="No tags" />
+        ) : tags.map((tag) => {
+          const draft = tagDraft(tag);
+          const unchanged = draft.name.trim() === tag.name && (draft.color || null) === tag.color;
+
+          return (
+            <div className="grid gap-2 border-b border-border px-3 py-3 last:border-b-0" key={tag.id}>
+              <div className="grid gap-2 lg:grid-cols-[minmax(0,12rem)_3rem_auto_auto]">
+                <Input
+                  aria-label={`Tag name ${tag.name}`}
+                  onChange={(event) => setTagDraft(tag, { name: event.currentTarget.value })}
+                  value={draft.name}
+                />
+                <input
+                  aria-label={`Tag color ${tag.name}`}
+                  className="h-8 w-12 rounded-hcbMd border border-border bg-surface-0 p-1"
+                  onChange={(event) => setTagDraft(tag, { color: event.currentTarget.value })}
+                  type="color"
+                  value={draft.color}
+                />
+                <Button
+                  disabled={unchanged || !draft.name.trim()}
+                  onClick={() => void saveTag(tag)}
+                  size="sm"
+                  variant="secondary"
+                >
+                  <Save aria-hidden="true" size={14} />
+                  Save
+                </Button>
+                <Button onClick={() => void removeTag(tag)} size="sm" variant="ghost">
+                  <Trash2 aria-hidden="true" size={14} />
+                  Delete
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1 text-[var(--text-xs)] text-text-muted">
+                <Badge>tasks {tag.taskCount}</Badge>
+                <Badge>events {tag.eventCount}</Badge>
+                <Badge>notes {tag.noteCount}</Badge>
+                <Badge tone="accent">total {tag.totalCount}</Badge>
+              </div>
+            </div>
+          );
+        })}
       </SettingsGroup>
 
       <SettingsGroup title="Auto tags">

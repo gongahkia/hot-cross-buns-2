@@ -81,6 +81,12 @@ const settingsSearchTextByTab: Record<SettingsTabId, string> = {
     "Duplicate detection",
     "Title similarity threshold",
     "Custom filters",
+    "Pinned filters",
+    "Boolean filters",
+    "Tags",
+    "Tag catalog",
+    "Tag colors",
+    "Merge tags",
     "Auto tags",
     "Rules",
     "Prefix",
@@ -619,8 +625,13 @@ export function SettingsView({
           <AdvancedSettingsTab
             beginRecoveryAction={beginRecoveryAction}
             calendarSources={source.calendarSources}
+            createTag={source.createTag}
+            deleteTag={source.deleteTag}
+            mergeTags={source.mergeTags}
             settings={settings}
+            tags={source.tags}
             taskLists={source.taskLists}
+            updateTag={source.updateTag}
             updateSelectedCalendar={updateSelectedCalendar}
             updateSelectedTaskList={updateSelectedTaskList}
             updateSettings={updateSettings}
