@@ -8,7 +8,9 @@ Consolidated from:
 
 This is the single July 2026 planning todo. Ports stay last.
 
-Last repo audit for this file: 2026-06-06.
+Last repo audit for this file: 2026-06-08.
+
+Audit note: static repo/source/test evidence only. No live Google API, external MCP client, packaged-app, or manual UI QA was performed for this update.
 
 Status key:
 
@@ -35,6 +37,14 @@ Status key:
 - Google Calendar event `colorId` is cached, written, theme-mapped, and user-overridable in Appearance settings.
 - Rule-based auto-tagging/color assignment exists for tasks/events/notes with settings toggle, validation, preview, conflict visibility, reorder controls, invalid-regex auto-disable, and tests.
 - Calendar has Agenda/Day/Multi-Day/Week/Month modes, overflow popovers titled `Items for <date>`, all-item overflow contents, completed-first ordering in overflow, and task-linked Google Calendar projection cleanup on task deletion.
+- Startup bootstrap snapshot, light bootstrap timings, startup fan-out fallback, and deferred `calendar.scheduleSuggest` request path exist.
+- Near-immediate post-CRUD sync/drain path exists through shared sync control/service-container wiring and live Google smoke docs reference `sync.post-crud-drain`.
+- Advanced local search parser/repository coverage exists for regex, attendee, duration, notes/body presence, due/start windows, list, calendar, tag, status, priority, and source/domain filters.
+- Sync mode selector exists for `manual`, `balanced`, and `near-real-time`, including settings UI, onboarding UI, diagnostics status, scheduler behavior, and tests.
+- Past-event and completed-task retention settings exist, including `0` as forever and sync read lower-bound behavior.
+- Diagnostics has logs, History, and Sync Issues surfaces with copy/search/error states and command-palette entry points.
+- Local backup settings and manual backup action exist.
+- MCP resources and prompt registry exist with status/doctor/today/week/diff/logs/pending-mutation resources and sync/today/week/support prompts.
 - Google account disconnected state is surfaced as a user-visible issue while cached SQLite data can still render.
 - Sidebar task/note counts use HCB-visible task-backed counts instead of raw Google/cache totals.
 - Full unit suite was previously green after the latest auto-tag/settings hardening pass.
@@ -43,60 +53,58 @@ Status key:
 
 - Tags exist as string metadata and auto-tag outputs, but there is no first-class tag repository, many-to-many table, tag CRUD UI, saved tag views, or tag analytics.
 - Auto-tagging lacks inspector-level "why was this tagged?" audit detail and bulk backfill/reapply controls.
-- Duplicate controls exist, but duplicate detection/review UI is still missing.
+- Multi-account plumbing is partially present: account IDs, account-scoped tokens/cache/checkpoints/mutations, latest-account transport, and multi-account docs/tests exist. Full connected-account management UX, account badges/filters, explicit target account selection, and merged multi-account Today remain open.
+- Duplicate detection/review exists for tasks/events/notes with dismiss/open/delete flows. Merge, coalesced cleanup, and deeper duplicate-resolution UX remain open.
 - Conversion works, but should get one live/manual QA pass against real Google sync for replace-original cleanup and queued mutation replay.
-- MCP/CLI is featureful, but advanced agent-native surfaces like `hcb_brief`, prompt registry, `hcb tail`, `hcb plan`, webhooks, and pending agent action tray are still missing.
+- MCP/CLI is featureful, and prompt/resource registries now exist. Advanced agent-native surfaces like `hcb_brief`, `hcb tail`, `hcb plan`, webhooks, and pending agent action tray are still missing.
 - Birthday Google payload shape is unit-tested, but live Google API smoke for birthday create/update/delete is still the main external-risk test.
 - Quick-add/NL parsing has meaningful code and tests, including recurrence handling, but not the full chrono-style parser depth listed below.
 - Calendar recurrence UI exists, but full Google-safe recurring edit scope and RRULE depth still need audit/finish work.
+- Search/filter depth is partial: advanced parser-backed operators and saved-search settings exist; boolean `AND`/`OR`/`NOT`, pinned filters, semantic search, local LLM, and chat sidebar remain open.
+- Portable data is partial/verify: settings/docs/local backups exist, but source-backed portable export/import and attachment implementation need a focused audit before closing.
 
 ### Missing / not implemented yet
 
-- Startup bootstrap snapshot and schedule-suggestion deferral.
-- Near-immediate pending queue drain after CRUD.
-- First-class multi-account isolation and merged multi-account Today.
 - Hierarchical Areas.
 - Bulk operations with coalesced undo/mutation entries.
 - Year view.
-- Advanced search operators, custom-filter DSL, pinned filters.
+- Boolean custom-filter DSL and pinned filters.
 - Semantic search, local LLM provider, and conversational planning sidebar.
 - CSS snippets, JSON config/keymaps, and sandboxed user extensions.
-- Portable export/import, attachments, ICS import/subscriptions.
-- Cache encryption, sync mode selector, retention/cleanup settings.
+- Source-verified portable export/import, source-verified attachments, ICS import/subscriptions.
+- Cache encryption.
 - Spotlight/Raycast/Alfred/App Intents/Shortcuts/Share Extension.
 - Rich notification actions.
-- Renderer History / Sync Issues window.
 - Linux/Windows ports.
 
 ## Recommended next implementation order
 
-1. Duplicate detection/review:
-   - find probable duplicate tasks/events/notes
-   - review, dismiss, merge/delete flows
-   - reason: duplicate controls now exist; detection is the matching cleanup surface.
-2. First-class tags:
+1. First-class tags:
    - tag table/repository, tag CRUD, tag colors, filters, saved views
    - auto-tag audit detail: "why was this tagged?"
    - reason: auto-tagging currently creates tag value, but tags are not yet a durable product primitive.
-3. Recurrence correctness:
-   - recurring edit scope, deeper RRULE editor, round-trip tests
+2. Recurrence correctness:
+   - recurring edit scope, deeper RRULE editor, round-trip tests, live Google smoke
    - reason: high-risk calendar behavior; better before broad calendar automation.
-4. Search/filter depth:
-   - advanced operators, custom DSL, saved queries, pinned filters
+3. Boolean/custom search and pinned filters:
+   - boolean DSL, saved-query polish, pinned filters
    - reason: pays off after tags/areas exist.
-5. Agent-native MCP/CLI v2:
+4. Duplicate merge/coalesced cleanup:
+   - merge, delete batch, dismissal reset, coalesced undo/mutation entries
+   - reason: duplicate detection/review is now present; cleanup is the remaining product gap.
+5. Portable export/import verification or implementation:
+   - source audit, deterministic `.hcb2export`, dry-run import diff, attachment bundling, backups
+   - reason: docs/settings exist, but implementation evidence was not closed in the static audit.
+6. Agent-native MCP/CLI v2:
    - `hcb_brief`, prompt registry, `hcb tail`, `hcb plan`, pending action tray
    - reason: v1 CRUD/read surface is done; v2 should focus on planner-level summaries and safe proposed writes.
-6. Import/export and data safety:
-   - deterministic `.hcb2export`, dry-run import diff, backups
-   - reason: needed before real-user beta and before risky migrations/encryption.
 7. Release hardening:
    - live Google smoke, external MCP client QA, notification actions, updater, packaging/signing checks
    - reason: product-readiness work after feature slices stabilize.
 
 ## 0. Planning gate
 
-- 2026-06-06: this file was re-audited against the current repo. Repeat before any implementation slice.
+- 2026-06-08: this file was statically re-audited against the current repo. Repeat before any implementation slice; live/manual QA was not part of this audit.
 - Re-audit current repo and `../hot-cross-buns` before implementation.
 - For each item below, classify as `Present`, `Partial`, `Missing`, or `Deferred-with-reason` before code.
 - Inspect at minimum:
@@ -114,7 +122,7 @@ Status key:
 
 ## 1. Startup and sync optimisations
 
-- Status: `Done`; implemented 2026-06-06.
+- Status: `Done`; implemented 2026-06-06 and statically rechecked 2026-06-08.
 - Defer `calendar.scheduleSuggest` until after first useful render.
   - Initial snapshot should render tasks, calendar, notes, settings, sync status, Google status, and native status without waiting for suggestions.
   - Today/schedule UI needs stable pending and empty states.
@@ -131,7 +139,8 @@ Status key:
 
 ### Accounts and sync scope
 
-- Status: `Missing`.
+- Status: `Partial`.
+- Static evidence exists for account IDs, account-scoped OAuth token storage, account-scoped cache rows/checkpoints/mutations, latest-account transport selection, and migration/sync replay tests. Product UX and merged multi-account planning remain incomplete.
 - Promote the account mirror to first-class multi-account:
   - list and manage all connected Google accounts, not only the latest account status
   - keep OAuth tokens, sync checkpoints, mutation queues, task lists, calendars, tasks, and events isolated per account
@@ -143,7 +152,7 @@ Status key:
 
 ### Tasks and organisation
 
-- Status: `Verify` for Kanban parity; `Partial` for tags/auto-tagging; `Missing` for Areas and duplicate detection.
+- Status: `Verify` for Kanban parity; `Partial` for tags/auto-tagging, duplicate detection/review, snooze, subtasks, templates, and NL quick-add; `Missing` for Areas and duplicate merge/coalesced cleanup.
 - Verify/finish Kanban parity beyond the current Google-list board if original `KanbanGrouping` behavior is not covered.
 - Finish first-class tags beyond current string-tag/auto-tag support:
   - tag repository
@@ -168,8 +177,9 @@ Status key:
   - reschedule
   - tag/untag
   - batched/coalesced undo and mutation entries
-- Add duplicate detection and duplicate-review UI for tasks, events, and notes.
-  - Note: duplicate create controls are already done; this item is only detection/review/merge/dismissal.
+- Finish duplicate resolution for tasks, events, and notes.
+  - Note: duplicate create controls and duplicate review/dismiss/open/delete are already present.
+  - Remaining: merge flows, coalesced cleanup, and stronger duplicate-resolution QA.
 - Finish snooze UX:
   - inspector controls for `snoozeUntil`
   - visible snoozed state in task lists/today/search
