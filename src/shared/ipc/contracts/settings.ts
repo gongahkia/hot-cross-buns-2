@@ -314,6 +314,7 @@ export const settingsSnapshotSchema = z
     diagnosticsIncludePerformance: z.boolean(),
     rawGoogleDiagnosticsEnabled: z.boolean(),
     savedSearchViews: z.array(savedSearchViewSchema).max(20),
+    pinnedSavedSearchViewIds: z.array(idSchema).max(20),
     savedTaskViews: z.array(savedTaskViewSchema).max(20)
   })
   .strict();
@@ -395,6 +396,7 @@ export const settingsUpdateRequestSchema = z
     diagnosticsIncludePerformance: z.boolean().optional(),
     rawGoogleDiagnosticsEnabled: z.boolean().optional(),
     savedSearchViews: z.array(savedSearchViewSchema).max(20).optional(),
+    pinnedSavedSearchViewIds: z.array(idSchema).max(20).optional(),
     savedTaskViews: z.array(savedTaskViewSchema).max(20).optional()
   })
   .strict()

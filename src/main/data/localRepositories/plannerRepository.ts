@@ -1,3 +1,3 @@
-import { SearchLocalRepository } from "./searchRepository";
+import { TagLocalRepository } from "./tagRepository";
 
-export class LocalPlannerRepository extends SearchLocalRepository {}
+export class LocalPlannerRepository extends TagLocalRepository {}

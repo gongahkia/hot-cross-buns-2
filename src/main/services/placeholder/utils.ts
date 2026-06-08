@@ -427,6 +427,10 @@ export function definedSettingsPatch(request: SettingsUpdateRequest): Partial<Se
     patch.savedSearchViews = request.savedSearchViews;
   }
 
+  if (request.pinnedSavedSearchViewIds !== undefined) {
+    patch.pinnedSavedSearchViewIds = request.pinnedSavedSearchViewIds;
+  }
+
   if (request.savedTaskViews !== undefined) {
     patch.savedTaskViews = request.savedTaskViews;
   }

@@ -26,6 +26,7 @@ export const hcbDomainSchema = z.enum([
   "tasks",
   "calendar",
   "notes",
+  "tags",
   "search",
   "sync",
   "google",

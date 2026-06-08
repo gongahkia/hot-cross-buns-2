@@ -16,8 +16,8 @@ import type {
   TaskUpdateRequest
 } from "@shared/ipc/contracts";
 import type { SqliteWriteOperation } from "../sqliteConnection";
-import { taskDetail, taskListSummary, taskSummary } from "./mappers";
-import { PlannerRepositoryBase } from "./plannerBase";
+import { parseTagsJson, taskDetail, taskListSummary, taskSummary } from "./mappers";
+import { normalizeLocalTagNames, PlannerRepositoryBase } from "./plannerBase";
 import {
   countRows,
   dateOnlyToIso,
@@ -321,7 +321,9 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
         previousSiblingId: request.previousSiblingId ?? null
       };
 
-      const tagsJson = JSON.stringify(request.tags ?? []);
+      const tags = normalizeLocalTagNames(request.tags ?? []);
+      const tagsJson = JSON.stringify(tags);
+      const tagEntityKind = request.dueDate === null || request.dueDate === undefined ? "note" : "task";
       this.connection.executeTransaction([
         {
           kind: "run",
@@ -353,6 +355,12 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
             now
           ]
         },
+        ...this.tagSyncOperations({
+          entityKind: tagEntityKind,
+          entityId: id,
+          tags,
+          now
+        }),
         this.pendingMutationOperation({
           id: `mutation:${randomUUID()}`,
           accountId: list.accountId,
@@ -430,8 +438,12 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
           : request.lockedSchedule;
       const snoozeUntil =
         request.snoozeUntil === undefined ? existing.snoozeUntil ?? null : request.snoozeUntil;
-      const tagsJson =
-        request.tags === undefined ? existing.tagsJson ?? "[]" : JSON.stringify(request.tags);
+      const tags =
+        request.tags === undefined
+          ? normalizeLocalTagNames(parseTagsJson(existing.tagsJson))
+          : normalizeLocalTagNames(request.tags);
+      const tagsJson = JSON.stringify(tags);
+      const beforeTagEntityKind = isHistoryNoteTask(existing) ? "note" : "task";
       const googleBackedPatch =
         request.title !== undefined ||
         request.notes !== undefined ||
@@ -477,6 +489,26 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
           ]
         }
       ];
+      const projected = {
+        ...existing,
+        dueAt,
+        parentId,
+        status: existing.status,
+        isHidden: existing.isHidden,
+        deletedAt: existing.deletedAt
+      };
+      const afterTagEntityKind = isHistoryNoteTask(projected) ? "note" : "task";
+
+      if (beforeTagEntityKind !== afterTagEntityKind) {
+        operations.push(...this.tagDeleteEntityOperations(beforeTagEntityKind, request.id));
+      }
+
+      operations.push(...this.tagSyncOperations({
+        entityKind: afterTagEntityKind,
+        entityId: request.id,
+        tags,
+        now
+      }));
 
       if (googleBackedPatch) {
         operations.push(
@@ -555,6 +587,7 @@ export class TaskLocalRepository extends PlannerRepositoryBase {
                 WHERE id = ? AND deleted_at IS NULL;`,
           params: [now, now, request.id]
         },
+        ...this.tagDeleteEntityOperations(isHistoryNoteTask(existing) ? "note" : "task", request.id),
         this.pendingMutationOperation({
           id: `mutation:${randomUUID()}`,
           accountId: existing.accountId ?? null,

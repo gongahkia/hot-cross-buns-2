@@ -255,6 +255,7 @@ export function createPlaceholderState(): PlaceholderState {
       diagnosticsIncludePerformance: true,
       rawGoogleDiagnosticsEnabled: false,
       savedSearchViews: [],
+      pinnedSavedSearchViewIds: [],
       savedTaskViews: []
     },
     sync: {

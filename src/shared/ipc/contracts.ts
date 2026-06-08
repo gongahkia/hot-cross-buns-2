@@ -170,6 +170,30 @@ export {
 } from "./contracts/search";
 
 export {
+  tagBulkApplyRequestSchema,
+  tagColorSchema,
+  tagCreateRequestSchema,
+  tagDeleteRequestSchema,
+  tagEntityKindSchema,
+  tagListRequestSchema,
+  tagListResponseSchema,
+  tagMergeRequestSchema,
+  tagMutationResponseSchema,
+  tagSummarySchema,
+  tagUpdateRequestSchema,
+  type TagBulkApplyRequest,
+  type TagCreateRequest,
+  type TagDeleteRequest,
+  type TagEntityKind,
+  type TagListRequest,
+  type TagListResponse,
+  type TagMergeRequest,
+  type TagMutationResponse,
+  type TagSummary,
+  type TagUpdateRequest
+} from "./contracts/tags";
+
+export {
   syncRunNowRequestSchema,
   syncRunNowResponseSchema,
   syncStatusRequestSchema,

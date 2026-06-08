@@ -334,6 +334,37 @@ DROP INDEX IF EXISTS idx_local_note_properties_note;
             }
           ];
     }
+  },
+  {
+    version: 15,
+    name: "first class local tags",
+    sql: `
+CREATE TABLE IF NOT EXISTS local_tags (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL UNIQUE,
+  color TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS local_entity_tags (
+  tag_id TEXT NOT NULL,
+  entity_kind TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(tag_id, entity_kind, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_tags_visible_name
+  ON local_tags(deleted_at, normalized_name);
+
+CREATE INDEX IF NOT EXISTS idx_local_entity_tags_entity
+  ON local_entity_tags(entity_kind, entity_id, tag_id);
+`
+    ,
+    operations: (connection) => tagBackfillOperations(connection)
   }
 ];
 
@@ -413,4 +444,124 @@ function normalizeTimeZone(value: string | null | undefined): string {
   }
 
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+function tagBackfillOperations(connection: SqliteConnection): SqliteWriteOperation[] {
+  const now = new Date().toISOString();
+  const refs: Array<{ entityId: string; kind: "task" | "event" | "note"; tag: string }> = [];
+
+  if (tableExists(connection, "google_tasks")) {
+    for (const row of connection.query<{
+      id: string;
+      status: string;
+      dueAt: string | null;
+      parentId: string | null;
+      deletedAt: string | null;
+      isHidden: number;
+      tagsJson: string | null;
+    }>(
+      `SELECT
+         id,
+         status,
+         due_at AS dueAt,
+         parent_task_id AS parentId,
+         deleted_at AS deletedAt,
+         is_hidden AS isHidden,
+         local_tags_json AS tagsJson
+       FROM google_tasks
+       WHERE local_tags_json IS NOT NULL;`
+    )) {
+      const kind = row.deletedAt == null &&
+        row.isHidden !== 1 &&
+        row.status !== "completed" &&
+        row.parentId === null &&
+        row.dueAt === null
+        ? "note"
+        : "task";
+      refs.push(...parseTagJson(row.tagsJson).map((tag) => ({ entityId: row.id, kind, tag })));
+    }
+  }
+
+  if (tableExists(connection, "google_calendar_events")) {
+    for (const row of connection.query<{ id: string; tagsJson: string | null }>(
+      `SELECT id, local_tags_json AS tagsJson
+       FROM google_calendar_events
+       WHERE local_tags_json IS NOT NULL;`
+    )) {
+      refs.push(...parseTagJson(row.tagsJson).map((tag) => ({ entityId: row.id, kind: "event" as const, tag })));
+    }
+  }
+
+  const operations: SqliteWriteOperation[] = [];
+  const seenTags = new Set<string>();
+  const seenRefs = new Set<string>();
+
+  for (const ref of refs) {
+    const normalized = normalizeTagName(ref.tag);
+
+    if (!normalized) {
+      continue;
+    }
+
+    const tagId = tagIdForName(normalized);
+
+    if (!seenTags.has(normalized)) {
+      seenTags.add(normalized);
+      operations.push({
+        kind: "run",
+        sql: `INSERT INTO local_tags (id, name, normalized_name, color, created_at, updated_at, deleted_at)
+              VALUES (?, ?, ?, NULL, ?, ?, NULL)
+              ON CONFLICT(normalized_name) DO UPDATE SET
+                name = excluded.name,
+                updated_at = excluded.updated_at,
+                deleted_at = NULL;`,
+        params: [tagId, ref.tag.trim(), normalized, now, now]
+      });
+    }
+
+    const refKey = `${tagId}|${ref.kind}|${ref.entityId}`;
+    if (seenRefs.has(refKey)) {
+      continue;
+    }
+
+    seenRefs.add(refKey);
+    operations.push({
+      kind: "run",
+      sql: `INSERT OR IGNORE INTO local_entity_tags (tag_id, entity_kind, entity_id, created_at)
+            VALUES (?, ?, ?, ?);`,
+      params: [tagId, ref.kind, ref.entityId, now]
+    });
+  }
+
+  return operations;
+}
+
+function parseTagJson(value: string | null | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeTagName(value: string): string {
+  return value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+function tagIdForName(normalized: string): string {
+  let hash = 2166136261;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return `tag:${(hash >>> 0).toString(36)}`;
 }

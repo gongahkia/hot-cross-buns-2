@@ -100,6 +100,16 @@ import {
 } from "./notes";
 import { searchQueryRequestSchema, searchQueryResponseSchema } from "./search";
 import {
+  tagBulkApplyRequestSchema,
+  tagCreateRequestSchema,
+  tagDeleteRequestSchema,
+  tagListRequestSchema,
+  tagListResponseSchema,
+  tagMergeRequestSchema,
+  tagMutationResponseSchema,
+  tagUpdateRequestSchema
+} from "./tags";
+import {
   settingsGetRequestSchema,
   settingsRecoveryActionRequestSchema,
   settingsRecoveryActionResponseSchema,
@@ -284,6 +294,14 @@ export const ipcContracts = {
       noteBrokenLinksRequestSchema,
       noteBrokenLinksResponseSchema
     )
+  },
+  tags: {
+    list: defineIpcContract("tags", "list", tagListRequestSchema, tagListResponseSchema),
+    create: defineIpcContract("tags", "create", tagCreateRequestSchema, tagMutationResponseSchema),
+    update: defineIpcContract("tags", "update", tagUpdateRequestSchema, tagMutationResponseSchema),
+    delete: defineIpcContract("tags", "delete", tagDeleteRequestSchema, tagMutationResponseSchema),
+    merge: defineIpcContract("tags", "merge", tagMergeRequestSchema, tagMutationResponseSchema),
+    bulkApply: defineIpcContract("tags", "bulkApply", tagBulkApplyRequestSchema, tagMutationResponseSchema)
   },
   search: {
     query: defineIpcContract(

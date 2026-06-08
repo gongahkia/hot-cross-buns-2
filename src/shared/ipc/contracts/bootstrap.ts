@@ -10,6 +10,7 @@ import { nativeCapabilitiesResponseSchema } from "./native";
 import { noteListSummarySchema, noteSummarySchema } from "./notes";
 import { settingsSnapshotSchema } from "./settings";
 import { syncStatusResponseSchema } from "./sync";
+import { tagSummarySchema } from "./tags";
 import {
   taskListSummarySchema,
   taskSummarySchema
@@ -45,6 +46,10 @@ const bootstrapNoteListResponseSchema = pagedListResponseSchema(
 ).extend({
   lists: z.array(noteListSummarySchema).max(MAX_BOOTSTRAP_ITEMS)
 });
+const bootstrapTagListResponseSchema = pagedListResponseSchema(
+  tagSummarySchema,
+  MAX_BOOTSTRAP_ITEMS
+);
 
 export const bootstrapGetRequestSchema = z
   .object({
@@ -73,6 +78,7 @@ export const bootstrapGetResponseSchema = z
     events: bootstrapCalendarRangeResponseSchema,
     scheduledTaskBlocks: bootstrapScheduledTaskBlockListResponseSchema,
     notes: bootstrapNoteListResponseSchema,
+    tags: bootstrapTagListResponseSchema,
     settings: settingsSnapshotSchema,
     syncStatus: syncStatusResponseSchema,
     googleStatus: googleStatusResponseSchema,

@@ -112,6 +112,7 @@ export const emptySettings: SettingsSnapshot = {
   diagnosticsIncludePerformance: true,
   rawGoogleDiagnosticsEnabled: false,
   savedSearchViews: [],
+  pinnedSavedSearchViewIds: [],
   savedTaskViews: []
 };
 

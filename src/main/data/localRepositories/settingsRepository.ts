@@ -95,6 +95,7 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   diagnosticsIncludePerformance: true,
   rawGoogleDiagnosticsEnabled: false,
   savedSearchViews: [],
+  pinnedSavedSearchViewIds: [],
   savedTaskViews: []
 };
 
@@ -397,6 +398,11 @@ export class LocalSettingsRepository {
         "search",
         "savedViews",
         DEFAULT_SETTINGS.savedSearchViews
+      ),
+      pinnedSavedSearchViewIds: this.readSetting(
+        "search",
+        "pinnedSavedViewIds",
+        DEFAULT_SETTINGS.pinnedSavedSearchViewIds
       ),
       savedTaskViews: this.readSetting(
         "tasks",
@@ -746,6 +752,10 @@ export class LocalSettingsRepository {
 
     if (request.savedSearchViews !== undefined) {
       this.writeSetting("search", "savedViews", request.savedSearchViews, now);
+    }
+
+    if (request.pinnedSavedSearchViewIds !== undefined) {
+      this.writeSetting("search", "pinnedSavedViewIds", request.pinnedSavedSearchViewIds, now);
     }
 
     if (request.savedTaskViews !== undefined) {
