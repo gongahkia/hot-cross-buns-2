@@ -53,6 +53,12 @@ import {
   type TaskUpdateRequest,
   type LocalPerformanceTiming,
   type SyncStatusResponse,
+  type TagBulkApplyRequest,
+  type TagCreateRequest,
+  type TagDeleteRequest,
+  type TagListRequest,
+  type TagMergeRequest,
+  type TagUpdateRequest,
   type UndoStackStatusResponse
 } from "@shared/ipc/contracts";
 import { appLogger } from "../diagnostics/appLogger";
@@ -275,6 +281,30 @@ export function createCoreIpcHandlers(
     {
       contract: ipcContracts.notes.listBrokenLinks,
       handle: (request) => services.planner.listBrokenNoteLinks(request as NoteBrokenLinksRequest)
+    },
+    {
+      contract: ipcContracts.tags.list,
+      handle: (request) => services.planner.listTags(request as TagListRequest)
+    },
+    {
+      contract: ipcContracts.tags.create,
+      handle: (request) => services.planner.createTag(request as TagCreateRequest)
+    },
+    {
+      contract: ipcContracts.tags.update,
+      handle: (request) => services.planner.updateTag(request as TagUpdateRequest)
+    },
+    {
+      contract: ipcContracts.tags.delete,
+      handle: (request) => services.planner.deleteTag(request as TagDeleteRequest)
+    },
+    {
+      contract: ipcContracts.tags.merge,
+      handle: (request) => services.planner.mergeTags(request as TagMergeRequest)
+    },
+    {
+      contract: ipcContracts.tags.bulkApply,
+      handle: (request) => services.planner.bulkApplyTags(request as TagBulkApplyRequest)
     },
     {
       contract: ipcContracts.search.query,
