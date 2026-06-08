@@ -8,6 +8,7 @@ import {
   normalizeReminderMinutes,
   startOfUtcDayIso
 } from "../../coreScreenShared";
+import { calendarDateTimeLocalInputValue } from "./calendarDateUtils";
 import type { CalendarCreateSeed, CalendarEventDraft, CalendarRepeatWeekday } from "./types";
 
 const recurrenceWeekdays: CalendarRepeatWeekday[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
@@ -301,12 +302,25 @@ export function allDayEndInputValue(endsAt: string): string {
   return dateInputValue(end.toISOString());
 }
 
-export function calendarDraftRangeLabel(draft: CalendarEventDraft): string {
+function calendarDraftLocalDateTimeParts(value: string, timeZone: string): { date: string; time: string } {
+  const localValue = calendarDateTimeLocalInputValue(value, timeZone);
+  return {
+    date: localValue.slice(0, 10),
+    time: localValue.slice(11, 16)
+  };
+}
+
+export function calendarDraftRangeLabel(draft: CalendarEventDraft, timeZone = "UTC"): string {
   if (draft.allDay) {
     return `${dateInputValue(draft.startsAt)} · All day`;
   }
 
-  return `${dateInputValue(draft.startsAt)} · ${draft.startsAt.slice(11, 16)}-${draft.endsAt.slice(11, 16)}`;
+  const start = calendarDraftLocalDateTimeParts(draft.startsAt, timeZone);
+  const end = calendarDraftLocalDateTimeParts(draft.endsAt, timeZone);
+
+  return start.date === end.date
+    ? `${start.date} · ${start.time}-${end.time}`
+    : `${start.date} · ${start.time}-${end.date} · ${end.time}`;
 }
 
 export function calendarDraftDurationLabel(draft: CalendarEventDraft): string {

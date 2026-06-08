@@ -186,7 +186,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
 
   function eventInspectorSubtitle(nextDraft: CalendarEventDraft): string {
     const calendar = source.calendarSources.find((calendarSource) => calendarSource.id === nextDraft.calendarId);
-    return `${calendar?.title ?? "Calendar"} · ${calendarDraftRangeLabel(nextDraft)}`;
+    return `${calendar?.title ?? "Calendar"} · ${calendarDraftRangeLabel(nextDraft, calendar?.timeZone ?? source.settings.defaultTimeZone)}`;
   }
 
   function eventInspectorBody(
@@ -419,7 +419,11 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
       target,
       noteDraft: {
         title: sourceDraft.title,
-        body: eventNoteBody(sourceDraft),
+        body: eventNoteBody(
+          sourceDraft,
+          source.calendarSources.find((calendarSource) => calendarSource.id === sourceDraft.calendarId)?.timeZone ??
+            source.settings.defaultTimeZone
+        ),
         tags: sourceDraft.tags,
         listId: defaultTaskListId(source)
       }
@@ -653,10 +657,10 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
   };
 }
 
-function eventNoteBody(sourceDraft: CalendarEventDraft): string {
+function eventNoteBody(sourceDraft: CalendarEventDraft, timeZone: string): string {
   return [
     sourceDraft.notes.trim(),
-    `Event: ${sourceDraft.allDay ? dateInputValue(sourceDraft.startsAt) : `${sourceDraft.startsAt} - ${sourceDraft.endsAt}`}`,
+    `Event: ${calendarDraftRangeLabel(sourceDraft, timeZone)}`,
     sourceDraft.location.trim() ? `Location: ${sourceDraft.location.trim()}` : ""
   ].filter(Boolean).join("\n\n");
 }

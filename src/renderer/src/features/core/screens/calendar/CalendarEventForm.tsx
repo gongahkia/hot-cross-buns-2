@@ -101,22 +101,23 @@ function eventDurationVisible(draft: CalendarEventDraft): boolean {
   return true;
 }
 
-function eventCrossesDate(draft: CalendarEventDraft): boolean {
+function eventCrossesDate(draft: CalendarEventDraft, timeZone: string): boolean {
   return draft.allDay
     ? Date.parse(draft.endsAt) - Date.parse(draft.startsAt) > 24 * 60 * 60 * 1000
-    : dateInputValue(draft.startsAt) !== dateInputValue(draft.endsAt);
+    : calendarDateTimeLocalInputValue(draft.startsAt, timeZone).slice(0, 10) !==
+      calendarDateTimeLocalInputValue(draft.endsAt, timeZone).slice(0, 10);
 }
 
-function calendarDetailRangeLabel(draft: CalendarEventDraft): string {
-  if (!eventCrossesDate(draft)) {
-    return calendarDraftRangeLabel(draft);
+function calendarDetailRangeLabel(draft: CalendarEventDraft, timeZone: string): string {
+  if (!eventCrossesDate(draft, timeZone)) {
+    return calendarDraftRangeLabel(draft, timeZone);
   }
 
   if (draft.allDay) {
     return `${dateInputValue(draft.startsAt)}-${allDayEndInputValue(draft.endsAt)} · All day`;
   }
 
-  return `${dateInputValue(draft.startsAt)} · ${draft.startsAt.slice(11, 16)}-${dateInputValue(draft.endsAt)} · ${draft.endsAt.slice(11, 16)}`;
+  return calendarDraftRangeLabel(draft, timeZone);
 }
 
 function visibleConferenceLabel(value: string | undefined): string | undefined {
@@ -295,7 +296,7 @@ export function CalendarEventDetails({
             "mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-base)] text-text-secondary",
             completed && "line-through"
           )}>
-            <span>{calendarDetailRangeLabel(draft)}</span>
+            <span>{calendarDetailRangeLabel(draft, sourceTimeZone)}</span>
             {eventDurationVisible(draft) ? <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge> : null}
             {selectedCalendar?.title ? <Badge tone="neutral">{selectedCalendar.title}</Badge> : null}
             {showSourceTimeZone ? <Badge tone="neutral">{sourceTimeZone}</Badge> : null}
@@ -678,7 +679,7 @@ export function CalendarEventForm({
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-[var(--text-xs)] text-text-muted">
           <span className="inline-flex min-w-0 items-center gap-1">
             <Clock3 aria-hidden="true" size={13} />
-            <span className="truncate">{calendarDraftRangeLabel(draft)}</span>
+            <span className="truncate">{calendarDraftRangeLabel(draft, sourceTimeZone)}</span>
           </span>
           <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge>
           {showSourceTimeZone ? <Badge tone="neutral">{sourceTimeZone}</Badge> : null}

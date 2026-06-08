@@ -750,6 +750,13 @@ describe("App calendar", () => {
     await user.type(await screen.findByRole("textbox", { name: "Event title" }), "Singapore hold");
     fireEvent.change(screen.getByLabelText("Event starts"), { target: { value: "2026-06-01T10:00" } });
     fireEvent.change(screen.getByLabelText("Event ends"), { target: { value: "2026-06-02T10:00" } });
+    const localRangeLabel = "2026-06-01 · 10:00-2026-06-02 · 10:00";
+
+    await waitFor(() => {
+      expect(screen.getByText(`Product · ${localRangeLabel}`)).toBeInTheDocument();
+    });
+    expect(screen.getByText(localRangeLabel)).toBeInTheDocument();
+    expect(screen.getByTestId("inspector-shell")).not.toHaveTextContent("02:00");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
