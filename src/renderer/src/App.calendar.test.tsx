@@ -655,28 +655,31 @@ describe("App calendar", () => {
     await user.click(within(tabs).getByRole("tab", { name: "Month" }));
 
     const monthGrid = screen.getByRole("grid", { name: "Calendar month view" });
-    const row = monthGrid.querySelector<HTMLElement>("[data-calendar-month-week-row]");
+    const monthRowGroup = within(monthGrid).getByRole("rowgroup");
+    const rows = Array.from(monthGrid.querySelectorAll<HTMLElement>("[data-calendar-month-week-row]"));
     const cells = within(monthGrid).getAllByRole("gridcell");
 
-    expect(row).not.toBeNull();
-    Object.defineProperty(row, "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({
-        bottom: 140,
-        height: 140,
-        left: 0,
-        right: 700,
-        top: 0,
-        width: 700,
-        x: 0,
-        y: 0,
-        toJSON: () => ({})
-      })
+    expect(rows).toHaveLength(6);
+    rows.forEach((row, rowIndex) => {
+      Object.defineProperty(row, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({
+          bottom: (rowIndex + 1) * 140,
+          height: 140,
+          left: 0,
+          right: 700,
+          top: rowIndex * 140,
+          width: 700,
+          x: 0,
+          y: rowIndex * 140,
+          toJSON: () => ({})
+        })
+      });
     });
 
     fireEvent.pointerDown(cells[1], { button: 0, buttons: 1, clientX: 150, clientY: 40, pointerId: 1 });
-    fireEvent.pointerMove(monthGrid, { buttons: 1, clientX: 350, clientY: 40, pointerId: 1 });
-    fireEvent.pointerUp(monthGrid, { button: 0, buttons: 0, clientX: 350, clientY: 40, pointerId: 1 });
+    fireEvent.pointerMove(monthRowGroup, { buttons: 1, clientX: 350, clientY: 40, pointerId: 1 });
+    fireEvent.pointerUp(monthRowGroup, { button: 0, buttons: 0, clientX: 350, clientY: 40, pointerId: 1 });
 
     expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
     const startsInput = screen.getByLabelText("Event starts") as HTMLInputElement;

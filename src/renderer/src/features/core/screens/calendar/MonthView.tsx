@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEventCompletionScope } from "@shared/ipc/contracts";
 import { cx } from "../../../../components/primitives";
 import { handleActivationKeyDown } from "../../coreScreenShared";
@@ -14,6 +14,8 @@ import { calendarAddUtcDays, calendarDateTitle, calendarMonthVisibleChipCount, v
 import type { CalendarCreateSeed, CalendarTimelineAllDaySegment } from "./types";
 
 const monthEventLaneHeight = 24;
+
+type MonthPointerEvent = Pick<globalThis.PointerEvent, "buttons" | "clientX" | "clientY" | "pointerId" | "type" | "preventDefault">;
 
 function monthAllDaySegmentStyle(segment: CalendarTimelineAllDaySegment): CSSProperties {
   return {
@@ -68,6 +70,7 @@ export function MonthView({
   const visibleWeekIds = visibleWeeks.map((week) => week.id).join("|");
   const dragRangeRef = useRef<{ last: string; moved: boolean; start: string } | null>(null);
   const monthGridRef = useRef<HTMLDivElement | null>(null);
+  const removeMonthPointerListenersRef = useRef<(() => void) | null>(null);
   const todayCellRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -77,6 +80,8 @@ export function MonthView({
 
     return () => window.cancelAnimationFrame(frame);
   }, [todayKey, visibleWeekIds]);
+
+  useEffect(() => () => removeMonthPointerListenersRef.current?.(), []);
 
   function orderedRange(start: string, end: string): { end: string; start: string } {
     return start <= end ? { start, end } : { start: end, end: start };
@@ -91,7 +96,7 @@ export function MonthView({
     return dayKey >= range.start && dayKey <= range.end;
   }
 
-  function dayKeyFromPointer(pointerEvent: PointerEvent<HTMLElement>): string | null {
+  function dayKeyFromPointer(pointerEvent: Pick<MonthPointerEvent, "clientX" | "clientY">): string | null {
     const rows = monthGridRef.current?.querySelectorAll<HTMLElement>("[data-calendar-month-week-row]");
 
     if (!rows) {
@@ -122,7 +127,7 @@ export function MonthView({
     return null;
   }
 
-  function updateDayPointerDrag(pointerEvent: PointerEvent<HTMLElement>): string | null {
+  function updateDayPointerDrag(pointerEvent: MonthPointerEvent): string | null {
     const drag = dragRangeRef.current;
 
     if (!drag || (pointerEvent.buttons !== 1 && pointerEvent.type !== "pointerup")) {
@@ -137,18 +142,55 @@ export function MonthView({
     return dayKey;
   }
 
-  function handleDayPointerDown(pointerEvent: PointerEvent<HTMLDivElement>, dayKey: string): void {
-    if (pointerEvent.button !== 0) {
+  function clearDayPointerDrag(): void {
+    dragRangeRef.current = null;
+    setRangeSelection(null);
+    removeMonthPointerListenersRef.current?.();
+    removeMonthPointerListenersRef.current = null;
+  }
+
+  function installMonthPointerListeners(pointerId: number): void {
+    removeMonthPointerListenersRef.current?.();
+
+    const handlePointerMove = (pointerEvent: globalThis.PointerEvent): void => {
+      if (pointerEvent.pointerId === pointerId) {
+        updateDayPointerDrag(pointerEvent);
+      }
+    };
+    const handlePointerUp = (pointerEvent: globalThis.PointerEvent): void => {
+      if (pointerEvent.pointerId === pointerId) {
+        handleDayPointerUp(pointerEvent);
+      }
+    };
+    const handlePointerCancel = (pointerEvent: globalThis.PointerEvent): void => {
+      if (pointerEvent.pointerId === pointerId) {
+        clearDayPointerDrag();
+      }
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp, { passive: false });
+    window.addEventListener("pointercancel", handlePointerCancel, { passive: false });
+    removeMonthPointerListenersRef.current = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+    };
+  }
+
+  function handleDayPointerDown(pointerEvent: ReactPointerEvent<HTMLDivElement>, dayKey: string): void {
+    if (pointerEvent.button > 0) {
       return;
     }
 
     pointerEvent.preventDefault();
     pointerEvent.currentTarget.setPointerCapture?.(pointerEvent.pointerId);
     dragRangeRef.current = { last: dayKey, moved: false, start: dayKey };
+    installMonthPointerListeners(pointerEvent.pointerId);
     setRangeSelection({ start: dayKey, end: dayKey });
   }
 
-  function handleDayPointerUp(pointerEvent: PointerEvent<HTMLElement>): void {
+  function handleDayPointerUp(pointerEvent: MonthPointerEvent): void {
     if (!dragRangeRef.current) {
       return;
     }
@@ -157,8 +199,7 @@ export function MonthView({
     const end = updateDayPointerDrag(pointerEvent) ?? dragRangeRef.current.last;
     const moved = dragRangeRef.current.moved || start !== end;
     const range = orderedRange(start, end);
-    dragRangeRef.current = null;
-    setRangeSelection(null);
+    clearDayPointerDrag();
 
     if (!moved) {
       return;
