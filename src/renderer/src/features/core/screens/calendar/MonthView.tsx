@@ -130,7 +130,7 @@ export function MonthView({
   function updateDayPointerDrag(pointerEvent: MonthPointerEvent): string | null {
     const drag = dragRangeRef.current;
 
-    if (!drag || (pointerEvent.buttons !== 1 && pointerEvent.type !== "pointerup")) {
+    if (!drag || (pointerEvent.buttons === 0 && pointerEvent.type !== "pointerup")) {
       return null;
     }
 
