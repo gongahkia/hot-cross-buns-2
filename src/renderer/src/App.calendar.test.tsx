@@ -675,10 +675,26 @@ describe("App calendar", () => {
         })
       });
     });
+    const dispatchPointer = (
+      target: Element,
+      type: string,
+      init: { button?: number; buttons: number; clientX: number; clientY: number; pointerId: number }
+    ): void => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
 
-    fireEvent.pointerDown(cells[1], { button: 0, buttons: 1, clientX: 150, clientY: 40, pointerId: 1 });
-    fireEvent.pointerEnter(cells[3], { buttons: 1, clientX: 350, clientY: 40, pointerId: 1 });
-    fireEvent.pointerUp(cells[3], { button: 0, buttons: 0, clientX: 350, clientY: 40, pointerId: 1 });
+      Object.defineProperties(event, {
+        button: { value: init.button ?? 0 },
+        buttons: { value: init.buttons },
+        clientX: { value: init.clientX },
+        clientY: { value: init.clientY },
+        pointerId: { value: init.pointerId }
+      });
+      fireEvent(target, event);
+    };
+
+    dispatchPointer(cells[1], "pointerdown", { button: 0, buttons: 1, clientX: 150, clientY: 40, pointerId: 1 });
+    dispatchPointer(cells[3], "pointermove", { buttons: 1, clientX: 350, clientY: 40, pointerId: 1 });
+    dispatchPointer(cells[3], "pointerup", { button: 0, buttons: 0, clientX: 350, clientY: 40, pointerId: 1 });
 
     expect(await screen.findByRole("heading", { level: 2, name: "New event" })).toBeInTheDocument();
     const startsInput = screen.getByLabelText("Event starts") as HTMLInputElement;

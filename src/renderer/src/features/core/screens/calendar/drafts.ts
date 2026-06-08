@@ -50,6 +50,7 @@ export function newCalendarDraft(
   const startsAt = allDay ? startOfUtcDayIso(seed?.startsAt ?? new Date().toISOString()) : defaultTimedStart(seed?.startsAt);
   const endsAt = allDay ? addUtcDaysIso(startsAt, 1) : addUtcDaysIso(startsAt, 0);
   const seedEnd = seed?.endsAt && Date.parse(seed.endsAt) > Date.parse(startsAt) ? seed.endsAt : null;
+  const allDayEnd = allDay && seedEnd ? startOfUtcDayIso(seedEnd) : null;
   const timedEnd = allDay ? endsAt : seedEnd ?? new Date(Date.parse(startsAt) + 60 * 60 * 1000).toISOString();
 
   return {
@@ -61,7 +62,7 @@ export function newCalendarDraft(
     calendarId: defaultCalendarId(source),
     colorId: "",
     startsAt,
-    endsAt: allDay ? endsAt : timedEnd,
+    endsAt: allDay ? allDayEnd ?? endsAt : timedEnd,
     timeZone: undefined,
     allDay,
     location: "",
