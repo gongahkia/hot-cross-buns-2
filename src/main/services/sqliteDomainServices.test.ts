@@ -1592,6 +1592,58 @@ describe("SQLite-backed domain services", () => {
     expect(after).toBe(before);
   });
 
+  it("maintains first-class tag catalog CRUD, merge, and bulk apply", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const task = await domain.planner.createTask({
+      title: "Tagged task",
+      notes: "",
+      dueDate: "2026-05-22",
+      listId: "acct-1:task-list:inbox",
+      tags: ["ops"]
+    });
+    const note = await domain.planner.createNote({
+      title: "Tagged note",
+      body: "",
+      listId: "acct-1:task-list:inbox",
+      tags: ["ideas"]
+    });
+    const event = await domain.planner.createCalendarEvent({
+      title: "Tagged event",
+      calendarId: "acct-1:calendar:product",
+      startsAt: "2026-05-22T11:00:00.000Z",
+      endsAt: "2026-05-22T12:00:00.000Z",
+      tags: ["ops"]
+    });
+
+    const listed = await domain.planner.listTags({ limit: 100 });
+    const ops = listed.items.find((tag) => tag.name === "ops");
+    expect(ops).toMatchObject({ taskCount: 1, eventCount: 1, noteCount: 0, totalCount: 2 });
+    expect(listed.items.find((tag) => tag.name === "ideas")).toMatchObject({ noteCount: 1 });
+
+    const created = await domain.planner.createTag({ name: "focus", color: "#123456" });
+    const focusId = created.tag?.id ?? created.id;
+    await domain.planner.bulkApplyTags({
+      tagIds: [focusId],
+      entityKind: "task",
+      entityIds: [task.id],
+      mode: "add"
+    });
+    expect((await domain.planner.getTask({ id: task.id })).tags).toEqual(["ops", "focus"]);
+
+    const renamed = await domain.planner.updateTag({ id: focusId, name: "deep focus", color: "#654321" });
+    expect(renamed.tag).toMatchObject({ name: "deep focus", color: "#654321" });
+    expect((await domain.planner.getTask({ id: task.id })).tags).toEqual(["ops", "deep focus"]);
+
+    await domain.planner.mergeTags({ sourceId: renamed.tag?.id ?? focusId, targetId: ops!.id });
+    expect((await domain.planner.getTask({ id: task.id })).tags).toEqual(["ops"]);
+
+    await domain.planner.deleteTag({ id: ops!.id });
+    expect((await domain.planner.getTask({ id: task.id })).tags).toEqual([]);
+    expect((await domain.planner.getCalendarEvent({ id: event.id })).tags).toEqual([]);
+    expect((await domain.planner.getNote({ id: note.id })).tags).toEqual(["ideas"]);
+  });
+
   it("uses the calendar visible-range index for calendar id and start/end paths", () => {
     const { syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);

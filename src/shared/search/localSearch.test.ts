@@ -204,6 +204,28 @@ describe("local search query DSL", () => {
     ).toBe(true);
   });
 
+  it("parses and matches boolean operators", () => {
+    const parsed = parseLocalSearchQuery("(source:tasks AND tag:focus) OR (source:notes AND NOT body:no)", { now });
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.boolean).toBeDefined();
+    expect(matchesLocalSearchItem(parsed, {
+      domain: "tasks",
+      title: "Task",
+      tags: ["focus"]
+    })).toBe(true);
+    expect(matchesLocalSearchItem(parsed, {
+      domain: "notes",
+      title: "Note",
+      body: "has body"
+    })).toBe(true);
+    expect(matchesLocalSearchItem(parsed, {
+      domain: "calendar",
+      title: "Focus",
+      tags: ["focus"]
+    })).toBe(false);
+  });
+
   it("parses strict duration operators and inclusive ranges", () => {
     const greaterThan = parseLocalSearchQuery("duration>30m", { now });
     const lessThan = parseLocalSearchQuery("duration<2h", { now });

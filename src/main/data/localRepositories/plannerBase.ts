@@ -56,7 +56,6 @@ export class PlannerRepositoryBase {
 
     for (const tag of tags) {
       const normalized = normalizeLocalTagName(tag);
-      const tagId = localTagIdForName(normalized);
       operations.push(
         {
           kind: "run",
@@ -66,13 +65,16 @@ export class PlannerRepositoryBase {
                   name = excluded.name,
                   updated_at = excluded.updated_at,
                   deleted_at = NULL;`,
-          params: [tagId, tag, normalized, input.now, input.now]
+          params: [localTagIdForName(normalized), tag, normalized, input.now, input.now]
         },
         {
           kind: "run",
           sql: `INSERT OR IGNORE INTO local_entity_tags (tag_id, entity_kind, entity_id, created_at)
-                VALUES (?, ?, ?, ?);`,
-          params: [tagId, input.entityKind, input.entityId, input.now]
+                SELECT id, ?, ?, ?
+                FROM local_tags
+                WHERE normalized_name = ? AND deleted_at IS NULL
+                LIMIT 1;`,
+          params: [input.entityKind, input.entityId, input.now, normalized]
         }
       );
     }

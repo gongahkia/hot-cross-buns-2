@@ -555,7 +555,7 @@ function tokenize(input: string): TokenizeResult {
       continue;
     }
 
-    if (!inQuote && (character === "(" || character === ")") && !current.includes(":")) {
+    if (!inQuote && (character === "(" || character === ")") && !current.toLowerCase().startsWith("regex:")) {
       if (current.length > 0) {
         tokens.push(current);
         current = "";

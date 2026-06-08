@@ -198,8 +198,7 @@ const calendarEventWriteFieldsSchema = z
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     recurrence: calendarEventRecurrenceSchema.nullable().optional(),
     hcbKind: calendarEventHcbKindSchema.optional(),
-    timeZone: z.string().trim().min(1).max(120).optional(),
-    scope: calendarEventCompletionScopeSchema.optional()
+    timeZone: z.string().trim().min(1).max(120).optional()
   })
   .strict()
   .superRefine((request, context) => {
