@@ -23,17 +23,20 @@ export function DiagnosticsOverlay({ initialTab = "overview", onClose }: Diagnos
     copyDiagnosticSummary,
     copyHistory,
     copyLogs,
+    copyVisibleSyncIssues,
     copyVisibleLogs,
     dialogRef,
     exportBundle,
     filteredHistory,
     filteredLogs,
     historyEntries,
+    historyError,
     historyQuery,
     logLevel,
     logQuery,
     logs,
     message,
+    pendingMutationsError,
     pendingMutations,
     rebuildNotifications,
     refreshLogs,
@@ -47,6 +50,7 @@ export function DiagnosticsOverlay({ initialTab = "overview", onClose }: Diagnos
     setTab,
     source,
     summary,
+    summaryError,
     tab,
     working
   } = useDiagnosticsOverlay(onClose, initialTab);
@@ -125,8 +129,13 @@ export function DiagnosticsOverlay({ initialTab = "overview", onClose }: Diagnos
           ) : null}
           {tab === "sync" ? (
             <SyncTab
+              copyVisibleSyncIssues={copyVisibleSyncIssues}
+              pendingMutationsError={pendingMutationsError}
               pendingMutations={pendingMutations}
               refresh={() => void refreshSyncDiagnostics()}
+              source={source}
+              summary={summary}
+              summaryError={summaryError}
               retryMutation={retryMutation}
               cancelMutation={cancelMutation}
               rebuildNotifications={rebuildNotifications}
@@ -154,6 +163,7 @@ export function DiagnosticsOverlay({ initialTab = "overview", onClose }: Diagnos
               copyHistory={copyHistory}
               filteredHistory={filteredHistory}
               historyEntries={historyEntries}
+              historyError={historyError}
               historyQuery={historyQuery}
               setHistoryQuery={setHistoryQuery}
             />

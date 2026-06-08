@@ -139,6 +139,9 @@ const FALSE_VALUES = new Set(["no", "false", "0", "none", "missing", "empty"]);
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const RELATIVE_DAY_PATTERN = /^\+(\d{1,3})d$/;
 const MAX_REGEX_LENGTH = 120;
+const MAX_REGEX_GROUPS = 8;
+const MAX_REGEX_QUANTIFIERS = 12;
+const MAX_REGEX_REPEAT_BOUND = 100;
 
 export function parseLocalSearchQuery(
   input: string,
@@ -153,6 +156,13 @@ export function parseLocalSearchQuery(
   const now = normalizedNow(options.now);
 
   for (const token of tokenized.tokens) {
+    const comparisonIssue = parseMalformedComparisonFilterToken(token);
+
+    if (comparisonIssue !== null) {
+      errors.push(comparisonIssue);
+      continue;
+    }
+
     const parsedFilter = parseComparisonFilterToken(token) ?? parseFilterToken(token);
 
     if (!parsedFilter) {
@@ -582,6 +592,31 @@ function parseComparisonFilterToken(token: string): { key: string; value: string
   };
 }
 
+function parseMalformedComparisonFilterToken(token: string): LocalSearchQueryIssue | null {
+  const match = /^(due|start|duration)(<=|>=|<|>|=)(.*)$/i.exec(token);
+
+  if (!match) {
+    return null;
+  }
+
+  const key = match[1].toLowerCase();
+  const operator = match[2];
+  const value = match[3].trim();
+
+  if ((operator === "<" || operator === ">") && value.length > 0) {
+    return null;
+  }
+
+  return {
+    code: operator === "<" || operator === ">" ? "missing_filter_value" : "invalid_filter_operator",
+    message:
+      key === "duration"
+        ? `Use duration>30m, duration<2h, or duration:30m..90m.`
+        : `Use ${key}<+7d or ${key}>today.`,
+    token
+  };
+}
+
 function parseDomains(value: string): LocalSearchDomain[] {
   const domains = value
     .split(",")
@@ -761,7 +796,7 @@ function parseDurationFilter(value: string, operator?: "<" | ">"): LocalSearchDu
     }
 
     return operator === "<"
-      ? { toMinutes: minutes, label: `< ${durationLabel(minutes)}` }
+      ? { toMinutes: minutes - 1, label: `< ${durationLabel(minutes)}` }
       : { fromMinutes: minutes + 1, label: `> ${durationLabel(minutes)}` };
   }
 
@@ -802,7 +837,7 @@ function durationLabel(minutes: number): string {
 }
 
 function parseRegexFilter(value: string): string | null {
-  if (value.length === 0 || value.length > MAX_REGEX_LENGTH) {
+  if (!isSafeLocalRegexPattern(value)) {
     return null;
   }
 
@@ -812,6 +847,51 @@ function parseRegexFilter(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+function isSafeLocalRegexPattern(value: string): boolean {
+  if (value.length === 0 || value.length > MAX_REGEX_LENGTH) {
+    return false;
+  }
+
+  if (/\\[1-9]|\\k<[^>]+>/.test(value)) {
+    return false;
+  }
+
+  if (/\(\?(?!!|=|:)/.test(value) || /\(\?(?:[=!]|<[=!])/.test(value)) {
+    return false;
+  }
+
+  if (value.includes("|")) {
+    return false;
+  }
+
+  if ((value.match(/\(/g) ?? []).length > MAX_REGEX_GROUPS) {
+    return false;
+  }
+
+  if ((value.match(/[+*?]|\{\d{1,5}(?:,\d{0,5})?\}/g) ?? []).length > MAX_REGEX_QUANTIFIERS) {
+    return false;
+  }
+
+  if (/\((?:[^()\\]|\\.)*[+*?{](?:[^()\\]|\\.)*\)(?:[+*?]|\{\d{1,5}(?:,\d{0,5})?\})/.test(value)) {
+    return false;
+  }
+
+  for (const match of value.matchAll(/\{(\d{1,5})(?:,(\d{0,5}))?\}/g)) {
+    const lower = Number.parseInt(match[1], 10);
+    const upper = match[2] === undefined || match[2] === "" ? lower : Number.parseInt(match[2], 10);
+
+    if (!Number.isFinite(lower) || !Number.isFinite(upper) || upper > MAX_REGEX_REPEAT_BOUND || lower > upper) {
+      return false;
+    }
+  }
+
+  if (/\{\d{1,5},\}/.test(value)) {
+    return false;
+  }
+
+  return true;
 }
 
 function parseDateOnly(value: string | undefined): string | null {
@@ -863,8 +943,16 @@ function matchesDuration(minutes: number | null, filter: LocalSearchDurationFilt
 }
 
 function matchesRegex(pattern: string, item: LocalSearchMatcherItem): boolean {
+  return matchesLocalSearchTextRegex(pattern, item.title, item.body);
+}
+
+export function matchesLocalSearchTextRegex(
+  pattern: string,
+  title: string,
+  body?: string | null
+): boolean {
   const regex = new RegExp(pattern, "i");
-  return regex.test(`${item.title}\n${item.body ?? ""}`);
+  return regex.test(`${title}\n${body ?? ""}`);
 }
 
 function duplicateFilter(key: string, token: string): LocalSearchQueryIssue {

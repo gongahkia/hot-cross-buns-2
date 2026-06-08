@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@shared/ipc/result";
+import { err, ok } from "@shared/ipc/result";
 import App from "./App";
 import {
   goToSection,
@@ -669,6 +669,193 @@ describe("App shell", () => {
 
     await runPaletteCommand(user, "diagnostics", /Copy diagnostics summary/);
     expect(await screen.findByRole("dialog", { name: "Diagnostics" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close diagnostics" }));
+
+    await runPaletteCommand(user, "diagnostics history", /Open Diagnostics History/);
+    let diagnostics = await screen.findByRole("dialog", { name: "Diagnostics" });
+    expect(within(diagnostics).getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Close diagnostics" }));
+
+    await runPaletteCommand(user, "sync issues", /Open Sync Issues/);
+    diagnostics = await screen.findByRole("dialog", { name: "Diagnostics" });
+    expect(within(diagnostics).getByRole("button", { name: "Sync" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("reuses diagnostics overlay when direct navigation changes tabs", async () => {
+    const user = userEvent.setup();
+    installHcb(seededHcb());
+    render(<App />);
+
+    await runPaletteCommand(user, "diagnostics history", /Open Diagnostics History/);
+    let diagnostics = await screen.findByRole("dialog", { name: "Diagnostics" });
+    expect(within(diagnostics).getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
+
+    window.dispatchEvent(new CustomEvent("hcb:open-diagnostics", { detail: { tab: "sync" } }));
+
+    await waitFor(() => expect(screen.getAllByRole("dialog", { name: "Diagnostics" })).toHaveLength(1));
+    diagnostics = screen.getByRole("dialog", { name: "Diagnostics" });
+    expect(within(diagnostics).getByRole("button", { name: "Sync" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("groups sync issues and copies visible sync issue text", async () => {
+    const user = userEvent.setup();
+    const api = seededHcb();
+    const baseSummary = await api.diagnostics.summary();
+    const writeText = vi.fn(async () => undefined);
+
+    if (!baseSummary.ok) {
+      throw new Error("Missing diagnostics fixture");
+    }
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+    api.diagnostics.summary = vi.fn(async () =>
+      ok({
+        ...baseSummary.data,
+        sync: {
+          ...baseSummary.data.sync,
+          state: "error" as const,
+          offline: true,
+          stale: true,
+          lastErrorCode: "SERVICE_UNAVAILABLE" as const
+        },
+        pendingMutations: {
+          ...baseSummary.data.pendingMutations,
+          totalCount: 4,
+          pendingCount: 1,
+          applyingCount: 1,
+          failedCount: 2,
+          retryableCount: 1,
+          authPausedCount: 1,
+          nextRetryAt: `${todayDate}T00:10:00.000Z`,
+          lastErrorCode: "UNAUTHORIZED" as const
+        }
+      })
+    );
+    api.diagnostics.pendingMutations = vi.fn(async () =>
+      ok({
+        mutations: [
+          {
+            id: "mutation-failed",
+            accountId: "acct-1",
+            resourceType: "task" as const,
+            resourceId: "task-failed",
+            operation: "task.update",
+            status: "failed" as const,
+            attemptCount: 1,
+            nextRetryAt: null,
+            lastErrorCode: "CONFLICT" as const,
+            lastErrorMessage: "Server conflict",
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: "mutation-retryable",
+            accountId: "acct-1",
+            resourceType: "event" as const,
+            resourceId: "event-retry",
+            operation: "event.create",
+            status: "failed" as const,
+            attemptCount: 2,
+            nextRetryAt: `${todayDate}T00:10:00.000Z`,
+            lastErrorCode: "RATE_LIMITED" as const,
+            lastErrorMessage: "Rate limited",
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: "mutation-auth",
+            accountId: "acct-1",
+            resourceType: "task" as const,
+            resourceId: "task-auth",
+            operation: "task.delete",
+            status: "failed" as const,
+            attemptCount: 1,
+            nextRetryAt: null,
+            lastErrorCode: "UNAUTHORIZED" as const,
+            lastErrorMessage: "Google account reauthentication is required",
+            createdAt: now,
+            updatedAt: now
+          },
+          {
+            id: "mutation-applying",
+            accountId: "acct-1",
+            resourceType: "task_list" as const,
+            resourceId: "list-applying",
+            operation: "taskList.rename",
+            status: "applying" as const,
+            attemptCount: 0,
+            nextRetryAt: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            createdAt: now,
+            updatedAt: now
+          }
+        ]
+      })
+    );
+    installHcb(api);
+    render(<App />);
+
+    await runPaletteCommand(user, "sync issues", /Open Sync Issues/);
+    const diagnostics = await screen.findByRole("dialog", { name: "Diagnostics" });
+
+    expect(await within(diagnostics).findByText("Sync offline")).toBeInTheDocument();
+    expect(within(diagnostics).getByText("Cache is stale")).toBeInTheDocument();
+    expect(within(diagnostics).getByText("Sync error")).toBeInTheDocument();
+    expect(within(diagnostics).getByText("Failed mutations")).toBeInTheDocument();
+    expect(within(diagnostics).getByText("Retryable/auth-paused mutations")).toBeInTheDocument();
+    expect(within(diagnostics).getByText("Queued/applying mutations")).toBeInTheDocument();
+
+    await user.click(within(diagnostics).getByRole("button", { name: "Copy visible sync issues" }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("[state:offline] Sync offline"))
+    );
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("task-failed"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("task-auth"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("list-applying"));
+  });
+
+  it("shows distinct diagnostics empty and error states", async () => {
+    const user = userEvent.setup();
+    const api = seededHcb();
+
+    api.diagnostics.summary = vi.fn(async () =>
+      err({
+        code: "SERVICE_UNAVAILABLE",
+        message: "Summary unavailable",
+        recoverable: true
+      })
+    );
+    api.diagnostics.pendingMutations = vi.fn(async () =>
+      err({
+        code: "SERVICE_UNAVAILABLE",
+        message: "Pending mutations unavailable",
+        recoverable: true
+      })
+    );
+    api.diagnostics.history = vi.fn(async () =>
+      err({
+        code: "SERVICE_UNAVAILABLE",
+        message: "History unavailable",
+        recoverable: true
+      })
+    );
+    installHcb(api);
+    render(<App />);
+
+    await runPaletteCommand(user, "sync issues", /Open Sync Issues/);
+    let diagnostics = await screen.findByRole("dialog", { name: "Diagnostics" });
+    expect(await within(diagnostics).findByText("Sync diagnostics could not load.")).toBeInTheDocument();
+    expect(within(diagnostics).queryByText("No sync issues found.")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close diagnostics" }));
+
+    await runPaletteCommand(user, "diagnostics history", /Open Diagnostics History/);
+    diagnostics = await screen.findByRole("dialog", { name: "Diagnostics" });
+    expect(await within(diagnostics).findByText("History could not load.")).toBeInTheDocument();
+    expect(within(diagnostics).queryByText("No history entries recorded.")).not.toBeInTheDocument();
   });
 
   it("exposes task command action IDs through the command palette", async () => {

@@ -14,7 +14,12 @@ export function AutoTagAudit({ input, rules }: AutoTagAuditProps): JSX.Element |
 
   const preview = previewAutoTagRules(rules, input);
   const visibleTraces = preview.traces.filter(
-    (trace) => trace.status === "matched" || trace.issues.length > 0
+    (trace) =>
+      trace.status === "matched" ||
+      trace.status === "invalid" ||
+      trace.status === "disabled" ||
+      trace.status === "no-output" ||
+      trace.issues.length > 0
   );
 
   if (visibleTraces.length === 0) {

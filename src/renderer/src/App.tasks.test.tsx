@@ -323,6 +323,100 @@ describe("App tasks", () => {
 
   });
 
+  it("computes snooze presets in local time", async () => {
+    installHcb(seededHcb());
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Tasks");
+    await user.click(screen.getByRole("button", { name: "Create tasks" }));
+    const snoozeInput = screen.getByLabelText("Snooze until");
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 22, 10, 15, 0, 0));
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Later today" }));
+      expect(snoozeInput).toHaveValue("2026-05-22T14:00");
+
+      fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+      expect(snoozeInput).toHaveValue("2026-05-23T09:00");
+
+      fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+      expect(snoozeInput).toHaveValue("2026-05-29T09:00");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sets and clears snooze through edit save payloads", async () => {
+    const api = seededHcb();
+    let taskSnoozeUntil: string | null = null;
+    api.tasks.list = vi.fn(async (request = {}) => {
+      if (request.status === "hidden" || request.status === "deleted") {
+        return ok({ items: [], page: { limit: 100, totalKnown: 0 } });
+      }
+
+      return ok({
+        items: [
+          seededTaskDetail("task-inbox-rules", {
+            listId: "list-inbox",
+            snoozeUntil: taskSnoozeUntil
+          })
+        ],
+        page: { limit: 100, totalKnown: 1 }
+      });
+    });
+    api.tasks.update = vi.fn(async (request) => {
+      if (request.snoozeUntil !== undefined) {
+        taskSnoozeUntil = request.snoozeUntil;
+      }
+
+      return ok(
+        seededTaskDetail(request.id, {
+          ...(request.title === undefined ? {} : { title: request.title }),
+          ...(request.notes === undefined ? {} : { notes: request.notes }),
+          ...(request.dueDate === undefined
+            ? {}
+            : { dueAt: request.dueDate ? `${request.dueDate}T00:00:00.000Z` : null }),
+          ...(request.listId === undefined ? {} : { listId: request.listId }),
+          ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
+          ...(request.priority === undefined ? {} : { priority: request.priority }),
+          snoozeUntil: taskSnoozeUntil
+        })
+      );
+    });
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Tasks");
+    await user.click(await screen.findByRole("button", { name: /^Draft inbox triage rules/ }));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" }));
+    const snoozeLocalValue = "2026-05-25T11:30";
+    const expectedSnoozeUntil = new Date(snoozeLocalValue).toISOString();
+    fireEvent.change(screen.getByLabelText("Snooze until"), { target: { value: snoozeLocalValue } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.tasks.update).toHaveBeenCalledWith(expect.objectContaining({
+        id: "task-inbox-rules",
+        snoozeUntil: expectedSnoozeUntil
+      }));
+    });
+
+    await user.click(await screen.findByRole("button", { name: /^Draft inbox triage rules/ }));
+    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Clear snooze" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.tasks.update).toHaveBeenLastCalledWith(expect.objectContaining({
+        id: "task-inbox-rules",
+        snoozeUntil: null
+      }));
+    });
+  });
+
   it("duplicates tasks as editable create drafts", async () => {
     const api = seededHcb();
     installHcb(api);

@@ -25,6 +25,7 @@ export const searchResultItemSchema = z
     domain: searchDomainSchema,
     title: z.string().min(1).max(500),
     snippet: z.string().max(500).optional(),
+    snoozeUntil: isoDateTimeSchema.nullable().optional(),
     tags: z.array(z.string().min(1).max(120)).max(64).optional(),
     updatedAt: isoDateTimeSchema.optional()
   })

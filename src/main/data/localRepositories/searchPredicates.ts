@@ -73,10 +73,6 @@ export function taskSearchPredicates(parsed: ParsedLocalSearchQuery): {
     }
   }
 
-  if (parsed.filters.regex !== undefined) {
-    addRegexFallbackPredicate(predicates, params, "tasks.title", "tasks.notes", parsed.filters.regex);
-  }
-
   addDatePredicate(predicates, params, "tasks.due_at", parsed.filters.due);
   predicates.push("NOT (tasks.due_at IS NULL AND tasks.parent_task_id IS NULL AND tasks.status != 'completed')");
 
@@ -117,10 +113,6 @@ export function eventSearchPredicates(parsed: ParsedLocalSearchQuery): {
     params.push(likeContainsParam(parsed.filters.attendee));
   }
 
-  if (parsed.filters.regex !== undefined) {
-    addRegexFallbackPredicate(predicates, params, "events.summary", "events.description", parsed.filters.regex);
-  }
-
   addDatePredicate(predicates, params, "events.start_at", parsed.filters.start);
 
   return { predicates, params };
@@ -151,10 +143,6 @@ export function noteSearchPredicates(parsed: ParsedLocalSearchQuery): {
   if (parsed.filters.tag !== undefined) {
     predicates.push("LOWER(tasks.local_tags_json) LIKE ? ESCAPE '\\'");
     params.push(likeContainsParam(parsed.filters.tag));
-  }
-
-  if (parsed.filters.regex !== undefined) {
-    addRegexFallbackPredicate(predicates, params, "tasks.title", "tasks.notes", parsed.filters.regex);
   }
 
   return { predicates, params };
@@ -193,24 +181,4 @@ export function addDatePredicate(
 
 export function likeContainsParam(value: string): string {
   return `%${value.toLowerCase().replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
-}
-
-function addRegexFallbackPredicate(
-  predicates: string[],
-  params: Array<string | number | boolean | null>,
-  titleColumn: string,
-  bodyColumn: string,
-  pattern: string
-): void {
-  const terms = pattern.match(/[a-z0-9]+/gi)?.slice(0, 3) ?? [];
-
-  if (terms.length === 0) {
-    return;
-  }
-
-  predicates.push(`(${terms.map(() => `(LOWER(${titleColumn}) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(${bodyColumn}, '')) LIKE ? ESCAPE '\\')`).join(" AND ")})`);
-  for (const term of terms) {
-    const param = likeContainsParam(term);
-    params.push(param, param);
-  }
 }

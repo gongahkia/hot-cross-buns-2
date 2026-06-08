@@ -1,4 +1,4 @@
-import type { SearchResultItem, TaskPriority } from "@shared/ipc/contracts";
+import type { CalendarEventStatus, SearchResultItem, TaskPriority } from "@shared/ipc/contracts";
 
 export interface PageWindow<T> {
   items: T[];
@@ -66,6 +66,7 @@ export interface CalendarEventRow extends Record<string, unknown> {
   eventId: string;
   linkedTaskId?: string | null;
   hcbKind?: "birthday" | null;
+  status?: CalendarEventStatus;
   accountId: string;
   calendarId: string;
   calendarTitle: string;

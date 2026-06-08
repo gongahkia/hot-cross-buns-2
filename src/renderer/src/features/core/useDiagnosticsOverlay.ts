@@ -13,6 +13,7 @@ import type { DiagnosticsTab } from "./DiagnosticsTabs";
 import { formatDateTime } from "./diagnosticsFormatting";
 
 type DiagnosticsMessage = { tone: "success" | "warning" | "danger"; text: string };
+const unavailableMessage = "Diagnostics preload bridge is unavailable.";
 
 export function useDiagnosticsOverlay(onClose: () => void, initialTab: DiagnosticsTab = "overview"): {
   cancelMutation: (id: string) => Promise<void>;
@@ -20,17 +21,20 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
   copyDiagnosticSummary: () => Promise<void>;
   copyHistory: () => Promise<void>;
   copyLogs: () => Promise<void>;
+  copyVisibleSyncIssues: (text: string) => Promise<void>;
   copyVisibleLogs: () => Promise<void>;
   dialogRef: MutableRefObject<HTMLElement | null>;
   exportBundle: () => Promise<void>;
   filteredHistory: DiagnosticsHistoryEntry[];
   filteredLogs: DiagnosticsLogEntry[];
   historyEntries: DiagnosticsHistoryEntry[];
+  historyError: string | null;
   historyQuery: string;
   logLevel: DiagnosticsLogLevel;
   logQuery: string;
   logs: DiagnosticsLogsResponse | null;
   message: DiagnosticsMessage | null;
+  pendingMutationsError: string | null;
   pendingMutations: DiagnosticsPendingMutation[];
   rebuildNotifications: () => Promise<void>;
   refreshLogs: () => Promise<void>;
@@ -44,6 +48,7 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
   setTab: (tab: DiagnosticsTab) => void;
   source: ReturnType<typeof useCoreViewModelSource>;
   summary: DiagnosticsSummaryResponse | null;
+  summaryError: string | null;
   tab: DiagnosticsTab;
   working: boolean;
 } {
@@ -56,6 +61,9 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
   const [logs, setLogs] = useState<DiagnosticsLogsResponse | null>(null);
   const [historyEntries, setHistoryEntries] = useState<DiagnosticsHistoryEntry[]>([]);
   const [pendingMutations, setPendingMutations] = useState<DiagnosticsPendingMutation[]>([]);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [pendingMutationsError, setPendingMutationsError] = useState<string | null>(null);
   const [logLevel, setLogLevel] = useState<DiagnosticsLogLevel>("info");
   const [logQuery, setLogQuery] = useState("");
   const [historyQuery, setHistoryQuery] = useState("");
@@ -76,6 +84,10 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     void refreshLogs();
@@ -117,10 +129,18 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
   }
 
   async function refreshSummary(): Promise<void> {
-    const result = await window.hcb?.diagnostics.summary();
+    try {
+      const result = await window.hcb?.diagnostics.summary();
 
-    if (result?.ok) {
-      setSummary(result.data);
+      if (result?.ok) {
+        setSummary(result.data);
+        setSummaryError(null);
+        return;
+      }
+
+      setSummaryError(result?.error.message ?? unavailableMessage);
+    } catch (error) {
+      setSummaryError(error instanceof Error ? error.message : "Diagnostics summary failed.");
     }
   }
 
@@ -133,18 +153,34 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
   }
 
   async function refreshHistory(): Promise<void> {
-    const result = await window.hcb?.diagnostics.history({ limit: source.settings.visibleHistoryEntryCount });
+    try {
+      const result = await window.hcb?.diagnostics.history({ limit: source.settings.visibleHistoryEntryCount });
 
-    if (result?.ok) {
-      setHistoryEntries(result.data.entries);
+      if (result?.ok) {
+        setHistoryEntries(result.data.entries);
+        setHistoryError(null);
+        return;
+      }
+
+      setHistoryError(result?.error.message ?? unavailableMessage);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Diagnostics history failed.");
     }
   }
 
   async function refreshPendingMutations(): Promise<void> {
-    const result = await window.hcb?.diagnostics.pendingMutations({ limit: 100 });
+    try {
+      const result = await window.hcb?.diagnostics.pendingMutations({ limit: 100 });
 
-    if (result?.ok) {
-      setPendingMutations(result.data.mutations);
+      if (result?.ok) {
+        setPendingMutations(result.data.mutations);
+        setPendingMutationsError(null);
+        return;
+      }
+
+      setPendingMutationsError(result?.error.message ?? unavailableMessage);
+    } catch (error) {
+      setPendingMutationsError(error instanceof Error ? error.message : "Pending mutations failed.");
     }
   }
 
@@ -213,7 +249,15 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
     if (result?.ok) {
       setMessage({ tone: "success", text: "Pending mutation was queued for retry." });
       await Promise.all([refreshPendingMutations(), refreshHistory(), refreshSummary()]);
+      return;
     }
+
+    setMessage({ tone: "warning", text: result?.error.message ?? unavailableMessage });
+  }
+
+  async function copyVisibleSyncIssues(text: string): Promise<void> {
+    await navigator.clipboard?.writeText(text);
+    setMessage({ tone: "success", text: "Visible sync issues copied." });
   }
 
   async function cancelMutation(id: string): Promise<void> {
@@ -226,7 +270,10 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
     if (result?.ok) {
       setMessage({ tone: "success", text: "Pending mutation was cancelled." });
       await Promise.all([refreshPendingMutations(), refreshHistory(), refreshSummary()]);
+      return;
     }
+
+    setMessage({ tone: "warning", text: result?.error.message ?? unavailableMessage });
   }
 
   async function clearLogs(): Promise<void> {
@@ -304,17 +351,20 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
     copyDiagnosticSummary,
     copyHistory,
     copyLogs,
+    copyVisibleSyncIssues,
     copyVisibleLogs,
     dialogRef,
     exportBundle,
     filteredHistory,
     filteredLogs,
     historyEntries,
+    historyError,
     historyQuery,
     logLevel,
     logQuery,
     logs,
     message,
+    pendingMutationsError,
     pendingMutations,
     rebuildNotifications,
     refreshLogs,
@@ -328,6 +378,7 @@ export function useDiagnosticsOverlay(onClose: () => void, initialTab: Diagnosti
     setTab,
     source,
     summary,
+    summaryError,
     tab,
     working
   };

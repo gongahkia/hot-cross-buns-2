@@ -237,6 +237,22 @@ export const plannerActions: PlannerAction[] = [
     category: "Diagnostics",
     keywords: ["diagnostics", "copy", "logs"],
     sectionId: "settings"
+  },
+  {
+    id: "diagnostics.history",
+    label: "Open Diagnostics History",
+    description: "Open diagnostics at mutation history",
+    category: "Diagnostics",
+    keywords: ["diagnostics", "history", "mutations"],
+    sectionId: "settings"
+  },
+  {
+    id: "diagnostics.sync",
+    label: "Open Sync Issues",
+    description: "Open diagnostics at sync issues",
+    category: "Diagnostics",
+    keywords: ["diagnostics", "sync", "issues", "mutations"],
+    sectionId: "settings"
   }
 ];
 

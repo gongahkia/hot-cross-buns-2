@@ -177,6 +177,65 @@ describe("local search query DSL", () => {
     ).toBe(true);
   });
 
+  it("matches tags across tasks, events, and notes", () => {
+    const parsed = parseLocalSearchQuery("tag:focus", { now });
+
+    expect(parsed.errors).toEqual([]);
+    expect(
+      matchesLocalSearchItem(parsed, {
+        domain: "tasks",
+        title: "Task",
+        tags: ["focus"]
+      })
+    ).toBe(true);
+    expect(
+      matchesLocalSearchItem(parsed, {
+        domain: "calendar",
+        title: "Event",
+        tags: ["focus"]
+      })
+    ).toBe(true);
+    expect(
+      matchesLocalSearchItem(parsed, {
+        domain: "notes",
+        title: "Note",
+        tags: ["focus"]
+      })
+    ).toBe(true);
+  });
+
+  it("parses strict duration operators and inclusive ranges", () => {
+    const greaterThan = parseLocalSearchQuery("duration>30m", { now });
+    const lessThan = parseLocalSearchQuery("duration<2h", { now });
+    const range = parseLocalSearchQuery("duration:30m..90m", { now });
+
+    expect(greaterThan.filters.duration).toEqual({ fromMinutes: 31, label: "> 30m" });
+    expect(lessThan.filters.duration).toEqual({ toMinutes: 119, label: "< 2h" });
+    expect(range.filters.duration).toEqual({ fromMinutes: 30, toMinutes: 90, label: "30m to 90m" });
+    expect(matchesLocalSearchItem(greaterThan, { domain: "tasks", title: "Task", durationMinutes: 30 })).toBe(false);
+    expect(matchesLocalSearchItem(greaterThan, { domain: "tasks", title: "Task", durationMinutes: 31 })).toBe(true);
+    expect(matchesLocalSearchItem(lessThan, { domain: "tasks", title: "Task", durationMinutes: 119 })).toBe(true);
+    expect(matchesLocalSearchItem(lessThan, { domain: "tasks", title: "Task", durationMinutes: 120 })).toBe(false);
+    expect(matchesLocalSearchItem(range, { domain: "tasks", title: "Task", durationMinutes: 30 })).toBe(true);
+    expect(matchesLocalSearchItem(range, { domain: "tasks", title: "Task", durationMinutes: 90 })).toBe(true);
+  });
+
+  it("parses relative due and start comparison aliases", () => {
+    const dueAfter = parseLocalSearchQuery("due>today", { now });
+    const startBefore = parseLocalSearchQuery("start<+14d", { now });
+
+    expect(dueAfter.filters.due).toMatchObject({
+      from: "2026-05-22T00:00:00.000Z",
+      label: "on/after today"
+    });
+    expect(startBefore.filters.start).toMatchObject({
+      to: "2026-06-05T00:00:00.000Z",
+      label: "before +14d"
+    });
+    expect(resolveLocalSearchDomains(dueAfter)).toEqual(["tasks"]);
+    expect(resolveLocalSearchDomains(startBefore)).toEqual(["calendar"]);
+  });
+
   it("reports invalid duration and regex syntax", () => {
     const parsed = parseLocalSearchQuery("duration:90m..30m regex:[", { now });
 
@@ -184,5 +243,32 @@ describe("local search query DSL", () => {
       "invalid_duration",
       "invalid_regex"
     ]);
+  });
+
+  it("rejects malformed comparison operators instead of treating them as text", () => {
+    const parsed = parseLocalSearchQuery("duration>=30m due<=+7d start=tomorrow", { now });
+
+    expect(parsed.text).toBe("");
+    expect(parsed.errors.map((error) => error.code)).toEqual([
+      "invalid_filter_operator",
+      "invalid_filter_operator",
+      "invalid_filter_operator"
+    ]);
+  });
+
+  it("rejects overlong and complex regex patterns", () => {
+    const parsed = parseLocalSearchQuery(`regex:${"a".repeat(121)} regex:(a+)+$ regex:foo(?=bar)`, { now });
+
+    expect(parsed.errors.map((error) => error.code)).toEqual([
+      "invalid_regex",
+      "invalid_regex",
+      "invalid_regex"
+    ]);
+  });
+
+  it("reports invalid duration units and bounds", () => {
+    expect(parseLocalSearchQuery("duration:0m..30m", { now }).errors[0]?.code).toBe("invalid_duration");
+    expect(parseLocalSearchQuery("duration:30x..2h", { now }).errors[0]?.code).toBe("invalid_duration");
+    expect(parseLocalSearchQuery("duration:30m..25h", { now }).errors[0]?.code).toBe("invalid_duration");
   });
 });

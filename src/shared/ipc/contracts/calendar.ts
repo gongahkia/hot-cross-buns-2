@@ -101,6 +101,8 @@ export type CalendarConference = z.infer<typeof calendarConferenceSchema>;
 
 export const calendarEventHcbKindSchema = z.enum(["birthday"]);
 export type CalendarEventHcbKind = z.infer<typeof calendarEventHcbKindSchema>;
+export const calendarEventStatusSchema = z.enum(["confirmed", "tentative", "cancelled"]);
+export type CalendarEventStatus = z.infer<typeof calendarEventStatusSchema>;
 
 export const calendarEventSummarySchema = z
   .object({
@@ -108,6 +110,7 @@ export const calendarEventSummarySchema = z
     eventId: idSchema.optional(),
     linkedTaskId: idSchema.optional(),
     hcbKind: calendarEventHcbKindSchema.optional(),
+    status: calendarEventStatusSchema.optional(),
     calendarId: idSchema,
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     title: z.string().min(1).max(500),

@@ -93,7 +93,8 @@ export function taskUpdatePayload(draft: TaskDraft): TaskUpdateRequest {
     dueDate: draft.dueDate || null,
     listId: draft.listId,
     parentId: draft.parentId || null,
-    priority: draft.priority
+    priority: draft.priority,
+    snoozeUntil: draft.snoozeUntil ?? null
   };
 }
 

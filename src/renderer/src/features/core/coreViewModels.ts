@@ -64,6 +64,7 @@ export interface CalendarEventViewModel {
   id: string;
   eventId: string;
   hcbKind?: "birthday";
+  status?: "confirmed" | "tentative" | "cancelled";
   sourceKind?: "event" | "task";
   taskId?: string;
   taskListId?: string;
@@ -152,6 +153,7 @@ export interface SearchResultViewModel {
   source: SearchSource;
   title: string;
   detail: string;
+  snoozeUntil?: string | null;
   deepLinkLabel: string;
 }
 

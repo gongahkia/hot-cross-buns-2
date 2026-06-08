@@ -21,6 +21,7 @@ import type {
 import { HcbPublicError } from "@shared/ipc/result";
 import {
   hasRunnableLocalSearch,
+  matchesLocalSearchTextRegex,
   parseLocalSearchQuery,
   resolveLocalSearchDomains,
   type ParsedLocalSearchQuery
@@ -161,6 +162,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         domain: SearchDomain;
         title: string;
         snippet: string | null;
+        snoozeUntil: string | null;
         tagsJson: string | null;
         accountId: string | null;
         description: string | null;
@@ -228,6 +230,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
            'tasks' AS domain,
            tasks.title AS title,
            COALESCE(tasks.notes, lists.title) AS snippet,
+           tasks.local_snooze_until AS snoozeUntil,
            tasks.local_tags_json AS tagsJson,
            NULL AS accountId,
            NULL AS description,
@@ -247,6 +250,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
            'calendar' AS domain,
            events.summary AS title,
            COALESCE(events.description, events.location, calendars.summary) AS snippet,
+           NULL AS snoozeUntil,
            events.local_tags_json AS tagsJson,
            events.account_id AS accountId,
            events.description AS description,
@@ -265,6 +269,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
            'notes' AS domain,
            tasks.title AS title,
            COALESCE(tasks.notes, '') AS snippet,
+           NULL AS snoozeUntil,
            tasks.local_tags_json AS tagsJson,
            NULL AS accountId,
            NULL AS description,
@@ -289,6 +294,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         domain: row.domain,
         title: row.title,
         snippet: row.domain === "notes" ? preview(row.snippet ?? "") : row.snippet ?? undefined,
+        snoozeUntil: row.domain === "tasks" ? row.snoozeUntil : undefined,
         tags: parseTagsJson(row.tagsJson),
         updatedAt: row.updatedAt
       }));
@@ -310,6 +316,26 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
        LIMIT 1;`,
       [row.accountId, googleId]
     ) !== undefined;
+  }
+
+  private queryLimitClause(parsed: ParsedLocalSearchQuery, limit: number): { sql: string; params: number[] } {
+    return parsed.filters.regex === undefined
+      ? { sql: "LIMIT ?", params: [limit] }
+      : { sql: "", params: [] };
+  }
+
+  private filterRegexRows<T extends { title: string }>(
+    parsed: ParsedLocalSearchQuery,
+    rows: T[],
+    bodyForRow: (row: T) => string | null | undefined
+  ): T[] {
+    const pattern = parsed.filters.regex;
+
+    if (pattern === undefined) {
+      return rows;
+    }
+
+    return rows.filter((row) => matchesLocalSearchTextRegex(pattern, row.title, bodyForRow(row)));
   }
 
   private calendarSearchItems(rows: Array<{
@@ -340,13 +366,16 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
   ): SearchResultItem[] {
     const { predicates, params } = taskSearchPredicates(parsed);
     const where = predicates.join(" AND ");
+    const limitClause = this.queryLimitClause(parsed, limit);
 
     if (!ftsQuery) {
-      return this.connection
+      const rows = this.connection
         .query<{
           id: string;
           title: string;
           snippet: string | null;
+          body: string | null;
+          snoozeUntil: string | null;
           tagsJson: string | null;
           updatedAt: string;
         }>(
@@ -354,6 +383,8 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
              tasks.id AS id,
              tasks.title AS title,
              COALESCE(tasks.notes, lists.title) AS snippet,
+             tasks.notes AS body,
+             tasks.local_snooze_until AS snoozeUntil,
              tasks.local_tags_json AS tagsJson,
              tasks.updated_at AS updatedAt
            FROM google_tasks tasks
@@ -364,24 +395,29 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
              tasks.due_at ASC,
              tasks.updated_at DESC,
              tasks.id ASC
-           LIMIT ?;`,
-          [...params, limit]
-        )
+           ${limitClause.sql};`,
+          [...params, ...limitClause.params]
+        );
+
+      return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
         .map((row) => ({
           id: row.id,
           domain: "tasks" as const,
           title: row.title,
           snippet: row.snippet ?? undefined,
+          snoozeUntil: row.snoozeUntil,
           tags: parseTagsJson(row.tagsJson),
           updatedAt: row.updatedAt
         }));
     }
 
-    return this.connection
+    const rows = this.connection
       .query<{
         id: string;
         title: string;
         snippet: string | null;
+        body: string | null;
+        snoozeUntil: string | null;
         tagsJson: string | null;
         updatedAt: string;
       }>(
@@ -404,25 +440,30 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
            FROM matches
            GROUP BY taskRowid
          )
-         SELECT
-           tasks.id AS id,
-           tasks.title AS title,
-           COALESCE(tasks.notes, lists.title) AS snippet,
-           tasks.local_tags_json AS tagsJson,
-           tasks.updated_at AS updatedAt
+           SELECT
+             tasks.id AS id,
+             tasks.title AS title,
+             COALESCE(tasks.notes, lists.title) AS snippet,
+             tasks.notes AS body,
+             tasks.local_snooze_until AS snoozeUntil,
+             tasks.local_tags_json AS tagsJson,
+             tasks.updated_at AS updatedAt
          FROM ranked
          INNER JOIN google_tasks tasks ON tasks.rowid = ranked.taskRowid
          INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
          WHERE ${where}
          ORDER BY ranked.rank ASC, tasks.updated_at DESC, tasks.id ASC
-         LIMIT ?;`,
-        [ftsQuery, ftsQuery, ...params, limit]
-      )
+         ${limitClause.sql};`,
+        [ftsQuery, ftsQuery, ...params, ...limitClause.params]
+      );
+
+    return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
       .map((row) => ({
         id: row.id,
         domain: "tasks" as const,
         title: row.title,
         snippet: row.snippet ?? undefined,
+        snoozeUntil: row.snoozeUntil,
         tags: parseTagsJson(row.tagsJson),
         updatedAt: row.updatedAt
       }));
@@ -435,6 +476,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
   ): SearchResultItem[] {
     const { predicates, params } = eventSearchPredicates(parsed);
     const where = predicates.join(" AND ");
+    const limitClause = this.queryLimitClause(parsed, limit);
 
     if (!ftsQuery) {
       const rows = this.connection
@@ -459,11 +501,11 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
            INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
            WHERE ${where}
            ORDER BY events.start_at ASC, events.updated_at DESC, events.id ASC
-           LIMIT ?;`,
-          [...params, limit]
+           ${limitClause.sql};`,
+          [...params, ...limitClause.params]
         );
 
-      return this.calendarSearchItems(rows);
+      return this.calendarSearchItems(this.filterRegexRows(parsed, rows, (row) => row.description)).slice(0, limit);
     }
 
     const rows = this.connection
@@ -508,11 +550,11 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
          INNER JOIN google_calendar_lists calendars ON calendars.id = events.calendar_id
          WHERE ${where}
          ORDER BY ranked.rank ASC, events.updated_at DESC, events.id ASC
-         LIMIT ?;`,
-        [ftsQuery, ftsQuery, ...params, limit]
+         ${limitClause.sql};`,
+        [ftsQuery, ftsQuery, ...params, ...limitClause.params]
       );
 
-    return this.calendarSearchItems(rows);
+    return this.calendarSearchItems(this.filterRegexRows(parsed, rows, (row) => row.description)).slice(0, limit);
   }
 
   private searchNotes(
@@ -522,9 +564,10 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
   ): SearchResultItem[] {
     const { predicates, params } = noteSearchPredicates(parsed);
     const where = predicates.join(" AND ");
+    const limitClause = this.queryLimitClause(parsed, limit);
 
     if (!ftsQuery) {
-      return this.connection
+      const rows = this.connection
         .query<{
           id: string;
           title: string;
@@ -541,9 +584,11 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
            INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
            WHERE ${where}
            ORDER BY tasks.updated_at DESC, tasks.id ASC
-           LIMIT ?;`,
-          [...params, limit]
-        )
+           ${limitClause.sql};`,
+          [...params, ...limitClause.params]
+        );
+
+      return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
         .map((row) => ({
           id: row.id,
           domain: "notes" as const,
@@ -554,7 +599,7 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
         }));
     }
 
-    return this.connection
+    const rows = this.connection
       .query<{
         id: string;
         title: string;
@@ -573,9 +618,11 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
          WHERE google_tasks_fts MATCH ?
            AND ${where}
          ORDER BY bm25(google_tasks_fts) ASC, tasks.updated_at DESC, tasks.id ASC
-         LIMIT ?;`,
-        [ftsQuery, ...params, limit]
-      )
+         ${limitClause.sql};`,
+        [ftsQuery, ...params, ...limitClause.params]
+      );
+
+    return this.filterRegexRows(parsed, rows, (row) => row.body).slice(0, limit)
       .map((row) => ({
         id: row.id,
         domain: "notes" as const,

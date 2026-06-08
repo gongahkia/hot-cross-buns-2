@@ -138,18 +138,78 @@ describe("auto tags", () => {
     expect(preview.traces).toEqual([
       expect.objectContaining({
         ruleId: "rule-coding",
+        ruleName: "Coding",
         order: 1,
         status: "matched",
         strippedField: "title",
-        tagsAdded: ["coding"]
+        tagsAdded: ["coding"],
+        eventColorStatus: "not-configured"
       }),
       expect.objectContaining({
         ruleId: "rule-github",
+        ruleName: "Github",
         order: 2,
         status: "matched",
-        tagsAdded: ["github"]
+        tagsAdded: ["github"],
+        eventColorStatus: "not-configured"
       })
     ]);
+  });
+
+  it("previews disabled and no-output rules for audit visibility", () => {
+    expect(previewAutoTagRules([rule({ enabled: false })], {
+      kind: "task",
+      title: "CODING: Review",
+      body: ""
+    })).toEqual(expect.objectContaining({
+      matchedRuleCount: 0,
+      tags: [],
+      traces: [
+        expect.objectContaining({
+          ruleName: "Coding",
+          order: 1,
+          status: "disabled",
+          tagsAdded: [],
+          issues: []
+        })
+      ]
+    }));
+
+    expect(previewAutoTagRules([rule({ tags: [], eventColorId: null })], {
+      kind: "task",
+      title: "CODING: Review",
+      body: ""
+    })).toEqual(expect.objectContaining({
+      matchedRuleCount: 0,
+      tags: [],
+      traces: [
+        expect.objectContaining({
+          ruleName: "Coding",
+          order: 1,
+          status: "no-output",
+          tagsAdded: [],
+          issues: [
+            expect.objectContaining({
+              field: "output",
+              severity: "warning"
+            })
+          ]
+        })
+      ]
+    }));
+
+    expect(previewAutoTagRules([rule({ tags: [], eventColorId: "5" })], {
+      kind: "task",
+      title: "CODING: Review",
+      body: ""
+    })).toEqual(expect.objectContaining({
+      traces: [
+        expect.objectContaining({
+          status: "no-output",
+          issues: []
+        })
+      ]
+    }));
   });
 
   it("previews requested and existing event color state", () => {
@@ -164,6 +224,21 @@ describe("auto tags", () => {
       traces: [
         expect.objectContaining({
           eventColorStatus: "skipped-explicit"
+        })
+      ]
+    }));
+
+    expect(previewAutoTagRules([rule({ eventColorId: "5" })], {
+      kind: "event",
+      title: "CODING: Review",
+      body: "",
+      requestedEventColorId: null,
+      existingEventColorId: "2"
+    })).toEqual(expect.objectContaining({
+      eventColorId: null,
+      traces: [
+        expect.objectContaining({
+          eventColorStatus: "skipped-existing"
         })
       ]
     }));

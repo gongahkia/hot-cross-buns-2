@@ -143,7 +143,7 @@ export function duplicateGroups(source: CoreViewModelSource): DuplicateGroup[] {
 
 function groupTaskDuplicates(tasks: readonly TaskViewModel[]): DuplicateGroup[] {
   return duplicateGroupsFromItems(
-    tasks.filter((task) => task.status === "open" && task.parentId === null),
+    tasks.filter((task) => task.status === "open"),
     (task) => ["task", normalizeTitle(task.title), task.listId, task.dueDate ?? "no-due"].join("|"),
     (task) => ({
       detail: `${task.list} · ${task.dueLabel}${task.snoozeUntil ? " · snoozed" : ""}`,
@@ -173,7 +173,7 @@ function groupNoteDuplicates(notes: readonly NoteViewModel[]): DuplicateGroup[] 
 
 function groupEventDuplicates(events: readonly CalendarEventViewModel[]): DuplicateGroup[] {
   return duplicateGroupsFromItems(
-    events.filter((event) => !event.completedAt),
+    events.filter((event) => event.status !== "cancelled"),
     (event) => [
       "event",
       normalizeTitle(event.title),

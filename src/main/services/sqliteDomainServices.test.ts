@@ -806,6 +806,18 @@ describe("SQLite-backed domain services", () => {
       query: "source:notes body:no",
       limit: 10
     });
+    const regexTaskSearch = await domain.planner.search({
+      query: "source:tasks regex:^Draft.*rules",
+      limit: 10
+    });
+    const regexExactMiss = await domain.planner.search({
+      query: "source:tasks regex:^Draft$",
+      limit: 10
+    });
+    const regexEventBodySearch = await domain.planner.search({
+      query: "source:calendar regex:^Review",
+      limit: 10
+    });
 
     expect(taskSearch.items).toEqual([
       expect.objectContaining({
@@ -823,6 +835,19 @@ describe("SQLite-backed domain services", () => {
       expect.objectContaining({
         domain: "notes",
         title: "Empty scratchpad"
+      })
+    ]);
+    expect(regexTaskSearch.items).toEqual([
+      expect.objectContaining({
+        domain: "tasks",
+        title: "Draft inbox triage rules"
+      })
+    ]);
+    expect(regexExactMiss.items).toEqual([]);
+    expect(regexEventBodySearch.items).toEqual([
+      expect.objectContaining({
+        domain: "calendar",
+        title: "Planner shell standup"
       })
     ]);
     expect(() =>

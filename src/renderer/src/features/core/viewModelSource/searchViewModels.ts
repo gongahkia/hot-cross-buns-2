@@ -125,10 +125,32 @@ export function searchViewModelFromResults(query: string, items: SearchResultIte
       targetId: item.id,
       source: item.domain === "calendar" ? "event" : item.domain === "tasks" ? "task" : "note",
       title: item.title,
-      detail: item.snippet ?? `Matched "${query}"`,
+      detail: searchResultDetail(query, item),
+      snoozeUntil: item.domain === "tasks" ? item.snoozeUntil ?? null : undefined,
       deepLinkLabel: `hotcrossbuns://${item.domain}/${item.id}`
     }))
   };
+}
+
+function searchResultDetail(query: string, item: SearchResultItem): string {
+  const detail = item.snippet ?? `Matched "${query}"`;
+
+  if (item.domain !== "tasks" || !item.snoozeUntil) {
+    return detail;
+  }
+
+  return `${detail} - ${snoozeSearchLabel(item.snoozeUntil)}`;
+}
+
+function snoozeSearchLabel(value: string): string {
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime())
+    ? "Snoozed"
+    : `Snoozed ${date.toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short"
+      })}`;
 }
 
 export function idleSearchViewModel(): SearchViewModel {

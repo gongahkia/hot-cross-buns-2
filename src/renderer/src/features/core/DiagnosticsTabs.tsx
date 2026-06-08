@@ -4,7 +4,8 @@ import type {
   DiagnosticsLogLevel,
   DiagnosticsLogsResponse,
   DiagnosticsPendingMutation,
-  DiagnosticsSummaryResponse
+  DiagnosticsSummaryResponse,
+  SyncStatusResponse
 } from "@shared/ipc/contracts";
 import {
   ClipboardCopy,
@@ -43,6 +44,14 @@ export const diagnosticsTabs: Array<{ id: DiagnosticsTab; label: string; icon: L
 ];
 
 const logLevels: DiagnosticsLogLevel[] = ["debug", "info", "warn", "error"];
+const authErrorCodes = new Set(["UNAUTHORIZED", "FORBIDDEN"]);
+
+type SyncStateIssue = { id: string; title: string; detail: string; tone: "warning" | "danger" };
+type SyncMutationGroup = {
+  id: string;
+  title: string;
+  mutations: DiagnosticsPendingMutation[];
+};
 
 export function OverviewTab({
   source,
@@ -117,30 +126,45 @@ export function OverviewTab({
 }
 
 export function SyncTab({
+  copyVisibleSyncIssues,
+  pendingMutationsError,
   pendingMutations,
   refresh,
   retryMutation,
   cancelMutation,
   rebuildNotifications,
   runRecovery,
+  source,
+  summary,
+  summaryError,
   working
 }: {
+  copyVisibleSyncIssues: (text: string) => Promise<void>;
+  pendingMutationsError: string | null;
   pendingMutations: DiagnosticsPendingMutation[];
   refresh: () => void;
   retryMutation: (id: string) => Promise<void>;
   cancelMutation: (id: string) => Promise<void>;
   rebuildNotifications: () => Promise<void>;
   runRecovery: (action: "refresh" | "forceFullResync" | "clearGoogleCache") => Promise<void>;
+  source: CoreViewModelSource;
+  summary: DiagnosticsSummaryResponse | null;
+  summaryError: string | null;
   working: boolean;
 }): JSX.Element {
-  const failed = pendingMutations.filter((mutation) => mutation.status === "failed");
-  const retryable = pendingMutations.filter((mutation) => mutation.status !== "failed" && (mutation.attemptCount > 0 || Boolean(mutation.lastErrorMessage)));
-  const active = pendingMutations.filter((mutation) => !failed.includes(mutation) && !retryable.includes(mutation));
-  const groups = [
+  const syncStatus = summary?.sync ?? source.syncStatus;
+  const stateIssues = syncStateIssues(syncStatus);
+  const retryable = pendingMutations.filter(isRetryableOrAuthPaused);
+  const failed = pendingMutations.filter((mutation) => mutation.status === "failed" && !isRetryableOrAuthPaused(mutation));
+  const active = pendingMutations.filter((mutation) => mutation.status !== "failed");
+  const groups: SyncMutationGroup[] = [
     { id: "failed", title: "Failed mutations", mutations: failed },
     { id: "retryable", title: "Retryable/auth-paused mutations", mutations: retryable },
-    { id: "active", title: "Queued mutations", mutations: active }
+    { id: "active", title: "Queued/applying mutations", mutations: active }
   ].filter((group) => group.mutations.length > 0);
+  const visibleIssueText = syncIssueText(stateIssues, groups);
+  const hasIssues = stateIssues.length > 0 || pendingMutations.length > 0;
+  const hasError = Boolean(summaryError || pendingMutationsError);
 
   return (
     <div className="grid gap-3">
@@ -170,12 +194,36 @@ export function SyncTab({
       </DiagnosticSection>
 
       <DiagnosticSection
-        title="Pending sync queue"
-        trailing={<Badge tone={pendingMutations.length > 0 ? "warning" : "neutral"}>{pendingMutations.length}</Badge>}
+        title="Sync issues"
+        trailing={<Badge tone={hasIssues ? "warning" : "neutral"}>{stateIssues.length + pendingMutations.length}</Badge>}
       >
-        {pendingMutations.length === 0 ? (
-          <p className="px-3 py-4 text-[var(--text-sm)] text-text-muted">No pending Google writes or sync issues.</p>
-        ) : (
+        {hasError ? (
+          <div className="grid gap-1 border-b border-border px-3 py-3 text-[var(--text-sm)]">
+            <div className="font-semibold text-danger">Sync diagnostics could not load.</div>
+            {summaryError ? <div className="text-text-muted">Summary: {summaryError}</div> : null}
+            {pendingMutationsError ? <div className="text-text-muted">Pending mutations: {pendingMutationsError}</div> : null}
+          </div>
+        ) : null}
+
+        {!hasError && !hasIssues ? (
+          <p className="px-3 py-4 text-[var(--text-sm)] text-text-muted">No sync issues found.</p>
+        ) : null}
+
+        {stateIssues.length > 0 ? (
+          <div className="grid">
+            {stateIssues.map((issue) => (
+              <div className="flex items-start justify-between gap-3 border-b border-border px-3 py-2" key={issue.id}>
+                <div className="min-w-0">
+                  <div className="text-[var(--text-sm)] font-semibold text-text-primary">{issue.title}</div>
+                  <div className="text-[var(--text-xs)] text-text-muted">{issue.detail}</div>
+                </div>
+                <Badge tone={issue.tone}>{issue.id}</Badge>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {groups.length > 0 ? (
           <div className="grid">
             {groups.map((group) => (
               <div className="grid" key={group.id}>
@@ -208,10 +256,80 @@ export function SyncTab({
               </div>
             ))}
           </div>
-        )}
+        ) : null}
+
+        {hasIssues ? (
+          <div className="flex justify-end border-t border-border px-3 py-2">
+            <Button onClick={() => void copyVisibleSyncIssues(visibleIssueText)}>
+              <ClipboardCopy aria-hidden="true" size={15} />
+              Copy visible sync issues
+            </Button>
+          </div>
+        ) : null}
       </DiagnosticSection>
     </div>
   );
+}
+
+function syncStateIssues(syncStatus: SyncStatusResponse): SyncStateIssue[] {
+  const issues: SyncStateIssue[] = [];
+
+  if (syncStatus.offline) {
+    issues.push({
+      id: "offline",
+      title: "Sync offline",
+      detail: "Google sync is reporting offline mode.",
+      tone: "warning"
+    });
+  }
+
+  if (syncStatus.stale) {
+    issues.push({
+      id: "stale",
+      title: "Cache is stale",
+      detail: "Local data may be older than the latest Google state.",
+      tone: "warning"
+    });
+  }
+
+  if (syncStatus.state === "error") {
+    issues.push({
+      id: "error",
+      title: "Sync error",
+      detail: syncStatus.lastErrorCode ? `Last error: ${syncStatus.lastErrorCode}` : "Sync ended in an error state.",
+      tone: "danger"
+    });
+  }
+
+  return issues;
+}
+
+function isRetryableOrAuthPaused(mutation: DiagnosticsPendingMutation): boolean {
+  return mutation.status === "failed" && (
+    mutation.nextRetryAt !== null ||
+    (mutation.lastErrorCode !== null && authErrorCodes.has(mutation.lastErrorCode))
+  );
+}
+
+function syncIssueText(stateIssues: SyncStateIssue[], groups: SyncMutationGroup[]): string {
+  return [
+    ...stateIssues.map((issue) => `[state:${issue.id}] ${issue.title} - ${issue.detail}`),
+    ...groups.flatMap((group) =>
+      group.mutations.map((mutation) =>
+        [
+          `[${group.id}]`,
+          `${operationLabel(mutation.operation)} ${mutation.resourceType}:${mutation.resourceId}`,
+          `status=${mutation.status}`,
+          `attempts=${mutation.attemptCount}`,
+          mutation.nextRetryAt === null ? null : `nextRetryAt=${mutation.nextRetryAt}`,
+          mutation.lastErrorCode === null ? null : `error=${mutation.lastErrorCode}`,
+          mutation.lastErrorMessage === null ? null : mutation.lastErrorMessage
+        ]
+          .filter((part): part is string => part !== null)
+          .join(" ")
+      )
+    )
+  ].join("\n");
 }
 
 export function LogsTab({
@@ -310,12 +428,14 @@ export function HistoryTab({
   copyHistory,
   filteredHistory,
   historyEntries,
+  historyError,
   historyQuery,
   setHistoryQuery
 }: {
   copyHistory: () => Promise<void>;
   filteredHistory: DiagnosticsHistoryEntry[];
   historyEntries: DiagnosticsHistoryEntry[];
+  historyError: string | null;
   historyQuery: string;
   setHistoryQuery: (query: string) => void;
 }): JSX.Element {
@@ -329,8 +449,15 @@ export function HistoryTab({
         <SearchInput label="Search history" value={historyQuery} onChange={setHistoryQuery} />
       </div>
       <div className="min-h-0 overflow-auto">
-        {filteredHistory.length === 0 ? (
-          <p className="p-4 text-[var(--text-sm)] text-text-muted">No history entries match this view.</p>
+        {historyError ? (
+          <div className="grid gap-1 p-4 text-[var(--text-sm)]">
+            <div className="font-semibold text-danger">History could not load.</div>
+            <div className="text-text-muted">{historyError}</div>
+          </div>
+        ) : historyEntries.length === 0 ? (
+          <p className="p-4 text-[var(--text-sm)] text-text-muted">No history entries recorded.</p>
+        ) : filteredHistory.length === 0 ? (
+          <p className="p-4 text-[var(--text-sm)] text-text-muted">No history entries match this search.</p>
         ) : (
           filteredHistory.map((entry) => <HistoryRow entry={entry} key={entry.id} />)
         )}

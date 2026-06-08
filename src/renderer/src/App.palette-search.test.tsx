@@ -33,6 +33,32 @@ describe("Command palette search", () => {
     expect(api.search.query).toHaveBeenCalledWith({ query: "review", limit: 30 });
   });
 
+  it("shows task snooze metadata in palette search results", async () => {
+    const api = seededHcb();
+    api.search.query = vi.fn(async () =>
+      ok({
+        items: [{
+          id: "task-inbox-rules",
+          domain: "tasks" as const,
+          title: "Draft inbox triage rules",
+          snippet: "Task in Inbox",
+          snoozeUntil: new Date("2026-05-25T11:30").toISOString(),
+          updatedAt: now
+        }],
+        page: { limit: 30, totalKnown: 1 }
+      })
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.keyboard("{Meta>}p{/Meta}");
+    const dialog = await screen.findByRole("dialog", { name: "Command palette" });
+    await user.type(within(dialog).getByRole("searchbox", { name: "Filter commands" }), "triage");
+
+    expect(await within(dialog).findByRole("option", { name: /Task in Inbox.*Snoozed/ })).toBeInTheDocument();
+  });
+
   it("opens the matching section from a palette search result", async () => {
     const api = seededHcb();
     installHcb(api);
@@ -215,10 +241,10 @@ describe("Command palette search", () => {
     const dialog = await screen.findByRole("dialog", { name: "Command palette" });
 
     fireEvent.change(within(dialog).getByRole("searchbox", { name: "Filter commands" }), {
-      target: { value: "status:blocked triage" }
+      target: { value: "duration>=30m" }
     });
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Unsupported task status");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Use duration>30m");
     await new Promise((resolve) => window.setTimeout(resolve, 80));
     expect(api.search.query).not.toHaveBeenCalled();
   });
