@@ -36,6 +36,14 @@ import {
 import { recoveryPhrase } from "./settingsUtils";
 
 type SettingsTabId = "general" | "profile" | "appearance" | "hotkeys" | "alerts" | "advanced" | "about";
+type AutoTagBackgroundNotice = {
+  title: string;
+  description: string;
+  tone: "info" | "success" | "warning";
+  changedKinds?: Array<{ kind: AutoTagTargetKind; changed: number }>;
+};
+
+const autoTagTargetKinds: AutoTagTargetKind[] = ["task", "event", "note"];
 
 const settingsSearchTextByTab: Record<SettingsTabId, string> = {
   about: [
@@ -88,6 +96,7 @@ const settingsSearchTextByTab: Record<SettingsTabId, string> = {
     "Tag colors",
     "Merge tags",
     "Auto tags",
+    "Background reapply",
     "Rules",
     "Prefix",
     "Contains",
@@ -208,6 +217,7 @@ export function SettingsView({
   } | null>(null);
   const [confirmationInput, setConfirmationInput] = useState("");
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+  const [autoTagBackgroundNotice, setAutoTagBackgroundNotice] = useState<AutoTagBackgroundNotice | null>(null);
   const [selectedSettingsTab, setSelectedSettingsTab] = useState<SettingsTabId>("general");
   const [settingsQuery, setSettingsQuery] = useState("");
   const [customRetentionAmount, setCustomRetentionAmount] = useState("60");
@@ -305,6 +315,9 @@ export function SettingsView({
       ).length,
     [settings.autoTagRules]
   );
+  const autoTagRulesSignature = useMemo(() => JSON.stringify(settings.autoTagRules), [settings.autoTagRules]);
+  const autoTagRulesSignatureRef = useRef<string | null>(null);
+  const autoTagBackgroundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setGoogleClientId(googleStatus.clientId ?? "");
@@ -332,6 +345,37 @@ export function SettingsView({
       }
     });
   }, [selectedSettingsTab]);
+
+  useEffect(() => {
+    const previousSignature = autoTagRulesSignatureRef.current;
+    autoTagRulesSignatureRef.current = autoTagRulesSignature;
+
+    if (previousSignature === null || previousSignature === autoTagRulesSignature) {
+      return;
+    }
+
+    if (autoTagBackgroundTimerRef.current) {
+      clearTimeout(autoTagBackgroundTimerRef.current);
+    }
+
+    setAutoTagBackgroundNotice(null);
+
+    if (settings.autoTagBackgroundReapplyMode === "manual") {
+      return;
+    }
+
+    let cancelled = false;
+    autoTagBackgroundTimerRef.current = setTimeout(() => {
+      void runAutoTagBackgroundReapply(settings.autoTagBackgroundReapplyMode, () => cancelled);
+    }, 900);
+
+    return () => {
+      cancelled = true;
+      if (autoTagBackgroundTimerRef.current) {
+        clearTimeout(autoTagBackgroundTimerRef.current);
+      }
+    };
+  }, [autoTagRuleErrorCount, autoTagRulesSignature, settings.autoTagBackgroundReapplyMode]);
 
   function updateSettings(request: SettingsUpdateRequest): void {
     setRecoveryMessage(null);
