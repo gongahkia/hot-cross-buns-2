@@ -10,7 +10,7 @@ This is the single July 2026 planning todo. Ports stay last.
 
 Last repo audit for this file: 2026-06-09.
 
-Audit note: static repo/source/test evidence only. No live Google API, external MCP client, packaged-app, or manual UI QA was performed for this update.
+Audit note: static repo/source/test evidence only. No live Google API, external MCP client, packaged-app, or manual UI QA was performed for this update. Follow-up removed verified implemented leftovers for snooze UX, auto-tag audit/reapply, calendar drag-create, note-template creation, pointer repair, and dock badge code paths.
 
 Status key:
 
@@ -70,7 +70,7 @@ Status key:
 ### Missing / not implemented yet
 
 - Hierarchical Areas.
-- Bulk reschedule/multi-select operations beyond current grouped tag and duplicate undo.
+- Bulk reschedule beyond current bulk complete/move/delete, bulk tag, and duplicate undo paths.
 - Production semantic vector/model packaging and richer conversational planning/action proposals.
 - CSS snippets, JSON config/keymaps, and sandboxed user extensions.
 - ICS import/subscriptions.
@@ -154,17 +154,11 @@ Status key:
 
 ### Tasks and organisation
 
-- Status: `Verify` for Kanban parity; `Partial` for tags/auto-tagging, duplicate detection/review, grouped duplicate cleanup undo, snooze, subtasks, templates, and NL quick-add; `Missing` for Areas.
+- Status: `Verify` for Kanban parity; `Partial` for tags background/perf, duplicate resolution hardening, grouped duplicate cleanup undo, board-level subtasks/reorder, task/event template instantiation, and NL quick-add; `Done` for snooze inspector/list/search UX and note-template creation; `Missing` for Areas.
 - Verify/finish Kanban parity beyond the current Google-list board if original `KanbanGrouping` behavior is not covered.
-- Harden first-class tags beyond current catalog/link implementation:
+- Harden first-class tags beyond current catalog/link/inspector-audit/bulk-reapply implementation:
   - background scheduling for backend auto-tag reapply
   - large-account tag analytics/reapply perf QA
-- Harden current rule-based auto-tagging and color assignment:
-  - "why was this tagged?" inspector/audit detail
-- Add auto-tag bulk tools:
-  - dry-run preview against existing tasks/events/notes
-  - apply/reapply changed rules to selected scopes
-  - undo/coalesced mutation handling for bulk reapply
 - Add hierarchical Areas:
   - area schema
   - area sort order
@@ -174,19 +168,15 @@ Status key:
 - Finish bulk operations where current multi-select is incomplete:
   - reschedule
   - tag/untag QA beyond current bulk tag apply path
-  - batched/coalesced mutation entries
+  - batched/coalesced mutation entries for reschedule
 - Harden duplicate resolution for tasks, events, and notes.
   - Note: duplicate create controls, review/dismiss/open/delete, loaded-data merge flows, domain cleanup, and grouped undo are present.
   - Remaining: stronger mutation compaction and event/note duplicate-resolution QA.
-- Finish snooze UX:
-  - inspector controls for `snoozeUntil`
-  - visible snoozed state in task lists/today/search
-  - clear/snooze presets
-- Finish subtask hierarchy UX:
-  - parent/child editing in inspector
+- Finish board-level subtask hierarchy/reorder UX:
+  - nested hierarchy display beyond current inspector subtasks
   - move/reorder subtasks safely inside Google Tasks list constraints
-  - clear visual hierarchy in task views
-- Finish task/event template engine if current settings-only templates are not fully instantiated:
+  - clear visual hierarchy in task views beyond shared subtask previews
+- Finish task/event template instantiation beyond current settings schemas and note-template create flow:
   - `{{today}}`
   - `{{+Nd}}`
   - `{{prompt:Label}}`
@@ -201,9 +191,8 @@ Status key:
 
 ### Calendar
 
-- Status: `Partial`; Agenda/Day/Multi-Day/Week/Month are present.
-- Verify/finish drag-to-create on calendar grids.
-- Add month/week day-agenda popover from cell/day click.
+- Status: `Partial`; Agenda/Day/Multi-Day/Week/Month and drag-to-create are present.
+- Add generic month/week/day agenda popover from cell/day click beyond current overflow popovers.
 - Add smart-reschedule:
   - suggest new slots for overdue, conflicted, or unscheduled tasks
   - respect priority, duration, locked schedules, working hours, visible calendars, and existing events
@@ -214,9 +203,9 @@ Status key:
   - Google-backed occurrence edits/deletes are implemented.
   - Locally materialized future-series split is implemented.
   - Remaining: Google-expanded future-series writes when only an instance is cached, clearer unsupported-state copy, and live Google smoke.
-- Finish visual RRULE editor depth if current UI does not cover all supported recurrence fields:
-  - frequency, interval, weekdays, month rules, end date, count, and never-ending rules
-  - readable summary and raw RRULE preview
+- Finish visual RRULE editor depth beyond current frequency/interval/weekday/end/count/readable-summary controls:
+  - month rules and never-ending rule polish
+  - raw RRULE preview
   - validation for unsupported Google/RFC combinations
   - round-trip tests against current recurrence sync code
 - Add attendee management depth beyond raw guest emails:
@@ -266,26 +255,19 @@ Status key:
 ## 4. Search, filters, and command surfaces
 
 - Status: `Partial`; local search, MCP/CLI search, advanced parser-backed operators, boolean DSL, saved-search settings, pinned filters, local semantic/hybrid search, local LLM provider hooks, and chat surfaces exist.
-- Keep parser-backed advanced search operators covered:
-  - regex mode
-  - `attendee:`
-  - `duration>30m`
-  - `notes:yes` / `body:yes`
-  - `due<+7d`
-  - list/tag/calendar/status/priority combinations
-- Harden custom-filter DSL:
-  - boolean explain/validation QA
+- Harden custom-filter DSL UX beyond current parser/operator coverage:
+  - boolean explain/validation polish
   - relative dates
   - saved-query UX polish
   - validation and explain output
 - Add local semantic search layered on existing search:
   - Current: deterministic local hash embeddings are stored in `local_semantic_embeddings` for tasks/events/notes, semantic/hybrid modes are exposed through IPC/search, and focused SQLite tests cover indexing/search diagnostics.
-  - Remaining production path: evaluate `sqlite-vec` vs SQLite `Vec1` for packaging stability
+  - Remaining production path: replace deterministic hash embeddings with a packaged model/vector path after evaluating `sqlite-vec` vs SQLite `Vec1`
   - use a worker-backed embedding path, starting with `Xenova/all-MiniLM-L6-v2` / `@huggingface/transformers` if packaging is acceptable
-  - store 384-dimensional embeddings with entity kind/id, source text hash, model id, and generated-at metadata
-  - store embeddings for tasks, events, notes, lists, and calendars locally
+  - store production embeddings with entity kind/id, source text hash, model id, and generated-at metadata
+  - extend embedding coverage to lists and calendars
   - background embedding/index refresh after edits and sync
-  - hybrid ranking with current FTS/DSL results
+  - tune hybrid ranking with current FTS/DSL results
   - local/private model and no remote embedding calls by default
   - model download/cache controls, rebuild controls, and disabled-state UI when the model or vector extension is unavailable
   - diagnostics for stale/missing embeddings
@@ -316,7 +298,7 @@ Status key:
 
 ### CSS tokens and snippets
 
-- Audit renderer styles and publish stable CSS custom properties for colors, typography, spacing, radii, shadow, and motion.
+- Document and publicly stabilize existing CSS custom properties for snippet authors.
 - Add user snippets directory under app data, e.g. `<userData>/snippets/*.css`.
 - Add snippet loader with enable/disable/reload/error handling.
 - Add Settings UI for snippets:
@@ -365,12 +347,10 @@ Status key:
 - Harden portable `.hcbexport` workflow:
   - manual migration QA on a real profile copy
   - decide only if a future `.hcb2export` alias/version is needed
-- Verify/finish local file attachments for notes, tasks, and events:
-  - image/file refs
-  - app-owned attachment storage
-  - download/copy actions
-  - portable metadata
-- Add local-pointer repair UI for broken attachment paths.
+- Finish user-facing local file attachments for notes, tasks, and events beyond portable pointer scan/export/import backend:
+  - add/paste/drop/picker UI where missing
+  - open/download/copy actions
+  - visible missing/corrupt pointer states outside repair settings
 - Add ICS calendar import and watched ICS subscriptions:
   - import local `.ics` files into cached calendar writes or a read-only local calendar source
   - subscribe to user-configured `https://` / `webcal://` ICS URLs with refresh intervals and ETag/Last-Modified caching where available
@@ -382,7 +362,7 @@ Status key:
 
 ## 7. Security, native Mac integration, and release polish
 
-- Status: `Partial`; base macOS-native shell, diagnostics, History/Sync Issues, MCP loopback/resources/prompts, Keychain-backed secrets, sync modes, retention settings, updater metadata/docs, local backups, and notifications scaffolding exist, but the items below still need product hardening.
+- Status: `Partial`; base macOS-native shell, diagnostics, History/Sync Issues, MCP loopback/resources/prompts, Keychain-backed secrets, sync modes, retention settings, dock badge code path, updater metadata/docs, local backups, and notifications scaffolding exist, but the items below still need product hardening.
 - Verify/finish local cache encryption as an opt-in, data-safety-gated feature:
   - keep unencrypted SQLite as the default until encrypted-cache migration is proven by tests and manual recovery drills
   - evaluate `better-sqlite3-multiple-ciphers` against current Electron/Node/macOS packaging, maintenance, license, prebuild, and deprecation risk
@@ -394,13 +374,6 @@ Status key:
   - support explicit decrypt/export recovery while the user still has Keychain access
   - document key-loss behavior clearly: encrypted cache is unrecoverable without the stored key, but Google source data can be re-synced after reconnect
   - do not ship the settings toggle until migration, downgrade, backup restore, corrupt-key, missing-Keychain, and interrupted-write tests pass
-- Sync mode selector:
-  - Status: `Done` by static evidence; keep live scheduler QA before release sign-off.
-  - manual
-  - balanced
-  - near-real-time
-- Past-event retention cutoff:
-  - Status: `Done` by static evidence; `0` means keep forever.
 - Past-task cleanup settings:
   - Status: `Partial`; completed-task retention exists, but overdue cleanup behavior still needs product/implementation audit.
 - Verify/finish in-app GitHub Releases update checker:
@@ -428,7 +401,6 @@ Status key:
   - prefer App Group drop file / queue if HCB is not running
   - optionally call authenticated loopback MCP only when server is enabled and reachable
   - sanitize shared input and surface failures without leaking source app data
-- Verify dock badge behavior end to end if only settings exist.
 - Add rich notification actions.
   - actions: Snooze 10m, Complete, Open
   - wire Snooze to `local_snooze_until`
@@ -442,15 +414,12 @@ Status key:
   - event notification defaults
   - 64-notification cap behavior
   - reschedule diagnostics
-- Renderer History / Sync Issues:
-  - Status: `Done` for Diagnostics tabs and command-palette entry points.
-  - Add a separate window only if later UX requires it.
 - Expand agent-native MCP, CLI, and local automation surface:
   - Current: base MCP/CLI read/write CRUD, sync, queue, undo/redo, convert tools, `hcb_brief`, `hcb tail`, `hcb plan`, durable pending action storage, floating approval tray, and loopback webhook subscriptions are present.
   - Current webhook coverage: localhost/127.0.0.1/::1 validation, HMAC signatures, private-body redaction by default, task created/completed emits, and sync completed emits.
   - Remaining: event-starting and mutation-failed emit sources, webhook retry/backoff/rate-limit hardening, richer prompt coverage for day planning/inbox triage/standups/reschedule/duplicate review, and external MCP client QA.
   - keep all agent/CLI/webhook output redacted and context-budgeted
-  - add/finish tests for resource discovery, prompt discovery, prompt args, `hcb_brief` schema stability, confirmation tray approvals, `hcb tail`, `hcb plan`, and webhook delivery retry paths
+  - add/finish tests for webhook delivery retry paths, event-starting/mutation-failed emits, richer prompts, and external MCP client behavior
 - Audit MCP tool catalogue parity with original:
   - Status: `Partial`; current tool registry is broad and tested, but original parity must be checked explicitly before closing this.
   - exact tool names
@@ -465,12 +434,6 @@ Status key:
   - 15k-event target
   - prepared event indexes/snapshots where still missing
   - startup and calendar navigation timings
-- Run frontend reference pass before major visual work:
-  - Apple Calendar
-  - Notion Calendar
-  - current HCB2 before screenshots
-  - extract layout/density/navigation lessons only
-  - do not copy branding, exact icons, copy, or proprietary artwork
 - Maintain security posture:
   - no credential leaks
   - no weakened CSP
@@ -479,22 +442,20 @@ Status key:
   - no permission bypass
 - Preserve Google Tasks/Calendar sync semantics and offline replay.
 - Add focused tests for:
-  - parsers
-  - migrations
+  - chrono-style NL parser/RRULE inference
+  - migrations for multi-account, encryption, and external config
   - reducers/stores
   - IPC contracts
-  - search/filter DSL
-  - semantic embeddings/vector search
+  - custom-filter DSL polish
+  - production semantic model/vector extension path
   - local LLM provider adapters
-  - MCP conversational sidebar action approvals
-  - keybindings
-  - import/export verification
-  - deterministic portable export diff stability
+  - chat-generated MCP action proposals
+  - external keymap JSON and `when` predicate parsing
   - ICS import/subscription parsing and refresh
   - encryption
   - multi-account sync and mutation isolation
-  - notification scheduling
-  - calendar recurrence
+  - rich notification actions and cap diagnostics
+  - recurrence master-missing/live-Google edge cases
   - extension sandboxing
 - Add Playwright/manual QA for:
   - Today
