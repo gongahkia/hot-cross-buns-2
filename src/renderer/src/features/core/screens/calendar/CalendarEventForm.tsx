@@ -96,6 +96,33 @@ function calendarReminderSummary(value: string): string {
   return `${hours} hr ${remainingMinutes} min before`;
 }
 
+function reminderSummary(method: "popup" | "email", minutes: number): string {
+  const prefix = method === "email" ? "Email" : "Popup";
+  return `${prefix} ${calendarReminderSummary(String(minutes)).toLocaleLowerCase()}`;
+}
+
+function calendarRemindersSummary(draft: CalendarEventDraft): string | null {
+  if (draft.remindersUseDefault) {
+    return "Calendar default reminders";
+  }
+
+  if (draft.reminders.length === 0) {
+    return null;
+  }
+
+  return draft.reminders.map((reminder) => reminderSummary(reminder.method, reminder.minutes)).join(", ");
+}
+
+function attendeeStatusLabel(value: string | undefined): string {
+  return value === "accepted"
+    ? "accepted"
+    : value === "declined"
+      ? "declined"
+      : value === "tentative"
+        ? "tentative"
+        : "needs action";
+}
+
 function eventDurationVisible(draft: CalendarEventDraft): boolean {
   if (draft.allDay) {
     return Date.parse(draft.endsAt) - Date.parse(draft.startsAt) > 24 * 60 * 60 * 1000;
@@ -270,9 +297,8 @@ export function CalendarEventDetails({
     .split(",")
     .map((guest) => guest.trim())
     .filter(Boolean);
-  const reminderLabel = draft.reminderMinutes.trim()
-    ? calendarReminderSummary(draft.reminderMinutes)
-    : null;
+  const reminderLabel = calendarRemindersSummary(draft) ??
+    (draft.reminderMinutes.trim() ? calendarReminderSummary(draft.reminderMinutes) : null);
   const repeats = draft.repeatFrequency !== "none";
   const showSourceTimeZone = sourceTimeZone !== defaultTimeZone;
   const location = draft.location.trim();
@@ -305,6 +331,8 @@ export function CalendarEventDetails({
             {eventDurationVisible(draft) ? <Badge tone="neutral">{calendarDraftDurationLabel(draft)}</Badge> : null}
             {selectedCalendar?.title ? <Badge tone="neutral">{selectedCalendar.title}</Badge> : null}
             {showSourceTimeZone ? <Badge tone="neutral">{sourceTimeZone}</Badge> : null}
+            <Badge tone="neutral">{draft.transparency === "transparent" ? "Free" : "Busy"}</Badge>
+            <Badge tone="neutral">{draft.visibility === "private" ? "Private" : draft.visibility === "public" ? "Public" : "Default visibility"}</Badge>
           </div>
         </div>
       </div>
@@ -344,9 +372,9 @@ export function CalendarEventDetails({
       {guests.length > 0 ? (
         <DetailLine icon={Users}>
           <div className="flex flex-wrap gap-2">
-            {guests.map((guest) => (
-              <Badge key={guest} tone="neutral">
-                {guest}
+            {(draft.attendees.length > 0 ? draft.attendees : guests.map((email) => ({ email }))).map((guest) => (
+              <Badge key={guest.email} tone="neutral">
+                {guest.email}{guest.responseStatus ? ` · ${attendeeStatusLabel(guest.responseStatus)}` : ""}
               </Badge>
             ))}
           </div>
