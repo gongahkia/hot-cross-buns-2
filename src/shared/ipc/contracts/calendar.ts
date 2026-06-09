@@ -100,10 +100,55 @@ export const calendarConferenceSchema = z
 
 export type CalendarConference = z.infer<typeof calendarConferenceSchema>;
 
+export const calendarConferenceCreateRequestSchema = z
+  .object({
+    type: z.literal("hangoutsMeet")
+  })
+  .strict();
+
+export type CalendarConferenceCreateRequest = z.infer<
+  typeof calendarConferenceCreateRequestSchema
+>;
+
+export const calendarEventReminderMethodSchema = z.enum(["popup", "email"]);
+export type CalendarEventReminderMethod = z.infer<typeof calendarEventReminderMethodSchema>;
+
+export const calendarEventReminderSchema = z
+  .object({
+    method: calendarEventReminderMethodSchema,
+    minutes: reminderMinutesSchema
+  })
+  .strict();
+
+export type CalendarEventReminder = z.infer<typeof calendarEventReminderSchema>;
+
+export const calendarEventAttendeeResponseStatusSchema = z.enum([
+  "needsAction",
+  "declined",
+  "tentative",
+  "accepted"
+]);
+
+export const calendarEventAttendeeSchema = z
+  .object({
+    email: guestEmailSchema,
+    displayName: z.string().trim().min(1).max(500).optional(),
+    responseStatus: calendarEventAttendeeResponseStatusSchema.optional(),
+    self: z.boolean().optional(),
+    resource: z.boolean().optional()
+  })
+  .strict();
+
+export type CalendarEventAttendee = z.infer<typeof calendarEventAttendeeSchema>;
+
 export const calendarEventHcbKindSchema = z.enum(["birthday"]);
 export type CalendarEventHcbKind = z.infer<typeof calendarEventHcbKindSchema>;
 export const calendarEventStatusSchema = z.enum(["confirmed", "tentative", "cancelled"]);
 export type CalendarEventStatus = z.infer<typeof calendarEventStatusSchema>;
+export const calendarEventTransparencySchema = z.enum(["opaque", "transparent"]);
+export type CalendarEventTransparency = z.infer<typeof calendarEventTransparencySchema>;
+export const calendarEventVisibilitySchema = z.enum(["default", "public", "private"]);
+export type CalendarEventVisibility = z.infer<typeof calendarEventVisibilitySchema>;
 
 export const calendarEventSummarySchema = z
   .object({
@@ -124,6 +169,11 @@ export const calendarEventSummarySchema = z
     notes: z.string().max(20_000).optional(),
     guestEmails: z.array(guestEmailSchema).max(50).optional(),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
+    attendees: z.array(calendarEventAttendeeSchema).max(50).optional(),
+    reminders: z.array(calendarEventReminderSchema).max(10).optional(),
+    remindersUseDefault: z.boolean().optional(),
+    transparency: calendarEventTransparencySchema.nullable().optional(),
+    visibility: calendarEventVisibilitySchema.nullable().optional(),
     tags: z.array(z.string().min(1).max(120)).max(64).optional(),
     conference: calendarConferenceSchema.nullable().optional(),
     mutationState: z.enum(["synced", "queued", "failed"]).optional(),
@@ -151,7 +201,13 @@ export const calendarEventRecurrenceSchema = z
     interval: z.number().int().min(1).max(366),
     endsOn: dateOnlySchema.nullable().optional(),
     count: z.number().int().min(1).max(366).nullable().optional(),
-    byDay: z.array(z.enum(["SU", "MO", "TU", "WE", "TH", "FR", "SA"])).max(7).optional()
+    byDay: z.array(z.enum(["SU", "MO", "TU", "WE", "TH", "FR", "SA"])).max(7).optional(),
+    byMonthDay: z.number().int().min(1).max(31).nullable().optional(),
+    bySetPos: z.number().int().min(-5).max(5).nullable().optional()
+  })
+  .refine((recurrence) => recurrence.bySetPos !== 0, {
+    path: ["bySetPos"],
+    message: "Monthly weekday position cannot be zero"
   })
   .strict();
 
@@ -196,6 +252,11 @@ const calendarEventWriteFieldsSchema = z
     notes: z.string().max(20_000).default(""),
     guestEmails: z.array(guestEmailSchema).max(50).default([]),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).default([]),
+    reminders: z.array(calendarEventReminderSchema).max(10).optional(),
+    remindersUseDefault: z.boolean().optional(),
+    conferenceCreateRequest: calendarConferenceCreateRequestSchema.nullable().optional(),
+    transparency: calendarEventTransparencySchema.nullable().optional(),
+    visibility: calendarEventVisibilitySchema.nullable().optional(),
     tags: z.array(z.string().min(1).max(120)).max(64).optional(),
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     recurrence: calendarEventRecurrenceSchema.nullable().optional(),
@@ -239,6 +300,11 @@ export const calendarEventUpdateRequestSchema = z
     notes: z.string().max(20_000).optional(),
     guestEmails: z.array(guestEmailSchema).max(50).optional(),
     reminderMinutes: z.array(reminderMinutesSchema).max(10).optional(),
+    reminders: z.array(calendarEventReminderSchema).max(10).optional(),
+    remindersUseDefault: z.boolean().optional(),
+    conferenceCreateRequest: calendarConferenceCreateRequestSchema.nullable().optional(),
+    transparency: calendarEventTransparencySchema.nullable().optional(),
+    visibility: calendarEventVisibilitySchema.nullable().optional(),
     tags: z.array(z.string().min(1).max(120)).max(64).optional(),
     colorId: z.string().trim().min(1).max(32).nullable().optional(),
     recurrence: calendarEventRecurrenceSchema.nullable().optional(),
@@ -258,6 +324,11 @@ export const calendarEventUpdateRequestSchema = z
       request.notes !== undefined ||
       request.guestEmails !== undefined ||
       request.reminderMinutes !== undefined ||
+      request.reminders !== undefined ||
+      request.remindersUseDefault !== undefined ||
+      request.conferenceCreateRequest !== undefined ||
+      request.transparency !== undefined ||
+      request.visibility !== undefined ||
       request.tags !== undefined ||
       request.colorId !== undefined ||
       request.recurrence !== undefined ||
@@ -399,6 +470,63 @@ export const calendarScheduleSuggestResponseSchema = z
 export type CalendarScheduleSuggestResponse = z.infer<
   typeof calendarScheduleSuggestResponseSchema
 >;
+
+export const smartRescheduleActionSchema = z.enum(["create", "move"]);
+
+export const smartRescheduleRequestSchema = z
+  .object({
+    date: dateOnlySchema,
+    calendarId: idSchema,
+    taskIds: z.array(idSchema).max(200).optional(),
+    apply: z.boolean().default(false),
+    capacityMinutes: z.number().int().min(5).max(24 * 60).default(480),
+    workingHours: z
+      .object({
+        start: z.number().int().min(0).max(23).default(6),
+        end: z.number().int().min(1).max(24).default(22)
+      })
+      .strict()
+      .default({ start: 6, end: 22 })
+  })
+  .strict()
+  .refine((request) => request.workingHours.end > request.workingHours.start, {
+    path: ["workingHours", "end"],
+    message: "Working hours end must be after start"
+  });
+
+export type SmartRescheduleRequest = z.input<typeof smartRescheduleRequestSchema>;
+
+export const smartRescheduleSuggestionSchema = z
+  .object({
+    taskId: idSchema,
+    calendarId: idSchema,
+    scheduledTaskBlockId: idSchema.optional(),
+    action: smartRescheduleActionSchema,
+    startsAt: isoDateTimeSchema,
+    endsAt: isoDateTimeSchema,
+    durationMinutes: durationMinutesSchema,
+    reason: z.string().min(1).max(1_000)
+  })
+  .strict();
+
+export const smartRescheduleSkippedSchema = z
+  .object({
+    taskId: idSchema,
+    reason: z.string().min(1).max(1_000)
+  })
+  .strict();
+
+export const smartRescheduleResponseSchema = z
+  .object({
+    suggestions: z.array(smartRescheduleSuggestionSchema).max(200),
+    skipped: z.array(smartRescheduleSkippedSchema).max(200),
+    applied: z.boolean(),
+    appliedBlocks: z.array(scheduledTaskBlockSummarySchema).max(200).default([])
+  })
+  .strict();
+
+export type SmartRescheduleSuggestion = z.infer<typeof smartRescheduleSuggestionSchema>;
+export type SmartRescheduleResponse = z.infer<typeof smartRescheduleResponseSchema>;
 
 export const availabilityExportRequestSchema = z
   .object({

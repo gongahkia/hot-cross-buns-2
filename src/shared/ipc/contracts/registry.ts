@@ -38,7 +38,9 @@ import {
   scheduledTaskBlockListResponseSchema,
   scheduledTaskBlockMoveRequestSchema,
   scheduledTaskBlockSummarySchema,
-  scheduledTaskBlockUnscheduleRequestSchema
+  scheduledTaskBlockUnscheduleRequestSchema,
+  smartRescheduleRequestSchema,
+  smartRescheduleResponseSchema
 } from "./calendar";
 import {
   chatClearRequestSchema,
@@ -321,6 +323,12 @@ export const ipcContracts = {
       "scheduleSuggest",
       calendarScheduleSuggestRequestSchema,
       calendarScheduleSuggestResponseSchema
+    ),
+    smartReschedule: defineIpcContract(
+      "calendar",
+      "smartReschedule",
+      smartRescheduleRequestSchema,
+      smartRescheduleResponseSchema
     ),
     exportAvailability: defineIpcContract(
       "calendar",
