@@ -3,6 +3,7 @@ import type {
   AutoTagReapplyApplyResponse,
   AutoTagReapplyPreviewRequest,
   AutoTagReapplyPreviewResponse,
+  AutoTagRule,
   TagAnalyticsResponse,
   TagBulkApplyRequest,
   TagCreateRequest,
@@ -308,22 +309,22 @@ export class TagLocalRepository extends SearchLocalRepository {
   }
 
   previewAutoTagReapply(
-    rules: readonly Parameters<typeof validateAutoTagRule>[0][],
+    rules: readonly AutoTagRule[],
     request: AutoTagReapplyPreviewRequest
   ): AutoTagReapplyPreviewResponse {
     return this.measureSqlite("tags.autoReapplyPreview", () =>
-      this.autoTagReapplyPreview(this.autoTagReapplyChanges(rules, request.kind), request)
+      this.autoTagReapplyPreview(rules, this.autoTagReapplyChanges(rules, request.kind), request)
     );
   }
 
   applyAutoTagReapply(
-    rules: readonly Parameters<typeof validateAutoTagRule>[0][],
+    rules: readonly AutoTagRule[],
     request: AutoTagReapplyApplyRequest
   ): AutoTagReapplyApplyResponse & { changedRefs: TagEntityRef[] } {
     return this.measureSqlite("tags.autoReapplyApply", () => {
       const now = new Date().toISOString();
       const changes = this.autoTagReapplyChanges(rules, request.kind);
-      const preview = this.autoTagReapplyPreview(changes, request);
+      const preview = this.autoTagReapplyPreview(rules, changes, request);
 
       if (preview.blocked || changes.length === 0) {
         return {
@@ -382,6 +383,14 @@ export class TagLocalRepository extends SearchLocalRepository {
     });
   }
 
+  autoTagReapplyChangedRefs(
+    rules: readonly AutoTagRule[],
+    request: AutoTagReapplyPreviewRequest
+  ): TagEntityRef[] {
+    return this.autoTagReapplyChanges(rules, request.kind)
+      .map((change) => ({ kind: change.kind, entityId: change.id }));
+  }
+
   tagEntityRefsForIds(tagIds: readonly string[]): TagEntityRef[] {
     const ids = [...new Set(tagIds)].filter((id) => id.length > 0);
     if (ids.length === 0) {
@@ -396,7 +405,7 @@ export class TagLocalRepository extends SearchLocalRepository {
   }
 
   private autoTagReapplyChanges(
-    rules: readonly Parameters<typeof validateAutoTagRule>[0][],
+    rules: readonly AutoTagRule[],
     kind: AutoTagTargetKind
   ): AutoTagChange[] {
     if (rules.some((rule) => validateAutoTagRule(rule).some((issue) => issue.severity === "error"))) {
@@ -435,10 +444,11 @@ export class TagLocalRepository extends SearchLocalRepository {
   }
 
   private autoTagReapplyPreview(
+    rules: readonly AutoTagRule[],
     changes: AutoTagChange[],
     request: AutoTagReapplyPreviewRequest
   ): AutoTagReapplyPreviewResponse {
-    const invalid = this.autoTagReapplyBlocked();
+    const invalid = this.autoTagReapplyBlocked(rules);
     const scanned = invalid.blocked ? 0 : this.autoTagCandidates(request.kind).length;
 
     if (invalid.blocked) {
@@ -474,8 +484,16 @@ export class TagLocalRepository extends SearchLocalRepository {
     };
   }
 
-  private autoTagReapplyBlocked(): { blocked: boolean; message: string } {
-    return { blocked: false, message: "Auto-tag reapply ready." };
+  private autoTagReapplyBlocked(rules: readonly AutoTagRule[]): { blocked: boolean; message: string } {
+    const errorCount = rules.reduce(
+      (count, rule) =>
+        count + validateAutoTagRule(rule).filter((issue) => issue.severity === "error").length,
+      0
+    );
+
+    return errorCount > 0
+      ? { blocked: true, message: `${errorCount} auto-tag rule error${errorCount === 1 ? "" : "s"} need review.` }
+      : { blocked: false, message: "Auto-tag reapply ready." };
   }
 
   private autoTagCandidates(kind: AutoTagTargetKind): AutoTagCandidate[] {
@@ -635,6 +653,8 @@ function tagSummary(row: TagRow): TagSummary {
     color: row.color,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    firstUsedAt: row.firstUsedAt,
+    lastUsedAt: row.lastUsedAt,
     taskCount: row.taskCount,
     eventCount: row.eventCount,
     noteCount: row.noteCount,
@@ -650,6 +670,8 @@ function tagSummarySelect(): string {
            tags.color AS color,
            tags.created_at AS createdAt,
            tags.updated_at AS updatedAt,
+           MIN(refs.created_at) AS firstUsedAt,
+           MAX(refs.created_at) AS lastUsedAt,
            COALESCE(SUM(CASE WHEN refs.entity_kind = 'task' THEN 1 ELSE 0 END), 0) AS taskCount,
            COALESCE(SUM(CASE WHEN refs.entity_kind = 'event' THEN 1 ELSE 0 END), 0) AS eventCount,
            COALESCE(SUM(CASE WHEN refs.entity_kind = 'note' THEN 1 ELSE 0 END), 0) AS noteCount,

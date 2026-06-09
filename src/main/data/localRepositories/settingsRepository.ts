@@ -4,6 +4,10 @@ import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   portableArchiveManifestSchema,
+  type LocalPointerListRequest,
+  type LocalPointerListResponse,
+  type LocalPointerRepairRequest,
+  type LocalPointerRepairResponse,
   type PortableArchiveManifest,
   type PortableExportResponse,
   type PortableImportPreview,
@@ -986,6 +990,12 @@ export class LocalSettingsRepository {
         missing: attachmentHealth.missing,
         corrupt: attachmentHealth.corrupt,
         skipped: archive.manifest.skippedPointers.length
+      },
+      items: {
+        tasks: portableTableDiffItems(current, archive.state, "google_tasks", "title"),
+        events: portableTableDiffItems(current, archive.state, "google_calendar_events", "summary"),
+        calendars: portableTableDiffItems(current, archive.state, "google_calendar_lists", "summary"),
+        taskLists: portableTableDiffItems(current, archive.state, "google_task_lists", "title")
       }
     };
   }
@@ -1006,6 +1016,116 @@ export class LocalSettingsRepository {
       importedAt: now,
       backupPath: backup.path,
       preview
+    };
+  }
+
+  listLocalPointers(request: LocalPointerListRequest): LocalPointerListResponse {
+    const limit = Math.max(1, Math.min(500, request.limit ?? 100));
+    const includeHealthy = request.includeHealthy === true;
+    const rows = this.localPointerRows()
+      .filter((row) => includeHealthy || !row.exists)
+      .slice(0, limit);
+
+    return {
+      items: rows,
+      totalKnown: rows.length
+    };
+  }
+
+  repairLocalPointer(
+    request: LocalPointerRepairRequest,
+    now = new Date().toISOString()
+  ): LocalPointerRepairResponse {
+    const replacementPointer = request.replacementPath.trim().startsWith("file://")
+      ? request.replacementPath.trim()
+      : pathToFileURL(request.replacementPath.trim()).href;
+    const affected = this.localPointerRows()
+      .filter((row) => row.pointer === request.pointer);
+    let updated = 0;
+    const operations = [];
+
+    for (const row of affected) {
+      if (row.kind === "event") {
+        const event = this.connection.get<{
+          id: string;
+          accountId: string;
+          description: string | null;
+        }>(
+          `SELECT id, account_id AS accountId, description
+           FROM google_calendar_events
+           WHERE id = ? AND deleted_at IS NULL
+           LIMIT 1;`,
+          [row.entityId]
+        );
+        const next = replaceExactPointer(event?.description ?? "", request.pointer, replacementPointer);
+
+        if (!event || next === (event.description ?? "")) {
+          continue;
+        }
+
+        operations.push(
+          {
+            kind: "run" as const,
+            sql: "UPDATE google_calendar_events SET description = ?, updated_at = ? WHERE id = ?;",
+            params: [next, now, row.entityId]
+          },
+          pendingMutationOperation({
+            id: `mutation:event:${randomUUID()}`,
+            accountId: event.accountId,
+            resourceType: "event",
+            resourceId: row.entityId,
+            operation: "calendar.events.update",
+            payload: { id: row.entityId, pointerRepair: true },
+            now
+          })
+        );
+        updated += 1;
+      } else {
+        const task = this.connection.get<{
+          id: string;
+          accountId: string | null;
+          notes: string | null;
+        }>(
+          `SELECT id, account_id AS accountId, notes
+           FROM google_tasks
+           WHERE id = ? AND deleted_at IS NULL
+           LIMIT 1;`,
+          [row.entityId]
+        );
+        const next = replaceExactPointer(task?.notes ?? "", request.pointer, replacementPointer);
+
+        if (!task || next === (task.notes ?? "")) {
+          continue;
+        }
+
+        operations.push(
+          {
+            kind: "run" as const,
+            sql: "UPDATE google_tasks SET notes = ?, updated_at = ? WHERE id = ?;",
+            params: [next, now, row.entityId]
+          },
+          pendingMutationOperation({
+            id: `mutation:task:${randomUUID()}`,
+            accountId: task.accountId,
+            resourceType: "task",
+            resourceId: row.entityId,
+            operation: "task.update",
+            payload: { id: row.entityId, pointerRepair: true },
+            now
+          })
+        );
+        updated += 1;
+      }
+    }
+
+    this.connection.executeTransaction(operations);
+
+    return {
+      pointer: request.pointer,
+      replacementPointer,
+      updated,
+      queued: updated > 0,
+      revision: now
     };
   }
 

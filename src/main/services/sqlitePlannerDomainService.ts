@@ -145,6 +145,34 @@ export function createSqlitePlannerDomainService(
       });
       return applied;
     },
+    previewAutoTagReapply: (request) =>
+      repository.previewAutoTagReapply(autoTagRules(settingsRepository), request),
+    applyAutoTagReapply: (request) => {
+      const rules = autoTagRules(settingsRepository);
+      const refs = repository.autoTagReapplyChangedRefs(rules, request);
+      const before = refs.map((ref) => ({ ref, snapshot: snapshotFor(ref.kind, ref.entityId) }));
+      const applied = repository.applyAutoTagReapply(rules, request);
+
+      if (refs.length > 0) {
+        recordUndoGroup({
+          actionKind: "tags.auto_reapply",
+          label: "Auto-tag reapply",
+          resourceId: `auto-tags:${request.kind}`,
+          changes: before.map(({ ref, snapshot }) => ({
+            actionKind: "tags.auto_reapply",
+            label: "Auto-tag reapply",
+            resourceKind: resourceKindFor(ref.kind),
+            resourceId: ref.entityId,
+            before: snapshot,
+            after: snapshotFor(ref.kind, ref.entityId)
+          }))
+        });
+      }
+
+      const { changedRefs: _changedRefs, ...response } = applied;
+      return response;
+    },
+    tagAnalytics: () => repository.tagAnalytics(),
     listCalendarBootstrapTasks: (request) => repository.listCalendarBootstrapTasks(request),
     getTask: (request) => repository.getTask(request.id),
     createTask: (request) => {
@@ -479,7 +507,27 @@ export function createSqlitePlannerDomainService(
     },
     suggestNoteLinks: (request) => repository.suggestLinkTargets(request),
     listBrokenNoteLinks: (request) => repository.listBrokenNoteLinks(request),
-    search: (request) => repository.search(request),
+    search: (request) => {
+      const settings = settingsRepository?.get();
+      const mode = request.mode ?? settings?.semanticSearchMode ?? "lexical";
+
+      if ((mode === "semantic" || mode === "hybrid") && settings?.semanticSearchEnabled !== true) {
+        const lexical = repository.search({ ...request, mode: "lexical" });
+        return {
+          ...lexical,
+          diagnostics: {
+            mode,
+            semanticEnabled: false,
+            indexedCount: 0,
+            staleCount: 0,
+            modelId: settings?.embeddingModelId ?? "hcb-local-hash-384",
+            fallbackReason: "semantic-disabled" as const
+          }
+        };
+      }
+
+      return repository.search({ ...request, mode });
+    },
     cleanupDuplicates: (request) => {
       const ids = [request.winnerId, ...new Set(request.loserIds)];
       const before = ids.map((id) => ({ id, snapshot: snapshotFor(request.kind, id) }));
