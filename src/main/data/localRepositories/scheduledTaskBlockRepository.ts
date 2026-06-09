@@ -5,7 +5,10 @@ import type {
   ScheduledTaskBlockListResponse,
   ScheduledTaskBlockMoveRequest,
   ScheduledTaskBlockSummary,
-  ScheduledTaskBlockUnscheduleRequest
+  ScheduledTaskBlockUnscheduleRequest,
+  SmartRescheduleRequest,
+  SmartRescheduleResponse,
+  SmartRescheduleSuggestion
 } from "@shared/ipc/contracts";
 import type { SqliteWriteOperation } from "../sqliteConnection";
 import {
@@ -35,9 +38,53 @@ import {
   systemTimeZone,
   validationFailure
 } from "./shared";
-import type { ScheduledTaskBlockRow } from "./types";
+import type { ScheduledTaskBlockRow, TaskRow } from "./types";
+
+interface SmartBusyRange {
+  startsAt: string;
+  endsAt: string;
+  eventId?: string;
+}
 
 export class ScheduledTaskBlockLocalRepository extends CalendarLocalRepository {
+  smartReschedule(request: SmartRescheduleRequest): SmartRescheduleResponse {
+    return this.measureSqlite("calendar.smartReschedule", () => {
+      const preview = this.previewSmartReschedule(request);
+
+      if (!(request.apply ?? false)) {
+        return preview;
+      }
+
+      const appliedBlocks = preview.suggestions.map((suggestion) =>
+        suggestion.action === "move" && suggestion.scheduledTaskBlockId
+          ? this.moveScheduledTaskBlock({
+              id: suggestion.scheduledTaskBlockId,
+              calendarId: suggestion.calendarId,
+              startsAt: suggestion.startsAt,
+              durationMinutes: suggestion.durationMinutes
+            })
+          : this.scheduleTaskBlock({
+              taskId: suggestion.taskId,
+              calendarId: suggestion.calendarId,
+              startsAt: suggestion.startsAt,
+              durationMinutes: suggestion.durationMinutes
+            })
+      );
+
+      this.recordHistory({
+        kind: "schedule.smart_reschedule",
+        summary: "Applied smart reschedule",
+        metadata: { queued: appliedBlocks.length > 0, count: appliedBlocks.length, calendarId: request.calendarId }
+      });
+
+      return {
+        ...preview,
+        applied: true,
+        appliedBlocks
+      };
+    });
+  }
+
   listScheduledTaskBlocks(request: ScheduledTaskBlockListRequest): ScheduledTaskBlockListResponse {
     return this.measureSqlite("calendar.listScheduledTaskBlocks", () => {
       const { limit, offset } = pageBounds(request.cursor, request.limit, 100, 500);
@@ -431,6 +478,148 @@ export class ScheduledTaskBlockLocalRepository extends CalendarLocalRepository {
     });
   }
 
+  private previewSmartReschedule(request: SmartRescheduleRequest): SmartRescheduleResponse {
+    const calendar = this.requireCalendar(request.calendarId);
+    const dayStart = `${request.date}T00:00:00.000Z`;
+    const dayStartMs = Date.parse(dayStart);
+    const dayEnd = new Date(dayStartMs + 24 * 60 * 60 * 1000).toISOString();
+    const workStartMs = dayStartMs + (request.workingHours?.start ?? 6) * 60 * 60 * 1000;
+    const workEndMs = dayStartMs + (request.workingHours?.end ?? 22) * 60 * 60 * 1000;
+    const taskIds = new Set(request.taskIds ?? []);
+    const tasks = this.smartRescheduleTasks(taskIds);
+    const existingBusy = this.busyRangesForSmartReschedule(calendar.id, dayStart, dayEnd);
+    const reserved = [...existingBusy];
+    const suggestions: SmartRescheduleSuggestion[] = [];
+    const skipped: SmartRescheduleResponse["skipped"] = [];
+    let usedMinutes = 0;
+    const capacityMinutes = request.capacityMinutes ?? 480;
+
+    for (const task of tasks.sort(compareSmartRescheduleTasks)) {
+      const existingBlock = this.findScheduledTaskBlockRowForTask(task.id);
+      const durationMinutes = smartTaskDurationMinutes(task);
+      const conflicts = existingBlock
+        ? rangesConflict(existingBlock, existingBusy.filter((range) => range.eventId !== existingBlock.calendarEventId))
+        : false;
+      const reason = smartRescheduleReason(task, existingBlock, dayStartMs, taskIds.size > 0, conflicts);
+
+      if (reason === null) {
+        continue;
+      }
+
+      if (task.lockedSchedule === 1) {
+        skipped.push({ taskId: task.id, reason: "Task has a locked schedule." });
+        continue;
+      }
+
+      if (usedMinutes + durationMinutes > capacityMinutes) {
+        skipped.push({ taskId: task.id, reason: "No remaining capacity in the selected day." });
+        continue;
+      }
+
+      const ignoredEventId = existingBlock?.calendarEventId;
+      const startsAtMs = firstFreeSmartStart(
+        reserved.filter((range) => range.eventId !== ignoredEventId),
+        workStartMs,
+        workEndMs,
+        durationMinutes
+      );
+
+      if (startsAtMs === null) {
+        skipped.push({ taskId: task.id, reason: "No free slot inside working hours." });
+        continue;
+      }
+
+      const startsAt = new Date(startsAtMs).toISOString();
+      const endsAt = addMinutesIso(startsAt, durationMinutes);
+      suggestions.push({
+        taskId: task.id,
+        calendarId: calendar.id,
+        ...(existingBlock ? { scheduledTaskBlockId: existingBlock.id } : {}),
+        action: existingBlock ? "move" : "create",
+        startsAt,
+        endsAt,
+        durationMinutes,
+        reason
+      });
+      reserved.push({ startsAt, endsAt });
+      usedMinutes += durationMinutes;
+    }
+
+    return {
+      suggestions,
+      skipped,
+      applied: false,
+      appliedBlocks: []
+    };
+  }
+
+  private smartRescheduleTasks(taskIds: Set<string>): TaskRow[] {
+    const params: string[] = [];
+    const predicates = [
+      "tasks.deleted_at IS NULL",
+      "tasks.is_hidden = 0",
+      "tasks.status = 'needsAction'",
+      "lists.deleted_at IS NULL"
+    ];
+
+    if (taskIds.size > 0) {
+      predicates.push(`tasks.id IN (${Array.from(taskIds).map(() => "?").join(", ")})`);
+      params.push(...taskIds);
+    }
+
+    return this.connection.query<TaskRow>(
+      `SELECT
+         tasks.id,
+         tasks.account_id AS accountId,
+         tasks.google_id AS googleId,
+         tasks.task_list_id AS listId,
+         lists.google_id AS listGoogleId,
+         lists.title AS listTitle,
+         tasks.title,
+         tasks.status,
+         tasks.notes,
+         tasks.due_at AS dueAt,
+         tasks.parent_task_id AS parentId,
+         tasks.is_hidden AS isHidden,
+         tasks.local_priority AS priority,
+         tasks.sort_order AS sortOrder,
+         tasks.etag,
+         pending.status AS pendingMutationStatus,
+         tasks.updated_at AS updatedAt,
+         tasks.local_planned_start AS plannedStart,
+         tasks.local_planned_end AS plannedEnd,
+         tasks.local_duration_minutes AS durationMinutes,
+         tasks.local_locked_schedule AS lockedSchedule,
+         tasks.local_snooze_until AS snoozeUntil,
+         tasks.local_tags_json AS tagsJson
+       FROM google_tasks tasks
+       INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+       LEFT JOIN (
+         SELECT resource_id, MAX(status) AS status
+         FROM google_pending_mutations
+         WHERE resource_type = 'task'
+           AND status IN ('pending', 'applying', 'failed')
+         GROUP BY resource_id
+       ) pending ON pending.resource_id = tasks.id
+       WHERE ${predicates.join(" AND ")}
+       ORDER BY tasks.local_priority ASC, tasks.due_at ASC, tasks.updated_at DESC
+       LIMIT 500;`,
+      params
+    );
+  }
+
+  private busyRangesForSmartReschedule(calendarId: string, start: string, end: string): SmartBusyRange[] {
+    return this.listCalendarEvents({
+      calendarIds: [calendarId],
+      start,
+      end,
+      limit: 500
+    }).items
+      .filter((event) => event.completedAt === null || event.completedAt === undefined)
+      .filter((event) => event.transparency !== "transparent")
+      .map((event) => ({ startsAt: event.startsAt, endsAt: event.endsAt, eventId: event.eventId ?? event.id }));
+  }
+
   private requireScheduledTaskBlock(id: string): ScheduledTaskBlockSummary {
     const row = this.findScheduledTaskBlockRow(id);
 
@@ -527,4 +716,96 @@ export class ScheduledTaskBlockLocalRepository extends CalendarLocalRepository {
       [taskId]
     );
   }
+}
+
+const smartPriorityRank: Record<string, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+  none: 3
+};
+
+function compareSmartRescheduleTasks(left: TaskRow, right: TaskRow): number {
+  return (smartPriorityRank[left.priority ?? "none"] ?? 3) - (smartPriorityRank[right.priority ?? "none"] ?? 3) ||
+    (left.dueAt ?? "9999").localeCompare(right.dueAt ?? "9999") ||
+    right.updatedAt.localeCompare(left.updatedAt) ||
+    left.id.localeCompare(right.id);
+}
+
+function smartTaskDurationMinutes(task: TaskRow): number {
+  if (typeof task.durationMinutes === "number" && task.durationMinutes > 0) {
+    return Math.min(24 * 60, Math.max(5, task.durationMinutes));
+  }
+
+  if (task.plannedStart && task.plannedEnd) {
+    const duration = Math.round((Date.parse(task.plannedEnd) - Date.parse(task.plannedStart)) / 60_000);
+
+    if (Number.isFinite(duration) && duration > 0) {
+      return Math.min(24 * 60, Math.max(5, duration));
+    }
+  }
+
+  return 30;
+}
+
+function smartRescheduleReason(
+  task: TaskRow,
+  existingBlock: ScheduledTaskBlockRow | undefined,
+  dayStartMs: number,
+  explicitTaskIds: boolean,
+  conflicts: boolean
+): string | null {
+  if (explicitTaskIds) {
+    return existingBlock ? "Selected task will move to the first open slot." : "Selected task will get a scheduled block.";
+  }
+
+  if (task.dueAt && Date.parse(task.dueAt) < dayStartMs) {
+    return "Overdue task scheduled before newer work.";
+  }
+
+  if (!existingBlock && !task.plannedStart) {
+    return "Unscheduled task placed in the first open slot.";
+  }
+
+  if (existingBlock?.status === "orphaned") {
+    return "Orphaned scheduled block will be repaired into a free slot.";
+  }
+
+  if (existingBlock && conflicts) {
+    return "Conflicted scheduled block will move to a free slot.";
+  }
+
+  return null;
+}
+
+function firstFreeSmartStart(
+  ranges: SmartBusyRange[],
+  workStartMs: number,
+  workEndMs: number,
+  durationMinutes: number
+): number | null {
+  let cursor = workStartMs;
+  const durationMs = durationMinutes * 60 * 1000;
+  const sorted = ranges
+    .map((range) => ({ start: Date.parse(range.startsAt), end: Date.parse(range.endsAt) }))
+    .filter((range) => Number.isFinite(range.start) && Number.isFinite(range.end) && range.end > range.start)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+
+  for (const range of sorted) {
+    if (range.end <= cursor) {
+      continue;
+    }
+
+    if (range.start >= cursor + durationMs) {
+      return cursor;
+    }
+
+    cursor = Math.max(cursor, range.end);
+  }
+
+  return cursor + durationMs <= workEndMs ? cursor : null;
+}
+
+function rangesConflict(range: SmartBusyRange, others: SmartBusyRange[]): boolean {
+  return others.some((other) => range.startsAt < other.endsAt && range.endsAt > other.startsAt);
 }

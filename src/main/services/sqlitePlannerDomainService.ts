@@ -458,6 +458,33 @@ export function createSqlitePlannerDomainService(
         }
       });
     },
+    smartReschedule: (request) => {
+      const preview = repository.smartReschedule({ ...request, apply: false });
+      const beforeByBlockId = new Map(
+        preview.suggestions
+          .flatMap((suggestion) => suggestion.scheduledTaskBlockId ? [suggestion.scheduledTaskBlockId] : [])
+          .map((blockId) => [blockId, undoRepository?.scheduledTaskBlockSnapshot(blockId) ?? null])
+      );
+      const result = repository.smartReschedule(request);
+
+      if (request.apply && result.appliedBlocks.length > 0) {
+        recordUndoGroup({
+          actionKind: "scheduled_task_block.smart_reschedule",
+          label: "Smart reschedule",
+          resourceId: result.appliedBlocks[0]?.id ?? "smart-reschedule",
+          changes: result.appliedBlocks.map((block) => ({
+            actionKind: block.id === beforeByBlockId.get(block.id) ? "scheduled_task_block.move" : "scheduled_task_block.smart_reschedule",
+            label: "Smart reschedule",
+            resourceKind: "scheduledTaskBlock",
+            resourceId: block.id,
+            before: beforeByBlockId.get(block.id) ?? null,
+            after: undoRepository?.scheduledTaskBlockSnapshot(block.id) ?? null
+          }))
+        });
+      }
+
+      return result;
+    },
     exportAvailability: (request) => repository.exportAvailability(request),
     listNotes: (request) => repository.listNotes(request),
     createNoteList: (request) => {
