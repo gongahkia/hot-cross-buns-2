@@ -18,6 +18,7 @@ import {
   taskLocalId
 } from "../src/main/sync/readSyncRepository";
 import type {
+  AutoTagRule,
   DiagnosticsHealthResponse,
   DiagnosticsIpcMetricsResponse,
   DiagnosticsPerformanceResponse,
@@ -302,8 +303,26 @@ function collectSqliteBaseline(userDataDir: string): SqliteBaselineResult {
     runLocalDataMigrations(connection);
     const performanceRepository = new LocalPerformanceRepository(connection);
     const plannerRepository = new LocalPlannerRepository(connection, performanceRepository);
+    const settingsRepository = new LocalSettingsRepository(connection);
     const syncRepository = new GoogleSyncRepository(connection);
     const measurements: PerfMeasurement[] = [];
+    const autoTagRule: AutoTagRule = {
+      id: "perf-auto-tag-generated-task",
+      name: "Generated task",
+      enabled: true,
+      targetKinds: ["task", "event", "note"],
+      matchField: "title",
+      matchType: "prefix",
+      pattern: "Generated task 00001",
+      tags: ["perf"],
+      stripMatchedPrefix: false,
+      eventColorId: null,
+      overrideExistingEventColor: false,
+      createdAt: perfFixture.baseTime,
+      updatedAt: perfFixture.baseTime
+    };
+
+    settingsRepository.update({ autoTagRules: [autoTagRule] });
 
     measure(measurements, `sqlite.task-lists.${fixtureSize}`, () =>
       plannerRepository.listTaskLists({ limit: 100 })
@@ -356,6 +375,18 @@ function collectSqliteBaseline(userDataDir: string): SqliteBaselineResult {
            AND (next_retry_at IS NULL OR next_retry_at <= ?);`,
         [perfFixture.baseTime]
       )
+    );
+    measure(measurements, `sqlite.auto-tags.preview-tasks.${fixtureSize}`, () =>
+      plannerRepository.previewAutoTagReapply([autoTagRule], { kind: "task", scope: "all" })
+    );
+    measure(measurements, `sqlite.auto-tags.preview-events.${fixtureSize}`, () =>
+      plannerRepository.previewAutoTagReapply([autoTagRule], { kind: "event", scope: "all" })
+    );
+    measure(measurements, `sqlite.auto-tags.preview-notes.${fixtureSize}`, () =>
+      plannerRepository.previewAutoTagReapply([autoTagRule], { kind: "note", scope: "all" })
+    );
+    measure(measurements, `sqlite.auto-tags.apply-task.${fixtureSize}`, () =>
+      plannerRepository.applyAutoTagReapply([autoTagRule], { kind: "task", scope: "all", confirm: true })
     );
 
     return {

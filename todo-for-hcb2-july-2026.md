@@ -23,16 +23,16 @@ Status key:
 
 1. First-class tags:
    - Status: `Partial`.
-   - Open: background scheduling for backend auto-tag reapply; large-account tag analytics/reapply perf QA.
+   - Open: large-account tag analytics perf QA; manual real-profile auto-tag reapply smoke.
 2. Recurrence correctness:
    - Status: `Partial`.
-   - Open: Google-expanded future-series writes when master data is unavailable; clearer unsupported-state copy; live Google smoke.
+   - Open: live Google smoke for future-series and missing-master recurrence cases.
 3. Boolean/custom search, semantic search, and planning chat:
    - Status: `Partial`.
    - Open: production transformer/vector-extension path, embedding worker/model controls, broader embedding coverage, richer provider health/diagnostics, and MCP-backed action proposals.
 4. Duplicate merge/coalesced cleanup:
    - Status: `Partial`.
-   - Open: stronger mutation compaction; deeper event/note duplicate-resolution QA.
+   - Open: manual real-profile duplicate cleanup smoke for tasks, events, and notes.
 5. Portable export/import verification:
    - Status: `Partial`.
    - Open: manual migration QA on a real profile copy.
@@ -72,13 +72,11 @@ Status key:
 
 - Status: `Verify` for Kanban parity; `Partial` for tags background/perf and duplicate resolution hardening.
 - Verify/finish Kanban parity beyond the current Google-list board if original `KanbanGrouping` behavior is not covered.
-- Add background scheduling for backend auto-tag reapply.
-- Run large-account tag analytics/reapply perf QA.
+- Run large-account tag analytics perf QA.
+- Run manual real-profile auto-tag reapply smoke.
 - Finish bulk tag/untag QA beyond the current bulk tag apply path.
 - Add batched/coalesced mutation-entry perf QA for large bulk edits.
-- Harden duplicate resolution for tasks, events, and notes:
-  - stronger mutation compaction
-  - deeper event/note duplicate-resolution QA
+- Run manual real-profile duplicate cleanup smoke for tasks, events, and notes.
 - Harden Quick Add parser edge cases:
   - time zones
   - broader ambiguous date/time QA
@@ -88,9 +86,7 @@ Status key:
 
 - Status: `Partial`.
 - Harden recurring-event edit scope:
-  - Google-expanded future-series writes when only an instance is cached
-  - clearer unsupported-state copy
-  - live Google smoke
+  - live Google smoke for future-series and missing-master recurrence cases
 - Deferred: attendee invitation/status editing beyond guest email writes. RSVP/status metadata is read/displayed; local writes avoid inventing attendee response state.
 
 ## 4. Linked markdown and knowledge graph
@@ -321,7 +317,7 @@ Status key:
   - ICS import/subscription parsing and refresh
   - encryption
   - rich notification actions and cap diagnostics
-  - recurrence master-missing/live-Google edge cases
+  - recurrence live-Google edge cases
   - extension sandboxing
   - webhook retry/emit coverage
 - Add Playwright/manual QA for:
