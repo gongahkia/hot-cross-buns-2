@@ -69,6 +69,8 @@ import type {
   ScheduledTaskBlockMoveRequest,
   ScheduledTaskBlockSummary,
   ScheduledTaskBlockUnscheduleRequest,
+  SmartRescheduleRequest,
+  SmartRescheduleResponse,
   SettingsSnapshot,
   SettingsUpdateRequest,
   AutoTagReapplyApplyRequest,
@@ -287,6 +289,9 @@ export interface PlannerViewDomainService {
   scheduleSuggest: (
     request: CalendarScheduleSuggestRequest
   ) => MaybePromise<CalendarScheduleSuggestResponse>;
+  smartReschedule: (
+    request: SmartRescheduleRequest
+  ) => MaybePromise<SmartRescheduleResponse>;
   exportAvailability: (
     request: AvailabilityExportRequest
   ) => MaybePromise<AvailabilityExportResponse>;
