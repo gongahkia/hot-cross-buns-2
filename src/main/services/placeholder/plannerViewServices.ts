@@ -356,7 +356,11 @@ export function createPlaceholderPlannerViewService(
         timeZone: state.settings.defaultTimeZone,
         recurrenceRule: recurrenceRuleFromRequest(request.recurrence ?? null),
         guestEmails: request.guestEmails ?? [],
-        reminderMinutes: request.reminderMinutes ?? []
+        reminderMinutes: request.reminderMinutes ?? [],
+        reminders: request.reminders ?? request.reminderMinutes?.map((minutes) => ({ method: "popup", minutes })),
+        remindersUseDefault: request.remindersUseDefault ?? false,
+        transparency: request.transparency ?? null,
+        visibility: request.visibility ?? null
       };
 
       state.calendarEvents.unshift(event);
@@ -380,6 +384,10 @@ export function createPlaceholderPlannerViewService(
         ...(request.notes === undefined ? {} : { notes: request.notes }),
         ...(request.guestEmails === undefined ? {} : { guestEmails: request.guestEmails }),
         ...(request.reminderMinutes === undefined ? {} : { reminderMinutes: request.reminderMinutes }),
+        ...(request.reminders === undefined ? {} : { reminders: request.reminders }),
+        ...(request.remindersUseDefault === undefined ? {} : { remindersUseDefault: request.remindersUseDefault }),
+        ...(request.transparency === undefined ? {} : { transparency: request.transparency }),
+        ...(request.visibility === undefined ? {} : { visibility: request.visibility }),
         ...(request.recurrence === undefined
           ? {}
           : { recurrenceRule: recurrenceRuleFromRequest(request.recurrence) }),

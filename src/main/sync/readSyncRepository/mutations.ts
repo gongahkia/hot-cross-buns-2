@@ -392,8 +392,12 @@ export function calendarEventMutationTarget(
     isAllDay: number;
     recurrenceRule: string | null;
     colorId: string | null;
+    transparency: string | null;
+    visibility: string | null;
     attendeeEmailsJson: string;
     reminderMinutesJson: string;
+    remindersJson: string;
+    remindersUseDefault: number;
     etag: string | null;
     deletedAt: string | null;
   }>(
@@ -414,8 +418,12 @@ export function calendarEventMutationTarget(
        events.is_all_day AS isAllDay,
        events.recurrence_rule AS recurrenceRule,
        events.color_id AS colorId,
+       events.transparency AS transparency,
+       events.visibility AS visibility,
        events.attendee_emails_json AS attendeeEmailsJson,
        events.reminder_minutes_json AS reminderMinutesJson,
+       events.reminders_json AS remindersJson,
+       events.reminders_use_default AS remindersUseDefault,
        events.etag AS etag,
        events.deleted_at AS deletedAt
      FROM google_calendar_events events
@@ -444,8 +452,12 @@ export function calendarEventMutationTarget(
         isAllDay: row.isAllDay === 1,
         recurrenceRule: row.recurrenceRule,
         colorId: row.colorId,
+        transparency: row.transparency,
+        visibility: row.visibility,
         attendeeEmails: parseJsonStringArray(row.attendeeEmailsJson),
         reminderMinutes: parseJsonNumberArray(row.reminderMinutesJson),
+        reminders: parseReminderObjects(row.remindersJson, parseJsonNumberArray(row.reminderMinutesJson)),
+        remindersUseDefault: row.remindersUseDefault === 1,
         etag: row.etag,
         deletedAt: row.deletedAt
       };
@@ -515,6 +527,33 @@ function pendingMutationFromRow(row: PendingGoogleMutationRow): PendingGoogleMut
     updatedAt: row.updatedAt,
     appliedAt: row.appliedAt
   };
+}
+
+function parseReminderObjects(
+  value: string,
+  fallbackMinutes: number[]
+): Array<{ method: "popup" | "email"; minutes: number }> {
+  const parsed = parseJsonValue(value);
+
+  if (!Array.isArray(parsed)) {
+    return fallbackMinutes.map((minutes) => ({ method: "popup", minutes }));
+  }
+
+  return parsed.flatMap((entry): Array<{ method: "popup" | "email"; minutes: number }> => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      return [];
+    }
+
+    const source = entry as Record<string, unknown>;
+    const method = source.method;
+    const minutes = source.minutes;
+
+    if ((method !== "popup" && method !== "email") || typeof minutes !== "number" || !Number.isInteger(minutes)) {
+      return [];
+    }
+
+    return minutes >= 0 && minutes <= 28 * 24 * 60 ? [{ method, minutes }] : [];
+  });
 }
 
 function pendingMutationResourceType(value: string): PendingGoogleMutationResourceType {

@@ -632,6 +632,46 @@ function numberArrayPayload(mutation: PendingGoogleMutation, key: string): numbe
     : null;
 }
 
+function reminderArrayPayload(
+  mutation: PendingGoogleMutation,
+  key: string
+): Array<{ method: "popup" | "email"; minutes: number }> | null {
+  if (!isJsonObject(mutation.payload)) {
+    return null;
+  }
+
+  const value = mutation.payload[key];
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.flatMap((item): Array<{ method: "popup" | "email"; minutes: number }> => {
+    if (!isJsonObject(item)) {
+      return [];
+    }
+
+    const method = item.method;
+    const minutes = item.minutes;
+
+    if ((method !== "popup" && method !== "email") || typeof minutes !== "number" || !Number.isInteger(minutes)) {
+      return [];
+    }
+
+    return minutes >= 0 && minutes <= 28 * 24 * 60 ? [{ method, minutes }] : [];
+  });
+}
+
+function conferenceCreateRequestPayload(mutation: PendingGoogleMutation): { type: "hangoutsMeet" } | null {
+  if (!isJsonObject(mutation.payload) || !isJsonObject(mutation.payload.conferenceCreateRequest)) {
+    return null;
+  }
+
+  return mutation.payload.conferenceCreateRequest.type === "hangoutsMeet"
+    ? { type: "hangoutsMeet" }
+    : null;
+}
+
 function calendarEventWriteInput(
   target: CalendarEventMutationTarget,
   mutation: PendingGoogleMutation
@@ -652,7 +692,9 @@ function calendarEventWriteInput(
       isAllDay: true,
       recurrenceRule: "RRULE:FREQ=YEARLY",
       colorId: textPayload(mutation, "colorId") ?? target.colorId,
-      reminderMinutes: numberArrayPayload(mutation, "reminderMinutes") ?? target.reminderMinutes
+      reminderMinutes: numberArrayPayload(mutation, "reminderMinutes") ?? target.reminderMinutes,
+      reminders: reminderArrayPayload(mutation, "reminders") ?? target.reminders,
+      remindersUseDefault: booleanPayload(mutation, "remindersUseDefault") ?? target.remindersUseDefault
     };
   }
 
@@ -667,8 +709,24 @@ function calendarEventWriteInput(
     isAllDay: booleanPayload(mutation, "allDay") ?? target.isAllDay,
     recurrenceRule: textPayload(mutation, "recurrenceRule") ?? target.recurrenceRule,
     colorId: textPayload(mutation, "colorId") ?? target.colorId,
+    transparency: textPayload(mutation, "transparency") === "transparent" ||
+    textPayload(mutation, "transparency") === "opaque"
+      ? textPayload(mutation, "transparency") as "transparent" | "opaque"
+      : target.transparency === "transparent" || target.transparency === "opaque"
+        ? target.transparency
+        : null,
+    visibility: textPayload(mutation, "visibility") === "default" ||
+    textPayload(mutation, "visibility") === "public" ||
+    textPayload(mutation, "visibility") === "private"
+      ? textPayload(mutation, "visibility") as "default" | "public" | "private"
+      : target.visibility === "default" || target.visibility === "public" || target.visibility === "private"
+        ? target.visibility
+        : null,
     attendeeEmails: stringArrayPayload(mutation, "guestEmails") ?? target.attendeeEmails,
-    reminderMinutes: numberArrayPayload(mutation, "reminderMinutes") ?? target.reminderMinutes
+    reminderMinutes: numberArrayPayload(mutation, "reminderMinutes") ?? target.reminderMinutes,
+    reminders: reminderArrayPayload(mutation, "reminders") ?? target.reminders,
+    remindersUseDefault: booleanPayload(mutation, "remindersUseDefault") ?? target.remindersUseDefault,
+    conferenceCreateRequest: conferenceCreateRequestPayload(mutation)
   };
 }
 
