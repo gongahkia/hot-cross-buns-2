@@ -343,10 +343,12 @@ export class TagLocalRepository extends SearchLocalRepository {
           if (change.kind === "event") {
             this.updateCalendarEvent({
               id: change.id,
-              title: change.nextTitle,
-              notes: change.nextBody,
+              ...(change.nextTitle === change.title ? {} : { title: change.nextTitle }),
+              ...(change.nextBody === change.body ? {} : { notes: change.nextBody }),
               tags: change.nextTags,
-              colorId: change.nextEventColorId ?? change.eventColorId ?? null,
+              ...((change.nextEventColorId ?? null) === (change.eventColorId ?? null)
+                ? {}
+                : { colorId: change.nextEventColorId ?? null }),
               scope: "seriesAll"
             });
           } else if (change.kind === "note") {
@@ -359,8 +361,8 @@ export class TagLocalRepository extends SearchLocalRepository {
           } else {
             this.updateTask({
               id: change.id,
-              title: change.nextTitle,
-              notes: change.nextBody,
+              ...(change.nextTitle === change.title ? {} : { title: change.nextTitle }),
+              ...(change.nextBody === change.body ? {} : { notes: change.nextBody }),
               tags: change.nextTags
             });
           }

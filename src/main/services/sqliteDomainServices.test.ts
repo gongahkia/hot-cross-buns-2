@@ -757,6 +757,12 @@ describe("SQLite-backed domain services", () => {
     const preview = await domain.settings.previewPortableImport({ path: firstExport.path });
 
     expect(preview.tasks.changed).toBe(1);
+    expect(preview.items?.tasks).toEqual([
+      expect.objectContaining({
+        id: "acct-1:task:inbox:task-1",
+        change: "changed"
+      })
+    ]);
     expect(preview.attachments).toMatchObject({
       bundled: 1,
       corrupt: 0,
@@ -774,6 +780,39 @@ describe("SQLite-backed domain services", () => {
     expect(restored.title).toBe("Draft inbox triage rules");
     expect(restored.notes).toContain("file://");
     expect(restored.notes).not.toContain(attachmentUrl);
+  });
+
+  it("lists and repairs missing local file pointers", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const missingUrl = pathToFileURL(join(temp?.directory ?? "", "missing.txt")).href;
+    const replacementPath = join(temp?.directory ?? "", "replacement.txt");
+
+    writeFileSync(replacementPath, "replacement bytes", "utf8");
+    await domain.planner.updateTask({
+      id: "acct-1:task:inbox:task-1",
+      notes: `Missing ${missingUrl}`
+    });
+
+    const pointers = await domain.settings.listLocalPointers({ includeHealthy: false, limit: 10 });
+    expect(pointers.items).toEqual([
+      expect.objectContaining({
+        pointer: missingUrl,
+        kind: "task",
+        entityId: "acct-1:task:inbox:task-1",
+        exists: false
+      })
+    ]);
+
+    const repaired = await domain.settings.repairLocalPointer({
+      pointer: missingUrl,
+      replacementPath,
+      confirm: true
+    });
+    const replacementUrl = pathToFileURL(replacementPath).href;
+
+    expect(repaired).toMatchObject({ updated: 1, queued: true, replacementPointer: replacementUrl });
+    expect((await domain.planner.getTask({ id: "acct-1:task:inbox:task-1" })).notes).toContain(replacementUrl);
   });
 
   it("honors portable export task list, calendar, and future-event filters", async () => {
@@ -1876,6 +1915,41 @@ describe("SQLite-backed domain services", () => {
     });
   });
 
+  it("reapplies auto tags across cached tasks through one undo entry", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const createdAt = "2026-06-06T00:00:00.000Z";
+
+    await domain.settings.update({
+      autoTagRules: [{
+        id: "auto-draft",
+        name: "Draft",
+        enabled: true,
+        targetKinds: ["task"],
+        matchField: "title",
+        matchType: "prefix",
+        pattern: "Draft",
+        tags: ["draft"],
+        stripMatchedPrefix: false,
+        eventColorId: null,
+        overrideExistingEventColor: false,
+        createdAt,
+        updatedAt: createdAt
+      }]
+    });
+
+    const preview = await domain.planner.previewAutoTagReapply({ kind: "task", scope: "all" });
+    expect(preview).toMatchObject({ kind: "task", blocked: false, changed: 1 });
+
+    const applied = await domain.planner.applyAutoTagReapply({ kind: "task", scope: "all", confirm: true });
+    expect(applied).toMatchObject({ changed: 1, queued: true, undoLabel: "Auto-tag reapply" });
+    expect((await domain.planner.getTask({ id: "acct-1:task:inbox:task-1" })).tags).toEqual(["draft"]);
+    expect(await domain.undo.status()).toMatchObject({ canUndo: true, undoLabel: "Auto-tag reapply" });
+
+    await domain.undo.undo();
+    expect((await domain.planner.getTask({ id: "acct-1:task:inbox:task-1" })).tags).toEqual([]);
+  });
+
   it("updates event tags locally without adding a Google mutation", async () => {
     const { domain, syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);
@@ -2043,6 +2117,17 @@ describe("SQLite-backed domain services", () => {
       canUndo: true,
       undoLabel: "Merge duplicate group"
     });
+    expect(
+      syncRepository.listActivePendingMutations({ limit: 50 })
+        .filter((mutation) => [winnerId, loser.id].includes(mutation.resourceId))
+        .map((mutation) => mutation.payload as Record<string, unknown>)
+    ).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        cleanupKind: "task",
+        cleanupWinnerId: winnerId,
+        cleanupLoserIds: [loser.id]
+      })
+    ]));
 
     await domain.undo.undo();
     expect(await domain.planner.getTask({ id: winnerId })).toMatchObject({
@@ -2126,6 +2211,18 @@ describe("SQLite-backed domain services", () => {
       title: "Cache-first startup",
       body: "Renderer should paint from SQLite before fresh sync completes."
     });
+
+    const disabled = await domain.planner.search({
+      query: "cache startup",
+      mode: "semantic",
+      limit: 10
+    });
+    expect(disabled.diagnostics).toMatchObject({
+      mode: "semantic",
+      semanticEnabled: false,
+      fallbackReason: "semantic-disabled"
+    });
+
     await domain.settings.update({ semanticSearchEnabled: true });
 
     const semantic = await domain.planner.search({
