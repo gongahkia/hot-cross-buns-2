@@ -61,7 +61,7 @@ Status key:
 - Quick-add/NL parsing has meaningful code and tests, including recurrence handling, but not the full chrono-style parser depth listed below.
 - Calendar recurrence UI exists. Edit/delete scope selection now reaches repository writes; whole-series, Google-backed occurrence edits/deletes, and locally materialized future-series splits are covered by focused tests. Google-expanded future-series edits still fail fast when the master series is unavailable; deeper RRULE editor depth and live Google smoke remain open.
 - Search/filter depth is partial: advanced parser-backed operators, boolean `AND`/`OR`/`NOT`, saved-search settings, pinned filters, and command-palette pinned filter chips exist. Semantic search, local LLM, and chat sidebar remain open.
-- Portable data has real `.hcbexport` export/preview/import with deterministic state JSON, manifest SHA-256, attachment bundling/relinking, pre-import backup, and focused tests. ICS import/subscriptions and local pointer repair UI remain open.
+- Portable data has real `.hcbexport` export/preview/import with deterministic state JSON, selected list/calendar/future filters, manifest SHA-256, attachment bundling/relinking, pre-import backup, and focused tests. ICS import/subscriptions and local pointer repair UI remain open.
 
 ### Missing / not implemented yet
 
@@ -91,7 +91,7 @@ Status key:
    - Status: `Partial`; duplicate group merge is implemented for loaded tasks/events/notes.
    - Remaining: coalesced undo/mutation entries and deeper duplicate-resolution QA.
 5. Portable export/import verification or implementation:
-   - Status: `Partial`; deterministic `.hcbexport`, dry-run import diff, attachment bundling/relinking, and pre-import backups exist.
+   - Status: `Partial`; deterministic `.hcbexport`, selected list/calendar/future filters, dry-run import diff, attachment bundling/relinking, and pre-import backups exist.
    - Remaining: local pointer repair UI, richer item-level preview, `.hcb2export` naming decision, and manual migration QA.
 6. Agent-native MCP/CLI v2:
    - Status: `Partial`; `hcb brief`, `hcb tail`, `hcb plan`, `hcb_brief`, `hcb_tail`, `hcb_plan`, resources, and prompts are implemented.
@@ -357,7 +357,7 @@ Status key:
 
 ## 6. Data, import/export, and local files
 
-- Status: `Partial`; portable `.hcbexport` export/preview/import now writes manifest/state/Attachments, deterministic table JSON, SHA-256 checks, bundled attachment copies, skipped pointer reporting, destructive import preview, pre-import backup, and attachment relinking.
+- Status: `Partial`; portable `.hcbexport` export/preview/import now writes manifest/state/Attachments, deterministic table JSON, selected list/calendar/future filters, SHA-256 checks, bundled attachment copies, skipped pointer reporting, destructive import preview, pre-import backup, and attachment relinking.
 - Harden portable `.hcbexport` / `.hcb2export` workflow:
   - richer item-level preview
   - local pointer repair UI

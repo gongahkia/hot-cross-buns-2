@@ -764,6 +764,151 @@ describe("SQLite-backed domain services", () => {
     expect(restored.notes).not.toContain(attachmentUrl);
   });
 
+  it("honors portable export task list, calendar, and future-event filters", async () => {
+    const { domain, settingsRepository, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    syncRepository.writeTaskLists(
+      "acct-1",
+      [{ id: "archive", title: "Archive", updatedAt: now }],
+      now
+    );
+    syncRepository.writeTasks(
+      "acct-1",
+      "archive",
+      [
+        {
+          id: "task-3",
+          taskListId: "archive",
+          title: "Archived task",
+          status: "needsAction",
+          deleted: false,
+          hidden: false,
+          updatedAt: now
+        }
+      ],
+      { fullSync: true, now }
+    );
+    syncRepository.writeCalendarLists(
+      "acct-1",
+      [
+        {
+          id: "marketing",
+          summary: "Marketing",
+          timeZone: "UTC",
+          isSelected: true,
+          isHidden: false,
+          isPrimary: false,
+          updatedAt: now
+        }
+      ],
+      now
+    );
+    syncRepository.writeCalendarEvents(
+      "acct-1",
+      "product",
+      [
+        {
+          id: "past",
+          calendarId: "product",
+          status: "confirmed",
+          summary: "Past product",
+          startAt: "2026-05-01T09:00:00.000Z",
+          endAt: "2026-05-01T09:30:00.000Z",
+          isAllDay: false,
+          updatedAt: now
+        },
+        {
+          id: "future",
+          calendarId: "product",
+          status: "confirmed",
+          summary: "Future product",
+          startAt: "2026-06-02T09:00:00.000Z",
+          endAt: "2026-06-02T09:30:00.000Z",
+          isAllDay: false,
+          updatedAt: now
+        }
+      ],
+      { fullSync: true, now, defaultTimeZone: "UTC" }
+    );
+    syncRepository.writeCalendarEvents(
+      "acct-1",
+      "marketing",
+      [
+        {
+          id: "future",
+          calendarId: "marketing",
+          status: "confirmed",
+          summary: "Future marketing",
+          startAt: "2026-06-02T10:00:00.000Z",
+          endAt: "2026-06-02T10:30:00.000Z",
+          isAllDay: false,
+          updatedAt: now
+        }
+      ],
+      { fullSync: true, now, defaultTimeZone: "UTC" }
+    );
+    syncRepository.enqueuePendingMutation({
+      accountId: "acct-1",
+      resourceType: "task",
+      resourceId: "acct-1:task:inbox:task-1",
+      operation: "tasks.update",
+      payload: {},
+      now
+    });
+    syncRepository.enqueuePendingMutation({
+      accountId: "acct-1",
+      resourceType: "task",
+      resourceId: "acct-1:task:archive:task-3",
+      operation: "tasks.update",
+      payload: {},
+      now
+    });
+    syncRepository.enqueuePendingMutation({
+      accountId: "acct-1",
+      resourceType: "event",
+      resourceId: "acct-1:event:product:future",
+      operation: "calendar.events.update",
+      payload: {},
+      now
+    });
+    syncRepository.enqueuePendingMutation({
+      accountId: "acct-1",
+      resourceType: "event",
+      resourceId: "acct-1:event:marketing:future",
+      operation: "calendar.events.update",
+      payload: {},
+      now
+    });
+    await domain.settings.update({
+      selectedTaskListIds: ["acct-1:task-list:inbox"],
+      selectedCalendarIds: ["acct-1:calendar:product"],
+      portableExportOnlySelectedTaskLists: true,
+      portableExportOnlySelectedCalendars: true,
+      portableExportOnlyFutureCurrentEvents: true
+    });
+
+    const exported = settingsRepository.exportPortableArchive("2026-06-01T00:00:00.000Z");
+    const state = JSON.parse(
+      readFileSync(join(exported.path, "hot-cross-buns-2-state.json"), "utf8")
+    ) as { tables: Record<string, { rows: Array<Record<string, unknown>> }> };
+    const rowIds = (table: string) => state.tables[table]?.rows.map((row) => row.id).sort() ?? [];
+    const mutationResourceIds = state.tables.google_pending_mutations.rows
+      .map((row) => row.resource_id)
+      .sort();
+
+    expect(rowIds("google_task_lists")).toEqual(["acct-1:task-list:inbox"]);
+    expect(rowIds("google_tasks")).toEqual([
+      "acct-1:task:inbox:task-1",
+      "acct-1:task:inbox:task-2"
+    ]);
+    expect(rowIds("google_calendar_lists")).toEqual(["acct-1:calendar:product"]);
+    expect(rowIds("google_calendar_events")).toEqual(["acct-1:event:product:future"]);
+    expect(mutationResourceIds).toEqual([
+      "acct-1:event:product:future",
+      "acct-1:task:inbox:task-1"
+    ]);
+  });
+
   it("deletes note lists by deleting the backing task list", async () => {
     const { domain } = createTestServices();
     const list = await domain.planner.createNoteList({ title: "Side notes" });
