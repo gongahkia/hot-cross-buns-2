@@ -46,7 +46,10 @@ function ensureEventColumns(connection: SqliteConnection, defaultTimeZone: strin
   };
 
   addColumn("attendee_emails_json", "attendee_emails_json TEXT NOT NULL DEFAULT '[]'");
+  addColumn("attendee_details_json", "attendee_details_json TEXT NOT NULL DEFAULT '[]'");
   addColumn("reminder_minutes_json", "reminder_minutes_json TEXT NOT NULL DEFAULT '[]'");
+  addColumn("reminders_json", "reminders_json TEXT NOT NULL DEFAULT '[]'");
+  addColumn("reminders_use_default", "reminders_use_default INTEGER NOT NULL DEFAULT 0");
   addColumn("conference_json", "conference_json TEXT");
   addColumn("recurrence_rule", "recurrence_rule TEXT");
   addColumn("local_time_zone", "local_time_zone TEXT");
@@ -325,7 +328,10 @@ CREATE TABLE IF NOT EXISTS google_calendar_events (
   hcb_kind TEXT,
   local_tags_json TEXT NOT NULL DEFAULT '[]',
   attendee_emails_json TEXT NOT NULL DEFAULT '[]',
+  attendee_details_json TEXT NOT NULL DEFAULT '[]',
   reminder_minutes_json TEXT NOT NULL DEFAULT '[]',
+  reminders_json TEXT NOT NULL DEFAULT '[]',
+  reminders_use_default INTEGER NOT NULL DEFAULT 0,
   conference_json TEXT,
   etag TEXT,
   sequence INTEGER,

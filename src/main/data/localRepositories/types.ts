@@ -80,12 +80,17 @@ export interface CalendarEventRow extends Record<string, unknown> {
   location: string | null;
   notes: string | null;
   guestEmailsJson: string | null;
+  attendeeDetailsJson: string | null;
   reminderMinutesJson: string | null;
+  remindersJson: string | null;
+  remindersUseDefault: number | null;
   conferenceJson: string | null;
   pendingMutationStatus?: "pending" | "applying" | "failed" | null;
   timeZone: string | null;
   recurrenceRule: string | null;
   colorId: string | null;
+  transparency: string | null;
+  visibility: string | null;
   tagsJson?: string | null;
   recurringEventId: string | null;
   originalStartAt: string | null;

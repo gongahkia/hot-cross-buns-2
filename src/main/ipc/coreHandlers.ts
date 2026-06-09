@@ -45,6 +45,7 @@ import {
   type ScheduledTaskBlockListRequest,
   type ScheduledTaskBlockMoveRequest,
   type ScheduledTaskBlockUnscheduleRequest,
+  type SmartRescheduleRequest,
   type SettingsRecoveryActionRequest,
   type SettingsUpdateRequest,
   type SyncRunNowRequest,
@@ -261,6 +262,12 @@ export function createCoreIpcHandlers(
       contract: ipcContracts.calendar.scheduleSuggest,
       handle: (request) =>
         services.planner.scheduleSuggest(request as CalendarScheduleSuggestRequest)
+    },
+    {
+      contract: ipcContracts.calendar.smartReschedule,
+      handle: withMutationDrain((request) =>
+        services.planner.smartReschedule(request as SmartRescheduleRequest)
+      )
     },
     {
       contract: ipcContracts.calendar.exportAvailability,
