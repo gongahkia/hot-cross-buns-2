@@ -151,13 +151,11 @@ export function usePaneWorkspace(): {
   }, []);
 
   const replaceFocusedWithSection = useCallback((sectionId: SectionId): void => {
-    const resolvedSectionId = sectionId === "today" ? "calendar" : sectionId;
-
     setState((current) => ({
       ...current,
       root: replacePaneContent(current.root, current.focusedPaneId, {
         kind: "section",
-        sectionId: resolvedSectionId
+        sectionId
       })
     }));
   }, []);

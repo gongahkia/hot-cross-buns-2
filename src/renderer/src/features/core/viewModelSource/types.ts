@@ -135,20 +135,6 @@ export interface CoreViewModelSource {
   syncStatus: SyncStatusResponse;
   taskFilterViewModels: TaskFilterViewModel[];
   taskLists: TaskListSummary[];
-  todayViewModel: {
-    metrics: Array<{ id: string; label: string; value: string }>;
-    focusTasks: TaskViewModel[];
-    currentTimeLabel: string;
-    conflictCount: number;
-    schedule: CalendarScheduleSuggestResponse;
-    nextUp: {
-      kind: "event" | "scheduledTaskBlock";
-      itemId: string;
-      title: string;
-      detail: string;
-    } | null;
-    timelineRows: Array<{ kind: "task" | "event" | "scheduledTaskBlock"; itemId: string }>;
-  };
 }
 
 export interface CalendarRangeLoadRequest {
@@ -257,6 +243,7 @@ export interface CoreViewModelSourceOptions {
   completeEvent: (eventId: string, scope?: CalendarEventCompletionScope) => Promise<boolean>;
   reopenEvent: (eventId: string, scope?: CalendarEventCompletionScope) => Promise<boolean>;
   moveTask: (request: TaskMoveRequest) => Promise<boolean>;
+  bulkRescheduleTasks: (request: TaskBulkRescheduleRequest) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
   createTaskList: (request: TaskListCreateRequest) => Promise<boolean>;
   renameTaskList: (request: TaskListRenameRequest) => Promise<boolean>;

@@ -38,7 +38,7 @@ export interface StoredPaneWorkspace {
   root: PaneNode;
 }
 
-const validSectionIds = new Set(["today", "tasks", "calendar", "notes", "settings"]);
+const validSectionIds = new Set(["tasks", "calendar", "notes", "settings"]);
 let paneIdCounter = 0;
 
 export function createPaneId(): string {

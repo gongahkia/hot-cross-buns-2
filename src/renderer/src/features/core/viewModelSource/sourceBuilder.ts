@@ -6,11 +6,8 @@ import {
 import type { CalendarEventViewModel, NoteViewModel, TaskViewModel } from "../coreViewModels";
 import {
   buildCalendarEventDayIndex,
-  compareTimelineRows,
   dayView,
-  eventsForDate,
   monthWeeks,
-  nextUpTimelineItem,
   scheduledTaskBlockConflicts,
   scheduledTaskBlockViewModel,
   stableCalendarEventViewModel,
@@ -18,7 +15,7 @@ import {
   stableTaskCalendarEventViewModel,
   weekDays
 } from "./calendarViewModels";
-import { dayKey, shortDateTime, startOfUtcDay, syncLabel, timeLabel } from "./dateFormat";
+import { shortDateTime } from "./dateFormat";
 import { idleSearchViewModel } from "./searchViewModels";
 import { settingsSections } from "./settingsViewModels";
 import { hasSnapshotData } from "./snapshot";
@@ -125,14 +122,12 @@ export function buildCoreViewModelSource(
       conflictTitlesByBlockId.get(block.id) ?? []
     )
   );
-  const scheduledTaskIds = new Set(baseScheduledTaskBlocks.map((block) => block.taskId));
   const rootTasks = tasks.filter((task) => task.parentId === null);
   const openTasks = rootTasks.filter((task) => task.status === "open");
   const openDatedTasks = openTasks.filter((task) => task.dueDate !== null);
   const openUndatedTasks = openTasks.filter((task) => task.dueDate === null);
   const notes = openUndatedTasks.map((task) => taskBackedNoteViewModel(task));
   const noteLists = taskBackedNoteLists(snapshot.taskLists, notes);
-  const unscheduledOpenTasks = openDatedTasks.filter((task) => !scheduledTaskIds.has(task.id));
   const completedTasks = rootTasks.filter((task) => task.status === "completed");
   const hiddenTasks = rootTasks.filter((task) => task.status === "hidden");
   const deletedTasks = rootTasks.filter((task) => task.status === "deleted");
@@ -158,39 +153,10 @@ export function buildCoreViewModelSource(
     );
   const calendarItems = [...events, ...taskCalendarEvents];
   const eventDayIndex = buildCalendarEventDayIndex(calendarItems);
-  const now = new Date();
-  const today = startOfUtcDay(now);
-  const todayKey = dayKey(today);
-  const todayEvents = eventsForDate(eventDayIndex, today).filter(
-    (event) =>
-      !event.completedAt &&
-      !scheduledEventIds.has(event.eventId) &&
-      !scheduledEventIds.has(event.id)
-  );
-  const baseTodayScheduledBlocks = baseScheduledTaskBlocks
-    .filter((block) => block.startsAt.slice(0, 10) === todayKey)
-    .sort(
-      (left, right) =>
-        left.startsAt.localeCompare(right.startsAt) ||
-        left.endsAt.localeCompare(right.endsAt) ||
-        left.id.localeCompare(right.id)
-    );
-  const nextUp = nextUpTimelineItem(todayEvents, baseTodayScheduledBlocks, now);
-  const scheduledTaskBlocks = baseScheduledTaskBlocks.map((block) => ({
-    ...block,
-    isNextUp: nextUp?.kind === "scheduledTaskBlock" && nextUp.itemId === block.id
-  }));
+  const scheduledTaskBlocks = baseScheduledTaskBlocks;
   const scheduledTaskBlocksById = Object.fromEntries(
     scheduledTaskBlocks.map((block) => [block.id, block])
   );
-  const todayScheduledBlocks = scheduledTaskBlocks
-    .filter((block) => block.startsAt.slice(0, 10) === todayKey)
-    .sort(
-      (left, right) =>
-        left.startsAt.localeCompare(right.startsAt) ||
-        left.endsAt.localeCompare(right.endsAt) ||
-        left.id.localeCompare(right.id)
-    );
   const taskFilterViewModels = taskFilters(
     openDatedTasks,
     completedTasks,
@@ -203,26 +169,6 @@ export function buildCoreViewModelSource(
     notes: snapshot.diagnosticsSummary?.cache.noteCount ?? snapshot.resourceCounts.notes,
     tasks: snapshot.diagnosticsSummary?.cache.taskCount ?? snapshot.resourceCounts.tasks
   };
-  const todayTimedRows = [
-    ...todayEvents.map((event) => ({
-      kind: "event" as const,
-      itemId: event.id,
-      startsAt: event.startsAt,
-      endsAt: event.endsAt
-    })),
-    ...todayScheduledBlocks.map((block) => ({
-      kind: "scheduledTaskBlock" as const,
-      itemId: block.id,
-      startsAt: block.startsAt,
-      endsAt: block.endsAt
-    }))
-  ].sort(compareTimelineRows);
-  const todayTimelineRows = [
-    ...todayTimedRows.slice(0, 10).map(({ kind, itemId }) => ({ kind, itemId })),
-    ...unscheduledOpenTasks.slice(0, 5).map((task) => ({ kind: "task" as const, itemId: task.id }))
-  ].slice(0, 15);
-  const conflictCount = scheduledTaskBlocks.filter((block) => block.conflictCount > 0).length;
-
   return {
     activeColorThemeId: activeColorTheme.id,
     appearanceReady: options.appearanceReady,
@@ -284,6 +230,7 @@ export function buildCoreViewModelSource(
     completeEvent: options.completeEvent,
     reopenEvent: options.reopenEvent,
     moveTask: options.moveTask,
+    bulkRescheduleTasks: options.bulkRescheduleTasks,
     deleteTask: options.deleteTask,
     createTaskList: options.createTaskList,
     renameTaskList: options.renameTaskList,
@@ -295,22 +242,7 @@ export function buildCoreViewModelSource(
     settingsSections: settingsSections(snapshot),
     syncStatus: snapshot.syncStatus,
     taskFilterViewModels,
-    taskLists: snapshot.taskLists,
-    todayViewModel: {
-      metrics: [
-        { id: "open", label: "Open tasks", value: String(openDatedTasks.length) },
-        { id: "scheduled", label: "Scheduled", value: String(scheduledTaskBlocks.length) },
-        { id: "conflicts", label: "Conflicts", value: String(conflictCount) },
-        { id: "events", label: "Events", value: String(events.length) },
-        { id: "sync", label: "Sync", value: syncLabel(snapshot.syncStatus) }
-      ],
-      focusTasks: unscheduledOpenTasks.slice(0, 6),
-      currentTimeLabel: timeLabel(now.toISOString(), snapshot.settings.defaultTimeZone),
-      conflictCount,
-      schedule: snapshot.scheduleSuggestion,
-      nextUp,
-      timelineRows: todayTimelineRows
-    }
+    taskLists: snapshot.taskLists
   };
 }
 

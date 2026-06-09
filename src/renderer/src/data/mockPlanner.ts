@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type SectionId = "today" | "tasks" | "calendar" | "notes" | "settings";
+export type SectionId = "tasks" | "calendar" | "notes" | "settings";
 export type Priority = "none" | "low" | "medium" | "high";
 
 export interface PlannerSection {
