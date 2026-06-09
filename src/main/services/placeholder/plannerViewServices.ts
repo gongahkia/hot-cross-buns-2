@@ -256,6 +256,19 @@ export function createPlaceholderPlannerViewService(
       state.sync.pendingMutationCount += 1;
       return taskDetail(task);
     },
+    bulkRescheduleTasks: (request) => {
+      const ids = [...new Set(request.taskIds)];
+      const now = new Date().toISOString();
+
+      for (const id of ids) {
+        const task = requiredById(state.tasks, id, "Task");
+        task.dueAt = request.dueDate === null ? null : `${request.dueDate}T00:00:00.000Z`;
+        task.updatedAt = now;
+      }
+
+      state.sync.pendingMutationCount += ids.length;
+      return { ids, updatedCount: ids.length, queued: true, revision: now };
+    },
     deleteTask: ({ id }) => {
       const index = state.tasks.findIndex((candidate) => candidate.id === id);
       if (index < 0) {

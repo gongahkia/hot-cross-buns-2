@@ -115,6 +115,13 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
         invokeContract(ipc, ipcContracts.tasks.reopen, request, "Task reopen request failed"),
       move: (request) =>
         invokeContract(ipc, ipcContracts.tasks.move, request, "Task move request failed"),
+      bulkReschedule: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.tasks.bulkReschedule,
+          request,
+          "Bulk task reschedule request failed"
+        ),
       delete: (request) =>
         invokeContract(ipc, ipcContracts.tasks.delete, request, "Task delete request failed"),
       createTaskList: (request) =>

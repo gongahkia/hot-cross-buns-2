@@ -33,6 +33,7 @@ import type {
   UndoApplyResponse,
   UndoStackStatusResponse,
   TaskCreateRequest,
+  TaskBulkRescheduleRequest,
   TaskListCreateRequest,
   TaskListRenameRequest,
   TaskListSummary,
@@ -121,6 +122,7 @@ export interface CoreViewModelSource {
   completeEvent: (eventId: string, scope?: CalendarEventCompletionScope) => Promise<boolean>;
   reopenEvent: (eventId: string, scope?: CalendarEventCompletionScope) => Promise<boolean>;
   moveTask: (request: TaskMoveRequest) => Promise<boolean>;
+  bulkRescheduleTasks: (request: TaskBulkRescheduleRequest) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
   createTaskList: (request: TaskListCreateRequest) => Promise<boolean>;
   renameTaskList: (request: TaskListRenameRequest) => Promise<boolean>;

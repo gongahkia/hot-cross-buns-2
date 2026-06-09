@@ -5,6 +5,7 @@ import type {
   DuplicateCleanupRequest,
   NoteCreateRequest,
   NoteUpdateRequest,
+  TaskBulkMutationResponse,
   TaskCreateRequest,
   TaskUpdateRequest
 } from "@shared/ipc/contracts";
@@ -238,6 +239,37 @@ export function createSqlitePlannerDomainService(
         after: undoRepository?.taskSnapshot(request.id)
       });
       return moved;
+    },
+    bulkRescheduleTasks: (request) => {
+      const ids = [...new Set(request.taskIds)];
+      const before = ids.map((id) => ({ id, snapshot: undoRepository?.taskSnapshot(id) ?? null }));
+      const updated = ids.map((id) =>
+        repository.updateTask(autoTaggedTaskUpdate(repository, settingsRepository, {
+          id,
+          dueDate: request.dueDate
+        }))
+      );
+
+      recordUndoGroup({
+        actionKind: "task.bulk_reschedule",
+        label: "Bulk reschedule tasks",
+        resourceId: `tasks:${ids.join(",")}`,
+        changes: before.map(({ id, snapshot }) => ({
+          actionKind: "task.bulk_reschedule",
+          label: "Bulk reschedule tasks",
+          resourceKind: "task",
+          resourceId: id,
+          before: snapshot,
+          after: undoRepository?.taskSnapshot(id) ?? null
+        }))
+      });
+
+      return {
+        ids: updated.map((task) => task.id),
+        updatedCount: updated.length,
+        queued: true,
+        revision: new Date().toISOString()
+      } satisfies TaskBulkMutationResponse;
     },
     deleteTask: (request) => {
       const before = undoRepository?.taskSnapshot(request.id) ?? null;

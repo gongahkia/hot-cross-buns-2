@@ -6,6 +6,7 @@ import type {
   ScheduledTaskBlockCreateRequest,
   ScheduledTaskBlockMoveRequest,
   ScheduledTaskBlockSummary,
+  TaskBulkRescheduleRequest,
   TaskCreateRequest,
   TaskListCreateRequest,
   TaskListRenameRequest,
@@ -39,6 +40,7 @@ export function useTaskMutations({
   completeEvent: (eventId: string, scope?: CalendarEventCompletionScope) => Promise<boolean>;
   reopenEvent: (eventId: string, scope?: CalendarEventCompletionScope) => Promise<boolean>;
   moveTask: (request: TaskMoveRequest) => Promise<boolean>;
+  bulkRescheduleTasks: (request: TaskBulkRescheduleRequest) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
   createTaskList: (request: TaskListCreateRequest) => Promise<boolean>;
   renameTaskList: (request: TaskListRenameRequest) => Promise<boolean>;
@@ -360,6 +362,42 @@ export function useTaskMutations({
     [beginTaskMutation, failTaskMutation, finishTaskMutation, setTasksSnapshot]
   );
 
+  const bulkRescheduleTasks = useCallback(
+    async (request: TaskBulkRescheduleRequest): Promise<boolean> => {
+      if (!window.hcb) {
+        failTaskMutation("Bulk task reschedule requires the preload bridge.", () => void bulkRescheduleTasks(request));
+        return false;
+      }
+
+      const ids = new Set(request.taskIds);
+      let previousTasks: TaskSummary[] = [];
+      beginTaskMutation();
+      setTasksSnapshot((tasks) => {
+        previousTasks = tasks;
+        return tasks.map((task) =>
+          ids.has(task.id)
+            ? optimisticTaskPatch(task, {
+                id: task.id,
+                dueDate: request.dueDate
+              })
+            : task
+        );
+      });
+
+      const result = await window.hcb.tasks.bulkReschedule(request);
+
+      if (result.ok) {
+        finishTaskMutation();
+        return true;
+      }
+
+      setTasksSnapshot(() => previousTasks);
+      failTaskMutation(result.error.message, () => void bulkRescheduleTasks(request));
+      return false;
+    },
+    [beginTaskMutation, failTaskMutation, finishTaskMutation, setTasksSnapshot]
+  );
+
   const deleteTask = useCallback(
     async (taskId: string): Promise<boolean> => {
       if (!window.hcb) {
@@ -627,6 +665,7 @@ export function useTaskMutations({
     completeEvent,
     reopenEvent,
     moveTask,
+    bulkRescheduleTasks,
     deleteTask,
     createTaskList,
     renameTaskList,

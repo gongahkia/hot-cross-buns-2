@@ -95,6 +95,8 @@ import type {
   UndoStackStatusResponse,
   TaskCompletionRequest,
   TaskCreateRequest,
+  TaskBulkMutationResponse,
+  TaskBulkRescheduleRequest,
   TaskDeleteRequest,
   TaskDetail,
   TaskListCreateRequest,
@@ -253,6 +255,7 @@ export interface PlannerViewDomainService {
   completeTask: (request: TaskCompletionRequest) => MaybePromise<TaskDetail>;
   reopenTask: (request: TaskCompletionRequest) => MaybePromise<TaskDetail>;
   moveTask: (request: TaskMoveRequest) => MaybePromise<TaskDetail>;
+  bulkRescheduleTasks: (request: TaskBulkRescheduleRequest) => MaybePromise<TaskBulkMutationResponse>;
   deleteTask: (request: TaskDeleteRequest) => MaybePromise<{ id: string; queued: boolean; revision?: string }>;
   createTaskList: (request: TaskListCreateRequest) => MaybePromise<TaskListSummary>;
   renameTaskList: (request: TaskListRenameRequest) => MaybePromise<TaskListSummary>;

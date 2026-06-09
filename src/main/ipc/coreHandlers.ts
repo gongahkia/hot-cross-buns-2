@@ -65,6 +65,7 @@ import {
   type SyncStatusResponse,
   type AutoTagReapplyApplyRequest,
   type AutoTagReapplyPreviewRequest,
+  type TaskBulkRescheduleRequest,
   type TagBulkApplyRequest,
   type TagCreateRequest,
   type TagDeleteRequest,
@@ -163,6 +164,12 @@ export function createCoreIpcHandlers(
       contract: ipcContracts.tasks.move,
       handle: withMutationDrain((request) =>
         services.planner.moveTask(request as TaskMoveRequest)
+      )
+    },
+    {
+      contract: ipcContracts.tasks.bulkReschedule,
+      handle: withMutationDrain((request) =>
+        services.planner.bulkRescheduleTasks(request as TaskBulkRescheduleRequest)
       )
     },
     {
