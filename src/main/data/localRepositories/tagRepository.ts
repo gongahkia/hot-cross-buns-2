@@ -800,7 +800,11 @@ function duplicateCleanupCompactedMutationIds(
     row.operation === winnerUpdateOperation
   );
 
-  if (!winnerHasCreate && winnerUpdates.length > 1) {
+  if (winnerHasCreate) {
+    for (const row of winnerUpdates) {
+      compactedIds.add(row.id);
+    }
+  } else if (winnerUpdates.length > 1) {
     for (const row of winnerUpdates.slice(0, -1)) {
       compactedIds.add(row.id);
     }

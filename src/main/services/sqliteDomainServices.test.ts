@@ -1879,6 +1879,55 @@ describe("SQLite-backed domain services", () => {
     ]);
   });
 
+  it("fails clearly when future-scoped recurrence writes target an occurrence without its master", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    syncRepository.writeCalendarEvents(
+      "acct-1",
+      "product",
+      [
+        {
+          id: "event-daily-root_20260523",
+          calendarId: "product",
+          recurringEventId: "event-daily-root",
+          originalStartAt: "2026-05-23T08:00:00.000Z",
+          status: "confirmed",
+          summary: "Daily planning",
+          startAt: "2026-05-23T08:00:00.000Z",
+          endAt: "2026-05-23T08:30:00.000Z",
+          isAllDay: false,
+          updatedAt: now
+        }
+      ],
+      {
+        fullSync: false,
+        now
+      }
+    );
+    const events = await domain.planner.listCalendarEvents({
+      calendarIds: ["acct-1:calendar:product"],
+      start: "2026-05-23T00:00:00.000Z",
+      end: "2026-05-24T00:00:00.000Z",
+      limit: 20
+    });
+    const occurrence = events.items.find((event) => event.recurringEventId === "event-daily-root");
+
+    expect(occurrence).toBeDefined();
+    expect(() =>
+      domain.planner.updateCalendarEvent({
+        id: occurrence?.id ?? "",
+        scope: "seriesFuture",
+        title: "Future planning"
+      })
+    ).toThrow("This future-series edit needs the original recurring event. Sync calendar data, open the whole series, then try again.");
+    expect(() =>
+      domain.planner.deleteCalendarEvent({
+        id: occurrence?.id ?? "",
+        scope: "seriesFuture"
+      })
+    ).toThrow("This future-series delete needs the original recurring event. Sync calendar data, open the whole series, then try again.");
+  });
+
   it("fails fast for occurrence edits on locally materialized recurrence instances", async () => {
     const { domain, syncRepository } = createTestServices();
     seedGoogleMirrors(syncRepository);
@@ -2155,11 +2204,41 @@ describe("SQLite-backed domain services", () => {
       tags: ["dup"]
     });
 
+    await domain.planner.updateTask({ id: winnerId, title: "Draft inbox triage rules" });
+    await domain.planner.updateTask({ id: loser.id, title: "Draft inbox triage rules" });
+
     const result = await domain.planner.cleanupDuplicates({
       kind: "task",
       winnerId,
       loserIds: [loser.id]
     });
+    const duplicateMutations = testConnection().query<{
+      resourceId: string;
+      operation: string;
+      status: string;
+      payloadJson: string;
+    }>(
+      `SELECT resource_id AS resourceId,
+              operation,
+              status,
+              payload_json AS payloadJson
+       FROM google_pending_mutations
+       WHERE resource_id IN (?, ?)
+       ORDER BY created_at ASC, id ASC;`,
+      [winnerId, loser.id]
+    ).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) as Record<string, unknown> }));
+    const winnerUpdates = duplicateMutations.filter((row) =>
+      row.resourceId === winnerId &&
+      row.operation === "task.update"
+    );
+    const loserUpdate = duplicateMutations.find((row) =>
+      row.resourceId === loser.id &&
+      row.operation === "task.update"
+    );
+    const loserDelete = duplicateMutations.find((row) =>
+      row.resourceId === loser.id &&
+      row.operation === "task.delete"
+    );
 
     expect(result).toMatchObject({ id: winnerId, kind: "task", loserIds: [loser.id], queued: true });
     expect(await domain.planner.getTask({ id: winnerId })).toMatchObject({
@@ -2172,6 +2251,23 @@ describe("SQLite-backed domain services", () => {
     expect(await domain.undo.status()).toMatchObject({
       canUndo: true,
       undoLabel: "Merge duplicate group"
+    });
+    expect(winnerUpdates.map((row) => row.status)).toEqual(["cancelled", "pending"]);
+    expect(winnerUpdates[0]?.payload).toMatchObject({
+      cleanupKind: "task",
+      cleanupCompacted: true
+    });
+    expect(loserUpdate).toMatchObject({ status: "cancelled" });
+    expect(loserUpdate?.payload).toMatchObject({
+      cleanupKind: "task",
+      cleanupWinnerId: winnerId,
+      cleanupCompacted: true
+    });
+    expect(loserDelete).toMatchObject({ status: "pending" });
+    expect(loserDelete?.payload).toMatchObject({
+      cleanupKind: "task",
+      cleanupWinnerId: winnerId,
+      cleanupLoserIds: [loser.id]
     });
     expect(
       syncRepository.listActivePendingMutations({ limit: 50 })
@@ -2197,6 +2293,189 @@ describe("SQLite-backed domain services", () => {
       priority: "high",
       durationMinutes: 45,
       tags: ["dup"]
+    });
+  });
+
+  it("compacts duplicate cleanup mutations for events and restores through grouped undo", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const events = await domain.planner.listCalendarEvents({
+      calendarIds: ["acct-1:calendar:product"],
+      start: "2026-05-22T00:00:00.000Z",
+      end: "2026-05-23T00:00:00.000Z",
+      limit: 20
+    });
+    const winnerId = events.items.find((event) => event.title === "Planner shell standup")?.id ?? "";
+    const loser = await domain.planner.createCalendarEvent({
+      title: "Planner shell standup",
+      calendarId: "acct-1:calendar:product",
+      startsAt: "2026-05-22T09:30:00.000Z",
+      endsAt: "2026-05-22T09:50:00.000Z",
+      notes: "Duplicate event note",
+      guestEmails: ["dup@example.com"],
+      reminderMinutes: [5],
+      tags: ["event-dup"],
+      colorId: "5"
+    });
+
+    await domain.planner.updateCalendarEvent({ id: winnerId, notes: "Review cache-first startup." });
+    await domain.planner.updateCalendarEvent({ id: loser.id, notes: "Duplicate event note revised" });
+
+    const result = await domain.planner.cleanupDuplicates({
+      kind: "event",
+      winnerId,
+      loserIds: [loser.id]
+    });
+    const duplicateMutations = testConnection().query<{
+      resourceId: string;
+      operation: string;
+      status: string;
+      payloadJson: string;
+    }>(
+      `SELECT resource_id AS resourceId,
+              operation,
+              status,
+              payload_json AS payloadJson
+       FROM google_pending_mutations
+       WHERE resource_id IN (?, ?)
+       ORDER BY created_at ASC, id ASC;`,
+      [winnerId, loser.id]
+    ).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) as Record<string, unknown> }));
+    const winnerUpdates = duplicateMutations.filter((row) =>
+      row.resourceId === winnerId &&
+      row.operation === "calendar.events.update"
+    );
+    const loserUpdate = duplicateMutations.find((row) =>
+      row.resourceId === loser.id &&
+      row.operation === "calendar.events.update"
+    );
+    const loserDelete = duplicateMutations.find((row) =>
+      row.resourceId === loser.id &&
+      row.operation === "calendar.events.delete"
+    );
+
+    expect(result).toMatchObject({ id: winnerId, kind: "event", loserIds: [loser.id], queued: true });
+    expect(await domain.planner.getCalendarEvent({ id: winnerId })).toMatchObject({
+      notes: "Review cache-first startup.\n\n--- merged duplicate ---\n\nDuplicate event note revised",
+      guestEmails: ["dup@example.com"],
+      reminderMinutes: [5],
+      tags: ["event-dup"],
+      colorId: "5"
+    });
+    expect(() => domain.planner.getCalendarEvent({ id: loser.id })).toThrow("Calendar event was not found.");
+    expect(winnerUpdates.map((row) => row.status)).toEqual(["cancelled", "pending"]);
+    expect(winnerUpdates[0]?.payload).toMatchObject({
+      cleanupKind: "event",
+      cleanupCompacted: true
+    });
+    expect(loserUpdate).toMatchObject({ status: "cancelled" });
+    expect(loserUpdate?.payload).toMatchObject({
+      cleanupKind: "event",
+      cleanupWinnerId: winnerId,
+      cleanupCompacted: true
+    });
+    expect(loserDelete).toMatchObject({ status: "pending" });
+    expect(loserDelete?.payload).toMatchObject({
+      cleanupKind: "event",
+      cleanupWinnerId: winnerId,
+      cleanupLoserIds: [loser.id]
+    });
+
+    await domain.undo.undo();
+    expect(await domain.planner.getCalendarEvent({ id: winnerId })).toMatchObject({
+      notes: "Review cache-first startup.",
+      tags: []
+    });
+    expect(await domain.planner.getCalendarEvent({ id: loser.id })).toMatchObject({
+      notes: "Duplicate event note revised",
+      tags: ["event-dup"]
+    });
+  });
+
+  it("compacts duplicate cleanup mutations for notes and restores through grouped undo", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const winner = await domain.planner.createNote({
+      title: "Duplicate note",
+      body: "Winner note body",
+      tags: ["winner"]
+    });
+    const loser = await domain.planner.createNote({
+      title: "Duplicate note",
+      body: "Loser note body",
+      tags: ["loser"]
+    });
+
+    await domain.planner.updateNote({ id: winner.id, body: "Winner note body" });
+    await domain.planner.updateNote({ id: loser.id, body: "Loser note body revised" });
+
+    const result = await domain.planner.cleanupDuplicates({
+      kind: "note",
+      winnerId: winner.id,
+      loserIds: [loser.id]
+    });
+    const duplicateMutations = testConnection().query<{
+      resourceId: string;
+      operation: string;
+      status: string;
+      payloadJson: string;
+    }>(
+      `SELECT resource_id AS resourceId,
+              operation,
+              status,
+              payload_json AS payloadJson
+       FROM google_pending_mutations
+       WHERE resource_id IN (?, ?)
+       ORDER BY created_at ASC, id ASC;`,
+      [winner.id, loser.id]
+    ).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) as Record<string, unknown> }));
+    const winnerUpdates = duplicateMutations.filter((row) =>
+      row.resourceId === winner.id &&
+      row.operation === "task.update"
+    );
+    const loserUpdate = duplicateMutations.find((row) =>
+      row.resourceId === loser.id &&
+      row.operation === "task.update"
+    );
+    const loserDelete = duplicateMutations.find((row) =>
+      row.resourceId === loser.id &&
+      row.operation === "task.delete"
+    );
+
+    expect(result).toMatchObject({ id: winner.id, kind: "note", loserIds: [loser.id], queued: true });
+    expect(await domain.planner.getNote({ id: winner.id })).toMatchObject({
+      body: "Winner note body\n\n--- merged duplicate ---\n\nLoser note body revised",
+      tags: ["winner", "loser"]
+    });
+    expect(() => domain.planner.getNote({ id: loser.id })).toThrow("Note was not found.");
+    expect(winnerUpdates.map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
+    expect(winnerUpdates.map((row) => row.payload)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        cleanupKind: "note",
+        cleanupCompacted: true
+      })
+    ]));
+    expect(loserUpdate).toMatchObject({ status: "cancelled" });
+    expect(loserUpdate?.payload).toMatchObject({
+      cleanupKind: "note",
+      cleanupWinnerId: winner.id,
+      cleanupCompacted: true
+    });
+    expect(loserDelete).toMatchObject({ status: "pending" });
+    expect(loserDelete?.payload).toMatchObject({
+      cleanupKind: "note",
+      cleanupWinnerId: winner.id,
+      cleanupLoserIds: [loser.id]
+    });
+
+    await domain.undo.undo();
+    expect(await domain.planner.getNote({ id: winner.id })).toMatchObject({
+      body: "Winner note body",
+      tags: ["winner"]
+    });
+    expect(await domain.planner.getNote({ id: loser.id })).toMatchObject({
+      body: "Loser note body revised",
+      tags: ["loser"]
     });
   });
 

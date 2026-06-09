@@ -254,6 +254,14 @@ describe("App settings and onboarding", () => {
     const dialog = await screen.findByRole("dialog", { name: "Settings" });
     await user.click(within(dialog).getByRole("button", { name: "Advanced" }));
 
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "Auto-tag background reapply mode" }), "silent");
+    await waitFor(() => {
+      expect(settings.autoTagBackgroundReapplyMode).toBe("silent");
+      expect(api.settings.update).toHaveBeenCalledWith({ autoTagBackgroundReapplyMode: "silent" });
+    });
+    await user.selectOptions(within(dialog).getByRole("combobox", { name: "Auto-tag background reapply mode" }), "manual");
+    await waitFor(() => expect(settings.autoTagBackgroundReapplyMode).toBe("manual"));
+
     expect(within(dialog).getByTitle("1 issue")).toBeInTheDocument();
     expect(await within(dialog).findByText("1 auto-tag rule error need review.")).toBeInTheDocument();
     expect(within(dialog).getByText(/Invalid regex:/)).toBeInTheDocument();
@@ -294,6 +302,48 @@ describe("App settings and onboarding", () => {
     await waitFor(() => {
       expect(settings.autoTagRules.map((rule) => rule.id)).toEqual(["rule-github", "rule-coding", "rule-invalid"]);
     });
+  });
+
+  it("previews and applies background auto-tag reapply after rule changes", async () => {
+    const api = seededHcb();
+    let settings = testSettings({
+      autoTagRules: [
+        autoTagRule(),
+        autoTagRule({
+          id: "rule-github",
+          name: "Github",
+          matchType: "contains",
+          pattern: "github",
+          tags: ["github"],
+          stripMatchedPrefix: false
+        })
+      ]
+    });
+    api.settings.get = vi.fn(async () => ok(settings));
+    api.settings.update = vi.fn(async (request) => {
+      settings = testSettings({ ...settings, ...request });
+      return ok(settings);
+    });
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await goToSection("Settings");
+    const dialog = await screen.findByRole("dialog", { name: "Settings" });
+    await user.click(within(dialog).getByRole("button", { name: "Advanced" }));
+    await user.click(within(dialog).getByRole("button", { name: "Move auto tag rule Github up" }));
+
+    expect(await within(dialog).findByText("Auto-tag reapply preview", undefined, { timeout: 2_500 })).toBeInTheDocument();
+    expect(within(dialog).getByText("Rules changed. 1 task needs reapply.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => {
+      expect(api.tags.previewAutoReapply).toHaveBeenCalledWith({ kind: "task", scope: "all" });
+      expect(api.tags.previewAutoReapply).toHaveBeenCalledWith({ kind: "event", scope: "all" });
+      expect(api.tags.previewAutoReapply).toHaveBeenCalledWith({ kind: "note", scope: "all" });
+      expect(api.tags.applyAutoReapply).toHaveBeenCalledWith({ kind: "task", scope: "all", confirm: true });
+    });
+    expect(within(dialog).getByText("1 updated.")).toBeInTheDocument();
   });
 
   it("shows onboarding for a fresh database and completes setup through settings IPC", async () => {

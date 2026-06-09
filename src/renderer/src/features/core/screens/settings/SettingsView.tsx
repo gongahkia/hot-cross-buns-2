@@ -878,7 +878,9 @@ function sameStringSet(left: readonly string[], right: readonly string[]): boole
 }
 
 function autoTagBackgroundSummary(items: Array<{ kind: AutoTagTargetKind; changed: number }>): string {
-  return `Rules changed. ${items.map((item) => autoTagKindLabel(item.kind, item.changed)).join(", ")} need reapply.`;
+  const total = items.reduce((sum, item) => sum + item.changed, 0);
+
+  return `Rules changed. ${items.map((item) => autoTagKindLabel(item.kind, item.changed)).join(", ")} ${total === 1 ? "needs" : "need"} reapply.`;
 }
 
 function autoTagBackgroundAppliedSummary(items: Array<{ kind: AutoTagTargetKind; changed: number; failed: number }>): string {
