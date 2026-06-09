@@ -238,7 +238,7 @@ function assertLoopbackUrl(value: string): void {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw validationFailure("Webhook URL must use HTTP or HTTPS.");
   }
-  if (!["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)) {
+  if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(parsed.hostname)) {
     throw validationFailure("Webhook URL must target localhost or 127.0.0.1.");
   }
 }

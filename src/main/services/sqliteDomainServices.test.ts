@@ -2069,7 +2069,7 @@ describe("SQLite-backed domain services", () => {
       credentialRevision: "rev-1",
       clientKey: "cli",
       createdAt: now,
-      expiresAt: "2026-05-23T00:00:00.000Z"
+      expiresAt: "2099-05-23T00:00:00.000Z"
     });
 
     expect(await domain.agent.listActions({ statuses: ["pending"], limit: 10 })).toMatchObject({
@@ -2093,11 +2093,11 @@ describe("SQLite-backed domain services", () => {
   it("validates webhook endpoints and stores loopback subscriptions", async () => {
     const { domain } = createTestServices();
 
-    await expect(domain.webhooks.upsert({
+    expect(() => domain.webhooks.upsert({
       url: "https://example.com/hcb",
       events: ["sync.completed"],
       enabled: true
-    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    })).toThrow("Webhook URL must target localhost or 127.0.0.1.");
 
     const created = await domain.webhooks.upsert({
       url: "http://127.0.0.1:49321/hcb",
