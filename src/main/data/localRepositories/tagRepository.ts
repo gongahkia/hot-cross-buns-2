@@ -1,4 +1,9 @@
 import type {
+  AutoTagReapplyApplyRequest,
+  AutoTagReapplyApplyResponse,
+  AutoTagReapplyPreviewRequest,
+  AutoTagReapplyPreviewResponse,
+  TagAnalyticsResponse,
   TagBulkApplyRequest,
   TagCreateRequest,
   TagDeleteRequest,
@@ -9,6 +14,11 @@ import type {
   TagSummary,
   TagUpdateRequest
 } from "@shared/ipc/contracts";
+import {
+  applyAutoTagRules,
+  validateAutoTagRule,
+  type AutoTagTargetKind
+} from "@shared/ipc/autoTags";
 import type { SqliteWriteOperation } from "../sqliteConnection";
 import {
   localTagIdForName,
@@ -25,6 +35,8 @@ interface TagRow extends Record<string, unknown> {
   color: string | null;
   createdAt: string;
   updatedAt: string;
+  firstUsedAt: string | null;
+  lastUsedAt: string | null;
   taskCount: number;
   eventCount: number;
   noteCount: number;
@@ -33,6 +45,22 @@ interface TagRow extends Record<string, unknown> {
 
 type TagEntityKind = "task" | "event" | "note";
 export type TagEntityRef = { kind: TagEntityKind; entityId: string };
+
+interface AutoTagCandidate {
+  kind: TagEntityKind;
+  id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  eventColorId?: string | null;
+}
+
+interface AutoTagChange extends AutoTagCandidate {
+  nextTitle: string;
+  nextBody: string;
+  nextTags: string[];
+  nextEventColorId?: string | null;
+}
 
 export class TagLocalRepository extends SearchLocalRepository {
   listTags(request: TagListRequest): TagListResponse {
@@ -254,6 +282,106 @@ export class TagLocalRepository extends SearchLocalRepository {
     });
   }
 
+  tagAnalytics(): TagAnalyticsResponse {
+    return this.measureSqlite("tags.analytics", () => {
+      const tags = this.connection.query<TagRow>(
+        `${tagSummarySelect()}
+         WHERE tags.deleted_at IS NULL
+         GROUP BY tags.id
+         ORDER BY totalCount DESC, tags.normalized_name ASC;`
+      ).map(tagSummary);
+
+      return {
+        totalTags: tags.length,
+        unusedTags: tags.filter((tag) => tag.totalCount === 0).length,
+        linkedEntities: tags.reduce((total, tag) => total + tag.totalCount, 0),
+        topTags: tags.filter((tag) => tag.totalCount > 0).slice(0, 10),
+        staleTags: [...tags]
+          .filter((tag) => tag.totalCount > 0)
+          .sort((left, right) =>
+            (left.lastUsedAt ?? "").localeCompare(right.lastUsedAt ?? "") ||
+            left.name.localeCompare(right.name)
+          )
+          .slice(0, 10)
+      };
+    });
+  }
+
+  previewAutoTagReapply(
+    rules: readonly Parameters<typeof validateAutoTagRule>[0][],
+    request: AutoTagReapplyPreviewRequest
+  ): AutoTagReapplyPreviewResponse {
+    return this.measureSqlite("tags.autoReapplyPreview", () =>
+      this.autoTagReapplyPreview(this.autoTagReapplyChanges(rules, request.kind), request)
+    );
+  }
+
+  applyAutoTagReapply(
+    rules: readonly Parameters<typeof validateAutoTagRule>[0][],
+    request: AutoTagReapplyApplyRequest
+  ): AutoTagReapplyApplyResponse & { changedRefs: TagEntityRef[] } {
+    return this.measureSqlite("tags.autoReapplyApply", () => {
+      const now = new Date().toISOString();
+      const changes = this.autoTagReapplyChanges(rules, request.kind);
+      const preview = this.autoTagReapplyPreview(changes, request);
+
+      if (preview.blocked || changes.length === 0) {
+        return {
+          ...preview,
+          queued: false,
+          revision: now,
+          changedRefs: []
+        };
+      }
+
+      let failed = 0;
+      const changedRefs: TagEntityRef[] = [];
+
+      for (const change of changes) {
+        try {
+          if (change.kind === "event") {
+            this.updateCalendarEvent({
+              id: change.id,
+              title: change.nextTitle,
+              notes: change.nextBody,
+              tags: change.nextTags,
+              colorId: change.nextEventColorId ?? change.eventColorId ?? null,
+              scope: "seriesAll"
+            });
+          } else if (change.kind === "note") {
+            this.updateNote({
+              id: change.id,
+              title: change.nextTitle,
+              body: change.nextBody,
+              tags: change.nextTags
+            });
+          } else {
+            this.updateTask({
+              id: change.id,
+              title: change.nextTitle,
+              notes: change.nextBody,
+              tags: change.nextTags
+            });
+          }
+          changedRefs.push({ kind: change.kind, entityId: change.id });
+        } catch {
+          failed += 1;
+        }
+      }
+
+      return {
+        ...preview,
+        changed: changedRefs.length,
+        failed,
+        skipped: preview.scanned - changedRefs.length - failed,
+        queued: changedRefs.length > 0,
+        revision: now,
+        undoLabel: changedRefs.length > 0 ? "Auto-tag reapply" : undefined,
+        changedRefs
+      };
+    });
+  }
+
   tagEntityRefsForIds(tagIds: readonly string[]): TagEntityRef[] {
     const ids = [...new Set(tagIds)].filter((id) => id.length > 0);
     if (ids.length === 0) {
@@ -265,6 +393,147 @@ export class TagLocalRepository extends SearchLocalRepository {
        WHERE tag_id IN (${ids.map(() => "?").join(", ")});`,
       ids
     );
+  }
+
+  private autoTagReapplyChanges(
+    rules: readonly Parameters<typeof validateAutoTagRule>[0][],
+    kind: AutoTagTargetKind
+  ): AutoTagChange[] {
+    if (rules.some((rule) => validateAutoTagRule(rule).some((issue) => issue.severity === "error"))) {
+      return [];
+    }
+
+    return this.autoTagCandidates(kind).flatMap((candidate) => {
+      const applied = applyAutoTagRules(rules, {
+        kind: candidate.kind,
+        title: candidate.title,
+        body: candidate.body,
+        existingTags: candidate.tags,
+        existingEventColorId: candidate.eventColorId ?? null
+      });
+      const nextEventColorId = candidate.kind === "event"
+        ? applied.eventColorId ?? candidate.eventColorId ?? null
+        : undefined;
+
+      if (
+        applied.title === candidate.title &&
+        applied.body === candidate.body &&
+        sameStringSet(applied.tags, candidate.tags) &&
+        (candidate.kind !== "event" || nextEventColorId === (candidate.eventColorId ?? null))
+      ) {
+        return [];
+      }
+
+      return [{
+        ...candidate,
+        nextTitle: applied.title,
+        nextBody: applied.body,
+        nextTags: applied.tags,
+        nextEventColorId
+      }];
+    });
+  }
+
+  private autoTagReapplyPreview(
+    changes: AutoTagChange[],
+    request: AutoTagReapplyPreviewRequest
+  ): AutoTagReapplyPreviewResponse {
+    const invalid = this.autoTagReapplyBlocked();
+    const scanned = invalid.blocked ? 0 : this.autoTagCandidates(request.kind).length;
+
+    if (invalid.blocked) {
+      return {
+        kind: request.kind,
+        scope: "all",
+        scanned,
+        changed: 0,
+        skipped: 0,
+        failed: 0,
+        blocked: true,
+        message: invalid.message,
+        sample: []
+      };
+    }
+
+    return {
+      kind: request.kind,
+      scope: "all",
+      scanned,
+      changed: changes.length,
+      skipped: Math.max(0, scanned - changes.length),
+      failed: 0,
+      blocked: false,
+      message: `${changes.length} ${request.kind}${changes.length === 1 ? "" : "s"} would change.`,
+      sample: changes.slice(0, 20).map((change) => ({
+        id: change.id,
+        title: change.title,
+        nextTitle: change.nextTitle,
+        tags: change.tags,
+        nextTags: change.nextTags
+      }))
+    };
+  }
+
+  private autoTagReapplyBlocked(): { blocked: boolean; message: string } {
+    return { blocked: false, message: "Auto-tag reapply ready." };
+  }
+
+  private autoTagCandidates(kind: AutoTagTargetKind): AutoTagCandidate[] {
+    if (kind === "event") {
+      return this.connection.query<{
+        id: string;
+        title: string;
+        body: string | null;
+        tagsJson: string | null;
+        colorId: string | null;
+      }>(
+        `SELECT id,
+                summary AS title,
+                description AS body,
+                local_tags_json AS tagsJson,
+                color_id AS colorId
+         FROM google_calendar_events
+         WHERE deleted_at IS NULL
+           AND status != 'cancelled'
+           AND COALESCE(hcb_kind, '') != 'birthday';`
+      ).map((row) => ({
+        kind,
+        id: row.id,
+        title: row.title,
+        body: row.body ?? "",
+        tags: normalizeLocalTagNames(parseStringArray(row.tagsJson)),
+        eventColorId: row.colorId
+      }));
+    }
+
+    const notePredicate = kind === "note"
+      ? "tasks.parent_task_id IS NULL AND tasks.due_at IS NULL"
+      : "NOT (tasks.parent_task_id IS NULL AND tasks.due_at IS NULL)";
+
+    return this.connection.query<{
+      id: string;
+      title: string;
+      body: string | null;
+      tagsJson: string | null;
+    }>(
+      `SELECT tasks.id,
+              tasks.title,
+              tasks.notes AS body,
+              tasks.local_tags_json AS tagsJson
+       FROM google_tasks tasks
+       INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+       WHERE tasks.deleted_at IS NULL
+         AND tasks.is_hidden = 0
+         AND tasks.status != 'completed'
+         AND lists.deleted_at IS NULL
+         AND ${notePredicate};`
+    ).map((row) => ({
+      kind,
+      id: row.id,
+      title: row.title,
+      body: row.body ?? "",
+      tags: normalizeLocalTagNames(parseStringArray(row.tagsJson))
+    }));
   }
 
   private requireTag(id: string): TagSummary {

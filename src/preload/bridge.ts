@@ -272,7 +272,23 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
       merge: (request) =>
         invokeContract(ipc, ipcContracts.tags.merge, request, "Tag merge request failed"),
       bulkApply: (request) =>
-        invokeContract(ipc, ipcContracts.tags.bulkApply, request, "Tag bulk apply request failed")
+        invokeContract(ipc, ipcContracts.tags.bulkApply, request, "Tag bulk apply request failed"),
+      previewAutoReapply: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.tags.previewAutoReapply,
+          request,
+          "Auto tag reapply preview failed"
+        ),
+      applyAutoReapply: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.tags.applyAutoReapply,
+          request,
+          "Auto tag reapply failed"
+        ),
+      analytics: () =>
+        invokeContract(ipc, ipcContracts.tags.analytics, {}, "Tag analytics request failed")
     },
     duplicates: {
       cleanup: (request) =>
@@ -347,6 +363,20 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           ipcContracts.settings.importPortableArchive,
           request,
           "Portable archive import failed"
+        ),
+      listLocalPointers: (request = {}) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.listLocalPointers,
+          request,
+          "Local pointer list failed"
+        ),
+      repairLocalPointer: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.repairLocalPointer,
+          request,
+          "Local pointer repair failed"
         )
     },
     undo: {

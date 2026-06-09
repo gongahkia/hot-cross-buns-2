@@ -126,7 +126,12 @@ import {
 } from "./notes";
 import { searchQueryRequestSchema, searchQueryResponseSchema } from "./search";
 import {
+  autoTagReapplyApplyRequestSchema,
+  autoTagReapplyApplyResponseSchema,
+  autoTagReapplyPreviewRequestSchema,
+  autoTagReapplyPreviewResponseSchema,
   tagBulkApplyRequestSchema,
+  tagAnalyticsResponseSchema,
   tagCreateRequestSchema,
   tagDeleteRequestSchema,
   tagListRequestSchema,
@@ -137,6 +142,10 @@ import {
 } from "./tags";
 import {
   settingsGetRequestSchema,
+  localPointerListRequestSchema,
+  localPointerListResponseSchema,
+  localPointerRepairRequestSchema,
+  localPointerRepairResponseSchema,
   portableArchivePathRequestSchema,
   portableExportResponseSchema,
   portableImportPreviewSchema,
@@ -340,7 +349,20 @@ export const ipcContracts = {
     update: defineIpcContract("tags", "update", tagUpdateRequestSchema, tagMutationResponseSchema),
     delete: defineIpcContract("tags", "delete", tagDeleteRequestSchema, tagMutationResponseSchema),
     merge: defineIpcContract("tags", "merge", tagMergeRequestSchema, tagMutationResponseSchema),
-    bulkApply: defineIpcContract("tags", "bulkApply", tagBulkApplyRequestSchema, tagMutationResponseSchema)
+    bulkApply: defineIpcContract("tags", "bulkApply", tagBulkApplyRequestSchema, tagMutationResponseSchema),
+    previewAutoReapply: defineIpcContract(
+      "tags",
+      "previewAutoReapply",
+      autoTagReapplyPreviewRequestSchema,
+      autoTagReapplyPreviewResponseSchema
+    ),
+    applyAutoReapply: defineIpcContract(
+      "tags",
+      "applyAutoReapply",
+      autoTagReapplyApplyRequestSchema,
+      autoTagReapplyApplyResponseSchema
+    ),
+    analytics: defineIpcContract("tags", "analytics", settingsGetRequestSchema, tagAnalyticsResponseSchema)
   },
   duplicates: {
     cleanup: defineIpcContract(
@@ -473,6 +495,18 @@ export const ipcContracts = {
       "importPortableArchive",
       portableImportRequestSchema,
       portableImportResponseSchema
+    ),
+    listLocalPointers: defineIpcContract(
+      "settings",
+      "listLocalPointers",
+      localPointerListRequestSchema,
+      localPointerListResponseSchema
+    ),
+    repairLocalPointer: defineIpcContract(
+      "settings",
+      "repairLocalPointer",
+      localPointerRepairRequestSchema,
+      localPointerRepairResponseSchema
     )
   },
   undo: {

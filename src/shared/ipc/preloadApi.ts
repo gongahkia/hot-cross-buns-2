@@ -103,6 +103,11 @@ import type {
   SyncRunNowRequest,
   SyncRunNowResponse,
   SyncStatusResponse,
+  AutoTagReapplyApplyRequest,
+  AutoTagReapplyApplyResponse,
+  AutoTagReapplyPreviewRequest,
+  AutoTagReapplyPreviewResponse,
+  TagAnalyticsResponse,
   TagBulkApplyRequest,
   TagCreateRequest,
   TagDeleteRequest,
@@ -111,6 +116,10 @@ import type {
   TagMergeRequest,
   TagMutationResponse,
   TagUpdateRequest,
+  LocalPointerListRequest,
+  LocalPointerListResponse,
+  LocalPointerRepairRequest,
+  LocalPointerRepairResponse,
   UndoApplyResponse,
   UndoStackStatusResponse,
   TaskCompletionRequest,
@@ -204,6 +213,13 @@ export interface HcbApi {
     delete: (request: TagDeleteRequest) => Promise<HcbResult<TagMutationResponse>>;
     merge: (request: TagMergeRequest) => Promise<HcbResult<TagMutationResponse>>;
     bulkApply: (request: TagBulkApplyRequest) => Promise<HcbResult<TagMutationResponse>>;
+    previewAutoReapply: (
+      request: AutoTagReapplyPreviewRequest
+    ) => Promise<HcbResult<AutoTagReapplyPreviewResponse>>;
+    applyAutoReapply: (
+      request: AutoTagReapplyApplyRequest
+    ) => Promise<HcbResult<AutoTagReapplyApplyResponse>>;
+    analytics: () => Promise<HcbResult<TagAnalyticsResponse>>;
   };
   duplicates: {
     cleanup: (request: DuplicateCleanupRequest) => Promise<HcbResult<DuplicateCleanupResponse>>;
@@ -234,6 +250,12 @@ export interface HcbApi {
     importPortableArchive: (
       request: PortableImportRequest
     ) => Promise<HcbResult<PortableImportResponse>>;
+    listLocalPointers: (
+      request?: LocalPointerListRequest
+    ) => Promise<HcbResult<LocalPointerListResponse>>;
+    repairLocalPointer: (
+      request: LocalPointerRepairRequest
+    ) => Promise<HcbResult<LocalPointerRepairResponse>>;
   };
   undo: {
     status: () => Promise<HcbResult<UndoStackStatusResponse>>;

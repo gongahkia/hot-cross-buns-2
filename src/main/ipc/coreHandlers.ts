@@ -63,12 +63,16 @@ import {
   type TaskUpdateRequest,
   type LocalPerformanceTiming,
   type SyncStatusResponse,
+  type AutoTagReapplyApplyRequest,
+  type AutoTagReapplyPreviewRequest,
   type TagBulkApplyRequest,
   type TagCreateRequest,
   type TagDeleteRequest,
   type TagListRequest,
   type TagMergeRequest,
   type TagUpdateRequest,
+  type LocalPointerListRequest,
+  type LocalPointerRepairRequest,
   type UndoStackStatusResponse,
   type WebhookDeleteRequest,
   type WebhookListRequest,
@@ -333,6 +337,21 @@ export function createCoreIpcHandlers(
       handle: (request) => services.planner.bulkApplyTags(request as TagBulkApplyRequest)
     },
     {
+      contract: ipcContracts.tags.previewAutoReapply,
+      handle: (request) =>
+        services.planner.previewAutoTagReapply(request as AutoTagReapplyPreviewRequest)
+    },
+    {
+      contract: ipcContracts.tags.applyAutoReapply,
+      handle: withMutationDrain((request) =>
+        services.planner.applyAutoTagReapply(request as AutoTagReapplyApplyRequest)
+      )
+    },
+    {
+      contract: ipcContracts.tags.analytics,
+      handle: () => services.planner.tagAnalytics()
+    },
+    {
       contract: ipcContracts.duplicates.cleanup,
       handle: withMutationDrain((request) =>
         services.planner.cleanupDuplicates(request as DuplicateCleanupRequest)
@@ -455,6 +474,16 @@ export function createCoreIpcHandlers(
       contract: ipcContracts.settings.importPortableArchive,
       handle: (request) =>
         services.settings.importPortableArchive(request as PortableImportRequest)
+    },
+    {
+      contract: ipcContracts.settings.listLocalPointers,
+      handle: (request) => services.settings.listLocalPointers(request as LocalPointerListRequest)
+    },
+    {
+      contract: ipcContracts.settings.repairLocalPointer,
+      handle: withMutationDrain((request) =>
+        services.settings.repairLocalPointer(request as LocalPointerRepairRequest)
+      )
     },
     {
       contract: ipcContracts.undo.status,

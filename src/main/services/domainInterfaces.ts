@@ -71,10 +71,15 @@ import type {
   ScheduledTaskBlockUnscheduleRequest,
   SettingsSnapshot,
   SettingsUpdateRequest,
+  AutoTagReapplyApplyRequest,
+  AutoTagReapplyApplyResponse,
+  AutoTagReapplyPreviewRequest,
+  AutoTagReapplyPreviewResponse,
   SyncRunNowRequest,
   SyncRunNowResponse,
   SyncStatusResponse,
   TagBulkApplyRequest,
+  TagAnalyticsResponse,
   TagCreateRequest,
   TagDeleteRequest,
   TagListRequest,
@@ -82,6 +87,10 @@ import type {
   TagMergeRequest,
   TagMutationResponse,
   TagUpdateRequest,
+  LocalPointerListRequest,
+  LocalPointerListResponse,
+  LocalPointerRepairRequest,
+  LocalPointerRepairResponse,
   UndoApplyResponse,
   UndoStackStatusResponse,
   TaskCompletionRequest,
@@ -295,6 +304,13 @@ export interface PlannerViewDomainService {
   deleteTag: (request: TagDeleteRequest) => MaybePromise<TagMutationResponse>;
   mergeTags: (request: TagMergeRequest) => MaybePromise<TagMutationResponse>;
   bulkApplyTags: (request: TagBulkApplyRequest) => MaybePromise<TagMutationResponse>;
+  previewAutoTagReapply: (
+    request: AutoTagReapplyPreviewRequest
+  ) => MaybePromise<AutoTagReapplyPreviewResponse>;
+  applyAutoTagReapply: (
+    request: AutoTagReapplyApplyRequest
+  ) => MaybePromise<AutoTagReapplyApplyResponse>;
+  tagAnalytics: () => MaybePromise<TagAnalyticsResponse>;
   cleanupDuplicates: (request: DuplicateCleanupRequest) => MaybePromise<DuplicateCleanupResponse>;
 }
 
@@ -324,6 +340,10 @@ export interface SettingsDomainService {
   importPortableArchive: (
     request: PortableImportRequest
   ) => MaybePromise<PortableImportResponse>;
+  listLocalPointers: (request: LocalPointerListRequest) => MaybePromise<LocalPointerListResponse>;
+  repairLocalPointer: (
+    request: LocalPointerRepairRequest
+  ) => MaybePromise<LocalPointerRepairResponse>;
 }
 
 export interface UndoDomainService {
