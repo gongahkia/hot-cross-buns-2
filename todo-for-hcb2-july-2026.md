@@ -8,7 +8,7 @@ Consolidated from:
 
 This is the single July 2026 planning todo. Ports stay last.
 
-Last repo audit for this file: 2026-06-08.
+Last repo audit for this file: 2026-06-09.
 
 Audit note: static repo/source/test evidence only. No live Google API, external MCP client, packaged-app, or manual UI QA was performed for this update.
 
@@ -40,34 +40,38 @@ Status key:
 - Startup bootstrap snapshot, light bootstrap timings, startup fan-out fallback, and deferred `calendar.scheduleSuggest` request path exist.
 - Near-immediate post-CRUD sync/drain path exists through shared sync control/service-container wiring and live Google smoke docs reference `sync.post-crud-drain`.
 - Advanced local search parser/repository coverage exists for regex, attendee, duration, notes/body presence, due/start windows, list, calendar, tag, status, priority, and source/domain filters.
+- Local semantic/hybrid search now exists with a deterministic local embedding index for tasks/events/notes, diagnostics metadata, and focused SQLite tests. Production transformer/vector-extension packaging remains open.
+- Chat sidebar/provider plumbing now exists with local-disabled fallback, Ollama/OpenAI-compatible provider hooks, remote-endpoint opt-in, local chat history, Settings controls, and focused SQLite tests. Full MCP-client planning/action proposal depth remains open.
 - Sync mode selector exists for `manual`, `balanced`, and `near-real-time`, including settings UI, onboarding UI, diagnostics status, scheduler behavior, and tests.
 - Past-event and completed-task retention settings exist, including `0` as forever and sync read lower-bound behavior.
 - Diagnostics has logs, History, and Sync Issues surfaces with copy/search/error states and command-palette entry points.
 - Local backup settings and manual backup action exist.
 - MCP resources and prompt registry exist with status/doctor/today/week/diff/logs/pending-mutation resources and sync/today/week/support prompts.
+- Durable pending agent action storage, IPC/preload contracts, floating approval tray, approve/reject/expiry states, and MCP dry-run confirmation persistence now exist with focused tests.
+- Loopback webhook subscriptions now exist with localhost-only URL validation, HMAC signatures, private-body redaction by default, Settings toggles, task-created/task-completed/sync-completed emits, and focused validation tests.
 - Google account disconnected state is surfaced as a user-visible issue while cached SQLite data can still render.
 - Sidebar task/note counts use HCB-visible task-backed counts instead of raw Google/cache totals.
 - Full unit suite was previously green after the latest auto-tag/settings hardening pass.
 
 ### Partial / still worth drilling down
 
-- Tags now have a first-class local catalog, many-to-many entity links, tag CRUD/merge UI, tag colors, bootstrap/IPC/preload/source plumbing, and backfill from existing task/event tag JSON. Saved tag analytics remain basic count totals.
-- Auto-tagging has inspector-level audit detail and settings-level bulk reapply for loaded tasks/events/notes. Full background reapply across unloaded cache windows and coalesced undo remain open.
+- Tags now have a first-class local catalog, many-to-many entity links, tag CRUD/merge UI, tag colors, bootstrap/IPC/preload/source plumbing, backfill from existing task/event tag JSON, and grouped undo for bulk tag writes/merge/delete. Saved tag analytics remain basic count totals.
+- Auto-tagging has inspector-level audit detail and settings-level bulk reapply for loaded tasks/events/notes. Full background reapply across unloaded cache windows remains open.
 - Multi-account plumbing is partially present: account IDs, account-scoped tokens/cache/checkpoints/mutations, latest-account transport, and multi-account docs/tests exist. Full connected-account management UX, account badges/filters, explicit target account selection, and merged multi-account Today remain open.
-- Duplicate detection/review exists for tasks/events/notes with dismiss/open/delete/merge flows. Coalesced cleanup and deeper duplicate-resolution QA remain open.
+- Duplicate detection/review exists for tasks/events/notes with dismiss/open/delete/merge flows. Cleanup now runs through the main domain service with grouped undo for task/event/note duplicate merges; deeper duplicate-resolution QA and mutation coalescing remain open.
 - Conversion works, but should get one live/manual QA pass against real Google sync for replace-original cleanup and queued mutation replay.
-- MCP/CLI is featureful, and prompt/resource registries now include `hcb_brief`, `hcb tail`, `hcb plan`, `hcb://brief`, `hcb://plan`, and `hcb://tail`. Webhooks and a durable pending agent action tray are still missing.
+- MCP/CLI is featureful, and prompt/resource registries now include `hcb_brief`, `hcb tail`, `hcb plan`, `hcb://brief`, `hcb://plan`, and `hcb://tail`. Durable pending agent actions and loopback webhooks are now present; external MCP client QA, webhook retry/rate-limit hardening, and full event-source coverage remain open.
 - Birthday Google payload shape is unit-tested, but live Google API smoke for birthday create/update/delete is still the main external-risk test.
 - Quick-add/NL parsing has meaningful code and tests, including recurrence handling, but not the full chrono-style parser depth listed below.
 - Calendar recurrence UI exists. Edit/delete scope selection now reaches repository writes; whole-series, Google-backed occurrence edits/deletes, and locally materialized future-series splits are covered by focused tests. Google-expanded future-series edits still fail fast when the master series is unavailable; deeper RRULE editor depth and live Google smoke remain open.
-- Search/filter depth is partial: advanced parser-backed operators, boolean `AND`/`OR`/`NOT`, saved-search settings, pinned filters, and command-palette pinned filter chips exist. Semantic search, local LLM, and chat sidebar remain open.
+- Search/filter depth is partial: advanced parser-backed operators, boolean `AND`/`OR`/`NOT`, saved-search settings, pinned filters, command-palette pinned filter chips, local semantic/hybrid search, provider-backed chat, and a chat sidebar exist. Production semantic model/vector packaging and richer agentic planning remain open.
 - Portable data has real `.hcbexport` export/preview/import with deterministic state JSON, selected list/calendar/future filters, manifest SHA-256, attachment bundling/relinking, pre-import backup, and focused tests. ICS import/subscriptions and local pointer repair UI remain open.
 
 ### Missing / not implemented yet
 
 - Hierarchical Areas.
-- Bulk operations with coalesced undo/mutation entries.
-- Semantic search, local LLM provider, and conversational planning sidebar.
+- Bulk reschedule/multi-select operations beyond current grouped tag and duplicate undo.
+- Production semantic vector/model packaging and richer conversational planning/action proposals.
 - CSS snippets, JSON config/keymaps, and sandboxed user extensions.
 - ICS import/subscriptions and local pointer repair UI.
 - Cache encryption.
@@ -79,23 +83,23 @@ Status key:
 
 1. First-class tags:
    - Status: `Partial`; implemented local tag catalog/repository, tag/entity tables, CRUD/merge UI, tag colors, counts, filters via tag search, pinned saved filters, inspector audit, and loaded-data bulk reapply.
-   - Remaining: full-cache/background auto-tag reapply, richer tag analytics, and coalesced undo for bulk changes.
+   - Remaining: full-cache/background auto-tag reapply and richer tag analytics.
 2. Recurrence correctness:
    - Status: `Partial`; whole-series, Google-backed occurrence edits/deletes, locally materialized future-series splits, and recurrence tests exist.
    - Remaining: Google-expanded future-series writes when master data is unavailable, deeper RRULE editor, and live Google smoke.
    - reason: high-risk calendar behavior; better before broad calendar automation.
 3. Boolean/custom search and pinned filters:
-   - Status: `Partial`; boolean DSL and pinned saved filters are implemented.
-   - Remaining: semantic search, local LLM, and conversational planning sidebar.
+   - Status: `Partial`; boolean DSL, pinned saved filters, local semantic/hybrid search, local-disabled chat, Ollama/OpenAI-compatible provider hooks, and a chat sidebar are implemented.
+   - Remaining: production transformer/vector-extension path, background embedding worker/model controls, broader embedding coverage, richer provider health/diagnostics, and MCP-backed action proposals.
 4. Duplicate merge/coalesced cleanup:
-   - Status: `Partial`; duplicate group merge is implemented for loaded tasks/events/notes.
-   - Remaining: coalesced undo/mutation entries and deeper duplicate-resolution QA.
+   - Status: `Partial`; duplicate group merge is implemented for loaded tasks/events/notes, with domain-backed cleanup and grouped undo.
+   - Remaining: mutation coalescing and deeper duplicate-resolution QA.
 5. Portable export/import verification or implementation:
    - Status: `Partial`; deterministic `.hcbexport`, selected list/calendar/future filters, dry-run import diff, attachment bundling/relinking, and pre-import backups exist.
    - Remaining: local pointer repair UI, richer item-level preview, `.hcb2export` naming decision, and manual migration QA.
 6. Agent-native MCP/CLI v2:
-   - Status: `Partial`; `hcb brief`, `hcb tail`, `hcb plan`, `hcb_brief`, `hcb_tail`, `hcb_plan`, resources, and prompts are implemented.
-   - Remaining: webhooks and durable pending agent action tray/proposed-write store.
+   - Status: `Partial`; `hcb brief`, `hcb tail`, `hcb plan`, `hcb_brief`, `hcb_tail`, `hcb_plan`, resources, prompts, durable pending action storage, approval tray, and loopback webhooks are implemented.
+   - Remaining: webhook retry/rate-limit hardening, event-starting/mutation-failed emit sources, external MCP client QA, and deeper approval-tray UI QA.
 7. Release hardening:
    - live Google smoke, external MCP client QA, notification actions, updater, packaging/signing checks
    - reason: product-readiness work after feature slices stabilize.
@@ -150,12 +154,11 @@ Status key:
 
 ### Tasks and organisation
 
-- Status: `Verify` for Kanban parity; `Partial` for tags/auto-tagging, duplicate detection/review, snooze, subtasks, templates, and NL quick-add; `Missing` for Areas and coalesced bulk cleanup.
+- Status: `Verify` for Kanban parity; `Partial` for tags/auto-tagging, duplicate detection/review, grouped duplicate cleanup undo, snooze, subtasks, templates, and NL quick-add; `Missing` for Areas.
 - Verify/finish Kanban parity beyond the current Google-list board if original `KanbanGrouping` behavior is not covered.
 - Harden first-class tags beyond current catalog/link implementation:
   - full-cache/background auto-tag reapply
   - richer tag analytics
-  - coalesced undo for bulk tag changes
 - Harden current rule-based auto-tagging and color assignment:
   - "why was this tagged?" inspector/audit detail
 - Add auto-tag bulk tools:
@@ -170,11 +173,11 @@ Status key:
   - settings/sidebar UI
 - Finish bulk operations where current multi-select is incomplete:
   - reschedule
-  - tag/untag
-  - batched/coalesced undo and mutation entries
+  - tag/untag QA beyond current bulk tag apply path
+  - batched/coalesced mutation entries
 - Harden duplicate resolution for tasks, events, and notes.
-  - Note: duplicate create controls, review/dismiss/open/delete, and loaded-data merge flows are present.
-  - Remaining: coalesced cleanup and stronger duplicate-resolution QA.
+  - Note: duplicate create controls, review/dismiss/open/delete, loaded-data merge flows, domain cleanup, and grouped undo are present.
+  - Remaining: mutation coalescing and stronger duplicate-resolution QA.
 - Finish snooze UX:
   - inspector controls for `snoozeUntil`
   - visible snoozed state in task lists/today/search
@@ -262,7 +265,7 @@ Status key:
 
 ## 4. Search, filters, and command surfaces
 
-- Status: `Partial`; local search, MCP/CLI search, advanced parser-backed operators, boolean DSL, saved-search settings, and pinned filters exist. Semantic search, local LLM, and chat surfaces remain missing.
+- Status: `Partial`; local search, MCP/CLI search, advanced parser-backed operators, boolean DSL, saved-search settings, pinned filters, local semantic/hybrid search, local LLM provider hooks, and chat surfaces exist.
 - Keep parser-backed advanced search operators covered:
   - regex mode
   - `attendee:`
@@ -276,7 +279,8 @@ Status key:
   - saved-query UX polish
   - validation and explain output
 - Add local semantic search layered on existing search:
-  - evaluate `sqlite-vec` vs SQLite `Vec1` for packaging stability
+  - Current: deterministic local hash embeddings are stored in `local_semantic_embeddings` for tasks/events/notes, semantic/hybrid modes are exposed through IPC/search, and focused SQLite tests cover indexing/search diagnostics.
+  - Remaining production path: evaluate `sqlite-vec` vs SQLite `Vec1` for packaging stability
   - use a worker-backed embedding path, starting with `Xenova/all-MiniLM-L6-v2` / `@huggingface/transformers` if packaging is acceptable
   - store 384-dimensional embeddings with entity kind/id, source text hash, model id, and generated-at metadata
   - store embeddings for tasks, events, notes, lists, and calendars locally
@@ -286,15 +290,15 @@ Status key:
   - model download/cache controls, rebuild controls, and disabled-state UI when the model or vector extension is unavailable
   - diagnostics for stale/missing embeddings
 - Add opt-in local LLM provider hook:
-  - support user-configured Ollama and llama.cpp/OpenAI-compatible local endpoints
-  - default disabled; prefer `127.0.0.1` / `localhost` endpoints unless the user explicitly opts into a remote URL
-  - summarize long notes, suggest task breakdowns, draft event agendas, and explain plans through existing MCP read/write tools
+  - Current: user-configured Ollama and OpenAI-compatible endpoints exist, default disabled, with remote URLs blocked unless explicitly enabled.
+  - Remaining: summarize long notes, suggest task breakdowns, draft event agendas, and explain plans through existing MCP read/write tools
   - route writes through dry-run previews and confirmation IDs; no silent task/event/note mutations
   - redact tokens/secrets, enforce context budgets, timeouts, cancellation, rate limits, and audit logs
   - show model/provider health, last error, and privacy status in Settings/Diagnostics
 - Add in-app conversational planning sidebar:
-  - act as an MCP client to HCB's local tools/resources/prompts and a user-configured model
-  - answer planning questions like "what should I do next?" using Today/search/calendar/task context
+  - Current: a local chat panel stores local chat history and answers with local search context plus optional provider calls.
+  - Remaining: act as an MCP client to HCB's local tools/resources/prompts and a user-configured model
+  - answer richer planning questions like "what should I do next?" using Today/search/calendar/task context
   - surface proposed writes through the Pending agent action tray
   - keep chat history local, exportable, clearable, and excluded from remote services by default
   - include prompt-injection guardrails for note/event/task content used as context
@@ -444,16 +448,11 @@ Status key:
   - Status: `Done` for Diagnostics tabs and command-palette entry points.
   - Add a separate window only if later UX requires it.
 - Expand agent-native MCP, CLI, and local automation surface:
-  - Note: base MCP/CLI read/write CRUD, sync, queue, undo/redo, and convert tools are already done.
-  - add `hcb_brief` read tool/resource returning one structured today summary with blocking tasks, overdue items, conflicts, suggested reorder, sync risk, and next events
-  - expand `promptRegistry.ts`; current prompts cover sync/debug/today/week/support, while day planning, inbox triage, standup summaries, reschedule planning, and duplicate review remain open
-  - add an in-app floating Pending agent action tray for queued `confirmationId`s, with approve/reject/expiry states and sanitized dry-run summaries
-  - add `hcb tail` CLI for live sync/log/mutation state, polling first and SSE only if the MCP transport grows stream support
-  - add `hcb plan` CLI that reads piped markdown, parses tasks/events/notes through shared NL parsing, previews candidates by default, and applies only with `--apply`
-  - add opt-in loopback webhooks for local POSTs on planner events such as task created/completed, event starting, mutation failed, and sync completed
-  - restrict webhook URLs to `127.0.0.1` / `localhost`, sign payloads with a local secret, rate-limit delivery, retry safely, and omit private bodies by default
+  - Current: base MCP/CLI read/write CRUD, sync, queue, undo/redo, convert tools, `hcb_brief`, `hcb tail`, `hcb plan`, durable pending action storage, floating approval tray, and loopback webhook subscriptions are present.
+  - Current webhook coverage: localhost/127.0.0.1/::1 validation, HMAC signatures, private-body redaction by default, task created/completed emits, and sync completed emits.
+  - Remaining: event-starting and mutation-failed emit sources, webhook retry/backoff/rate-limit hardening, richer prompt coverage for day planning/inbox triage/standups/reschedule/duplicate review, and external MCP client QA.
   - keep all agent/CLI/webhook output redacted and context-budgeted
-  - add tests for resource discovery, prompt discovery, prompt args, `hcb_brief` schema stability, confirmation tray approvals, `hcb tail`, `hcb plan`, and webhook validation/delivery
+  - add/finish tests for resource discovery, prompt discovery, prompt args, `hcb_brief` schema stability, confirmation tray approvals, `hcb tail`, `hcb plan`, and webhook delivery retry paths
 - Audit MCP tool catalogue parity with original:
   - Status: `Partial`; current tool registry is broad and tested, but original parity must be checked explicitly before closing this.
   - exact tool names
