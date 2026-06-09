@@ -1,5 +1,12 @@
 import type { GoogleApiTransport } from "./transport";
-import type { CalendarConference } from "@shared/ipc/contracts";
+import type {
+  CalendarConference,
+  CalendarConferenceCreateRequest,
+  CalendarEventAttendee,
+  CalendarEventReminder,
+  CalendarEventTransparency,
+  CalendarEventVisibility
+} from "@shared/ipc/contracts";
 
 export interface GoogleCalendarListMirror {
   id: string;
@@ -38,7 +45,10 @@ export interface GoogleCalendarEventMirror {
   transparency?: string | null;
   visibility?: string | null;
   attendeeEmails?: string[];
+  attendees?: CalendarEventAttendee[];
   reminderMinutes?: number[];
+  reminders?: CalendarEventReminder[];
+  remindersUseDefault?: boolean;
   conference?: CalendarConference | null;
   etag?: string | null;
   sequence?: number | null;
@@ -72,8 +82,13 @@ export interface GoogleCalendarEventWriteInput {
   isAllDay: boolean;
   recurrenceRule?: string | null;
   colorId?: string | null;
+  transparency?: CalendarEventTransparency | null;
+  visibility?: CalendarEventVisibility | null;
   attendeeEmails?: readonly string[];
   reminderMinutes?: readonly number[];
+  reminders?: readonly CalendarEventReminder[];
+  remindersUseDefault?: boolean;
+  conferenceCreateRequest?: CalendarConferenceCreateRequest | null;
 }
 
 export interface GoogleCalendarEventUpdateInput extends GoogleCalendarEventWriteInput {
@@ -161,9 +176,14 @@ interface GoogleEventDateDto {
 
 interface GoogleEventAttendeeDto {
   email?: string;
+  displayName?: string;
+  responseStatus?: string;
+  self?: boolean;
+  resource?: boolean;
 }
 
 interface GoogleEventRemindersDto {
+  useDefault?: boolean;
   overrides?: Array<{ method?: string; minutes?: number }>;
 }
 
@@ -198,15 +218,23 @@ interface GoogleEventMutationDto {
   attendees?: Array<{ email: string }>;
   reminders?: {
     useDefault: boolean;
-    overrides: Array<{ method: "popup"; minutes: number }>;
+    overrides?: Array<{ method: "popup" | "email"; minutes: number }>;
   };
   colorId?: string | null;
+  conferenceData?: {
+    createRequest: {
+      requestId: string;
+      conferenceSolutionKey: {
+        type: "hangoutsMeet";
+      };
+    };
+  };
 }
 
 const CALENDAR_LIST_FIELDS =
   "items(id,summary,description,timeZone,backgroundColor,foregroundColor,selected,hidden,primary,accessRole,etag)";
 const EVENTS_FIELDS =
-  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password)))";
+  "nextPageToken,nextSyncToken,items(id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email,displayName,responseStatus,self,resource),reminders(useDefault,overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password)))";
 
 export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
   private readonly transport: GoogleApiTransport;
@@ -289,7 +317,8 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "POST",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(calendarId)}/events`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email,displayName,responseStatus,self,resource),reminders(useDefault,overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))",
+        conferenceDataVersion: input.conferenceCreateRequest ? "1" : undefined
       },
       body: eventMutationBody(input, { includeEventType: true })
     });
@@ -302,7 +331,8 @@ export class GoogleCalendarHttpAdapter implements GoogleCalendarTransport {
       method: "PATCH",
       path: `/calendar/v3/calendars/${encodeGooglePathComponent(input.calendarId)}/events/${encodeGooglePathComponent(input.eventId)}`,
       query: {
-        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email),reminders(overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))"
+        fields: "id,summary,description,location,status,start,end,recurrence,colorId,recurringEventId,originalStartTime,etag,updated,sequence,transparency,visibility,eventType,birthdayProperties(type,customTypeName,contact),attendees(email,displayName,responseStatus,self,resource),reminders(useDefault,overrides(method,minutes)),hangoutLink,conferenceData(conferenceSolution(name),entryPoints(entryPointType,uri,label,pin,accessCode,meetingCode,passcode,password))",
+        conferenceDataVersion: input.conferenceCreateRequest ? "1" : undefined
       },
       body: eventMutationBody(input, { includeEventType: false }),
       ifMatch: input.ifMatch ?? undefined
@@ -356,7 +386,10 @@ function mapEvent(
     transparency: item.transparency ?? null,
     visibility: item.visibility ?? null,
     attendeeEmails: normalizeAttendeeEmails(item.attendees),
+    attendees: normalizeAttendees(item.attendees),
     reminderMinutes: normalizeReminderMinutes(item.reminders),
+    reminders: normalizeReminders(item.reminders),
+    remindersUseDefault: item.reminders?.useDefault === true,
     conference: normalizeConference(item),
     etag: item.etag ?? null,
     sequence: item.sequence ?? null,
@@ -416,6 +449,35 @@ function normalizeAttendeeEmails(attendees: GoogleEventAttendeeDto[] | undefined
   return result;
 }
 
+function normalizeAttendees(attendees: GoogleEventAttendeeDto[] | undefined): CalendarEventAttendee[] {
+  const seen = new Set<string>();
+  const result: CalendarEventAttendee[] = [];
+
+  for (const attendee of attendees ?? []) {
+    const email = attendee.email?.trim().toLowerCase();
+
+    if (email === undefined || email.length === 0 || seen.has(email)) {
+      continue;
+    }
+
+    seen.add(email);
+    result.push({
+      email,
+      ...(textValue(attendee.displayName) ? { displayName: textValue(attendee.displayName) } : {}),
+      ...(attendee.responseStatus === "needsAction" ||
+      attendee.responseStatus === "declined" ||
+      attendee.responseStatus === "tentative" ||
+      attendee.responseStatus === "accepted"
+        ? { responseStatus: attendee.responseStatus }
+        : {}),
+      ...(attendee.self === undefined ? {} : { self: attendee.self }),
+      ...(attendee.resource === undefined ? {} : { resource: attendee.resource })
+    });
+  }
+
+  return result;
+}
+
 function normalizeReminderMinutes(reminders: GoogleEventRemindersDto | undefined): number[] {
   const seen = new Set<number>();
   const result: number[] = [];
@@ -444,6 +506,33 @@ function normalizeReminderMinutes(reminders: GoogleEventRemindersDto | undefined
   return result.sort((left, right) => left - right);
 }
 
+function normalizeReminders(reminders: GoogleEventRemindersDto | undefined): CalendarEventReminder[] {
+  const seen = new Set<string>();
+  const result: CalendarEventReminder[] = [];
+
+  for (const reminder of reminders?.overrides ?? []) {
+    const method = reminder.method;
+    const minutes = reminder.minutes;
+    const key = `${method}:${minutes}`;
+
+    if (
+      (method !== "popup" && method !== "email") ||
+      minutes === undefined ||
+      !Number.isInteger(minutes) ||
+      minutes < 0 ||
+      minutes > 28 * 24 * 60 ||
+      seen.has(key)
+    ) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push({ method, minutes });
+  }
+
+  return result.sort((left, right) => left.minutes - right.minutes || left.method.localeCompare(right.method));
+}
+
 function eventMutationBody(
   input: GoogleCalendarEventWriteInput,
   options: { includeEventType: boolean }
@@ -458,6 +547,12 @@ function eventMutationBody(
   const reminderMinutes = normalizeReminderMinutes({
     overrides: (input.reminderMinutes ?? []).map((minutes) => ({ method: "popup", minutes }))
   });
+  const reminders = normalizeReminders({
+    overrides: input.reminders ??
+      (input.reminderMinutes === undefined
+        ? undefined
+        : input.reminderMinutes.map((minutes) => ({ method: "popup", minutes })))
+  });
 
   return {
     summary: input.summary,
@@ -469,17 +564,26 @@ function eventMutationBody(
       ? { recurrence: [input.recurrenceRule.trim()] }
       : {}),
     ...(input.colorId === undefined ? {} : { colorId: input.colorId }),
+    ...(input.transparency === "opaque" || input.transparency === "transparent"
+      ? { transparency: input.transparency }
+      : {}),
+    ...(input.visibility === "default" || input.visibility === "public" || input.visibility === "private"
+      ? { visibility: input.visibility }
+      : {}),
     ...(attendeeEmails.length === 0
       ? {}
       : { attendees: attendeeEmails.map((email) => ({ email })) }),
-    ...(reminderMinutes.length === 0
-      ? {}
-      : {
-          reminders: {
-            useDefault: false,
-            overrides: reminderMinutes.map((minutes) => ({ method: "popup", minutes }))
+    ...googleReminderMutation(input, reminders, reminderMinutes),
+    ...(input.conferenceCreateRequest?.type === "hangoutsMeet"
+      ? {
+          conferenceData: {
+            createRequest: {
+              requestId: `hcb-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+              conferenceSolutionKey: { type: "hangoutsMeet" as const }
+            }
           }
-        })
+        }
+      : {})
   };
 }
 
@@ -489,6 +593,12 @@ function birthdayMutationBody(
 ): GoogleEventMutationDto {
   const reminderMinutes = normalizeReminderMinutes({
     overrides: (input.reminderMinutes ?? []).map((minutes) => ({ method: "popup", minutes }))
+  });
+  const reminders = normalizeReminders({
+    overrides: input.reminders ??
+      (input.reminderMinutes === undefined
+        ? undefined
+        : input.reminderMinutes.map((minutes) => ({ method: "popup", minutes })))
   });
 
   return {
@@ -500,15 +610,31 @@ function birthdayMutationBody(
     transparency: "transparent",
     visibility: "private",
     ...(input.colorId === undefined ? {} : { colorId: input.colorId }),
-    ...(input.reminderMinutes === undefined
-      ? {}
-      : {
-          reminders: {
-            useDefault: false,
-            overrides: reminderMinutes.map((minutes) => ({ method: "popup", minutes }))
-          }
-        })
+    ...googleReminderMutation(input, reminders, reminderMinutes)
   };
+}
+
+function googleReminderMutation(
+  input: GoogleCalendarEventWriteInput,
+  reminders: CalendarEventReminder[],
+  reminderMinutes: number[]
+): Pick<GoogleEventMutationDto, "reminders"> {
+  if (input.remindersUseDefault === true) {
+    return { reminders: { useDefault: true } };
+  }
+
+  if (input.reminders !== undefined || input.reminderMinutes !== undefined || input.remindersUseDefault === false) {
+    return {
+      reminders: {
+        useDefault: false,
+        overrides: reminders.length > 0
+          ? reminders
+          : reminderMinutes.map((minutes) => ({ method: "popup" as const, minutes }))
+      }
+    };
+  }
+
+  return {};
 }
 
 function eventMutationDate(

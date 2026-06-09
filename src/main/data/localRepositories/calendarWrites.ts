@@ -326,6 +326,12 @@ export function parseLocalRRuleUntil(value: string): Date | undefined {
 }
 
 function firstLocalRecurrenceDate(start: Date, rrule: ParsedLocalRRule): Date {
+  if (rrule.freq === "MONTHLY" && (rrule.byMonthDay || rrule.bySetPos)) {
+    return monthlyRuleMatches(start, rrule, start)
+      ? start
+      : nextMonthlyRuleDate(addUtcDaysDate(start, -1), rrule, start);
+  }
+
   if (rrule.freq !== "WEEKLY" || !rrule.byDay?.length || rrule.byDay.includes(weekdayCode(start))) {
     return start;
   }
@@ -336,6 +342,10 @@ function firstLocalRecurrenceDate(start: Date, rrule: ParsedLocalRRule): Date {
 export function nextLocalRecurrenceDate(date: Date, rrule: ParsedLocalRRule, seriesStart = date): Date {
   if (rrule.freq === "WEEKLY" && rrule.byDay?.length) {
     return nextWeeklyByDayDate(date, rrule, seriesStart);
+  }
+
+  if (rrule.freq === "MONTHLY" && (rrule.byMonthDay || rrule.bySetPos)) {
+    return nextMonthlyRuleDate(date, rrule, seriesStart);
   }
 
   const next = new Date(date.getTime());
@@ -368,6 +378,73 @@ function nextWeeklyByDayDate(date: Date, rrule: ParsedLocalRRule, seriesStart: D
   const fallback = new Date(date.getTime());
   fallback.setUTCDate(fallback.getUTCDate() + rrule.interval * 7);
   return fallback;
+}
+
+function nextMonthlyRuleDate(date: Date, rrule: ParsedLocalRRule, seriesStart: Date): Date {
+  const next = new Date(date.getTime());
+
+  for (let offset = 1; offset <= 370; offset += 1) {
+    next.setUTCDate(next.getUTCDate() + 1);
+    next.setUTCHours(
+      seriesStart.getUTCHours(),
+      seriesStart.getUTCMinutes(),
+      seriesStart.getUTCSeconds(),
+      seriesStart.getUTCMilliseconds()
+    );
+
+    if (monthlyRuleMatches(next, rrule, seriesStart)) {
+      return next;
+    }
+  }
+
+  const fallback = new Date(date.getTime());
+  fallback.setUTCMonth(fallback.getUTCMonth() + rrule.interval);
+  return fallback;
+}
+
+function monthlyRuleMatches(date: Date, rrule: ParsedLocalRRule, seriesStart: Date): boolean {
+  if (!recurrenceMonthMatches(seriesStart, date, rrule.interval)) {
+    return false;
+  }
+
+  if (rrule.byMonthDay) {
+    return date.getUTCDate() === rrule.byMonthDay;
+  }
+
+  if (rrule.bySetPos && rrule.byDay?.length) {
+    return rrule.byDay.includes(weekdayCode(date)) &&
+      monthlyWeekdayPositionMatches(date, rrule.bySetPos);
+  }
+
+  return date.getUTCDate() === seriesStart.getUTCDate();
+}
+
+function recurrenceMonthMatches(seriesStart: Date, date: Date, interval: number): boolean {
+  const months =
+    (date.getUTCFullYear() - seriesStart.getUTCFullYear()) * 12 +
+    date.getUTCMonth() -
+    seriesStart.getUTCMonth();
+
+  return months >= 0 && months % interval === 0;
+}
+
+function monthlyWeekdayPositionMatches(date: Date, position: number): boolean {
+  const day = date.getUTCDate();
+
+  if (position > 0) {
+    return Math.floor((day - 1) / 7) + 1 === position;
+  }
+
+  const nextWeek = new Date(date.getTime());
+  let fromEnd = 1;
+  nextWeek.setUTCDate(day + 7);
+
+  while (nextWeek.getUTCMonth() === date.getUTCMonth()) {
+    fromEnd += 1;
+    nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
+  }
+
+  return -fromEnd === position;
 }
 
 function recurrenceWeekMatches(seriesStart: Date, date: Date, interval: number): boolean {
@@ -415,9 +492,10 @@ export function eventInsertOperation(input: {
     sql: `INSERT INTO google_calendar_events (
       id, account_id, calendar_id, google_id, status, summary, description, location,
       start_at, start_time_zone, end_at, end_time_zone, is_all_day, recurrence_rule, local_time_zone,
-      hcb_kind, local_tags_json, color_id, attendee_emails_json, reminder_minutes_json,
+      hcb_kind, local_tags_json, color_id, transparency, visibility, attendee_emails_json,
+      attendee_details_json, reminder_minutes_json, reminders_json, reminders_use_default,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+    ) VALUES (?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
     params: [
       input.id,
       input.accountId,
@@ -436,8 +514,13 @@ export function eventInsertOperation(input: {
       input.hcbKind ?? null,
       input.localTagsJson ?? "[]",
       input.colorId ?? null,
+      input.transparency ?? null,
+      input.visibility ?? null,
       JSON.stringify(input.guestEmails),
+      JSON.stringify(input.guestEmails.map((email) => ({ email }))),
       JSON.stringify(input.reminderMinutes),
+      JSON.stringify(input.reminders ?? []),
+      boolInt(input.remindersUseDefault === true),
       input.now,
       input.now
     ]
@@ -469,8 +552,13 @@ export function eventUpdateOperation(input: {
               hcb_kind = COALESCE(?, hcb_kind),
               local_tags_json = ?,
               color_id = ?,
+              transparency = ?,
+              visibility = ?,
               attendee_emails_json = ?,
+              attendee_details_json = ?,
               reminder_minutes_json = ?,
+              reminders_json = ?,
+              reminders_use_default = ?,
               updated_at = ?
           WHERE id = ? AND deleted_at IS NULL;`,
     params: [
@@ -488,8 +576,13 @@ export function eventUpdateOperation(input: {
       input.hcbKind ?? null,
       input.localTagsJson ?? "[]",
       input.colorId ?? null,
+      input.transparency ?? null,
+      input.visibility ?? null,
       JSON.stringify(input.guestEmails),
+      JSON.stringify(input.guestEmails.map((email) => ({ email }))),
       JSON.stringify(input.reminderMinutes),
+      JSON.stringify(input.reminders ?? []),
+      boolInt(input.remindersUseDefault === true),
       input.now,
       input.id
     ]
@@ -623,7 +716,12 @@ export function mutationPayload(input: NormalizedCalendarWrite, hcbKind?: "birth
     notes: input.notes,
     guestEmails: input.guestEmails,
     reminderMinutes: input.reminderMinutes,
+    reminders: input.reminders ?? [],
+    remindersUseDefault: input.remindersUseDefault ?? false,
     colorId: input.colorId ?? null,
+    transparency: input.transparency ?? null,
+    visibility: input.visibility ?? null,
+    conferenceCreateRequest: input.conferenceCreateRequest ?? null,
     hcbKind: hcbKind ?? null,
     recurrence: recurrenceFromRule(input.recurrenceRule),
     recurrenceRule: input.recurrenceRule
@@ -633,4 +731,12 @@ export function mutationPayload(input: NormalizedCalendarWrite, hcbKind?: "birth
 function normalizeColorId(value: string | null | undefined): string | null {
   const colorId = value?.trim() ?? "";
   return colorId.length > 0 && colorId.length <= 32 ? colorId : null;
+}
+
+function normalizeTransparency(value: CalendarEventTransparency | null | undefined): CalendarEventTransparency | null {
+  return value === "opaque" || value === "transparent" ? value : null;
+}
+
+function normalizeVisibility(value: CalendarEventVisibility | null | undefined): CalendarEventVisibility | null {
+  return value === "default" || value === "public" || value === "private" ? value : null;
 }

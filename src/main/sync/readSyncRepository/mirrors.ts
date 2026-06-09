@@ -1,4 +1,9 @@
-import { normalizeGuestEmails, normalizeReminderMinutes } from "@shared/domain/calendar";
+import {
+  normalizeCalendarAttendees,
+  normalizeCalendarReminders,
+  normalizeGuestEmails,
+  normalizeReminderMinutes
+} from "@shared/domain/calendar";
 import type { SqliteConnection, SqliteWriteOperation } from "../../data/sqliteConnection";
 import type {
   GoogleCalendarEventMirror,
@@ -210,9 +215,10 @@ export function writeCalendarEvents(
         id, account_id, calendar_id, google_id, recurring_event_id, original_start_at,
         status, summary, description, location, start_at, start_time_zone, end_at,
         end_time_zone, is_all_day, recurrence_rule, color_id, transparency, visibility, etag,
-        sequence, local_time_zone, hcb_kind, attendee_emails_json, reminder_minutes_json, conference_json, google_updated_at,
+        sequence, local_time_zone, hcb_kind, attendee_emails_json, attendee_details_json,
+        reminder_minutes_json, reminders_json, reminders_use_default, conference_json, google_updated_at,
         created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(account_id, calendar_id, google_id) DO UPDATE SET
         recurring_event_id = excluded.recurring_event_id,
         original_start_at = excluded.original_start_at,
@@ -234,7 +240,10 @@ export function writeCalendarEvents(
         local_time_zone = excluded.local_time_zone,
         hcb_kind = COALESCE(excluded.hcb_kind, google_calendar_events.hcb_kind),
         attendee_emails_json = excluded.attendee_emails_json,
+        attendee_details_json = excluded.attendee_details_json,
         reminder_minutes_json = excluded.reminder_minutes_json,
+        reminders_json = excluded.reminders_json,
+        reminders_use_default = excluded.reminders_use_default,
         conference_json = excluded.conference_json,
         google_updated_at = excluded.google_updated_at,
         updated_at = excluded.updated_at,
@@ -264,7 +273,10 @@ export function writeCalendarEvents(
         localTimeZone,
         event.hcbKind ?? null,
         JSON.stringify(normalizeGuestEmails(event.attendeeEmails)),
+        JSON.stringify(normalizeCalendarAttendees(event.attendees)),
         JSON.stringify(normalizeReminderMinutes(event.reminderMinutes)),
+        JSON.stringify(normalizeCalendarReminders(event.reminders)),
+        boolInt(event.remindersUseDefault === true),
         event.conference ? JSON.stringify(event.conference) : null,
         event.updatedAt ?? null,
         options.now,
@@ -406,7 +418,10 @@ export function updateCalendarEventFromRemote(
                 local_time_zone = ?,
                 hcb_kind = COALESCE(?, hcb_kind),
                 attendee_emails_json = ?,
+                attendee_details_json = ?,
                 reminder_minutes_json = ?,
+                reminders_json = ?,
+                reminders_use_default = ?,
                 conference_json = ?,
                 google_updated_at = ?,
                 updated_at = ?,
@@ -435,7 +450,10 @@ export function updateCalendarEventFromRemote(
         eventTimeZone(input.remote, defaultTimeZone),
         input.remote.hcbKind ?? null,
         JSON.stringify(normalizeGuestEmails(input.remote.attendeeEmails)),
+        JSON.stringify(normalizeCalendarAttendees(input.remote.attendees)),
         JSON.stringify(normalizeReminderMinutes(input.remote.reminderMinutes)),
+        JSON.stringify(normalizeCalendarReminders(input.remote.reminders)),
+        boolInt(input.remote.remindersUseDefault === true),
         input.remote.conference ? JSON.stringify(input.remote.conference) : null,
         input.remote.updatedAt ?? null,
         input.now,
