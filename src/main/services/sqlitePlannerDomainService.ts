@@ -473,7 +473,9 @@ export function createSqlitePlannerDomainService(
           label: "Smart reschedule",
           resourceId: result.appliedBlocks[0]?.id ?? "smart-reschedule",
           changes: result.appliedBlocks.map((block) => ({
-            actionKind: block.id === beforeByBlockId.get(block.id) ? "scheduled_task_block.move" : "scheduled_task_block.smart_reschedule",
+            actionKind: beforeByBlockId.has(block.id)
+              ? "scheduled_task_block.move"
+              : "scheduled_task_block.create",
             label: "Smart reschedule",
             resourceKind: "scheduledTaskBlock",
             resourceId: block.id,

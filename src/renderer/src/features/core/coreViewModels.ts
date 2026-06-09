@@ -91,6 +91,20 @@ export interface CalendarEventViewModel {
   notes: string;
   guestEmails: string[];
   reminderMinutes: number[];
+  attendees: Array<{
+    email: string;
+    displayName?: string;
+    responseStatus?: "needsAction" | "declined" | "tentative" | "accepted";
+    self?: boolean;
+    resource?: boolean;
+  }>;
+  reminders: Array<{
+    method: "popup" | "email";
+    minutes: number;
+  }>;
+  remindersUseDefault: boolean;
+  transparency: "opaque" | "transparent" | null;
+  visibility: "default" | "public" | "private" | null;
   tags?: string[];
   conference: {
     solutionName?: string;
