@@ -406,6 +406,88 @@ export function SettingsView({
     );
   }
 
+  async function runAutoTagBackgroundReapply(
+    mode: SettingsSnapshot["autoTagBackgroundReapplyMode"],
+    cancelled: () => boolean
+  ): Promise<void> {
+    if (autoTagRuleErrorCount > 0) {
+      if (!cancelled()) {
+        setAutoTagBackgroundNotice({
+          title: "Auto-tag reapply blocked",
+          description: "Fix auto-tag rule errors before background reapply can run.",
+          tone: "warning"
+        });
+      }
+      return;
+    }
+
+    const previews: Array<{ kind: AutoTagTargetKind; changed: number }> = [];
+
+    for (const kind of autoTagTargetKinds) {
+      const preview = await source.previewAutoTagReapply({ kind, scope: "all" });
+
+      if (cancelled()) {
+        return;
+      }
+
+      if (!preview || preview.blocked) {
+        setAutoTagBackgroundNotice({
+          title: "Auto-tag reapply blocked",
+          description: preview?.message ?? `Auto-tag ${kind} preview failed.`,
+          tone: "warning"
+        });
+        return;
+      }
+
+      if (preview.changed > 0) {
+        previews.push({ kind, changed: preview.changed });
+      }
+    }
+
+    if (previews.length === 0) {
+      setAutoTagBackgroundNotice({
+        title: "Auto-tag reapply preview",
+        description: "No cached tasks, events, or notes need reapply.",
+        tone: "info"
+      });
+      return;
+    }
+
+    if (mode === "preview") {
+      setAutoTagBackgroundNotice({
+        title: "Auto-tag reapply preview",
+        description: autoTagBackgroundSummary(previews),
+        tone: "info",
+        changedKinds: previews
+      });
+      return;
+    }
+
+    await applyAutoTagBackgroundChanges(previews);
+  }
+
+  async function applyAutoTagBackgroundChanges(
+    changedKinds: Array<{ kind: AutoTagTargetKind; changed: number }>
+  ): Promise<void> {
+    const applied: Array<{ kind: AutoTagTargetKind; changed: number; failed: number }> = [];
+
+    for (const item of changedKinds) {
+      const result = await source.applyAutoTagReapply({ kind: item.kind, scope: "all", confirm: true });
+
+      if (result) {
+        applied.push({ kind: item.kind, changed: result.changed, failed: result.failed });
+      }
+    }
+
+    source.refreshUndoStatus();
+    source.refresh();
+    setAutoTagBackgroundNotice({
+      title: "Auto-tag reapply applied",
+      description: autoTagBackgroundAppliedSummary(applied),
+      tone: "success"
+    });
+  }
+
   function updateBaseTheme(theme: SettingsSnapshot["theme"]): void {
     const nextMode = resolveAppThemeMode(theme, currentSystemPrefersDark());
     const currentColorTheme = resolveAppColorTheme(settings.colorTheme, effectiveThemeMode);
