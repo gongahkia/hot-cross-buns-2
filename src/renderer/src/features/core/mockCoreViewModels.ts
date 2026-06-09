@@ -261,23 +261,6 @@ export const taskFilterViewModels: TaskFilterViewModel[] = [
   }
 ];
 
-export const todayViewModel = {
-  metrics: [
-    { id: "open", label: "Open tasks", value: "4" },
-    { id: "events", label: "Events today", value: "5" },
-    { id: "notes", label: "Notes", value: "3" },
-    { id: "cache", label: "Sync mode", value: "Mock" }
-  ],
-  focusTasks: [...inboxTasks, planningTasks[0]],
-  timelineRows: [
-    { kind: "event" as const, itemId: "event-standup" },
-    { kind: "task" as const, itemId: "task-inbox-rules" },
-    { kind: "event" as const, itemId: "event-focus" },
-    { kind: "task" as const, itemId: "task-calendar-fixtures" },
-    { kind: "event" as const, itemId: "event-review" }
-  ]
-};
-
 function mockCalendarEvent({
   allDay = false,
   calendar,

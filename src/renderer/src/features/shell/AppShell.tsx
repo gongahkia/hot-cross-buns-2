@@ -288,7 +288,7 @@ export function AppShell(): JSX.Element {
         return;
       }
 
-      if (action.route.kind === "calendar" || action.route.kind === "event") {
+      if (action.route.kind === "today" || action.route.kind === "calendar" || action.route.kind === "event") {
         navigateToSection("calendar");
         return;
       }
