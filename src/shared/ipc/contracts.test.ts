@@ -70,7 +70,11 @@ describe("shared IPC contracts", () => {
       "calendar",
       "notes",
       "tags",
+      "duplicates",
       "search",
+      "agent",
+      "webhooks",
+      "chat",
       "sync",
       "google",
       "settings",
@@ -527,7 +531,17 @@ describe("shared IPC contracts", () => {
         keybindings: defaultKeybindings,
         savedSearchViews: [],
         pinnedSavedSearchViewIds: [],
-        savedTaskViews: []
+        savedTaskViews: [],
+        semanticSearchEnabled: false,
+        semanticSearchMode: "lexical",
+        embeddingModelId: "hcb-local-hash-384",
+        llmEnabled: false,
+        llmProvider: "ollama",
+        llmEndpoint: "http://127.0.0.1:11434",
+        llmModel: "llama3.1",
+        llmAllowRemoteEndpoint: false,
+        agentActionTrayEnabled: true,
+        webhooksEnabled: false
       }).setupCompletedAt
     ).toBeNull();
     expect(
