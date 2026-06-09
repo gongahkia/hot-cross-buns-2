@@ -26,6 +26,12 @@ export interface CalendarEventDraft {
   tags: string[];
   guests: string;
   reminderMinutes: string;
+  reminders: Array<{ method: "popup" | "email"; minutes: number }>;
+  remindersUseDefault: boolean;
+  attendees: CalendarEventViewModel["attendees"];
+  addMeet: boolean;
+  transparency: "opaque" | "transparent" | null;
+  visibility: "default" | "public" | "private" | null;
   conference: CalendarEventViewModel["conference"];
   repeatFrequency: CalendarRepeatFrequency;
   recurringEventId?: string | null;
@@ -36,6 +42,9 @@ export interface CalendarEventDraft {
   repeatEndsOn: string;
   repeatCount: string;
   repeatWeekdays: CalendarRepeatWeekday[];
+  repeatMonthlyMode: "dayOfMonth" | "weekday";
+  repeatMonthDay: string;
+  repeatSetPos: string;
 }
 
 export interface CalendarDaySlot {
