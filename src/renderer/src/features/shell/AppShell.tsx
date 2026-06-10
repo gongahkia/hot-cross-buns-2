@@ -11,7 +11,7 @@ import { AgentActionTray } from "../core/AgentActionTray";
 import type { DiagnosticsTab } from "../core/DiagnosticsTabs";
 import type { TaskSurfaceCommand } from "../core/CoreScreens";
 import { useCoreViewModelSource } from "../core/coreViewModelSource";
-import { eventMatchesAccelerator } from "../core/hotkeys";
+import { displayAccelerator, duplicateAccelerators, eventMatchesAccelerator, hotkeyDefinitions } from "../core/hotkeys";
 import {
   RenderTimingBoundary,
   rendererNow,
@@ -92,12 +92,15 @@ export function AppShell(): JSX.Element {
   const [diagnosticsInitialTab, setDiagnosticsInitialTab] = useState<DiagnosticsTab>("overview");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [commandPaletteMode, setCommandPaletteMode] = useState<"open" | "action">("open");
+  const [leaderActive, setLeaderActive] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState("");
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
   const shellVisibleReported = useRef(false);
   const commandPaletteOpenStartedAt = useRef<number | null>(null);
+  const leaderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsDialogRef = useRef<HTMLElement | null>(null);
   const calendarVisibilityInitialized = useRef(false);
 
@@ -213,6 +216,17 @@ export function AppShell(): JSX.Element {
 
   const openCommandPalette = useCallback((initialQuery = ""): void => {
     commandPaletteOpenStartedAt.current = rendererNow();
+    setCommandPaletteMode("open");
+    setCommandPaletteInitialQuery(initialQuery);
+    setNotificationsOpen(false);
+    setDiagnosticsOpen(false);
+    setSettingsOpen(false);
+    setCommandPaletteOpen(true);
+  }, []);
+
+  const openActionPalette = useCallback((initialQuery = ""): void => {
+    commandPaletteOpenStartedAt.current = rendererNow();
+    setCommandPaletteMode("action");
     setCommandPaletteInitialQuery(initialQuery);
     setNotificationsOpen(false);
     setDiagnosticsOpen(false);
@@ -547,8 +561,18 @@ export function AppShell(): JSX.Element {
         return;
       }
 
+      if (actionId === "quickAdd.open") {
+        openQuickAdd();
+        return;
+      }
+
       if (actionId === "commandPalette.open") {
         openCommandPalette();
+        return;
+      }
+
+      if (actionId === "actionPalette.open") {
+        openActionPalette();
         return;
       }
 
@@ -684,6 +708,8 @@ export function AppShell(): JSX.Element {
       navigateToPrimarySection,
       navigateToSection,
       openCommandPalette,
+      openActionPalette,
+      openQuickAdd,
       paneWorkspace.closePane,
       paneWorkspace.focusPaneByDirection,
       paneWorkspace.focusedPaneId,

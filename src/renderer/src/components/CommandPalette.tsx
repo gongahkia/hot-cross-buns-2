@@ -16,6 +16,7 @@ import { IconButton, Input, cx } from "./primitives";
 interface CommandPaletteProps {
   actionContext: PlannerActionContext;
   initialQuery?: string;
+  mode?: "open" | "action";
   onCommand?: (command: PlannerAction) => boolean | void;
   onNavigate: (sectionId: SectionId) => void;
   onOpenChange: (open: boolean) => void;
@@ -34,6 +35,14 @@ function commandMatches(command: PlannerAction, query: string): boolean {
     .join(" ")
     .toLowerCase()
     .includes(normalizedQuery);
+}
+
+function commandAllowedInMode(command: PlannerAction, mode: "open" | "action"): boolean {
+  if (mode === "open") {
+    return command.category === "Navigate" || command.category === "Calendar";
+  }
+
+  return command.category !== "Navigate";
 }
 
 function searchResultSection(source: SearchSource): SectionId {
@@ -110,6 +119,7 @@ function dispatchSearchResultOpen(result: SearchResultViewModel): void {
 export function CommandPalette({
   actionContext,
   initialQuery = "",
+  mode = "open",
   onCommand,
   onNavigate,
   onOpenChange,
@@ -123,10 +133,10 @@ export function CommandPalette({
   const trimmedQuery = query.trim();
 
   const filteredCommands = useMemo(
-    () => plannerActions.filter((command) => commandMatches(command, query)),
-    [query]
+    () => plannerActions.filter((command) => commandAllowedInMode(command, mode) && commandMatches(command, query)),
+    [mode, query]
   );
-  const searchEnabled = trimmedQuery.length > 0 && filteredCommands.length === 0;
+  const searchEnabled = mode === "open" && trimmedQuery.length > 0 && filteredCommands.length === 0;
   const search = useLocalSearch(searchEnabled ? query : "");
   const searchResults = searchEnabled && search.viewModel.state === "results" ? search.viewModel.results : [];
   const activeOptionCount = filteredCommands.length > 0 ? filteredCommands.length : searchResults.length;
@@ -262,7 +272,7 @@ export function CommandPalette({
         <div className="flex h-11 items-center gap-3 border-b border-border px-3">
           <Command aria-hidden="true" className="text-accent" size={17} />
           <h2 className="min-w-0 flex-1 truncate text-[var(--text-md)] font-semibold" id="command-palette-title">
-            {t("command.title")}
+            {mode === "open" ? "Quick Switcher" : "Action Palette"}
           </h2>
           <IconButton icon={X} label={t("command.close")} onClick={closePalette} variant="ghost" />
         </div>
@@ -281,7 +291,7 @@ export function CommandPalette({
               className="pl-9"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder={t("command.placeholder")}
+              placeholder={mode === "open" ? "Open views, pinned filters, or search" : "Run a command"}
               ref={inputRef}
               role="searchbox"
               value={query}
