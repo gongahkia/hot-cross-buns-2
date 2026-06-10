@@ -168,6 +168,11 @@ class FakeNativeAdapter implements NativePlatformAdapter {
     state: "ready",
     message: "registered"
   };
+  updateResult: NativeOperationResult = {
+    ok: false,
+    state: "unsupported",
+    message: "not configured"
+  };
   trayResult: NativeOperationResult = {
     ok: true,
     state: "ready",
@@ -269,11 +274,7 @@ class FakeNativeAdapter implements NativePlatformAdapter {
   }
 
   checkForUpdates(): NativeOperationResult {
-    return {
-      ok: false,
-      state: "unsupported",
-      message: "not configured"
-    };
+    return this.updateResult;
   }
 
   openExternalUrl(): NativeOperationResult {
@@ -313,6 +314,7 @@ function createService(input: {
   events?: CalendarEventSummary[];
   dispatch?: (action: NativeAction) => void;
   webhookEmit?: (...args: unknown[]) => void;
+  recordUpdateCheck?: (checkedAt: string) => void;
 } = {}) {
   const adapter = input.adapter ?? new FakeNativeAdapter();
   const settings = { current: input.settings ?? defaultSettings() };
@@ -327,6 +329,7 @@ function createService(input: {
     settings: {
       get: () => settings.current
     },
+    recordUpdateCheck: input.recordUpdateCheck,
     windows: {
       showMainWindow: vi.fn(),
       hideMainWindow: vi.fn(),
@@ -351,6 +354,35 @@ function createService(input: {
 }
 
 describe("native shell service", () => {
+  it("records and exposes manual GitHub release check status", async () => {
+    const checkedAt = "2026-05-22T12:00:00.000Z";
+    const recordUpdateCheck = vi.fn();
+    const adapter = new FakeNativeAdapter();
+    adapter.updateResult = {
+      checkedAt,
+      downloadUrl: "https://github.com/gongahkia/hot-cross-buns-2/releases/download/v1.2.0/HotCrossBuns2.dmg",
+      latestVersion: "1.2.0",
+      ok: true,
+      releaseName: "v1.2.0",
+      releaseUrl: "https://github.com/gongahkia/hot-cross-buns-2/releases/tag/v1.2.0",
+      state: "ready",
+      updateAvailable: true,
+      message: "Hot Cross Buns 1.2.0 is available from GitHub Releases."
+    };
+    const { service } = createService({ adapter, recordUpdateCheck });
+
+    await expect(service.checkForUpdates()).resolves.toMatchObject({
+      checkedAt,
+      latestVersion: "1.2.0",
+      updateAvailable: true
+    });
+    expect(recordUpdateCheck).toHaveBeenCalledWith(checkedAt);
+    expect(service.capabilities().updaterStatus).toMatchObject({
+      releaseUrl: "https://github.com/gongahkia/hot-cross-buns-2/releases/tag/v1.2.0",
+      updateAvailable: true
+    });
+  });
+
   it("defers tray, hotkey, notifications, protocol, updater, and MCP startup", async () => {
     const { adapter, service } = createService({
       tasks: [
