@@ -32,6 +32,7 @@ import {
   type NoteBrokenLinksRequest,
   type NoteCreateRequest,
   type NoteDeleteRequest,
+  type NoteEntityLinksRequest,
   type NoteLinkSuggestRequest,
   type NoteListCreateRequest,
   type NoteListDeleteRequest,
@@ -325,6 +326,10 @@ export function createCoreIpcHandlers(
     {
       contract: ipcContracts.notes.listBrokenLinks,
       handle: (request) => services.planner.listBrokenNoteLinks(request as NoteBrokenLinksRequest)
+    },
+    {
+      contract: ipcContracts.notes.entityLinks,
+      handle: (request) => services.planner.listEntityLinks(request as NoteEntityLinksRequest)
     },
     {
       contract: ipcContracts.tags.list,

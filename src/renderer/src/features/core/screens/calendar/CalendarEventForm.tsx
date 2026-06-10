@@ -13,6 +13,8 @@ import type { useCoreViewModelSource } from "../../coreViewModelSource";
 import { MarkdownPreview } from "../../MarkdownPreview";
 import { TagBadges, TagInput } from "../../TagInput";
 import { AutoTagAudit } from "../../AutoTagAudit";
+import { EntityLinksPanel } from "../../EntityLinksPanel";
+import { plannerLinkTargets } from "../../plannerLinkTargets";
 import {
   addUtcDaysIso,
   dateInputToIso,
@@ -463,13 +465,15 @@ export function CalendarEventDetails({
   defaultTimeZone,
   draft,
   eventColorOverrides,
-  rules
+  rules,
+  source
 }: {
   calendars: ReturnType<typeof useCoreViewModelSource>["calendarSources"];
   defaultTimeZone: string;
   draft: CalendarEventDraft;
   eventColorOverrides: CalendarEventColorOverrides;
   rules: readonly AutoTagRule[];
+  source: ReturnType<typeof useCoreViewModelSource>;
 }): JSX.Element {
   const selectedCalendar = calendars.find((calendar) => calendar.id === draft.calendarId);
   const displayColor = draftDisplayColor(draft, selectedCalendar, eventColorOverrides);
@@ -525,6 +529,7 @@ export function CalendarEventDetails({
             body={notes}
             emptyDescription="No notes"
             emptyTitle="No notes"
+            plannerLinkTargets={plannerLinkTargets(source)}
             variant="plain"
           />
         </DetailLine>
@@ -579,6 +584,8 @@ export function CalendarEventDetails({
         }}
         rules={rules}
       />
+
+      {draft.id ? <EntityLinksPanel entityId={draft.id} entityKind="event" /> : null}
     </div>
   );
 }

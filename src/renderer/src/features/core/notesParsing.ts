@@ -1,15 +1,21 @@
+import { extractPlannerLinks as extractSharedPlannerLinks } from "@shared/plannerLinks";
+
 export interface NoteProperty {
   key: string;
   value: string;
 }
 
-export type PlannerLinkKind = "note" | "task" | "event";
-
-export interface PlannerLinkReference {
-  kind: PlannerLinkKind;
-  label: string;
-  raw: string;
-}
+export {
+  extractPlannerLinks,
+  normalizedPlannerLinkLabel,
+  parsePlannerLink,
+  plannerLinkDisplayLabel,
+  plannerLinkKinds,
+  plannerLinkMarker,
+  type PlannerLinkKind,
+  type PlannerLinkReference,
+  type PlannerLinkType
+} from "@shared/plannerLinks";
 
 export function buildNotePreview(body: string): string {
   const trimmed = body.trim();
@@ -25,38 +31,7 @@ export function normalizedNoteTitle(title: string): string {
 }
 
 export function extractNoteLinks(body: string): string[] {
-  const links = new Set<string>();
-  const pattern = /\[\[([^\]]{1,160})\]\]/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(body)) !== null) {
-    const title = match[1]?.trim();
-
-    if (title) {
-      links.add(title);
-    }
-  }
-
-  return Array.from(links);
-}
-
-export function parsePlannerLink(raw: string): PlannerLinkReference {
-  const [maybeKind, ...rest] = raw.split(":");
-  const kind = maybeKind.toLowerCase();
-
-  if ((kind === "note" || kind === "task" || kind === "event") && rest.length > 0) {
-    return {
-      kind,
-      label: rest.join(":").trim(),
-      raw
-    };
-  }
-
-  return {
-    kind: "note",
-    label: raw.trim(),
-    raw
-  };
+  return extractSharedPlannerLinks(body).map((link) => link.raw);
 }
 
 export function extractNoteProperties(body: string): NoteProperty[] {

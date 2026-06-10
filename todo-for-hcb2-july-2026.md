@@ -8,9 +8,11 @@ Consolidated from:
 
 Open tasks only. Ports stay last.
 
-Last static repo audit for this file: 2026-06-09.
+Last static repo audit for this file: 2026-06-10.
 
 Audit limits: static repo/source/test evidence only. No live Google API, external MCP client, packaged-app, or manual UI QA was performed.
+
+2026-06-10 delta: commits after the prior TODO audit only touched perf smoke wiring plus small test/default adjustments. No TODO item moved to `Present`. Static evidence still supports the open-task list below.
 
 Status key:
 

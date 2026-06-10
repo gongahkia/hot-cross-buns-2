@@ -8,7 +8,9 @@ import { Badge, Button, cx, Input } from "../../../components/primitives";
 import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { CorePriority, TaskViewModel } from "../coreViewModels";
 import { AutoTagAudit } from "../AutoTagAudit";
+import { EntityLinksPanel } from "../EntityLinksPanel";
 import { MarkdownPreview } from "../MarkdownPreview";
+import { plannerLinkTargets } from "../plannerLinkTargets";
 import { TagBadges, TagInput } from "../TagInput";
 
 export interface TaskDraft {
@@ -204,6 +206,7 @@ export function TaskInspectorDetails({
             body={notes}
             emptyDescription="No notes"
             emptyTitle="No notes"
+            plannerLinkTargets={plannerLinkTargets(source)}
             variant="plain"
           />
         </TaskDetailLine>
@@ -246,6 +249,8 @@ export function TaskInspectorDetails({
         }}
         rules={source.settings.autoTagRules}
       />
+
+      {draft.id ? <EntityLinksPanel entityId={draft.id} entityKind="task" /> : null}
 
       {draft.parentId ? (
         <TaskDetailLine icon={ListPlus}>

@@ -9,6 +9,11 @@ import {
   type SearchResultItem,
   type ScheduledTaskBlockSummary
 } from "@shared/ipc/contracts";
+import {
+  extractPlannerLinks,
+  normalizedPlannerLinkLabel,
+  type PlannerLinkKind
+} from "@shared/plannerLinks";
 import type { PlannerViewDomainService } from "../domainInterfaces";
 import { buildDaySchedule } from "../schedulingSuggestionService";
 import {
@@ -847,23 +852,65 @@ export function createPlaceholderPlannerViewService(
       return { items: items.slice(0, limit) };
     },
     listBrokenNoteLinks: (request) => {
-      const note = state.notes.find((candidate) => candidate.id === request.noteId);
+      const entityId = request.entityId ?? request.noteId;
+      const note = state.notes.find((candidate) => candidate.id === entityId);
 
       if (!note) {
         throw new Error("Note was not found.");
       }
 
-      const linkTexts = Array.from(note.body.matchAll(/\[\[([^\]]{1,160})\]\]/g))
-        .map((match) => match[1]?.trim() ?? "")
-        .filter((linkText) => {
-          if (!linkText || linkText.includes(":")) {
-            return false;
-          }
-
-          return !state.notes.some((candidate) => candidate.title.toLowerCase() === linkText.toLowerCase());
-        });
+      const linkTexts = extractPlannerLinks(note.body)
+        .filter((link) => !placeholderLinkTargetId(state, link.kind, link.targetId, link.label))
+        .map((link) => link.raw);
 
       return { items: Array.from(new Set(linkTexts)).map((linkText) => ({ linkText })) };
+    },
+    listEntityLinks: (request) => {
+      const source = placeholderEntityBody(state, request.entityKind, request.entityId);
+      const links = extractPlannerLinks(source.body).map((link) => {
+        const targetId = placeholderLinkTargetId(state, link.kind, link.targetId, link.label);
+        return {
+          sourceKind: request.entityKind,
+          sourceId: request.entityId,
+          sourceField: source.field,
+          targetKind: link.kind,
+          targetId,
+          targetLabel: link.label,
+          raw: link.raw,
+          alias: link.alias,
+          linkType: link.type,
+          broken: targetId === null
+        };
+      });
+
+      const backlinks = placeholderAllEntityBodies(state).flatMap((candidate) =>
+        extractPlannerLinks(candidate.body)
+          .filter((link) => link.kind === request.entityKind)
+          .map((link) => ({
+            link,
+            targetId: placeholderLinkTargetId(state, link.kind, link.targetId, link.label),
+            source: candidate
+          }))
+          .filter((candidate) => candidate.targetId === request.entityId)
+          .map((candidate) => ({
+            sourceKind: candidate.source.kind,
+            sourceId: candidate.source.id,
+            sourceField: candidate.source.field,
+            targetKind: candidate.link.kind,
+            targetId: candidate.targetId,
+            targetLabel: candidate.link.label,
+            raw: candidate.link.raw,
+            alias: candidate.link.alias,
+            linkType: candidate.link.type,
+            broken: false
+          }))
+      );
+
+      return {
+        outgoing: links,
+        backlinks,
+        broken: links.filter((link) => link.broken)
+      };
     },
     search: (request) => {
       const domains = new Set<SearchDomain>(request.domains ?? ["tasks", "calendar", "notes"]);
@@ -929,4 +976,82 @@ export function createPlaceholderPlannerViewService(
         : response;
     }
   };
+}
+
+function placeholderLinkTargetId(
+  state: PlaceholderState,
+  kind: PlannerLinkKind,
+  targetId: string | null,
+  label: string
+): string | null {
+  if (targetId) {
+    return placeholderEntityExists(state, kind, targetId) ? targetId : null;
+  }
+
+  const normalized = normalizedPlannerLinkLabel(label);
+  const body = placeholderAllEntityBodies(state).find((candidate) =>
+    candidate.kind === kind && normalizedPlannerLinkLabel(candidate.title) === normalized
+  );
+
+  return body?.id ?? null;
+}
+
+function placeholderEntityExists(state: PlaceholderState, kind: PlannerLinkKind, id: string): boolean {
+  return placeholderAllEntityBodies(state).some((candidate) => candidate.kind === kind && candidate.id === id);
+}
+
+function placeholderEntityBody(
+  state: PlaceholderState,
+  kind: PlannerLinkKind,
+  id: string
+): { body: string; field: string; id: string; kind: PlannerLinkKind; title: string } {
+  const body = placeholderAllEntityBodies(state).find((candidate) => candidate.kind === kind && candidate.id === id);
+
+  if (!body) {
+    throw new Error("Entity was not found.");
+  }
+
+  return body;
+}
+
+function placeholderAllEntityBodies(
+  state: PlaceholderState
+): Array<{ body: string; field: string; id: string; kind: PlannerLinkKind; title: string }> {
+  return [
+    ...state.notes.map((note) => ({
+      body: note.body,
+      field: "body",
+      id: note.id,
+      kind: "note" as const,
+      title: note.title
+    })),
+    ...state.tasks.map((task) => ({
+      body: task.notes ?? "",
+      field: "notes",
+      id: task.id,
+      kind: "task" as const,
+      title: task.title
+    })),
+    ...state.calendarEvents.map((event) => ({
+      body: event.notes ?? "",
+      field: "description",
+      id: event.id,
+      kind: "event" as const,
+      title: event.title
+    })),
+    ...state.taskLists.map((list) => ({
+      body: list.title,
+      field: "title",
+      id: list.id,
+      kind: "list" as const,
+      title: list.title
+    })),
+    ...state.calendars.map((calendar) => ({
+      body: calendar.title,
+      field: "title",
+      id: calendar.id,
+      kind: "calendar" as const,
+      title: calendar.title
+    }))
+  ];
 }

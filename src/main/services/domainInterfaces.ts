@@ -45,6 +45,8 @@ import type {
   NoteCreateRequest,
   NoteDeleteRequest,
   NoteDetail,
+  NoteEntityLinksRequest,
+  NoteEntityLinksResponse,
   NoteLinkSuggestRequest,
   NoteLinkSuggestResponse,
   NoteListCreateRequest,
@@ -305,6 +307,7 @@ export interface PlannerViewDomainService {
   deleteNote: (request: NoteDeleteRequest) => MaybePromise<{ id: string; queued: boolean; revision?: string }>;
   suggestNoteLinks: (request: NoteLinkSuggestRequest) => MaybePromise<NoteLinkSuggestResponse>;
   listBrokenNoteLinks: (request: NoteBrokenLinksRequest) => MaybePromise<NoteBrokenLinksResponse>;
+  listEntityLinks: (request: NoteEntityLinksRequest) => MaybePromise<NoteEntityLinksResponse>;
   search: (request: SearchQueryRequest) => MaybePromise<SearchQueryResponse>;
   listTags: (request: TagListRequest) => MaybePromise<TagListResponse>;
   createTag: (request: TagCreateRequest) => MaybePromise<TagMutationResponse>;

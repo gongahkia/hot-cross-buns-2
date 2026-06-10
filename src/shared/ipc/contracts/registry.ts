@@ -116,6 +116,8 @@ import {
   noteCreateRequestSchema,
   noteDeleteRequestSchema,
   noteDetailSchema,
+  noteEntityLinksRequestSchema,
+  noteEntityLinksResponseSchema,
   noteLinkSuggestRequestSchema,
   noteLinkSuggestResponseSchema,
   noteListCreateRequestSchema,
@@ -357,6 +359,12 @@ export const ipcContracts = {
       "listBrokenLinks",
       noteBrokenLinksRequestSchema,
       noteBrokenLinksResponseSchema
+    ),
+    entityLinks: defineIpcContract(
+      "notes",
+      "entityLinks",
+      noteEntityLinksRequestSchema,
+      noteEntityLinksResponseSchema
     )
   },
   tags: {

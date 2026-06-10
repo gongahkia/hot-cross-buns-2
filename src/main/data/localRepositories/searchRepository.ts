@@ -6,6 +6,10 @@ import type {
   NoteCreateRequest,
   NoteDeleteRequest,
   NoteDetail,
+  NoteEntityKind,
+  NoteEntityLink,
+  NoteEntityLinksRequest,
+  NoteEntityLinksResponse,
   NoteLinkSuggestRequest,
   NoteLinkSuggestResponse,
   NoteListCreateRequest,
@@ -56,6 +60,27 @@ interface TaskBackedNoteListRow extends Record<string, unknown> {
   title: string;
   updatedAt: string;
   noteCount: number;
+}
+
+interface EntityLinkSourceRow extends Record<string, unknown> {
+  kind: NoteEntityKind;
+  id: string;
+  title: string;
+  body: string;
+  sourceField: string;
+}
+
+interface EntityLinkRow extends Record<string, unknown> {
+  sourceKind: NoteEntityKind;
+  sourceId: string;
+  sourceField: string;
+  targetKind: NoteEntityKind;
+  targetId: string | null;
+  targetLabel: string;
+  raw: string;
+  alias: string | null;
+  linkType: "wikilink" | "transclusion";
+  broken: number;
 }
 
 export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
@@ -1056,12 +1081,70 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
 
   listBrokenNoteLinks(request: NoteBrokenLinksRequest): NoteBrokenLinksResponse {
     return this.measureSqlite("notes.listBrokenLinks", () => {
-      const note = this.getNote(request.noteId);
-      const items = extractPlannerLinks(note.body)
-        .filter((link) => this.resolveLinkTargetId(link) === null)
-        .map((link) => ({ linkText: link.raw }));
+      const entityKind = request.entityKind ?? "note";
+      const entityId = request.entityId ?? request.noteId;
+
+      if (!entityId) {
+        throw validationFailure("An entity id is required.");
+      }
+
+      const links = this.listEntityLinks({ entityKind, entityId });
+      const items = links.broken.map((link) => ({ linkText: link.raw, link }));
 
       return { items };
+    });
+  }
+
+  listEntityLinks(request: NoteEntityLinksRequest): NoteEntityLinksResponse {
+    return this.measureSqlite("notes.entityLinks", () => {
+      this.refreshEntityLinks();
+
+      const params = [request.entityKind, request.entityId];
+      const outgoing = this.connection
+        .query<EntityLinkRow>(
+          `SELECT source_kind AS sourceKind,
+                  source_id AS sourceId,
+                  source_field AS sourceField,
+                  target_kind AS targetKind,
+                  target_id AS targetId,
+                  target_label AS targetLabel,
+                  raw,
+                  alias,
+                  link_type AS linkType,
+                  broken
+           FROM local_entity_links
+           WHERE source_kind = ?
+             AND source_id = ?
+           ORDER BY source_field ASC, link_type ASC, target_kind ASC, target_label COLLATE NOCASE ASC, raw ASC;`,
+          params
+        )
+        .map(entityLink);
+      const backlinks = this.connection
+        .query<EntityLinkRow>(
+          `SELECT source_kind AS sourceKind,
+                  source_id AS sourceId,
+                  source_field AS sourceField,
+                  target_kind AS targetKind,
+                  target_id AS targetId,
+                  target_label AS targetLabel,
+                  raw,
+                  alias,
+                  link_type AS linkType,
+                  broken
+           FROM local_entity_links
+           WHERE target_kind = ?
+             AND target_id = ?
+             AND broken = 0
+           ORDER BY source_kind ASC, source_id ASC, source_field ASC, raw ASC;`,
+          params
+        )
+        .map(entityLink);
+
+      return {
+        outgoing,
+        backlinks,
+        broken: outgoing.filter((link) => link.broken)
+      };
     });
   }
 
@@ -1141,7 +1224,125 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
     return first.id;
   }
 
+  private refreshEntityLinks(): void {
+    const now = new Date().toISOString();
+    const operations = this.entityLinkSources().flatMap((source) =>
+      extractPlannerLinks(source.body).map((link) => {
+        const targetId = this.resolveLinkTargetId(link);
+        const id = createHash("sha256")
+          .update([
+            source.kind,
+            source.id,
+            source.sourceField,
+            link.kind,
+            link.type,
+            link.raw,
+            link.label
+          ].join("\n"))
+          .digest("hex");
+
+        return {
+          kind: "run" as const,
+          sql: `INSERT INTO local_entity_links (
+                  id, source_kind, source_id, source_field, target_kind, target_id,
+                  target_label, raw, alias, link_type, broken, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  target_id = excluded.target_id,
+                  target_label = excluded.target_label,
+                  raw = excluded.raw,
+                  alias = excluded.alias,
+                  link_type = excluded.link_type,
+                  broken = excluded.broken,
+                  updated_at = excluded.updated_at;`,
+          params: [
+            id,
+            source.kind,
+            source.id,
+            source.sourceField,
+            link.kind,
+            targetId,
+            link.label,
+            link.raw,
+            link.alias,
+            link.type,
+            targetId === null ? 1 : 0,
+            now
+          ]
+        };
+      })
+    );
+
+    this.connection.executeTransaction([
+      {
+        kind: "run",
+        sql: "DELETE FROM local_entity_links;"
+      },
+      ...operations
+    ]);
+  }
+
+  private entityLinkSources(): EntityLinkSourceRow[] {
+    const notes = this.connection.query<EntityLinkSourceRow>(
+      `SELECT 'note' AS kind,
+              tasks.id AS id,
+              tasks.title AS title,
+              COALESCE(tasks.notes, '') AS body,
+              'body' AS sourceField
+       FROM google_tasks tasks
+       INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+       WHERE ${this.notePredicate("tasks", "lists")};`
+    );
+    const tasks = this.connection.query<EntityLinkSourceRow>(
+      `SELECT 'task' AS kind,
+              tasks.id AS id,
+              tasks.title AS title,
+              COALESCE(tasks.notes, '') AS body,
+              'notes' AS sourceField
+       FROM google_tasks tasks
+       INNER JOIN google_task_lists lists ON lists.id = tasks.task_list_id
+       WHERE tasks.deleted_at IS NULL
+         AND tasks.is_hidden = 0
+         AND lists.deleted_at IS NULL
+         AND NOT (${this.notePredicate("tasks", "lists")});`
+    );
+    const events = this.connection.query<EntityLinkSourceRow>(
+      `SELECT 'event' AS kind,
+              id,
+              summary AS title,
+              COALESCE(description, '') AS body,
+              'description' AS sourceField
+       FROM google_calendar_events
+       WHERE deleted_at IS NULL
+         AND status != 'cancelled';`
+    );
+    const lists = this.connection.query<EntityLinkSourceRow>(
+      `SELECT 'list' AS kind,
+              id,
+              title,
+              title AS body,
+              'title' AS sourceField
+       FROM google_task_lists
+       WHERE deleted_at IS NULL;`
+    );
+    const calendars = this.connection.query<EntityLinkSourceRow>(
+      `SELECT 'calendar' AS kind,
+              id,
+              summary AS title,
+              summary AS body,
+              'title' AS sourceField
+       FROM google_calendar_lists
+       WHERE deleted_at IS NULL;`
+    );
+
+    return [...notes, ...tasks, ...events, ...lists, ...calendars];
+  }
+
   private resolveLinkTargetId(link: PlannerLinkReference): string | null {
+    if (link.targetId) {
+      return this.entityExists(link.kind, link.targetId) ? link.targetId : null;
+    }
+
     if (link.kind === "note") {
       return this.connection.get<{ id: string }>(
         `SELECT tasks.id
@@ -1169,15 +1370,48 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
       )?.id ?? null;
     }
 
-    return this.connection.get<{ id: string }>(
+    if (link.kind === "event") {
+      return this.connection.get<{ id: string }>(
       `SELECT id
        FROM google_calendar_events
        WHERE deleted_at IS NULL
          AND status != 'cancelled'
          AND (id = ? OR LOWER(summary) = LOWER(?))
        LIMIT 1;`,
+        [link.label, link.label]
+      )?.id ?? null;
+    }
+
+    if (link.kind === "list") {
+      return this.connection.get<{ id: string }>(
+        `SELECT id
+         FROM google_task_lists
+         WHERE deleted_at IS NULL
+           AND (id = ? OR LOWER(title) = LOWER(?))
+         LIMIT 1;`,
+        [link.label, link.label]
+      )?.id ?? null;
+    }
+
+    return this.connection.get<{ id: string }>(
+      `SELECT id
+       FROM google_calendar_lists
+       WHERE deleted_at IS NULL
+         AND (id = ? OR LOWER(summary) = LOWER(?))
+       LIMIT 1;`,
       [link.label, link.label]
     )?.id ?? null;
+  }
+
+  private entityExists(kind: NoteEntityKind, id: string): boolean {
+    return this.resolveLinkTargetId({
+      alias: null,
+      kind,
+      label: id,
+      raw: id,
+      targetId: null,
+      type: "wikilink"
+    }) === id;
   }
 
   private notePredicate(taskAlias: string, listAlias: string): string {
@@ -1188,6 +1422,21 @@ export class SearchLocalRepository extends ScheduledTaskBlockLocalRepository {
       AND ${taskAlias}.due_at IS NULL
       AND ${listAlias}.deleted_at IS NULL`;
   }
+}
+
+function entityLink(row: EntityLinkRow): NoteEntityLink {
+  return {
+    sourceKind: row.sourceKind,
+    sourceId: row.sourceId,
+    sourceField: row.sourceField,
+    targetKind: row.targetKind,
+    targetId: row.targetId,
+    targetLabel: row.targetLabel,
+    raw: row.raw,
+    alias: row.alias,
+    linkType: row.linkType,
+    broken: row.broken === 1
+  };
 }
 
 function taskBooleanItem(row: {

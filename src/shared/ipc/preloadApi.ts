@@ -71,6 +71,8 @@ import type {
   NoteCreateRequest,
   NoteDeleteRequest,
   NoteDetail,
+  NoteEntityLinksRequest,
+  NoteEntityLinksResponse,
   NoteBrokenLinksRequest,
   NoteBrokenLinksResponse,
   NoteLinkSuggestRequest,
@@ -210,6 +212,7 @@ export interface HcbApi {
     delete: (request: NoteDeleteRequest) => Promise<HcbResult<MutationAck>>;
     linkSuggest: (request: NoteLinkSuggestRequest) => Promise<HcbResult<NoteLinkSuggestResponse>>;
     listBrokenLinks: (request: NoteBrokenLinksRequest) => Promise<HcbResult<NoteBrokenLinksResponse>>;
+    entityLinks: (request: NoteEntityLinksRequest) => Promise<HcbResult<NoteEntityLinksResponse>>;
   };
   search: {
     query: (request: SearchQueryRequest) => Promise<HcbResult<SearchQueryResponse>>;

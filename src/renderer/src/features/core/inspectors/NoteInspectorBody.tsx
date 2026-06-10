@@ -15,14 +15,19 @@ import { useDirtyState, useInspector } from "../../../components/Inspector";
 import { EmojiInput, EmojiTextarea } from "../../../components/EmojiTextField";
 import { Badge, Button, Input, cx } from "../../../components/primitives";
 import { AutoTagAudit } from "../AutoTagAudit";
+import { EntityLinksPanel } from "../EntityLinksPanel";
+import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { NoteViewModel } from "../coreViewModels";
 import { MarkdownPreview } from "../MarkdownPreview";
+import { plannerLinkTargets } from "../plannerLinkTargets";
 import { TagBadges, TagInput } from "../TagInput";
 import {
   extractNoteLinks,
   extractNoteProperties,
+  extractPlannerLinks,
   normalizedNoteTitle,
-  parsePlannerLink
+  parsePlannerLink,
+  plannerLinkDisplayLabel
 } from "../notesParsing";
 
 export interface NoteDraftValue {
@@ -54,6 +59,7 @@ interface NoteInspectorBodyProps {
   onOpenNote: (noteId: string) => Promise<void> | void;
   onPersist: (noteId: string, draft: NoteDraftValue) => Promise<boolean>;
   rules: readonly AutoTagRule[];
+  source: ReturnType<typeof useCoreViewModelSource>;
   templates?: NoteTemplateOption[];
 }
 
@@ -66,17 +72,19 @@ function noteDraftValuesEqual(left: NoteDraftValue, right: NoteDraftValue): bool
 export function NoteInspectorSummary({
   note,
   notes,
-  onOpenNote
+  onOpenNote,
+  source
 }: {
   note: NoteViewModel;
   notes: NoteViewModel[];
   onOpenNote: (noteId: string) => Promise<void> | void;
+  source: ReturnType<typeof useCoreViewModelSource>;
 }): JSX.Element {
   const noteByNormalizedTitle = useMemo(
     () => new Map(notes.map((candidate) => [normalizedNoteTitle(candidate.title), candidate])),
     [notes]
   );
-  const links = useMemo(() => extractNoteLinks(note.body), [note.body]);
+  const links = useMemo(() => extractPlannerLinks(note.body), [note.body]);
   const properties = useMemo(() => extractNoteProperties(note.body), [note.body]);
   const backlinks = useMemo(
     () =>
@@ -108,7 +116,9 @@ export function NoteInspectorSummary({
         </div>
       </div>
 
-      {note.body.trim() ? <MarkdownPreview ariaLabel="Note preview" body={note.body} /> : null}
+      {note.body.trim() ? (
+        <MarkdownPreview ariaLabel="Note preview" body={note.body} plannerLinkTargets={plannerLinkTargets(source)} />
+      ) : null}
 
       {properties.length > 0 ? (
         <div className="grid gap-2">
@@ -127,8 +137,7 @@ export function NoteInspectorSummary({
         <div className="grid gap-2">
           <div className="text-[var(--text-xs)] font-semibold uppercase text-text-muted">Links</div>
           <div className="flex flex-wrap gap-2">
-            {links.map((title) => {
-              const link = parsePlannerLink(title);
+            {links.map((link) => {
               const linkedNote = link.kind === "note"
                 ? noteByNormalizedTitle.get(normalizedNoteTitle(link.label))
                 : undefined;
@@ -138,12 +147,12 @@ export function NoteInspectorSummary({
                 <button
                   aria-label={linkedNote ? `Open linked note ${linkedNote.title}` : `${link.kind} link ${link.label}`}
                   className={linkButtonClass(linkedNote ? "accent" : "neutral")}
-                  key={title}
+                  key={`${link.type}-${link.raw}`}
                   onClick={action}
                   type="button"
                 >
                   <Search aria-hidden="true" size={14} />
-                  {linkedNote ? linkedNote.title : `${link.kind}: ${link.label}`}
+                  {linkedNote ? linkedNote.title : `${link.kind}: ${plannerLinkDisplayLabel(link)}`}
                 </button>
               );
             })}
@@ -170,6 +179,8 @@ export function NoteInspectorSummary({
           </div>
         </div>
       ) : null}
+
+      <EntityLinksPanel entityId={note.id} entityKind="note" />
     </div>
   );
 }
@@ -185,7 +196,7 @@ function linkButtonClass(tone: "accent" | "warning" | "neutral"): string {
 
 export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspectorBodyProps>(
   function NoteInspectorBody(
-    { createMode = false, error, note, notes, onDraftChange, onOpenNote, onPersist, rules, templates = [] },
+    { createMode = false, error, note, notes, onDraftChange, onOpenNote, onPersist, rules, source, templates = [] },
     ref
   ): JSX.Element {
     const dirty = useDirtyState<NoteDraftValue>({ title: note.title, body: note.body, tags: note.tags ?? [] });
@@ -569,7 +580,11 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
               value={dirty.value.body}
             />
           ) : (
-            <MarkdownPreview ariaLabel="Note preview" body={dirty.value.body} />
+            <MarkdownPreview
+              ariaLabel="Note preview"
+              body={dirty.value.body}
+              plannerLinkTargets={plannerLinkTargets(source)}
+            />
           )}
         </div>
 

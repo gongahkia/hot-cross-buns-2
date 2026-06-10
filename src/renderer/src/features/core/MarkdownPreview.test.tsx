@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MarkdownPreview } from "./MarkdownPreview";
 
 const mermaidMock = vi.hoisted(() => ({
@@ -13,6 +13,10 @@ vi.mock("mermaid", () => ({
 }));
 
 describe("MarkdownPreview", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     mermaidMock.initialize.mockReset();
     mermaidMock.render.mockReset();
@@ -55,6 +59,46 @@ describe("MarkdownPreview", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Field" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Design" })).toBeInTheDocument();
+  });
+
+  it("opens resolved planner wikilinks", async () => {
+    const user = userEvent.setup();
+    const events: CustomEvent[] = [];
+    const listener = (event: Event) => events.push(event as CustomEvent);
+
+    window.addEventListener("hcb:open-entity", listener);
+
+    render(
+      <MarkdownPreview
+        body="See [[note:Target note|the target]]"
+        plannerLinkTargets={[{ body: "Target body", id: "note-1", kind: "note", title: "Target note" }]}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Target note" }));
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.detail).toEqual({ id: "note-1", kind: "note" });
+
+    window.removeEventListener("hcb:open-entity", listener);
+  });
+
+  it("renders broken planner wikilinks as disabled buttons", () => {
+    render(<MarkdownPreview body="See [[task:Missing]]" />);
+
+    expect(screen.getByRole("button", { name: "Broken task: Missing" })).toBeDisabled();
+  });
+
+  it("renders planner transclusions", () => {
+    render(
+      <MarkdownPreview
+        body="![[note:Target note]]"
+        plannerLinkTargets={[{ body: "Embedded content", id: "note-1", kind: "note", title: "Target note" }]}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Target note" })).toBeInTheDocument();
+    expect(screen.getByText("Embedded content")).toBeInTheDocument();
   });
 
   it("renders Mermaid diagrams from fenced code blocks", async () => {

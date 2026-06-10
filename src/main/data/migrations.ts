@@ -460,6 +460,35 @@ CREATE TABLE IF NOT EXISTS local_chat_messages (
 CREATE INDEX IF NOT EXISTS idx_local_chat_messages_session
   ON local_chat_messages(session_id, created_at ASC, id ASC);
 `
+  },
+  {
+    version: 17,
+    name: "universal entity links",
+    sql: `
+CREATE TABLE IF NOT EXISTS local_entity_links (
+  id TEXT PRIMARY KEY,
+  source_kind TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  source_field TEXT NOT NULL,
+  target_kind TEXT NOT NULL,
+  target_id TEXT,
+  target_label TEXT NOT NULL,
+  raw TEXT NOT NULL,
+  alias TEXT,
+  link_type TEXT NOT NULL,
+  broken INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_entity_links_source
+  ON local_entity_links(source_kind, source_id, source_field);
+
+CREATE INDEX IF NOT EXISTS idx_local_entity_links_target
+  ON local_entity_links(target_kind, target_id, source_kind, source_id);
+
+CREATE INDEX IF NOT EXISTS idx_local_entity_links_broken
+  ON local_entity_links(broken, target_kind, target_label);
+`
   }
 ];
 

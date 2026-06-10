@@ -210,6 +210,7 @@ export function useCalendarEventInspector(source: CoreViewModelSource): {
           eventColorOverrides={source.settings.calendarEventColorOverrides}
           key={`view-${calendarInspectorInstanceRef.current}`}
           rules={source.settings.autoTagRules}
+          source={source}
         />
       );
     }

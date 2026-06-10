@@ -268,7 +268,9 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
       linkSuggest: (request) =>
         invokeContract(ipc, ipcContracts.notes.linkSuggest, request, "Note link suggest request failed"),
       listBrokenLinks: (request) =>
-        invokeContract(ipc, ipcContracts.notes.listBrokenLinks, request, "Broken note links request failed")
+        invokeContract(ipc, ipcContracts.notes.listBrokenLinks, request, "Broken note links request failed"),
+      entityLinks: (request) =>
+        invokeContract(ipc, ipcContracts.notes.entityLinks, request, "Entity links request failed")
     },
     search: {
       query: (request) =>

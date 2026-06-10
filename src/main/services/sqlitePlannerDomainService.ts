@@ -568,6 +568,7 @@ export function createSqlitePlannerDomainService(
     },
     suggestNoteLinks: (request) => repository.suggestLinkTargets(request),
     listBrokenNoteLinks: (request) => repository.listBrokenNoteLinks(request),
+    listEntityLinks: (request) => repository.listEntityLinks(request),
     search: (request) => {
       const settings = settingsRepository?.get();
       const mode = request.mode ?? settings?.semanticSearchMode ?? "lexical";

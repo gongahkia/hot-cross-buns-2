@@ -6,6 +6,19 @@ import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { EmptyState } from "../../components/states";
 import { cx } from "../../components/primitives";
+import {
+  parsePlannerLink,
+  plannerLinkDisplayLabel,
+  type PlannerLinkKind,
+  type PlannerLinkReference
+} from "@shared/plannerLinks";
+
+export interface MarkdownPlannerLinkTarget {
+  body?: string;
+  id: string;
+  kind: PlannerLinkKind;
+  title: string;
+}
 
 export interface MarkdownPreviewProps {
   ariaLabel?: string;
@@ -13,6 +26,8 @@ export interface MarkdownPreviewProps {
   className?: string;
   emptyDescription?: string;
   emptyTitle?: string;
+  plannerLinkTargets?: MarkdownPlannerLinkTarget[];
+  transclusionDepth?: number;
   variant?: "card" | "plain";
 }
 
@@ -48,10 +63,108 @@ function safeImageSrc(src: string | undefined): string | undefined {
   return undefined;
 }
 
+function markdownUrlTransform(value: string): string {
+  return value;
+}
+
 function markdownChildrenToString(children: ReactNode): string {
   return Children.toArray(children)
     .map((child) => (typeof child === "string" || typeof child === "number" ? String(child) : ""))
     .join("");
+}
+
+function bodyWithPlannerLinks(body: string): string {
+  return body.replace(/(^|[^!])\[\[([^\]]{1,220})\]\]/g, (_match, prefix: string, raw: string) => {
+    const link = parsePlannerLink(raw, "wikilink");
+    const label = escapeMarkdownLabel(plannerLinkDisplayLabel(link));
+    return `${prefix}[${label}](${plannerLinkHref(link)})`;
+  });
+}
+
+type MarkdownSegment =
+  | { body: string; kind: "markdown" }
+  | { kind: "transclusion"; link: PlannerLinkReference };
+
+function markdownSegments(body: string): MarkdownSegment[] {
+  const pattern = /!\[\[([^\]]{1,220})\]\]/g;
+  const segments: MarkdownSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(body)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ body: body.slice(lastIndex, match.index), kind: "markdown" });
+    }
+
+    const raw = match[1]?.trim();
+
+    if (raw) {
+      segments.push({ kind: "transclusion", link: parsePlannerLink(raw, "transclusion") });
+    } else {
+      segments.push({ body: match[0], kind: "markdown" });
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < body.length) {
+    segments.push({ body: body.slice(lastIndex), kind: "markdown" });
+  }
+
+  return segments.length > 0 ? segments : [{ body, kind: "markdown" }];
+}
+
+function escapeMarkdownLabel(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\]/g, "\\]");
+}
+
+function plannerLinkHref(link: PlannerLinkReference): string {
+  return `hcb-planner-link:${encodeURIComponent(JSON.stringify(link))}`;
+}
+
+function plannerLinkFromHref(href: string | undefined): PlannerLinkReference | null {
+  if (!href?.startsWith("hcb-planner-link:")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(href.slice("hcb-planner-link:".length))) as PlannerLinkReference;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizedPlannerTitle(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function resolvePlannerTarget(
+  targets: readonly MarkdownPlannerLinkTarget[],
+  link: PlannerLinkReference
+): MarkdownPlannerLinkTarget | null {
+  if (link.targetId) {
+    return targets.find((target) => target.kind === link.kind && target.id === link.targetId) ?? null;
+  }
+
+  const normalized = normalizedPlannerTitle(link.label);
+  return targets.find((target) =>
+    target.kind === link.kind &&
+    (target.id === link.label || normalizedPlannerTitle(target.title) === normalized)
+  ) ?? null;
+}
+
+function openPlannerTarget(target: MarkdownPlannerLinkTarget): void {
+  if (target.kind !== "note" && target.kind !== "task" && target.kind !== "event") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent("hcb:open-entity", {
+    detail: {
+      id: target.id,
+      kind: target.kind
+    }
+  }));
 }
 
 type MermaidState =
@@ -163,6 +276,8 @@ export function MarkdownPreview({
   className,
   emptyDescription = "This note has no body yet.",
   emptyTitle = "Empty note",
+  plannerLinkTargets = [],
+  transclusionDepth = 0,
   variant = "card"
 }: MarkdownPreviewProps): JSX.Element {
   const [lightboxImage, setLightboxImage] = useState<{ alt: string; src: string; title?: string } | null>(null);
@@ -184,6 +299,39 @@ export function MarkdownPreview({
 
   const components: Components = {
     a({ children, href }) {
+      const plannerLink = plannerLinkFromHref(href);
+
+      if (plannerLink) {
+        const target = resolvePlannerTarget(plannerLinkTargets, plannerLink);
+
+        if (plannerLink.type === "transclusion") {
+          return (
+            <PlannerTransclusion
+              depth={transclusionDepth}
+              link={plannerLink}
+              target={target}
+              targets={plannerLinkTargets}
+            />
+          );
+        }
+
+        return (
+          <button
+            className={cx(
+              "inline-flex min-h-7 items-center rounded-hcbSm border px-1.5 text-[var(--text-sm)] underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              target
+                ? "border-accent/40 bg-bg-tertiary text-accent hover:underline"
+                : "border-warning/60 bg-bg-tertiary text-warning"
+            )}
+            disabled={!target}
+            onClick={() => target ? openPlannerTarget(target) : undefined}
+            type="button"
+          >
+            {target ? target.title : `Broken ${plannerLink.kind}: ${plannerLink.label}`}
+          </button>
+        );
+      }
+
       const sanitizedHref = safeHref(href);
 
       return (
@@ -325,6 +473,8 @@ export function MarkdownPreview({
     return <EmptyState description={emptyDescription} title={emptyTitle} />;
   }
 
+  const renderedSegments = markdownSegments(body);
+
   return (
     <div
       aria-label={ariaLabel}
@@ -335,9 +485,30 @@ export function MarkdownPreview({
       )}
       role="region"
     >
-      <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
-        {body}
-      </ReactMarkdown>
+      {renderedSegments.map((segment, index) => {
+        if (segment.kind === "transclusion") {
+          return (
+            <PlannerTransclusion
+              depth={transclusionDepth}
+              key={`transclusion-${index}`}
+              link={segment.link}
+              target={resolvePlannerTarget(plannerLinkTargets, segment.link)}
+              targets={plannerLinkTargets}
+            />
+          );
+        }
+
+        return segment.body.length > 0 ? (
+          <ReactMarkdown
+            components={components}
+            key={`markdown-${index}`}
+            remarkPlugins={[remarkGfm]}
+            urlTransform={markdownUrlTransform}
+          >
+            {bodyWithPlannerLinks(segment.body)}
+          </ReactMarkdown>
+        ) : null;
+      })}
       {lightboxImage ? (
         <div
           aria-label="Image preview"
@@ -372,6 +543,64 @@ export function MarkdownPreview({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function PlannerTransclusion({
+  depth,
+  link,
+  target,
+  targets
+}: {
+  depth: number;
+  link: PlannerLinkReference;
+  target: MarkdownPlannerLinkTarget | null;
+  targets: MarkdownPlannerLinkTarget[];
+}): JSX.Element {
+  if (!target) {
+    return (
+      <div className="my-2 rounded-hcbMd border border-warning/60 bg-bg-tertiary p-3 text-[var(--text-sm)] text-warning">
+        Broken embed {link.kind}: {link.label}
+      </div>
+    );
+  }
+
+  if (depth >= 2) {
+    return (
+      <div className="my-2 rounded-hcbMd border border-border bg-bg-tertiary p-3 text-[var(--text-sm)] text-text-muted">
+        Embed depth limit reached for {target.title}
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <button
+          className="min-w-0 truncate text-left text-[var(--text-sm)] font-semibold text-accent underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onClick={() => openPlannerTarget(target)}
+          type="button"
+        >
+          {target.title}
+        </button>
+        <span className="rounded-hcbSm border border-border px-1.5 py-0.5 text-[var(--text-xs)] text-text-muted">
+          {target.kind}
+        </span>
+      </div>
+      {target.body?.trim() ? (
+        <MarkdownPreview
+          body={target.body}
+          className="border-0 bg-transparent p-0"
+          emptyDescription="No embedded content"
+          emptyTitle="Empty embed"
+          plannerLinkTargets={targets}
+          transclusionDepth={depth + 1}
+          variant="plain"
+        />
+      ) : (
+        <span className="text-[var(--text-sm)] text-text-muted">No embedded content</span>
+      )}
     </div>
   );
 }

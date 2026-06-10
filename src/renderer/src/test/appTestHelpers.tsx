@@ -869,7 +869,8 @@ export function seededHcb(): HcbApi {
 
         return ok({ items: items.slice(0, request.limit ?? 8) });
       }),
-      listBrokenLinks: vi.fn(async () => ok({ items: [] }))
+      listBrokenLinks: vi.fn(async () => ok({ items: [] })),
+      entityLinks: vi.fn(async () => ok({ outgoing: [], backlinks: [], broken: [] }))
     },
     tags: {
       ...api.tags,

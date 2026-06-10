@@ -138,20 +138,49 @@ export const noteLinkSuggestResponseSchema = z
 
 export type NoteLinkSuggestResponse = z.infer<typeof noteLinkSuggestResponseSchema>;
 
+export const noteEntityKindSchema = z.enum(["note", "task", "event", "list", "calendar"]);
+export type NoteEntityKind = z.infer<typeof noteEntityKindSchema>;
+
+export const noteEntityLinkTypeSchema = z.enum(["wikilink", "transclusion"]);
+export type NoteEntityLinkType = z.infer<typeof noteEntityLinkTypeSchema>;
+
 export const noteBrokenLinksRequestSchema = z
   .object({
-    noteId: idSchema
+    entityKind: noteEntityKindSchema.default("note"),
+    entityId: idSchema.optional(),
+    noteId: idSchema.optional()
+  })
+  .strict()
+  .refine((request) => request.entityId !== undefined || request.noteId !== undefined, {
+    message: "An entity id is required"
+  });
+
+export type NoteBrokenLinksRequest = z.input<typeof noteBrokenLinksRequestSchema>;
+
+export const noteEntityLinkSchema = z
+  .object({
+    sourceKind: noteEntityKindSchema,
+    sourceId: idSchema,
+    sourceField: z.string().min(1).max(80),
+    targetKind: noteEntityKindSchema,
+    targetId: idSchema.nullable(),
+    targetLabel: z.string().min(1).max(220),
+    raw: z.string().min(1).max(220),
+    alias: z.string().min(1).max(220).nullable(),
+    linkType: noteEntityLinkTypeSchema,
+    broken: z.boolean()
   })
   .strict();
 
-export type NoteBrokenLinksRequest = z.input<typeof noteBrokenLinksRequestSchema>;
+export type NoteEntityLink = z.infer<typeof noteEntityLinkSchema>;
 
 export const noteBrokenLinksResponseSchema = z
   .object({
     items: z.array(
       z
         .object({
-          linkText: z.string().min(1).max(160)
+          linkText: z.string().min(1).max(220),
+          link: noteEntityLinkSchema.optional()
         })
         .strict()
     )
@@ -159,3 +188,22 @@ export const noteBrokenLinksResponseSchema = z
   .strict();
 
 export type NoteBrokenLinksResponse = z.infer<typeof noteBrokenLinksResponseSchema>;
+
+export const noteEntityLinksRequestSchema = z
+  .object({
+    entityKind: noteEntityKindSchema,
+    entityId: idSchema
+  })
+  .strict();
+
+export type NoteEntityLinksRequest = z.input<typeof noteEntityLinksRequestSchema>;
+
+export const noteEntityLinksResponseSchema = z
+  .object({
+    outgoing: z.array(noteEntityLinkSchema),
+    backlinks: z.array(noteEntityLinkSchema),
+    broken: z.array(noteEntityLinkSchema)
+  })
+  .strict();
+
+export type NoteEntityLinksResponse = z.infer<typeof noteEntityLinksResponseSchema>;

@@ -280,6 +280,7 @@ export function useNotesController(source: CoreViewModelSource): {
           note={note}
           notes={notes}
           onOpenNote={(noteId) => selectNote(noteId, "view")}
+          source={source}
         />
       );
     }
@@ -293,6 +294,7 @@ export function useNotesController(source: CoreViewModelSource): {
         onOpenNote={(noteId) => selectNote(noteId, "view")}
         onPersist={persistNoteDraft}
         rules={source.settings.autoTagRules}
+        source={source}
         templates={noteTemplateOptions}
         createMode={createNoteIds.current.has(note.id)}
         error={currentInspector?.id === note.id ? noteActionError : undefined}

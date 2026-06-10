@@ -457,7 +457,8 @@ const hcbApi: HcbApi = {
       })
     ),
     linkSuggest: vi.fn(async () => ok({ items: [] })),
-    listBrokenLinks: vi.fn(async () => ok({ items: [] }))
+    listBrokenLinks: vi.fn(async () => ok({ items: [] })),
+    entityLinks: vi.fn(async () => ok({ backlinks: [], broken: [], outgoing: [] }))
   },
   tags: {
     list: vi.fn(async (request = {}) =>
