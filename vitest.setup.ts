@@ -1,11 +1,14 @@
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, vi } from "vitest";
 import type { CalendarEventDetail, SettingsSnapshot, TaskDetail } from "./src/shared/ipc/contracts";
+import { defaultSemanticSearchModels } from "./src/shared/ipc/contracts";
 import type { HcbApi } from "./src/shared/ipc/preloadApi";
 import { ok } from "./src/shared/ipc/result";
 import {
   defaultHistoryCategoryVisibility,
-  defaultKeybindings
+  defaultKeybindings,
+  defaultLeaderKey,
+  defaultLeaderKeybindings
 } from "./src/shared/settingsCatalog";
 
 const now = new Date("2026-05-22T00:00:00.000Z").toISOString();
@@ -700,6 +703,8 @@ const hcbApi: HcbApi = {
         eventRetentionDaysBack: 0,
         completedTaskRetentionDaysBack: 365,
         keybindings: defaultKeybindings,
+        leaderKey: defaultLeaderKey,
+        leaderKeybindings: defaultLeaderKeybindings,
         showTrayIcon: true,
         trayClickAction: "open-menu" as const,
         menuBarPanelStyle: "adaptive" as const,
@@ -748,7 +753,8 @@ const hcbApi: HcbApi = {
         savedTaskViews: [],
         semanticSearchEnabled: false,
         semanticSearchMode: "lexical" as const,
-        embeddingModelId: "hcb-local-hash-384",
+        embeddingModelId: "Xenova/all-MiniLM-L6-v2",
+        semanticSearchModels: defaultSemanticSearchModels,
         agentActionTrayEnabled: true,
         webhooksEnabled: false
       })
@@ -791,6 +797,8 @@ const hcbApi: HcbApi = {
         eventRetentionDaysBack: request.eventRetentionDaysBack ?? 0,
         completedTaskRetentionDaysBack: request.completedTaskRetentionDaysBack ?? 365,
         keybindings: request.keybindings ?? defaultKeybindings,
+        leaderKey: request.leaderKey === undefined ? defaultLeaderKey : request.leaderKey,
+        leaderKeybindings: request.leaderKeybindings ?? defaultLeaderKeybindings,
         showTrayIcon: request.showTrayIcon ?? true,
         trayClickAction: request.trayClickAction ?? "open-menu",
         menuBarPanelStyle: request.menuBarPanelStyle ?? "adaptive",
@@ -839,7 +847,8 @@ const hcbApi: HcbApi = {
         savedTaskViews: request.savedTaskViews ?? [],
         semanticSearchEnabled: request.semanticSearchEnabled ?? false,
         semanticSearchMode: request.semanticSearchMode ?? "lexical",
-        embeddingModelId: request.embeddingModelId ?? "hcb-local-hash-384",
+        embeddingModelId: request.embeddingModelId ?? "Xenova/all-MiniLM-L6-v2",
+        semanticSearchModels: request.semanticSearchModels ?? defaultSemanticSearchModels,
         agentActionTrayEnabled: request.agentActionTrayEnabled ?? true,
         webhooksEnabled: request.webhooksEnabled ?? false
       })

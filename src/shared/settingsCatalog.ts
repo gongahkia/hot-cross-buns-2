@@ -2,7 +2,9 @@ export const hotkeyActionIds = [
   "task.create",
   "note.create",
   "calendar.create",
+  "quickAdd.open",
   "commandPalette.open",
+  "actionPalette.open",
   "print.today",
   "sync.refresh",
   "sync.forceFullResync",
@@ -61,8 +63,10 @@ export const defaultKeybindings: Record<HotkeyActionId, string | null> = {
   "task.create": "CmdOrCtrl+N",
   "note.create": "CmdOrCtrl+Shift+N",
   "calendar.create": "CmdOrCtrl+Shift+E",
-  "commandPalette.open": "CmdOrCtrl+P",
-  "print.today": "CmdOrCtrl+Shift+P",
+  "quickAdd.open": null,
+  "commandPalette.open": "CmdOrCtrl+O",
+  "actionPalette.open": "CmdOrCtrl+Shift+P",
+  "print.today": null,
   "sync.refresh": "CmdOrCtrl+R",
   "sync.forceFullResync": "CmdOrCtrl+Shift+R",
   "undo.perform": "CmdOrCtrl+Z",
@@ -90,6 +94,45 @@ export const defaultKeybindings: Record<HotkeyActionId, string | null> = {
   "calendar.view.multiDay": "CmdOrCtrl+Alt+3",
   "calendar.view.week": "CmdOrCtrl+Alt+4",
   "calendar.view.month": "CmdOrCtrl+Alt+5"
+};
+
+export const defaultLeaderKey = "CmdOrCtrl+K";
+
+export const defaultLeaderKeybindings: Record<HotkeyActionId, string | null> = {
+  "task.create": "T",
+  "note.create": "N",
+  "calendar.create": "E",
+  "quickAdd.open": "A",
+  "commandPalette.open": "O",
+  "actionPalette.open": "P",
+  "print.today": null,
+  "sync.refresh": "R",
+  "sync.forceFullResync": "Shift+R",
+  "undo.perform": "U",
+  "redo.perform": "Shift+U",
+  "navigation.today": "0",
+  "navigation.tasks": "1",
+  "navigation.calendar": "2",
+  "navigation.notes": "3",
+  "navigation.search": "S",
+  "navigation.settings": ",",
+  "navigation.diagnostics.toggle": ".",
+  "navigation.sidebar.toggle": "B",
+  "navigation.notifications.toggle": "I",
+  "pane.create": "W",
+  "pane.close": "X",
+  "pane.split.horizontal": "D",
+  "pane.split.vertical": "Shift+D",
+  "pane.focus.left": "Left",
+  "pane.focus.right": "Right",
+  "pane.focus.up": "Up",
+  "pane.focus.down": "Down",
+  "web.tab.create": "G",
+  "calendar.view.agenda": "Alt+1",
+  "calendar.view.day": "Alt+2",
+  "calendar.view.multiDay": "Alt+3",
+  "calendar.view.week": "Alt+4",
+  "calendar.view.month": "Alt+5"
 };
 
 export const historyCategoryIds = [

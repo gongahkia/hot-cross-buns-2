@@ -21,8 +21,11 @@ import type {
 } from "./types";
 import {
   defaultHistoryCategoryVisibility,
-  defaultKeybindings
+  defaultKeybindings,
+  defaultLeaderKey,
+  defaultLeaderKeybindings
 } from "@shared/settingsCatalog";
+import { defaultSemanticSearchModels } from "@shared/ipc/contracts";
 
 const now = new Date("2026-05-22T12:00:00.000Z");
 
@@ -67,6 +70,8 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     eventRetentionDaysBack: 0,
     completedTaskRetentionDaysBack: 365,
     keybindings: defaultKeybindings,
+    leaderKey: defaultLeaderKey,
+    leaderKeybindings: defaultLeaderKeybindings,
     showTrayIcon: true,
     trayClickAction: "open-menu",
     menuBarPanelStyle: "adaptive",
@@ -115,7 +120,8 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     savedTaskViews: [],
     semanticSearchEnabled: false,
     semanticSearchMode: "lexical",
-    embeddingModelId: "hcb-local-hash-384",
+    embeddingModelId: "Xenova/all-MiniLM-L6-v2",
+    semanticSearchModels: defaultSemanticSearchModels,
     agentActionTrayEnabled: true,
     webhooksEnabled: false,
     ...overrides

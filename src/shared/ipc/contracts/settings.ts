@@ -3,6 +3,8 @@ import {
   defaultNavigationTabOrder,
   defaultHistoryCategoryVisibility,
   defaultKeybindings,
+  defaultLeaderKey,
+  defaultLeaderKeybindings,
   defaultToolbarActionOrder,
   historyCategoryIds,
   hotkeyActionIds,
@@ -48,6 +50,9 @@ export const hotkeyActionIdSchema = z.enum(hotkeyActionIds);
 export const keybindingsSchema = z
   .record(hotkeyActionIdSchema, z.string().trim().min(1).max(120).nullable())
   .default(defaultKeybindings);
+export const leaderKeybindingsSchema = z
+  .record(hotkeyActionIdSchema, z.string().trim().min(1).max(120).nullable())
+  .default(defaultLeaderKeybindings);
 export const completionSoundIds = [
   "glass",
   "pop",
@@ -173,6 +178,47 @@ export const savedSearchViewSchema = z
 
 export type SavedSearchView = z.infer<typeof savedSearchViewSchema>;
 
+export const semanticSearchModelSchema = z
+  .object({
+    id: z.string().trim().min(1).max(120),
+    label: z.string().trim().min(1).max(120),
+    provider: z.enum(["transformers-js", "builtin"]),
+    dimensions: z.number().int().min(1).max(4096),
+    installed: z.boolean(),
+    installState: z.enum(["not-installed", "installed", "error"]),
+    cachePath: z.string().trim().max(1_000).nullable(),
+    lastError: z.string().trim().max(500).nullable(),
+    updatedAt: isoDateTimeSchema.nullable()
+  })
+  .strict();
+
+export type SemanticSearchModel = z.infer<typeof semanticSearchModelSchema>;
+
+export const defaultSemanticSearchModels = [
+  {
+    id: "Xenova/all-MiniLM-L6-v2",
+    label: "MiniLM L6 v2",
+    provider: "transformers-js",
+    dimensions: 384,
+    installed: false,
+    installState: "not-installed",
+    cachePath: null,
+    lastError: null,
+    updatedAt: null
+  },
+  {
+    id: "hcb-local-hash-384",
+    label: "Built-in lexical hash",
+    provider: "builtin",
+    dimensions: 384,
+    installed: true,
+    installState: "installed",
+    cachePath: null,
+    lastError: null,
+    updatedAt: null
+  }
+] satisfies SemanticSearchModel[];
+
 export const savedTaskViewSchema = z
   .object({
     id: idSchema,
@@ -268,6 +314,8 @@ export const settingsSnapshotSchema = z
     restoreWindowStateEnabled: z.boolean(),
     startOnLogin: z.boolean(),
     keybindings: keybindingsSchema,
+    leaderKey: z.string().trim().min(1).max(120).nullable(),
+    leaderKeybindings: leaderKeybindingsSchema,
     selectedTaskListIds: z.array(idSchema).max(100),
     selectedCalendarIds: z.array(idSchema).max(100),
     setupCompletedAt: isoDateTimeSchema.nullable(),
@@ -322,6 +370,7 @@ export const settingsSnapshotSchema = z
     semanticSearchEnabled: z.boolean(),
     semanticSearchMode: semanticSearchModeSettingSchema,
     embeddingModelId: z.string().trim().min(1).max(120),
+    semanticSearchModels: z.array(semanticSearchModelSchema).max(10),
     agentActionTrayEnabled: z.boolean(),
     webhooksEnabled: z.boolean()
   })
@@ -356,6 +405,8 @@ export const settingsUpdateRequestSchema = z
     restoreWindowStateEnabled: z.boolean().optional(),
     startOnLogin: z.boolean().optional(),
     keybindings: keybindingsSchema.optional(),
+    leaderKey: z.string().trim().min(1).max(120).nullable().optional(),
+    leaderKeybindings: leaderKeybindingsSchema.optional(),
     selectedTaskListIds: z.array(idSchema).max(100).optional(),
     selectedCalendarIds: z.array(idSchema).max(100).optional(),
     setupCompletedAt: isoDateTimeSchema.nullable().optional(),
@@ -410,6 +461,7 @@ export const settingsUpdateRequestSchema = z
     semanticSearchEnabled: z.boolean().optional(),
     semanticSearchMode: semanticSearchModeSettingSchema.optional(),
     embeddingModelId: z.string().trim().min(1).max(120).optional(),
+    semanticSearchModels: z.array(semanticSearchModelSchema).max(10).optional(),
     agentActionTrayEnabled: z.boolean().optional(),
     webhooksEnabled: z.boolean().optional()
   })

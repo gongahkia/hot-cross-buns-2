@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   portableArchiveManifestSchema,
+  defaultSemanticSearchModels,
   type LocalPointerListRequest,
   type LocalPointerListResponse,
   type LocalPointerRepairRequest,
@@ -18,6 +19,8 @@ import {
 import {
   defaultHistoryCategoryVisibility,
   defaultKeybindings,
+  defaultLeaderKey,
+  defaultLeaderKeybindings,
   defaultNavigationTabOrder,
   defaultToolbarActionOrder,
   hotkeyActionIds
@@ -78,6 +81,8 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   restoreWindowStateEnabled: true,
   startOnLogin: false,
   keybindings: defaultKeybindings,
+  leaderKey: defaultLeaderKey,
+  leaderKeybindings: defaultLeaderKeybindings,
   selectedTaskListIds: [],
   selectedCalendarIds: [],
   setupCompletedAt: null,
@@ -140,7 +145,8 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   savedTaskViews: [],
   semanticSearchEnabled: false,
   semanticSearchMode: "lexical",
-  embeddingModelId: "hcb-local-hash-384",
+  embeddingModelId: "Xenova/all-MiniLM-L6-v2",
+  semanticSearchModels: defaultSemanticSearchModels,
   agentActionTrayEnabled: true,
   webhooksEnabled: false
 };
@@ -261,6 +267,8 @@ export class LocalSettingsRepository {
       ),
       startOnLogin: this.readSetting("app", "startOnLogin", DEFAULT_SETTINGS.startOnLogin),
       keybindings: this.readKeybindings(),
+      leaderKey: this.readSetting("hotkeys", "leaderKey", DEFAULT_SETTINGS.leaderKey),
+      leaderKeybindings: this.readLeaderKeybindings(),
       selectedTaskListIds: this.readSetting(
         "google",
         "selectedTaskListIds",
@@ -475,6 +483,11 @@ export class LocalSettingsRepository {
         "embeddingModelId",
         DEFAULT_SETTINGS.embeddingModelId
       ),
+      semanticSearchModels: normalizeSemanticModels(this.readSetting(
+        "search",
+        "semanticModels",
+        DEFAULT_SETTINGS.semanticSearchModels
+      )),
       agentActionTrayEnabled: this.readSetting(
         "agent",
         "actionTrayEnabled",
@@ -617,6 +630,14 @@ export class LocalSettingsRepository {
     if (request.keybindings !== undefined) {
       const keybindings = normalizeKeybindings(request.keybindings);
       this.writeSetting("hotkeys", "keybindings", keybindings, now);
+    }
+
+    if (request.leaderKey !== undefined) {
+      this.writeSetting("hotkeys", "leaderKey", request.leaderKey, now);
+    }
+
+    if (request.leaderKeybindings !== undefined) {
+      this.writeSetting("hotkeys", "leaderKeybindings", normalizeLeaderKeybindings(request.leaderKeybindings), now);
     }
 
     if (request.selectedTaskListIds !== undefined) {
@@ -848,6 +869,10 @@ export class LocalSettingsRepository {
 
     if (request.embeddingModelId !== undefined) {
       this.writeSetting("search", "embeddingModelId", request.embeddingModelId, now);
+    }
+
+    if (request.semanticSearchModels !== undefined) {
+      this.writeSetting("search", "semanticModels", normalizeSemanticModels(request.semanticSearchModels), now);
     }
 
     if (request.agentActionTrayEnabled !== undefined) {
@@ -1450,6 +1475,15 @@ export class LocalSettingsRepository {
     return normalizeKeybindings(saved);
   }
 
+  private readLeaderKeybindings(): SettingsSnapshot["leaderKeybindings"] {
+    const saved = this.readSetting<Partial<SettingsSnapshot["leaderKeybindings"]>>(
+      "hotkeys",
+      "leaderKeybindings",
+      {}
+    );
+    return normalizeLeaderKeybindings(saved);
+  }
+
   private defaultSelectedTaskListIds(): string[] {
     const rows = this.connection.query<{ id: string }>(
       `SELECT id
@@ -1927,6 +1961,60 @@ function normalizeKeybindings(
   }
 
   return normalized;
+}
+
+function normalizeLeaderKeybindings(
+  value: Partial<SettingsSnapshot["leaderKeybindings"]>
+): SettingsSnapshot["leaderKeybindings"] {
+  const normalized: SettingsSnapshot["leaderKeybindings"] = { ...DEFAULT_SETTINGS.leaderKeybindings };
+
+  for (const actionId of hotkeyActionIds) {
+    const accelerator = value[actionId];
+
+    if (accelerator === undefined) {
+      continue;
+    }
+
+    normalized[actionId] = typeof accelerator === "string" && accelerator.trim().length > 0
+      ? accelerator.trim()
+      : null;
+  }
+
+  return normalized;
+}
+
+function normalizeSemanticModels(
+  value: unknown
+): SettingsSnapshot["semanticSearchModels"] {
+  const byId = new Map(DEFAULT_SETTINGS.semanticSearchModels.map((model) => [model.id, model]));
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const model = entry as Partial<SettingsSnapshot["semanticSearchModels"][number]>;
+      const base = typeof model.id === "string" ? byId.get(model.id) : undefined;
+
+      if (!base) {
+        continue;
+      }
+
+      byId.set(base.id, {
+        ...base,
+        installed: typeof model.installed === "boolean" ? model.installed : base.installed,
+        installState: model.installState === "installed" || model.installState === "error" || model.installState === "not-installed"
+          ? model.installState
+          : base.installState,
+        cachePath: typeof model.cachePath === "string" ? model.cachePath.slice(0, 1_000) : null,
+        lastError: typeof model.lastError === "string" ? model.lastError.slice(0, 500) : null,
+        updatedAt: typeof model.updatedAt === "string" ? model.updatedAt : null
+      });
+    }
+  }
+
+  return [...byId.values()];
 }
 
 function normalizeMenuBarPanelStyle(value: unknown): SettingsSnapshot["menuBarPanelStyle"] {

@@ -9,8 +9,11 @@ import type {
 } from "@shared/ipc/contracts";
 import {
   defaultHistoryCategoryVisibility,
-  defaultKeybindings
+  defaultKeybindings,
+  defaultLeaderKey,
+  defaultLeaderKeybindings
 } from "@shared/settingsCatalog";
+import { defaultSemanticSearchModels } from "@shared/ipc/contracts";
 
 export type TaskRecord = TaskDetail & {
   listTitle: string;
@@ -198,6 +201,8 @@ export function createPlaceholderState(): PlaceholderState {
       restoreWindowStateEnabled: true,
       startOnLogin: false,
       keybindings: defaultKeybindings,
+      leaderKey: defaultLeaderKey,
+      leaderKeybindings: defaultLeaderKeybindings,
       selectedTaskListIds: ["list-inbox", "list-planning"],
       selectedCalendarIds: ["cal-product", "cal-engineering", "cal-qa"],
       setupCompletedAt: nowIso,
@@ -260,7 +265,8 @@ export function createPlaceholderState(): PlaceholderState {
       savedTaskViews: [],
       semanticSearchEnabled: false,
       semanticSearchMode: "lexical",
-      embeddingModelId: "hcb-local-hash-384",
+      embeddingModelId: "Xenova/all-MiniLM-L6-v2",
+      semanticSearchModels: defaultSemanticSearchModels,
       agentActionTrayEnabled: true,
       webhooksEnabled: false
     },

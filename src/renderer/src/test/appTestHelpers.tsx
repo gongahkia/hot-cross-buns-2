@@ -10,7 +10,10 @@ import type {
 } from "@shared/ipc/contracts";
 import {
   defaultHistoryCategoryVisibility,
-  defaultKeybindings
+  defaultKeybindings,
+  defaultLeaderKey,
+  defaultLeaderKeybindings,
+  defaultSemanticSearchModels
 } from "@shared/ipc/contracts";
 import type { HcbApi } from "@shared/ipc/preloadApi";
 import { ok } from "@shared/ipc/result";
@@ -146,6 +149,8 @@ export function testSettings(overrides: Partial<SettingsSnapshot> = {}): Setting
     eventRetentionDaysBack: 0,
     completedTaskRetentionDaysBack: 365,
     keybindings: defaultKeybindings,
+    leaderKey: defaultLeaderKey,
+    leaderKeybindings: defaultLeaderKeybindings,
     showTrayIcon: true,
     trayClickAction: "open-menu",
     menuBarPanelStyle: "adaptive",
@@ -194,7 +199,8 @@ export function testSettings(overrides: Partial<SettingsSnapshot> = {}): Setting
     savedTaskViews: [],
     semanticSearchEnabled: false,
     semanticSearchMode: "lexical",
-    embeddingModelId: "hcb-local-hash-384",
+    embeddingModelId: "Xenova/all-MiniLM-L6-v2",
+    semanticSearchModels: defaultSemanticSearchModels,
     agentActionTrayEnabled: true,
     webhooksEnabled: false,
     ...overrides

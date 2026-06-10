@@ -7,7 +7,10 @@ import type {
 } from "@shared/ipc/contracts";
 import {
   defaultHistoryCategoryVisibility,
-  defaultKeybindings
+  defaultKeybindings,
+  defaultLeaderKey,
+  defaultLeaderKeybindings,
+  defaultSemanticSearchModels
 } from "@shared/ipc/contracts";
 import type { CoreDataSnapshot } from "./types";
 
@@ -64,6 +67,8 @@ export const emptySettings: SettingsSnapshot = {
   eventRetentionDaysBack: 0,
   completedTaskRetentionDaysBack: 365,
   keybindings: defaultKeybindings,
+  leaderKey: defaultLeaderKey,
+  leaderKeybindings: defaultLeaderKeybindings,
   showTrayIcon: true,
   trayClickAction: "open-menu",
   menuBarPanelStyle: "adaptive",
@@ -118,7 +123,8 @@ export const emptySettings: SettingsSnapshot = {
   savedTaskViews: [],
   semanticSearchEnabled: false,
   semanticSearchMode: "lexical",
-  embeddingModelId: "hcb-local-hash-384",
+  embeddingModelId: "Xenova/all-MiniLM-L6-v2",
+  semanticSearchModels: defaultSemanticSearchModels,
   agentActionTrayEnabled: true,
   webhooksEnabled: false
 };
