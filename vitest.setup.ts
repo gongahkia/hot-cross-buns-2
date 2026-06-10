@@ -749,11 +749,6 @@ const hcbApi: HcbApi = {
         semanticSearchEnabled: false,
         semanticSearchMode: "lexical" as const,
         embeddingModelId: "hcb-local-hash-384",
-        llmEnabled: false,
-        llmProvider: "ollama" as const,
-        llmEndpoint: "http://127.0.0.1:11434",
-        llmModel: "llama3.1",
-        llmAllowRemoteEndpoint: false,
         agentActionTrayEnabled: true,
         webhooksEnabled: false
       })
@@ -845,11 +840,6 @@ const hcbApi: HcbApi = {
         semanticSearchEnabled: request.semanticSearchEnabled ?? false,
         semanticSearchMode: request.semanticSearchMode ?? "lexical",
         embeddingModelId: request.embeddingModelId ?? "hcb-local-hash-384",
-        llmEnabled: request.llmEnabled ?? false,
-        llmProvider: request.llmProvider ?? "ollama",
-        llmEndpoint: request.llmEndpoint ?? "http://127.0.0.1:11434",
-        llmModel: request.llmModel ?? "llama3.1",
-        llmAllowRemoteEndpoint: request.llmAllowRemoteEndpoint ?? false,
         agentActionTrayEnabled: request.agentActionTrayEnabled ?? true,
         webhooksEnabled: request.webhooksEnabled ?? false
       })
@@ -1029,63 +1019,6 @@ const hcbApi: HcbApi = {
     ),
     delete: vi.fn(async (request) => ok({ id: request.id, queued: false, revision: now })),
     test: vi.fn(async (request) => ok({ id: request.id, queued: false, revision: now }))
-  },
-  chat: {
-    listSessions: vi.fn(async (request = {}) =>
-      ok({
-        items: [],
-        page: {
-          limit: request.limit ?? 50,
-          totalKnown: 0
-        }
-      })
-    ),
-    listMessages: vi.fn(async (request) =>
-      ok({
-        items: [],
-        page: {
-          limit: request.limit ?? 50,
-          totalKnown: 0
-        }
-      })
-    ),
-    send: vi.fn(async (request) =>
-      ok({
-        session: {
-          id: request.sessionId ?? "chat:test",
-          title: request.message,
-          createdAt: now,
-          updatedAt: now
-        },
-        userMessage: {
-          id: "chat-message:user",
-          sessionId: request.sessionId ?? "chat:test",
-          role: "user" as const,
-          content: request.message,
-          createdAt: now
-        },
-        assistantMessage: {
-          id: "chat-message:assistant",
-          sessionId: request.sessionId ?? "chat:test",
-          role: "assistant" as const,
-          content: "Test assistant response.",
-          createdAt: now
-        },
-        provider: "local-disabled",
-        proposedActionIds: []
-      })
-    ),
-    clear: vi.fn(async () => ok({ cleared: 0 })),
-    providerHealth: vi.fn(async () =>
-      ok({
-        enabled: false,
-        provider: "ollama",
-        endpoint: "http://127.0.0.1:11434",
-        remoteAllowed: false,
-        ok: true,
-        message: "LLM provider is disabled."
-      })
-    )
   },
   native: {
     capabilities: vi.fn(async () =>
