@@ -489,6 +489,35 @@ CREATE INDEX IF NOT EXISTS idx_local_entity_links_target
 CREATE INDEX IF NOT EXISTS idx_local_entity_links_broken
   ON local_entity_links(broken, target_kind, target_label);
 `
+  },
+  {
+    version: 18,
+    name: "ics subscriptions",
+    sql: `
+CREATE TABLE IF NOT EXISTS local_ics_subscriptions (
+  id TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  title TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  refresh_minutes INTEGER NOT NULL DEFAULT 360,
+  etag TEXT,
+  last_modified TEXT,
+  last_attempt_at TEXT,
+  last_success_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_local_ics_subscriptions_url
+  ON local_ics_subscriptions(url)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_local_ics_subscriptions_visible
+  ON local_ics_subscriptions(deleted_at, enabled, updated_at DESC);
+`
   }
 ];
 

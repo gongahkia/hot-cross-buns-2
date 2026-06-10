@@ -401,6 +401,118 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           ipcContracts.settings.repairLocalPointer,
           request,
           "Local pointer repair failed"
+        ),
+      customizationStatus: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.customizationStatus,
+          {},
+          "Customization status failed"
+        ),
+      reloadCustomization: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.reloadCustomization,
+          {},
+          "Customization reload failed"
+        ),
+      setSnippetEnabled: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.setSnippetEnabled,
+          request,
+          "Snippet setting update failed"
+        ),
+      setExtensionEnabled: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.setExtensionEnabled,
+          request,
+          "Extension setting update failed"
+        ),
+      logExtensionMessage: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.logExtensionMessage,
+          request,
+          "Extension log failed"
+        ),
+      listAttachments: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.listAttachments,
+          request,
+          "Attachment list failed"
+        ),
+      addAttachment: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.addAttachment,
+          request,
+          "Attachment add failed"
+        ),
+      removeAttachment: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.removeAttachment,
+          request,
+          "Attachment remove failed"
+        ),
+      openAttachment: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.openAttachment,
+          request,
+          "Attachment open failed"
+        ),
+      downloadAttachment: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.downloadAttachment,
+          request,
+          "Attachment download failed"
+        ),
+      importIcs: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.importIcs,
+          request,
+          "ICS import failed"
+        ),
+      listIcsSubscriptions: () =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.listIcsSubscriptions,
+          {},
+          "ICS subscription list failed"
+        ),
+      subscribeIcs: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.subscribeIcs,
+          request,
+          "ICS subscription save failed"
+        ),
+      refreshIcsSubscription: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.refreshIcsSubscription,
+          request,
+          "ICS subscription refresh failed"
+        ),
+      deleteIcsSubscription: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.deleteIcsSubscription,
+          request,
+          "ICS subscription delete failed"
+        ),
+      exportLocalReport: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.settings.exportLocalReport,
+          request,
+          "Local report export failed"
         )
     },
     undo: {

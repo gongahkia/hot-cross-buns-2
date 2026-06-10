@@ -61,6 +61,22 @@ import type {
   PortableImportResponse,
   SettingsRecoveryActionRequest,
   SettingsRecoveryActionResponse,
+  AttachmentActionRequest,
+  AttachmentActionResponse,
+  AttachmentAddRequest,
+  AttachmentListRequest,
+  AttachmentListResponse,
+  AttachmentMutationResponse,
+  CustomizationExtensionLogRequest,
+  CustomizationStatusResponse,
+  CustomizationToggleRequest,
+  IcsImportRequest,
+  IcsImportResponse,
+  IcsSubscriptionActionRequest,
+  IcsSubscriptionCreateRequest,
+  IcsSubscriptionsResponse,
+  LocalReportExportRequest,
+  LocalReportExportResponse,
   ScheduledTaskBlockCreateRequest,
   ScheduledTaskBlockListRequest,
   ScheduledTaskBlockListResponse,
@@ -351,6 +367,40 @@ export interface SettingsDomainService {
   repairLocalPointer: (
     request: LocalPointerRepairRequest
   ) => MaybePromise<LocalPointerRepairResponse>;
+  customizationStatus: () => MaybePromise<CustomizationStatusResponse>;
+  reloadCustomization: () => MaybePromise<CustomizationStatusResponse>;
+  setSnippetEnabled: (
+    request: CustomizationToggleRequest
+  ) => MaybePromise<CustomizationStatusResponse>;
+  setExtensionEnabled: (
+    request: CustomizationToggleRequest
+  ) => MaybePromise<CustomizationStatusResponse>;
+  logExtensionMessage: (
+    request: CustomizationExtensionLogRequest
+  ) => MaybePromise<CustomizationStatusResponse>;
+  listAttachments: (request: AttachmentListRequest) => MaybePromise<AttachmentListResponse>;
+  addAttachment: (request: AttachmentAddRequest) => MaybePromise<AttachmentMutationResponse>;
+  removeAttachment: (
+    request: AttachmentActionRequest
+  ) => MaybePromise<AttachmentMutationResponse>;
+  openAttachment: (request: AttachmentActionRequest) => MaybePromise<AttachmentActionResponse>;
+  downloadAttachment: (
+    request: AttachmentActionRequest
+  ) => MaybePromise<AttachmentActionResponse>;
+  importIcs: (request: IcsImportRequest) => MaybePromise<IcsImportResponse>;
+  listIcsSubscriptions: () => MaybePromise<IcsSubscriptionsResponse>;
+  subscribeIcs: (
+    request: IcsSubscriptionCreateRequest
+  ) => MaybePromise<IcsSubscriptionsResponse>;
+  refreshIcsSubscription: (
+    request: IcsSubscriptionActionRequest
+  ) => MaybePromise<IcsSubscriptionsResponse>;
+  deleteIcsSubscription: (
+    request: IcsSubscriptionActionRequest
+  ) => MaybePromise<IcsSubscriptionsResponse>;
+  exportLocalReport: (
+    request: LocalReportExportRequest
+  ) => MaybePromise<LocalReportExportResponse>;
 }
 
 export interface SearchModelDomainService {

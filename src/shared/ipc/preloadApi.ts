@@ -99,6 +99,22 @@ import type {
   SettingsRecoveryActionResponse,
   SettingsSnapshot,
   SettingsUpdateRequest,
+  AttachmentActionRequest,
+  AttachmentActionResponse,
+  AttachmentAddRequest,
+  AttachmentListRequest,
+  AttachmentListResponse,
+  AttachmentMutationResponse,
+  CustomizationExtensionLogRequest,
+  CustomizationStatusResponse,
+  CustomizationToggleRequest,
+  IcsImportRequest,
+  IcsImportResponse,
+  IcsSubscriptionActionRequest,
+  IcsSubscriptionCreateRequest,
+  IcsSubscriptionsResponse,
+  LocalReportExportRequest,
+  LocalReportExportResponse,
   StartupTimingSnapshot,
   SyncRunNowRequest,
   SyncRunNowResponse,
@@ -267,6 +283,46 @@ export interface HcbApi {
     repairLocalPointer: (
       request: LocalPointerRepairRequest
     ) => Promise<HcbResult<LocalPointerRepairResponse>>;
+    customizationStatus: () => Promise<HcbResult<CustomizationStatusResponse>>;
+    reloadCustomization: () => Promise<HcbResult<CustomizationStatusResponse>>;
+    setSnippetEnabled: (
+      request: CustomizationToggleRequest
+    ) => Promise<HcbResult<CustomizationStatusResponse>>;
+    setExtensionEnabled: (
+      request: CustomizationToggleRequest
+    ) => Promise<HcbResult<CustomizationStatusResponse>>;
+    logExtensionMessage: (
+      request: CustomizationExtensionLogRequest
+    ) => Promise<HcbResult<CustomizationStatusResponse>>;
+    listAttachments: (
+      request: AttachmentListRequest
+    ) => Promise<HcbResult<AttachmentListResponse>>;
+    addAttachment: (
+      request: AttachmentAddRequest
+    ) => Promise<HcbResult<AttachmentMutationResponse>>;
+    removeAttachment: (
+      request: AttachmentActionRequest
+    ) => Promise<HcbResult<AttachmentMutationResponse>>;
+    openAttachment: (
+      request: AttachmentActionRequest
+    ) => Promise<HcbResult<AttachmentActionResponse>>;
+    downloadAttachment: (
+      request: AttachmentActionRequest
+    ) => Promise<HcbResult<AttachmentActionResponse>>;
+    importIcs: (request: IcsImportRequest) => Promise<HcbResult<IcsImportResponse>>;
+    listIcsSubscriptions: () => Promise<HcbResult<IcsSubscriptionsResponse>>;
+    subscribeIcs: (
+      request: IcsSubscriptionCreateRequest
+    ) => Promise<HcbResult<IcsSubscriptionsResponse>>;
+    refreshIcsSubscription: (
+      request: IcsSubscriptionActionRequest
+    ) => Promise<HcbResult<IcsSubscriptionsResponse>>;
+    deleteIcsSubscription: (
+      request: IcsSubscriptionActionRequest
+    ) => Promise<HcbResult<IcsSubscriptionsResponse>>;
+    exportLocalReport: (
+      request: LocalReportExportRequest
+    ) => Promise<HcbResult<LocalReportExportResponse>>;
   };
   undo: {
     status: () => Promise<HcbResult<UndoStackStatusResponse>>;

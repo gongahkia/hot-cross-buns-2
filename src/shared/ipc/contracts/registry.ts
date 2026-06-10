@@ -143,10 +143,26 @@ import {
 } from "./tags";
 import {
   settingsGetRequestSchema,
+  attachmentActionRequestSchema,
+  attachmentActionResponseSchema,
+  attachmentAddRequestSchema,
+  attachmentListRequestSchema,
+  attachmentListResponseSchema,
+  attachmentMutationResponseSchema,
+  customizationExtensionLogRequestSchema,
+  customizationStatusResponseSchema,
+  customizationToggleRequestSchema,
+  icsImportRequestSchema,
+  icsImportResponseSchema,
+  icsSubscriptionActionRequestSchema,
+  icsSubscriptionCreateRequestSchema,
+  icsSubscriptionsResponseSchema,
   localPointerListRequestSchema,
   localPointerListResponseSchema,
   localPointerRepairRequestSchema,
   localPointerRepairResponseSchema,
+  localReportExportRequestSchema,
+  localReportExportResponseSchema,
   portableArchivePathRequestSchema,
   portableExportResponseSchema,
   portableImportPreviewSchema,
@@ -530,6 +546,102 @@ export const ipcContracts = {
       "repairLocalPointer",
       localPointerRepairRequestSchema,
       localPointerRepairResponseSchema
+    ),
+    customizationStatus: defineIpcContract(
+      "settings",
+      "customizationStatus",
+      settingsGetRequestSchema,
+      customizationStatusResponseSchema
+    ),
+    reloadCustomization: defineIpcContract(
+      "settings",
+      "reloadCustomization",
+      settingsGetRequestSchema,
+      customizationStatusResponseSchema
+    ),
+    setSnippetEnabled: defineIpcContract(
+      "settings",
+      "setSnippetEnabled",
+      customizationToggleRequestSchema,
+      customizationStatusResponseSchema
+    ),
+    setExtensionEnabled: defineIpcContract(
+      "settings",
+      "setExtensionEnabled",
+      customizationToggleRequestSchema,
+      customizationStatusResponseSchema
+    ),
+    logExtensionMessage: defineIpcContract(
+      "settings",
+      "logExtensionMessage",
+      customizationExtensionLogRequestSchema,
+      customizationStatusResponseSchema
+    ),
+    listAttachments: defineIpcContract(
+      "settings",
+      "listAttachments",
+      attachmentListRequestSchema,
+      attachmentListResponseSchema
+    ),
+    addAttachment: defineIpcContract(
+      "settings",
+      "addAttachment",
+      attachmentAddRequestSchema,
+      attachmentMutationResponseSchema
+    ),
+    removeAttachment: defineIpcContract(
+      "settings",
+      "removeAttachment",
+      attachmentActionRequestSchema,
+      attachmentMutationResponseSchema
+    ),
+    openAttachment: defineIpcContract(
+      "settings",
+      "openAttachment",
+      attachmentActionRequestSchema,
+      attachmentActionResponseSchema
+    ),
+    downloadAttachment: defineIpcContract(
+      "settings",
+      "downloadAttachment",
+      attachmentActionRequestSchema,
+      attachmentActionResponseSchema
+    ),
+    importIcs: defineIpcContract(
+      "settings",
+      "importIcs",
+      icsImportRequestSchema,
+      icsImportResponseSchema
+    ),
+    listIcsSubscriptions: defineIpcContract(
+      "settings",
+      "listIcsSubscriptions",
+      settingsGetRequestSchema,
+      icsSubscriptionsResponseSchema
+    ),
+    subscribeIcs: defineIpcContract(
+      "settings",
+      "subscribeIcs",
+      icsSubscriptionCreateRequestSchema,
+      icsSubscriptionsResponseSchema
+    ),
+    refreshIcsSubscription: defineIpcContract(
+      "settings",
+      "refreshIcsSubscription",
+      icsSubscriptionActionRequestSchema,
+      icsSubscriptionsResponseSchema
+    ),
+    deleteIcsSubscription: defineIpcContract(
+      "settings",
+      "deleteIcsSubscription",
+      icsSubscriptionActionRequestSchema,
+      icsSubscriptionsResponseSchema
+    ),
+    exportLocalReport: defineIpcContract(
+      "settings",
+      "exportLocalReport",
+      localReportExportRequestSchema,
+      localReportExportResponseSchema
     )
   },
   undo: {

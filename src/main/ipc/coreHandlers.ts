@@ -47,6 +47,15 @@ import {
   type SmartRescheduleRequest,
   type SettingsRecoveryActionRequest,
   type SettingsUpdateRequest,
+  type AttachmentActionRequest,
+  type AttachmentAddRequest,
+  type AttachmentListRequest,
+  type CustomizationExtensionLogRequest,
+  type CustomizationToggleRequest,
+  type IcsImportRequest,
+  type IcsSubscriptionActionRequest,
+  type IcsSubscriptionCreateRequest,
+  type LocalReportExportRequest,
   type SyncRunNowRequest,
   type TaskCompletionRequest,
   type TaskCreateRequest,
@@ -497,6 +506,79 @@ export function createCoreIpcHandlers(
       handle: withMutationDrain((request) =>
         services.settings.repairLocalPointer(request as LocalPointerRepairRequest)
       )
+    },
+    {
+      contract: ipcContracts.settings.customizationStatus,
+      handle: () => services.settings.customizationStatus()
+    },
+    {
+      contract: ipcContracts.settings.reloadCustomization,
+      handle: () => services.settings.reloadCustomization()
+    },
+    {
+      contract: ipcContracts.settings.setSnippetEnabled,
+      handle: (request) =>
+        services.settings.setSnippetEnabled(request as CustomizationToggleRequest)
+    },
+    {
+      contract: ipcContracts.settings.setExtensionEnabled,
+      handle: (request) =>
+        services.settings.setExtensionEnabled(request as CustomizationToggleRequest)
+    },
+    {
+      contract: ipcContracts.settings.logExtensionMessage,
+      handle: (request) =>
+        services.settings.logExtensionMessage(request as CustomizationExtensionLogRequest)
+    },
+    {
+      contract: ipcContracts.settings.listAttachments,
+      handle: (request) => services.settings.listAttachments(request as AttachmentListRequest)
+    },
+    {
+      contract: ipcContracts.settings.addAttachment,
+      handle: withMutationDrain((request) =>
+        services.settings.addAttachment(request as AttachmentAddRequest)
+      )
+    },
+    {
+      contract: ipcContracts.settings.removeAttachment,
+      handle: withMutationDrain((request) =>
+        services.settings.removeAttachment(request as AttachmentActionRequest)
+      )
+    },
+    {
+      contract: ipcContracts.settings.openAttachment,
+      handle: (request) => services.settings.openAttachment(request as AttachmentActionRequest)
+    },
+    {
+      contract: ipcContracts.settings.downloadAttachment,
+      handle: (request) => services.settings.downloadAttachment(request as AttachmentActionRequest)
+    },
+    {
+      contract: ipcContracts.settings.importIcs,
+      handle: (request) => services.settings.importIcs(request as IcsImportRequest)
+    },
+    {
+      contract: ipcContracts.settings.listIcsSubscriptions,
+      handle: () => services.settings.listIcsSubscriptions()
+    },
+    {
+      contract: ipcContracts.settings.subscribeIcs,
+      handle: (request) => services.settings.subscribeIcs(request as IcsSubscriptionCreateRequest)
+    },
+    {
+      contract: ipcContracts.settings.refreshIcsSubscription,
+      handle: (request) =>
+        services.settings.refreshIcsSubscription(request as IcsSubscriptionActionRequest)
+    },
+    {
+      contract: ipcContracts.settings.deleteIcsSubscription,
+      handle: (request) =>
+        services.settings.deleteIcsSubscription(request as IcsSubscriptionActionRequest)
+    },
+    {
+      contract: ipcContracts.settings.exportLocalReport,
+      handle: (request) => services.settings.exportLocalReport(request as LocalReportExportRequest)
     },
     {
       contract: ipcContracts.undo.status,

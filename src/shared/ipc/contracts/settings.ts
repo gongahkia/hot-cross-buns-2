@@ -676,3 +676,273 @@ export const localPointerRepairResponseSchema = z
   .strict();
 
 export type LocalPointerRepairResponse = z.infer<typeof localPointerRepairResponseSchema>;
+
+export const customizationSnippetSchema = z
+  .object({
+    id: idSchema,
+    fileName: z.string().min(1).max(255),
+    path: z.string().min(1).max(4_096),
+    enabled: z.boolean(),
+    sizeBytes: z.number().int().nonnegative(),
+    updatedAt: isoDateTimeSchema.nullable(),
+    content: z.string().max(200_000).optional(),
+    error: z.string().min(1).max(500).nullable()
+  })
+  .strict();
+
+export type CustomizationSnippet = z.infer<typeof customizationSnippetSchema>;
+
+export const customizationExternalFileStatusSchema = z
+  .object({
+    path: z.string().min(1).max(4_096),
+    exists: z.boolean(),
+    valid: z.boolean(),
+    appliedKeys: z.array(z.string().min(1).max(120)).max(120),
+    conflicts: z.array(z.string().min(1).max(300)).max(50),
+    error: z.string().min(1).max(500).nullable()
+  })
+  .strict();
+
+export type CustomizationExternalFileStatus = z.infer<
+  typeof customizationExternalFileStatusSchema
+>;
+
+export const customizationExtensionCapabilitySchema = z.enum([
+  "ui.panel",
+  "host.info",
+  "log.write"
+]);
+
+export type CustomizationExtensionCapability = z.infer<
+  typeof customizationExtensionCapabilitySchema
+>;
+
+export const customizationExtensionSchema = z
+  .object({
+    id: idSchema,
+    name: z.string().min(1).max(120),
+    version: z.string().min(1).max(80),
+    path: z.string().min(1).max(4_096),
+    mainPath: z.string().min(1).max(4_096),
+    enabled: z.boolean(),
+    capabilities: z.array(customizationExtensionCapabilitySchema).max(10),
+    code: z.string().max(200_000).optional(),
+    logs: z.array(z.string().min(1).max(500)).max(100),
+    error: z.string().min(1).max(500).nullable()
+  })
+  .strict();
+
+export type CustomizationExtension = z.infer<typeof customizationExtensionSchema>;
+
+export const customizationStatusResponseSchema = z
+  .object({
+    configDirectory: z.string().min(1).max(4_096),
+    snippetsDirectory: z.string().min(1).max(4_096),
+    extensionsDirectory: z.string().min(1).max(4_096),
+    settingsJsonPath: z.string().min(1).max(4_096),
+    keymapJsonPath: z.string().min(1).max(4_096),
+    snippets: z.array(customizationSnippetSchema).max(200),
+    externalSettings: customizationExternalFileStatusSchema,
+    externalKeymap: customizationExternalFileStatusSchema,
+    extensions: z.array(customizationExtensionSchema).max(100),
+    safeMode: z.boolean()
+  })
+  .strict();
+
+export type CustomizationStatusResponse = z.infer<
+  typeof customizationStatusResponseSchema
+>;
+
+export const customizationToggleRequestSchema = z
+  .object({
+    id: idSchema,
+    enabled: z.boolean()
+  })
+  .strict();
+
+export type CustomizationToggleRequest = z.input<
+  typeof customizationToggleRequestSchema
+>;
+
+export const customizationExtensionLogRequestSchema = z
+  .object({
+    extensionId: idSchema,
+    level: z.enum(["info", "warn", "error"]).default("info"),
+    message: z.string().trim().min(1).max(500)
+  })
+  .strict();
+
+export type CustomizationExtensionLogRequest = z.input<
+  typeof customizationExtensionLogRequestSchema
+>;
+
+export const attachmentEntityKindSchema = z.enum(["task", "event", "note"]);
+export type AttachmentEntityKind = z.infer<typeof attachmentEntityKindSchema>;
+
+export const attachmentSummarySchema = z
+  .object({
+    id: idSchema,
+    entityKind: attachmentEntityKindSchema,
+    entityId: idSchema,
+    pointer: z.string().min(1).max(4_096),
+    displayName: z.string().min(1).max(500),
+    kind: z.enum(["image", "file"]),
+    exists: z.boolean(),
+    sizeBytes: z.number().int().nonnegative().nullable()
+  })
+  .strict();
+
+export type AttachmentSummary = z.infer<typeof attachmentSummarySchema>;
+
+export const attachmentListRequestSchema = z
+  .object({
+    entityKind: attachmentEntityKindSchema,
+    entityId: idSchema
+  })
+  .strict();
+
+export type AttachmentListRequest = z.input<typeof attachmentListRequestSchema>;
+
+export const attachmentListResponseSchema = z
+  .object({
+    items: z.array(attachmentSummarySchema).max(200)
+  })
+  .strict();
+
+export type AttachmentListResponse = z.infer<typeof attachmentListResponseSchema>;
+
+export const attachmentAddRequestSchema = attachmentListRequestSchema.extend({
+  fileName: z.string().trim().min(1).max(500),
+  mimeType: z.string().trim().max(200).optional(),
+  dataBase64: z.string().min(1).max(60_000_000)
+}).strict();
+
+export type AttachmentAddRequest = z.input<typeof attachmentAddRequestSchema>;
+
+export const attachmentActionRequestSchema = z
+  .object({
+    pointer: z.string().min(1).max(4_096),
+    displayName: z.string().trim().min(1).max(500).optional()
+  })
+  .strict();
+
+export type AttachmentActionRequest = z.input<typeof attachmentActionRequestSchema>;
+
+export const attachmentMutationResponseSchema = attachmentListResponseSchema.extend({
+  queued: z.boolean(),
+  revision: isoDateTimeSchema
+}).strict();
+
+export type AttachmentMutationResponse = z.infer<
+  typeof attachmentMutationResponseSchema
+>;
+
+export const attachmentActionResponseSchema = z
+  .object({
+    path: z.string().min(1).max(4_096),
+    message: z.string().min(1).max(500)
+  })
+  .strict();
+
+export type AttachmentActionResponse = z.infer<
+  typeof attachmentActionResponseSchema
+>;
+
+export const icsImportRequestSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(500),
+    calendarTitle: z.string().trim().min(1).max(500).optional(),
+    dataBase64: z.string().min(1).max(40_000_000)
+  })
+  .strict();
+
+export type IcsImportRequest = z.input<typeof icsImportRequestSchema>;
+
+export const icsSubscriptionCreateRequestSchema = z
+  .object({
+    url: z.string().trim().min(1).max(2_048),
+    title: z.string().trim().min(1).max(500).optional(),
+    refreshMinutes: z.number().int().min(15).max(7 * 24 * 60).default(360)
+  })
+  .strict();
+
+export type IcsSubscriptionCreateRequest = z.input<
+  typeof icsSubscriptionCreateRequestSchema
+>;
+
+export const icsSubscriptionActionRequestSchema = z
+  .object({
+    id: idSchema
+  })
+  .strict();
+
+export type IcsSubscriptionActionRequest = z.input<
+  typeof icsSubscriptionActionRequestSchema
+>;
+
+export const icsSubscriptionSummarySchema = z
+  .object({
+    id: idSchema,
+    url: z.string().min(1).max(2_048),
+    title: z.string().min(1).max(500),
+    enabled: z.boolean(),
+    refreshMinutes: z.number().int().min(15).max(7 * 24 * 60),
+    calendarId: idSchema,
+    lastAttemptAt: isoDateTimeSchema.nullable(),
+    lastSuccessAt: isoDateTimeSchema.nullable(),
+    lastError: z.string().min(1).max(500).nullable(),
+    eventCount: z.number().int().nonnegative(),
+    etag: z.string().min(1).max(500).nullable(),
+    lastModified: z.string().min(1).max(500).nullable()
+  })
+  .strict();
+
+export type IcsSubscriptionSummary = z.infer<typeof icsSubscriptionSummarySchema>;
+
+export const icsImportResponseSchema = z
+  .object({
+    calendarId: idSchema,
+    calendarTitle: z.string().min(1).max(500),
+    importedEventCount: z.number().int().nonnegative(),
+    skippedEventCount: z.number().int().nonnegative(),
+    revision: isoDateTimeSchema
+  })
+  .strict();
+
+export type IcsImportResponse = z.infer<typeof icsImportResponseSchema>;
+
+export const icsSubscriptionsResponseSchema = z
+  .object({
+    items: z.array(icsSubscriptionSummarySchema).max(200)
+  })
+  .strict();
+
+export type IcsSubscriptionsResponse = z.infer<
+  typeof icsSubscriptionsResponseSchema
+>;
+
+export const localReportExportRequestSchema = z
+  .object({
+    range: z.enum(["today", "week", "custom"]).default("today"),
+    format: z.enum(["markdown", "csv", "ics"]).default("markdown"),
+    start: isoDateTimeSchema.optional(),
+    end: isoDateTimeSchema.optional()
+  })
+  .strict();
+
+export type LocalReportExportRequest = z.input<
+  typeof localReportExportRequestSchema
+>;
+
+export const localReportExportResponseSchema = z
+  .object({
+    path: z.string().min(1).max(4_096),
+    format: z.enum(["markdown", "csv", "ics"]),
+    generatedAt: isoDateTimeSchema,
+    itemCount: z.number().int().nonnegative()
+  })
+  .strict();
+
+export type LocalReportExportResponse = z.infer<
+  typeof localReportExportResponseSchema
+>;
