@@ -287,8 +287,8 @@ export async function checkForUpdates(): Promise<NativeOperationResult> {
       state: "ready",
       updateAvailable,
       message: updateAvailable
-        ? `Hot Cross Buns ${latestVersion} is available from GitHub Releases.`
-        : "Hot Cross Buns is up to date."
+        ? `Hot Cross Buns 2 ${latestVersion} is available from GitHub Releases.`
+        : "Hot Cross Buns 2 is up to date."
     };
   } catch (error) {
     return {

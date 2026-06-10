@@ -369,7 +369,7 @@ describe("native shell service", () => {
       releaseUrl: "https://github.com/gongahkia/hot-cross-buns-2/releases/tag/v1.2.0",
       state: "ready",
       updateAvailable: true,
-      message: "Hot Cross Buns 1.2.0 is available from GitHub Releases."
+      message: "Hot Cross Buns 2 1.2.0 is available from GitHub Releases."
     };
     const { service } = createService({ adapter, recordUpdateCheck });
 
