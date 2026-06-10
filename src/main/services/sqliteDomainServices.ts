@@ -10,6 +10,7 @@ import type {
   LocalAgentRepository,
   LocalPlannerRepository,
   LocalSettingsRepository,
+  LocalSettingsSupportRepository,
   LocalUndoRepository,
   LocalWebhookRepository
 } from "../data/localRepositories";
@@ -37,6 +38,7 @@ import {
 export interface SqliteDomainServiceOptions {
   plannerRepository: LocalPlannerRepository;
   settingsRepository: LocalSettingsRepository;
+  settingsSupportRepository: LocalSettingsSupportRepository;
   undoRepository: LocalUndoRepository;
   agentRepository: LocalAgentRepository;
   webhookRepository: LocalWebhookRepository;
@@ -81,6 +83,7 @@ export function createSqliteDomainServices(
     settings: createSqliteSettingsDomainService({
       mcpState,
       settingsRepository: options.settingsRepository,
+      settingsSupportRepository: options.settingsSupportRepository,
       sync,
       syncRepository: options.syncRepository
     }),

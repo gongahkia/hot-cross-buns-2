@@ -103,7 +103,14 @@ const settingsSearchTextByTab: Record<SettingsTabId, string> = {
     "Regex",
     "Task templates",
     "Event templates",
-    "Note templates"
+    "Note templates",
+    "Customization",
+    "CSS snippets",
+    "settings.json",
+    "keymap.json",
+    "Sandboxed extensions",
+    "ICS import subscriptions",
+    "Local reports"
   ].join(" "),
   alerts: [
     "Alerts",

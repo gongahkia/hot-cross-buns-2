@@ -953,6 +953,37 @@ const hcbApi: HcbApi = {
         queued: false,
         revision: now
       })
+    ),
+    customizationStatus: vi.fn(async () => ok(mockCustomizationStatus())),
+    reloadCustomization: vi.fn(async () => ok(mockCustomizationStatus())),
+    setSnippetEnabled: vi.fn(async () => ok(mockCustomizationStatus())),
+    setExtensionEnabled: vi.fn(async () => ok(mockCustomizationStatus())),
+    logExtensionMessage: vi.fn(async () => ok(mockCustomizationStatus())),
+    listAttachments: vi.fn(async () => ok({ items: [] })),
+    addAttachment: vi.fn(async () => ok({ items: [], queued: false, revision: now })),
+    removeAttachment: vi.fn(async () => ok({ items: [], queued: false, revision: now })),
+    openAttachment: vi.fn(async (request) => ok({ path: request.pointer, message: "Opened." })),
+    downloadAttachment: vi.fn(async (request) => ok({ path: request.pointer, message: "Downloaded." })),
+    importIcs: vi.fn(async (request) =>
+      ok({
+        calendarId: "ics:test",
+        calendarTitle: request.calendarTitle ?? request.fileName,
+        importedEventCount: 0,
+        skippedEventCount: 0,
+        revision: now
+      })
+    ),
+    listIcsSubscriptions: vi.fn(async () => ok({ items: [] })),
+    subscribeIcs: vi.fn(async () => ok({ items: [] })),
+    refreshIcsSubscription: vi.fn(async () => ok({ items: [] })),
+    deleteIcsSubscription: vi.fn(async () => ok({ items: [] })),
+    exportLocalReport: vi.fn(async (request) =>
+      ok({
+        path: "/tmp/hcb-test-report.md",
+        format: request.format ?? "markdown",
+        generatedAt: now,
+        itemCount: 0
+      })
     )
   },
   undo: {
@@ -1382,6 +1413,35 @@ const hcbApi: HcbApi = {
     )
   }
 };
+
+function mockCustomizationStatus() {
+  return {
+    configDirectory: "/tmp/hcb-test",
+    snippetsDirectory: "/tmp/hcb-test/snippets",
+    extensionsDirectory: "/tmp/hcb-test/extensions",
+    settingsJsonPath: "/tmp/hcb-test/settings.json",
+    keymapJsonPath: "/tmp/hcb-test/keymap.json",
+    snippets: [],
+    externalSettings: {
+      path: "/tmp/hcb-test/settings.json",
+      exists: false,
+      valid: true,
+      appliedKeys: [],
+      conflicts: [],
+      error: null
+    },
+    externalKeymap: {
+      path: "/tmp/hcb-test/keymap.json",
+      exists: false,
+      valid: true,
+      appliedKeys: [],
+      conflicts: [],
+      error: null
+    },
+    extensions: [],
+    safeMode: false
+  };
+}
 
 if (typeof window !== "undefined") {
   Object.defineProperty(window, "hcb", {

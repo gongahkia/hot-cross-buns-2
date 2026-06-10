@@ -8,6 +8,7 @@ import { Badge, Button, cx, Input } from "../../../components/primitives";
 import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { CorePriority, TaskViewModel } from "../coreViewModels";
 import { AutoTagAudit } from "../AutoTagAudit";
+import { AttachmentPanel } from "../AttachmentPanel";
 import { EntityLinksPanel } from "../EntityLinksPanel";
 import { MarkdownPreview } from "../MarkdownPreview";
 import { plannerLinkTargets } from "../plannerLinkTargets";
@@ -210,6 +211,10 @@ export function TaskInspectorDetails({
             variant="plain"
           />
         </TaskDetailLine>
+      ) : null}
+
+      {(draft.id ?? task?.id) ? (
+        <AttachmentPanel entityId={(draft.id ?? task?.id) as string} entityKind="task" />
       ) : null}
 
       {draft.dueDate ? (

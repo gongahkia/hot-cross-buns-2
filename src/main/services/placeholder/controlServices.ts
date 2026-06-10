@@ -192,6 +192,33 @@ export function createPlaceholderControlServices(
         updated: 0,
         queued: false,
         revision: new Date().toISOString()
+      }),
+      customizationStatus: () => placeholderCustomizationStatus(),
+      reloadCustomization: () => placeholderCustomizationStatus(),
+      setSnippetEnabled: () => placeholderCustomizationStatus(),
+      setExtensionEnabled: () => placeholderCustomizationStatus(),
+      logExtensionMessage: () => placeholderCustomizationStatus(),
+      listAttachments: () => ({ items: [] }),
+      addAttachment: () => ({ items: [], queued: false, revision: new Date().toISOString() }),
+      removeAttachment: () => ({ items: [], queued: false, revision: new Date().toISOString() }),
+      openAttachment: (request) => ({ path: request.pointer, message: "Placeholder attachment open." }),
+      downloadAttachment: (request) => ({ path: request.pointer, message: "Placeholder attachment download." }),
+      importIcs: (request) => ({
+        calendarId: "placeholder:ics",
+        calendarTitle: request.calendarTitle ?? request.fileName,
+        importedEventCount: 0,
+        skippedEventCount: 0,
+        revision: new Date().toISOString()
+      }),
+      listIcsSubscriptions: () => ({ items: [] }),
+      subscribeIcs: () => ({ items: [] }),
+      refreshIcsSubscription: () => ({ items: [] }),
+      deleteIcsSubscription: () => ({ items: [] }),
+      exportLocalReport: (request) => ({
+        path: "/tmp/hot-cross-buns-2-placeholder-report.txt",
+        format: request.format ?? "markdown",
+        generatedAt: new Date().toISOString(),
+        itemCount: 0
       })
     },
     searchModels: {
@@ -331,5 +358,34 @@ export function createPlaceholderControlServices(
       test: (request) => ({ id: request.id, queued: false, revision: new Date().toISOString() }),
       emit: () => undefined
     }
+  };
+}
+
+function placeholderCustomizationStatus() {
+  return {
+    configDirectory: "/tmp/hot-cross-buns-2",
+    snippetsDirectory: "/tmp/hot-cross-buns-2/snippets",
+    extensionsDirectory: "/tmp/hot-cross-buns-2/extensions",
+    settingsJsonPath: "/tmp/hot-cross-buns-2/settings.json",
+    keymapJsonPath: "/tmp/hot-cross-buns-2/keymap.json",
+    snippets: [],
+    externalSettings: {
+      path: "/tmp/hot-cross-buns-2/settings.json",
+      exists: false,
+      valid: true,
+      appliedKeys: [],
+      conflicts: [],
+      error: null
+    },
+    externalKeymap: {
+      path: "/tmp/hot-cross-buns-2/keymap.json",
+      exists: false,
+      valid: true,
+      appliedKeys: [],
+      conflicts: [],
+      error: null
+    },
+    extensions: [],
+    safeMode: false
   };
 }

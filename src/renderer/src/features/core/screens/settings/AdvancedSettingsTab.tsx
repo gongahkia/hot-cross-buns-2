@@ -10,6 +10,8 @@ import type { AutoTagTargetKind } from "@shared/ipc/autoTags";
 import type {
   AutoTagRule,
   CalendarListSummary,
+  CustomizationStatusResponse,
+  IcsSubscriptionsResponse,
   LocalPointerListResponse,
   PortableImportPreview,
   SettingsRecoveryActionRequest,
@@ -30,15 +32,19 @@ import {
   Archive,
   CalendarDays,
   ChevronRight,
+  Code2,
   Database,
   FileDown,
   FilePlus2,
+  FileUp,
   Filter,
   History,
   Layers3,
   Link2,
   ListChecks,
+  Paperclip,
   Pin,
+  Puzzle,
   RotateCcw,
   Save,
   Tag,
@@ -94,6 +100,18 @@ function autoTagRuleHasError(rule: AutoTagRule): boolean {
   return validateAutoTagRule(rule).some((issue) => issue.severity === "error");
 }
 
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index] ?? 0);
+  }
+
+  return btoa(binary);
+}
+
 function autoDisableInvalidAutoTagRules(rules: AutoTagRule[], now: string): AutoTagRule[] {
   let changed = false;
   const nextRules = rules.map((rule) => {
@@ -147,6 +165,13 @@ export function AdvancedSettingsTab({
   const [semanticStatus, setSemanticStatus] = useState<string | null>(null);
   const [localPointers, setLocalPointers] = useState<LocalPointerListResponse | null>(null);
   const [pointerReplacementPath, setPointerReplacementPath] = useState("");
+  const [customizationStatus, setCustomizationStatus] = useState<CustomizationStatusResponse | null>(null);
+  const [customizationMessage, setCustomizationMessage] = useState<string | null>(null);
+  const [icsSubscriptions, setIcsSubscriptions] = useState<IcsSubscriptionsResponse | null>(null);
+  const [icsUrl, setIcsUrl] = useState("");
+  const [icsTitle, setIcsTitle] = useState("");
+  const [icsMessage, setIcsMessage] = useState<string | null>(null);
+  const [reportMessage, setReportMessage] = useState<string | null>(null);
   const autoTagAutoDisableRequestRef = useRef<string | null>(null);
   const autoTagPreviewExistingTagValues = useMemo(
     () => parseTagText(autoTagPreviewExistingTags),
@@ -213,6 +238,8 @@ export function AdvancedSettingsTab({
   useEffect(() => {
     void refreshTagAnalytics();
     void refreshLocalPointers();
+    void refreshCustomizationStatus();
+    void refreshIcsSubscriptions();
   }, []);
 
   async function refreshTagAnalytics(): Promise<void> {
@@ -227,6 +254,113 @@ export function AdvancedSettingsTab({
     if (result?.ok) {
       setLocalPointers(result.data);
     }
+  }
+
+  async function refreshCustomizationStatus(): Promise<void> {
+    const result = await window.hcb?.settings.customizationStatus();
+    if (result?.ok) {
+      setCustomizationStatus(result.data);
+    }
+  }
+
+  async function reloadCustomization(): Promise<void> {
+    const result = await window.hcb?.settings.reloadCustomization();
+    if (!result?.ok) {
+      setCustomizationMessage(result?.error.message ?? "Customization reload failed.");
+      return;
+    }
+    setCustomizationStatus(result.data);
+    setCustomizationMessage("Customization reloaded.");
+  }
+
+  async function setSnippetEnabled(id: string, enabled: boolean): Promise<void> {
+    const result = await window.hcb?.settings.setSnippetEnabled({ id, enabled });
+    if (!result?.ok) {
+      setCustomizationMessage(result?.error.message ?? "Snippet update failed.");
+      return;
+    }
+    setCustomizationStatus(result.data);
+  }
+
+  async function setExtensionEnabled(id: string, enabled: boolean): Promise<void> {
+    const result = await window.hcb?.settings.setExtensionEnabled({ id, enabled });
+    if (!result?.ok) {
+      setCustomizationMessage(result?.error.message ?? "Extension update failed.");
+      return;
+    }
+    setCustomizationStatus(result.data);
+  }
+
+  async function refreshIcsSubscriptions(): Promise<void> {
+    const result = await window.hcb?.settings.listIcsSubscriptions();
+    if (result?.ok) {
+      setIcsSubscriptions(result.data);
+    }
+  }
+
+  async function importIcsFile(file: File): Promise<void> {
+    setIcsMessage("Importing ICS file.");
+    const result = await window.hcb?.settings.importIcs({
+      fileName: file.name,
+      dataBase64: await fileToBase64(file)
+    });
+    if (!result?.ok) {
+      setIcsMessage(result?.error.message ?? "ICS import failed.");
+      return;
+    }
+    setIcsMessage(`Imported ${result.data.importedEventCount} events into ${result.data.calendarTitle}.`);
+  }
+
+  async function subscribeIcs(): Promise<void> {
+    if (!icsUrl.trim()) {
+      setIcsMessage("Enter an ICS URL.");
+      return;
+    }
+    setIcsMessage("Subscribing to ICS feed.");
+    const result = await window.hcb?.settings.subscribeIcs({
+      url: icsUrl.trim(),
+      ...(icsTitle.trim() ? { title: icsTitle.trim() } : {}),
+      refreshMinutes: 360
+    });
+    if (!result?.ok) {
+      setIcsMessage(result?.error.message ?? "ICS subscription failed.");
+      return;
+    }
+    setIcsSubscriptions(result.data);
+    setIcsUrl("");
+    setIcsTitle("");
+    setIcsMessage("ICS subscription saved.");
+  }
+
+  async function refreshIcsSubscription(id: string): Promise<void> {
+    setIcsMessage("Refreshing ICS subscription.");
+    const result = await window.hcb?.settings.refreshIcsSubscription({ id });
+    if (!result?.ok) {
+      setIcsMessage(result?.error.message ?? "ICS refresh failed.");
+      return;
+    }
+    setIcsSubscriptions(result.data);
+    setIcsMessage("ICS subscription refreshed.");
+  }
+
+  async function deleteIcsSubscription(id: string): Promise<void> {
+    const result = await window.hcb?.settings.deleteIcsSubscription({ id });
+    if (!result?.ok) {
+      setIcsMessage(result?.error.message ?? "ICS delete failed.");
+      return;
+    }
+    setIcsSubscriptions(result.data);
+    setIcsMessage("ICS subscription removed.");
+  }
+
+  async function exportLocalReport(range: "today" | "week", format: "markdown" | "csv" | "ics"): Promise<void> {
+    setReportMessage("Exporting local report.");
+    const result = await window.hcb?.settings.exportLocalReport({ range, format });
+    if (!result?.ok) {
+      setReportMessage(result?.error.message ?? "Local report export failed.");
+      return;
+    }
+    setReportMessage(`Exported ${result.data.itemCount} items to ${result.data.path}.`);
   }
 
   function updatePerTabFilter(
@@ -758,6 +892,187 @@ export function AdvancedSettingsTab({
           description="Google Calendar lists, events, and queued event writes."
           onChange={(checked) => updateSettings({ syncCalendarEventsEnabled: checked })}
         />
+      </SettingsGroup>
+
+      <SettingsGroup title="Customization">
+        <SettingsControlRow
+          description={customizationStatus ? `Config: ${customizationStatus.configDirectory}` : "File-backed customization status."}
+          icon={Code2}
+          label="External files"
+        >
+          <Button onClick={() => void reloadCustomization()} variant="secondary">
+            <RotateCcw aria-hidden="true" size={14} />
+            Reload
+          </Button>
+        </SettingsControlRow>
+        {customizationStatus ? (
+          <>
+            <SettingsControlRow
+              description={customizationStatus.externalSettings.error ?? customizationStatus.settingsJsonPath}
+              label="settings.json"
+            >
+              <Badge tone={customizationStatus.externalSettings.valid ? "success" : "danger"}>
+                {customizationStatus.externalSettings.exists ? `${customizationStatus.externalSettings.appliedKeys.length} keys` : "missing"}
+              </Badge>
+            </SettingsControlRow>
+            <SettingsControlRow
+              description={customizationStatus.externalKeymap.error ?? customizationStatus.keymapJsonPath}
+              label="keymap.json"
+            >
+              <Badge tone={customizationStatus.externalKeymap.valid ? "success" : "danger"}>
+                {customizationStatus.externalKeymap.exists ? `${customizationStatus.externalKeymap.appliedKeys.length} keys` : "missing"}
+              </Badge>
+            </SettingsControlRow>
+            <SettingsControlRow
+              description={customizationStatus.snippetsDirectory}
+              icon={Code2}
+              label="CSS snippets"
+            >
+              <Badge>{customizationStatus.snippets.length}</Badge>
+            </SettingsControlRow>
+            {customizationStatus.snippets.length === 0 ? (
+              <EmptyState description="Drop .css files into the snippets folder and reload." title="No snippets" />
+            ) : customizationStatus.snippets.map((snippet) => (
+              <SettingsSwitch
+                checked={snippet.enabled}
+                description={snippet.error ?? `${snippet.sizeBytes} bytes`}
+                key={snippet.id}
+                label={snippet.fileName}
+                onChange={(checked) => void setSnippetEnabled(snippet.id, checked)}
+              />
+            ))}
+            <SettingsControlRow
+              description={customizationStatus.extensionsDirectory}
+              icon={Puzzle}
+              label="Sandboxed extensions"
+            >
+              <Badge>{customizationStatus.extensions.length}</Badge>
+            </SettingsControlRow>
+            {customizationStatus.extensions.length === 0 ? (
+              <EmptyState description="Add extension folders with manifest.json and main.js." title="No extensions" />
+            ) : customizationStatus.extensions.map((extension) => (
+              <SettingsSwitch
+                checked={extension.enabled}
+                description={extension.error ?? `${extension.version}; ${extension.capabilities.join(", ") || "no capabilities"}`}
+                icon={Puzzle}
+                key={extension.id}
+                label={extension.name}
+                onChange={(checked) => void setExtensionEnabled(extension.id, checked)}
+                trailing={<Badge tone={extension.error ? "danger" : extension.enabled ? "success" : "neutral"}>{extension.enabled ? "enabled" : "off"}</Badge>}
+              />
+            ))}
+            {customizationStatus.safeMode ? (
+              <div className="rounded-hcbMd border border-warning bg-surface-0 px-3 py-2 text-[var(--text-sm)] text-warning">
+                Safe mode is active. Snippets and extensions are not loaded.
+              </div>
+            ) : null}
+          </>
+        ) : null}
+        {customizationMessage ? (
+          <div className="rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-sm)] text-text-secondary">
+            {customizationMessage}
+          </div>
+        ) : null}
+      </SettingsGroup>
+
+      <SettingsGroup title="ICS import and subscriptions">
+        <SettingsControlRow
+          description="Imports .ics files into a read-only local calendar."
+          icon={FileUp}
+          label="ICS file import"
+        >
+          <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-sm)] font-semibold text-text-primary">
+            <FileUp aria-hidden="true" size={14} />
+            Import .ics
+            <input
+              accept=".ics,text/calendar"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file) {
+                  void importIcsFile(file);
+                }
+              }}
+              type="file"
+            />
+          </label>
+        </SettingsControlRow>
+        <SettingsControlRow
+          description="Subscriptions use https/webcal, cache ETag/Last-Modified, and remain read-only."
+          icon={CalendarDays}
+          label="Subscribe"
+        >
+          <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_auto]">
+            <Input
+              aria-label="ICS subscription URL"
+              onChange={(event) => setIcsUrl(event.currentTarget.value)}
+              placeholder="webcal://example.com/calendar.ics"
+              value={icsUrl}
+            />
+            <Input
+              aria-label="ICS subscription title"
+              onChange={(event) => setIcsTitle(event.currentTarget.value)}
+              placeholder="Calendar name"
+              value={icsTitle}
+            />
+            <Button onClick={() => void subscribeIcs()} variant="secondary">
+              <CalendarDays aria-hidden="true" size={14} />
+              Subscribe
+            </Button>
+          </div>
+        </SettingsControlRow>
+        {(icsSubscriptions?.items ?? []).map((subscription) => (
+          <SettingsControlRow
+            description={subscription.lastError ?? `Last success: ${subscription.lastSuccessAt ?? "never"}`}
+            icon={CalendarDays}
+            key={subscription.id}
+            label={subscription.title}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{subscription.eventCount}</Badge>
+              <Button onClick={() => void refreshIcsSubscription(subscription.id)} size="sm" variant="secondary">
+                <RotateCcw aria-hidden="true" size={14} />
+                Refresh
+              </Button>
+              <Button onClick={() => void deleteIcsSubscription(subscription.id)} size="sm" variant="secondary">
+                <Trash2 aria-hidden="true" size={14} />
+                Remove
+              </Button>
+            </div>
+          </SettingsControlRow>
+        ))}
+        {icsMessage ? (
+          <div className="rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-sm)] text-text-secondary">
+            {icsMessage}
+          </div>
+        ) : null}
+      </SettingsGroup>
+
+      <SettingsGroup title="Local reports">
+        <SettingsControlRow
+          description="Exports local task and calendar summaries without syncing."
+          icon={FileDown}
+          label="Today"
+        >
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void exportLocalReport("today", "markdown")} size="sm" variant="secondary">Markdown</Button>
+            <Button onClick={() => void exportLocalReport("today", "csv")} size="sm" variant="secondary">CSV</Button>
+            <Button onClick={() => void exportLocalReport("today", "ics")} size="sm" variant="secondary">ICS</Button>
+          </div>
+        </SettingsControlRow>
+        <SettingsControlRow icon={FileDown} label="Week">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void exportLocalReport("week", "markdown")} size="sm" variant="secondary">Markdown</Button>
+            <Button onClick={() => void exportLocalReport("week", "csv")} size="sm" variant="secondary">CSV</Button>
+            <Button onClick={() => void exportLocalReport("week", "ics")} size="sm" variant="secondary">ICS</Button>
+          </div>
+        </SettingsControlRow>
+        {reportMessage ? (
+          <div className="rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-sm)] text-text-secondary">
+            {reportMessage}
+          </div>
+        ) : null}
       </SettingsGroup>
 
       <SettingsGroup title="Agent and semantic search">

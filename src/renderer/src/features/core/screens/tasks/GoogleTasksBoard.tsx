@@ -1220,9 +1220,9 @@ function TaskActionMenu({
         <Copy aria-hidden="true" size={18} />
         Duplicate
       </MenuButton>
-      <MenuButton disabled>
+      <MenuButton onClick={onOpen}>
         <Paperclip aria-hidden="true" size={18} />
-        Add attachment
+        Attachments
       </MenuButton>
       <MenuButton onClick={onDelete}>
         <Trash2 aria-hidden="true" size={18} />

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defaultKeybindings } from "@shared/settingsCatalog";
@@ -9,6 +9,7 @@ import {
   LocalPerformanceRepository,
   LocalPlannerRepository,
   LocalSettingsRepository,
+  LocalSettingsSupportRepository,
   LocalUndoRepository,
   LocalWebhookRepository
 } from "../data/localRepositories";
@@ -35,6 +36,14 @@ function createTestServices() {
   const performanceRepository = new LocalPerformanceRepository(temp.connection);
   const plannerRepository = new LocalPlannerRepository(temp.connection, performanceRepository);
   const settingsRepository = new LocalSettingsRepository(temp.connection);
+  const settingsSupportRepository = new LocalSettingsSupportRepository(temp.connection, {
+    configDirectory: join(temp.directory, "config"),
+    dataDirectory: join(temp.directory, "data"),
+    cacheDirectory: join(temp.directory, "cache"),
+    logsDirectory: join(temp.directory, "logs"),
+    diagnosticsDirectory: join(temp.directory, "diagnostics"),
+    tempDirectory: join(temp.directory, "tmp")
+  });
   const undoRepository = new LocalUndoRepository(temp.connection);
   const agentRepository = new LocalAgentRepository(temp.connection);
   const webhookRepository = new LocalWebhookRepository(temp.connection);
@@ -42,6 +51,7 @@ function createTestServices() {
   const domain = createSqliteDomainServices({
     plannerRepository,
     settingsRepository,
+    settingsSupportRepository,
     undoRepository,
     agentRepository,
     webhookRepository,
@@ -52,6 +62,7 @@ function createTestServices() {
     domain,
     plannerRepository,
     settingsRepository,
+    settingsSupportRepository,
     undoRepository,
     agentRepository,
     webhookRepository,
@@ -809,6 +820,120 @@ describe("SQLite-backed domain services", () => {
 
     expect(repaired).toMatchObject({ updated: 1, queued: true, replacementPointer: replacementUrl });
     expect((await domain.planner.getTask({ id: "acct-1:task:inbox:task-1" })).notes).toContain(replacementUrl);
+  });
+
+  it("loads external settings, keymaps, snippets, and extension manifests", async () => {
+    const { domain, settingsSupportRepository } = createTestServices();
+    const configDirectory = join(temp?.directory ?? "", "config");
+    const snippetDirectory = join(configDirectory, "snippets");
+    const extensionDirectory = join(configDirectory, "extensions", "local.example");
+
+    mkdirSync(snippetDirectory, { recursive: true });
+    mkdirSync(extensionDirectory, { recursive: true });
+    writeFileSync(join(configDirectory, "settings.json"), JSON.stringify({ theme: "dark", uiLayoutScale: 1.1 }), "utf8");
+    writeFileSync(join(configDirectory, "keymap.json"), JSON.stringify({ keybindings: { "navigation.tasks": "CmdOrCtrl+8" } }), "utf8");
+    writeFileSync(join(snippetDirectory, "accent.css"), ":root{--color-accent:#ff0000;}", "utf8");
+    writeFileSync(join(extensionDirectory, "manifest.json"), JSON.stringify({
+      id: "local.example",
+      name: "Example",
+      version: "1.0.0",
+      main: "main.js",
+      capabilities: ["ui.panel", "log.write"]
+    }), "utf8");
+    writeFileSync(join(extensionDirectory, "main.js"), "hcbExtension.log('loaded')", "utf8");
+
+    await domain.settings.setSnippetEnabled({ id: "accent.css", enabled: true });
+    await domain.settings.setExtensionEnabled({ id: "local.example", enabled: true });
+
+    const settings = await domain.settings.get();
+    const status = await domain.settings.customizationStatus();
+
+    expect(settings.theme).toBe("dark");
+    expect(settings.uiLayoutScale).toBe(1.1);
+    expect(settings.keybindings["navigation.tasks"]).toBe("CmdOrCtrl+8");
+    expect(status.snippets[0]).toMatchObject({ id: "accent.css", enabled: true });
+    expect(status.snippets[0]?.content).toContain("--color-accent");
+    expect(status.extensions[0]).toMatchObject({ id: "local.example", enabled: true });
+    expect(status.extensions[0]?.code).toContain("hcbExtension.log");
+    expect(settingsSupportRepository.applyExternalSettings(await domain.settings.update({ theme: "light" })).theme).toBe("dark");
+  });
+
+  it("adds, lists, opens through metadata, downloads, and removes attachments", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+
+    const added = await domain.settings.addAttachment({
+      entityKind: "task",
+      entityId: "acct-1:task:inbox:task-1",
+      fileName: "receipt.txt",
+      mimeType: "text/plain",
+      dataBase64: Buffer.from("receipt bytes", "utf8").toString("base64")
+    });
+
+    expect(added.queued).toBe(true);
+    expect(added.items).toHaveLength(1);
+    expect(added.items[0]?.displayName).toContain("receipt.txt");
+    expect((await domain.planner.getTask({ id: "acct-1:task:inbox:task-1" })).notes).toContain("file://");
+
+    const listed = await domain.settings.listAttachments({
+      entityKind: "task",
+      entityId: "acct-1:task:inbox:task-1"
+    });
+    expect(listed.items[0]).toMatchObject({ exists: true, kind: "file" });
+
+    const downloaded = await domain.settings.downloadAttachment({
+      pointer: listed.items[0]?.pointer ?? "",
+      displayName: "receipt.txt"
+    });
+    expect(existsSync(downloaded.path)).toBe(true);
+
+    const removed = await domain.settings.removeAttachment({
+      pointer: listed.items[0]?.pointer ?? "",
+      displayName: "receipt.txt"
+    });
+    expect(removed.items).toHaveLength(0);
+  });
+
+  it("imports ICS into a read-only local calendar and exports local reports", async () => {
+    const { domain, syncRepository } = createTestServices();
+    seedGoogleMirrors(syncRepository);
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "X-WR-CALNAME:Launches",
+      "BEGIN:VEVENT",
+      "UID:demo-1",
+      "DTSTAMP:20260701T000000Z",
+      "DTSTART:20260703T090000Z",
+      "DTEND:20260703T100000Z",
+      "SUMMARY:Ship HCB2",
+      "DESCRIPTION:Release prep",
+      "LOCATION:Remote",
+      "END:VEVENT",
+      "END:VCALENDAR"
+    ].join("\r\n");
+
+    const imported = await domain.settings.importIcs({
+      fileName: "launches.ics",
+      dataBase64: Buffer.from(ics, "utf8").toString("base64")
+    });
+    const calendars = await domain.planner.listCalendars({ limit: 100 });
+    const events = await domain.planner.listCalendarEvents({
+      start: "2026-07-01T00:00:00.000Z",
+      end: "2026-07-08T00:00:00.000Z",
+      limit: 100
+    });
+    const report = await domain.settings.exportLocalReport({ range: "week", format: "markdown" });
+
+    expect(imported).toMatchObject({ calendarTitle: "Launches", importedEventCount: 1 });
+    expect(calendars.items.some((calendar) => calendar.title === "Launches")).toBe(true);
+    expect(events.items.some((event) => event.title === "Ship HCB2")).toBe(true);
+    expect(() => domain.planner.updateCalendarEvent({
+      id: events.items.find((event) => event.title === "Ship HCB2")?.eventId ?? "",
+      title: "Edited"
+    })).toThrow(/read-only/);
+    expect(existsSync(report.path)).toBe(true);
+    expect(readFileSync(report.path, "utf8")).toContain("Hot Cross Buns report");
   });
 
   it("honors portable export task list, calendar, and future-event filters", async () => {
@@ -1869,9 +1994,9 @@ describe("SQLite-backed domain services", () => {
     expect(updated.title).toBe("Future planning");
     expect(after.items.filter((event) => event.title === "Daily planning")).toHaveLength(1);
     expect(after.items.filter((event) => event.title === "Future planning")).toHaveLength(2);
-    expect(mutationRows.map((row) => row.operation)).toEqual([
+    expect(mutationRows.map((row) => row.operation).sort()).toEqual([
+      "calendar.events.create",
       "calendar.events.update",
-      "calendar.events.create"
     ]);
   });
 

@@ -13,6 +13,7 @@ import type { useCoreViewModelSource } from "../../coreViewModelSource";
 import { MarkdownPreview } from "../../MarkdownPreview";
 import { TagBadges, TagInput } from "../../TagInput";
 import { AutoTagAudit } from "../../AutoTagAudit";
+import { AttachmentPanel } from "../../AttachmentPanel";
 import { EntityLinksPanel } from "../../EntityLinksPanel";
 import { plannerLinkTargets } from "../../plannerLinkTargets";
 import {
@@ -534,6 +535,8 @@ export function CalendarEventDetails({
           />
         </DetailLine>
       ) : null}
+
+      {draft.id ? <AttachmentPanel entityId={draft.id} entityKind="event" /> : null}
 
       {showReminder ? (
         <DetailLine icon={Bell}>

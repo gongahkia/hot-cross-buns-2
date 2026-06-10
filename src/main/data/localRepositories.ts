@@ -3,6 +3,7 @@ export { LocalAgentRepository } from "./localRepositories/agentRepository";
 export { LocalPerformanceRepository } from "./localRepositories/performanceRepository";
 export { LocalPlannerRepository } from "./localRepositories/plannerRepository";
 export { LocalSettingsRepository } from "./localRepositories/settingsRepository";
+export { LocalSettingsSupportRepository } from "./localRepositories/settingsSupportRepository";
 export { TagLocalRepository } from "./localRepositories/tagRepository";
 export { LocalUndoRepository } from "./localRepositories/undoRepository";
 export { LocalWebhookRepository } from "./localRepositories/webhookRepository";

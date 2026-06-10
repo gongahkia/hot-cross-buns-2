@@ -10,6 +10,7 @@ import {
   LocalPerformanceRepository,
   LocalPlannerRepository,
   LocalSettingsRepository,
+  LocalSettingsSupportRepository,
   LocalUndoRepository,
   LocalWebhookRepository
 } from "../data/localRepositories";
@@ -52,6 +53,7 @@ export interface LocalDataService {
   migrations: MigrationResult;
   plannerRepository: LocalPlannerRepository;
   settingsRepository: LocalSettingsRepository;
+  settingsSupportRepository: LocalSettingsSupportRepository;
   syncRepository: GoogleSyncRepository;
   historyRepository: LocalHistoryRepository;
   undoRepository: LocalUndoRepository;
@@ -116,6 +118,17 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const webhookRepository = new LocalWebhookRepository(connection);
   const plannerRepository = new LocalPlannerRepository(connection, performanceRepository);
   const settingsRepository = new LocalSettingsRepository(connection);
+  const settingsSupportRepository = new LocalSettingsSupportRepository(
+    connection,
+    appPaths ?? {
+      configDirectory: appSupportDirectory,
+      dataDirectory: appSupportDirectory,
+      cacheDirectory: appSupportDirectory,
+      logsDirectory: appSupportDirectory,
+      diagnosticsDirectory: appSupportDirectory,
+      tempDirectory: appSupportDirectory
+    }
+  );
   const syncRepository = new GoogleSyncRepository(connection, { defaultTimeZone });
   const runtimeGoogleEnabled = options.enableRuntimeGoogle ?? options.nativeAdapter !== undefined;
   const runtimeGoogleWritesEnabled =
@@ -147,6 +160,7 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const sqliteDomain = createSqliteDomainServices({
     plannerRepository,
     settingsRepository,
+    settingsSupportRepository,
     undoRepository,
     agentRepository,
     webhookRepository,
@@ -184,7 +198,7 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const mcpController = new LocalMcpServerController({
     credentialAdapter: new KeychainMcpCredentialAdapter(secretStore),
     toolRegistry: mcpToolRegistry,
-    getSettings: () => settingsRepository.get(),
+    getSettings: () => settingsSupportRepository.applyExternalSettings(settingsRepository.get()),
     runtimeFilePath: appPaths ? join(appPaths.configDirectory, HCB_MCP_RUNTIME_FILE_NAME) : undefined
   });
   const nativeShell = new NativeShellService({
@@ -193,7 +207,9 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     account: {
       latest: () => syncRepository.latestAccountStatus()
     },
-    settings: settingsRepository,
+    settings: {
+      get: () => settingsSupportRepository.applyExternalSettings(settingsRepository.get())
+    },
     windows: options.nativeWindows ?? noopWindowActions,
     sync: {
       runNow: (request) => Promise.resolve(sqliteDomain.sync.runNow(request))
@@ -235,7 +251,23 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
       previewPortableImport: (request) => sqliteDomain.settings.previewPortableImport(request),
       importPortableArchive: (request) => sqliteDomain.settings.importPortableArchive(request),
       listLocalPointers: (request) => sqliteDomain.settings.listLocalPointers(request),
-      repairLocalPointer: (request) => sqliteDomain.settings.repairLocalPointer(request)
+      repairLocalPointer: (request) => sqliteDomain.settings.repairLocalPointer(request),
+      customizationStatus: () => sqliteDomain.settings.customizationStatus(),
+      reloadCustomization: () => sqliteDomain.settings.reloadCustomization(),
+      setSnippetEnabled: (request) => sqliteDomain.settings.setSnippetEnabled(request),
+      setExtensionEnabled: (request) => sqliteDomain.settings.setExtensionEnabled(request),
+      logExtensionMessage: (request) => sqliteDomain.settings.logExtensionMessage(request),
+      listAttachments: (request) => sqliteDomain.settings.listAttachments(request),
+      addAttachment: (request) => sqliteDomain.settings.addAttachment(request),
+      removeAttachment: (request) => sqliteDomain.settings.removeAttachment(request),
+      openAttachment: (request) => sqliteDomain.settings.openAttachment(request),
+      downloadAttachment: (request) => sqliteDomain.settings.downloadAttachment(request),
+      importIcs: (request) => sqliteDomain.settings.importIcs(request),
+      listIcsSubscriptions: () => sqliteDomain.settings.listIcsSubscriptions(),
+      subscribeIcs: (request) => sqliteDomain.settings.subscribeIcs(request),
+      refreshIcsSubscription: (request) => sqliteDomain.settings.refreshIcsSubscription(request),
+      deleteIcsSubscription: (request) => sqliteDomain.settings.deleteIcsSubscription(request),
+      exportLocalReport: (request) => sqliteDomain.settings.exportLocalReport(request)
     },
     google: googleRuntime ?? sqliteDomain.google,
     mcp: {
@@ -258,7 +290,7 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     mcp: domain.mcp
   });
   syncScheduler = new SyncScheduler({
-    getSettings: () => settingsRepository.get(),
+    getSettings: () => settingsSupportRepository.applyExternalSettings(settingsRepository.get()),
     runNow: (request) => Promise.resolve(sqliteDomain.sync.runNow(request))
   });
 
@@ -281,6 +313,7 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
       migrations,
       plannerRepository,
       settingsRepository,
+      settingsSupportRepository,
       syncRepository,
       historyRepository,
       undoRepository,

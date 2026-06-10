@@ -47,6 +47,7 @@ const PORTABLE_TABLES = [
   "local_agent_actions",
   "local_webhook_subscriptions",
   "local_webhook_deliveries",
+  "local_ics_subscriptions",
   "local_semantic_embeddings",
   "local_chat_sessions",
   "local_chat_messages",

@@ -13,7 +13,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, shell } from "electron";
 import { z } from "zod";
 import {
-  attachmentEntityKindSchema,
   customizationExtensionCapabilitySchema,
   settingsUpdateRequestSchema,
   type AttachmentActionRequest,
@@ -141,7 +140,7 @@ export class LocalSettingsSupportRepository {
     const now = new Date().toISOString();
     const next = [
       ...(logs[request.extensionId] ?? []),
-      `${now} ${request.level.toUpperCase()} ${request.message}`
+      `${now} ${(request.level ?? "info").toUpperCase()} ${request.message}`
     ].slice(-100);
     logs[request.extensionId] = next;
     this.writeCustomizationState("extensionLogs", logs);
@@ -231,7 +230,9 @@ export class LocalSettingsSupportRepository {
       throw validationFailure("Attachment file is missing.");
     }
 
-    const downloads = app.getPath("downloads");
+    const downloads = typeof app?.getPath === "function"
+      ? app.getPath("downloads")
+      : join(this.appPaths.dataDirectory, "Downloads");
     const targetDirectory = join(downloads, "Hot Cross Buns 2");
     const targetPath = uniquePath(
       targetDirectory,
@@ -889,7 +890,7 @@ export class LocalSettingsSupportRepository {
       [`%${pointer}%`]
     );
     if (task) {
-      const kind = attachmentEntityKindSchema.parse(noteLikeTask(task) ? "note" : "task");
+      const kind: "task" | "note" = noteLikeTask(task) ? "note" : "task";
       return taskAttachmentTarget(kind, task.id, task.accountId, task.notes ?? "");
     }
 

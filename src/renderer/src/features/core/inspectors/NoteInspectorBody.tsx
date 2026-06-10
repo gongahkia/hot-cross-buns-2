@@ -15,6 +15,7 @@ import { useDirtyState, useInspector } from "../../../components/Inspector";
 import { EmojiInput, EmojiTextarea } from "../../../components/EmojiTextField";
 import { Badge, Button, Input, cx } from "../../../components/primitives";
 import { AutoTagAudit } from "../AutoTagAudit";
+import { AttachmentPanel } from "../AttachmentPanel";
 import { EntityLinksPanel } from "../EntityLinksPanel";
 import type { useCoreViewModelSource } from "../coreViewModelSource";
 import type { NoteViewModel } from "../coreViewModels";
@@ -119,6 +120,8 @@ export function NoteInspectorSummary({
       {note.body.trim() ? (
         <MarkdownPreview ariaLabel="Note preview" body={note.body} plannerLinkTargets={plannerLinkTargets(source)} />
       ) : null}
+
+      <AttachmentPanel entityId={note.id} entityKind="note" />
 
       {properties.length > 0 ? (
         <div className="grid gap-2">

@@ -7,6 +7,7 @@ import type {
 } from "@shared/ipc/contracts";
 import { HcbPublicError } from "@shared/ipc/result";
 import type { LocalSettingsRepository } from "../data/localRepositories";
+import type { LocalSettingsSupportRepository } from "../data/localRepositories";
 import type { GoogleSyncRepository } from "../sync/readSyncRepository";
 import type { SettingsDomainService, SyncControlDomainService } from "./domainInterfaces";
 import { applyMcpSettings } from "./sqliteMcpControlService";
@@ -14,18 +15,22 @@ import { applyMcpSettings } from "./sqliteMcpControlService";
 export function createSqliteSettingsDomainService({
   mcpState,
   settingsRepository,
+  settingsSupportRepository,
   sync,
   syncRepository
 }: {
   mcpState: McpStatusResponse;
   settingsRepository: LocalSettingsRepository;
+  settingsSupportRepository: LocalSettingsSupportRepository;
   sync: SyncControlDomainService;
   syncRepository: GoogleSyncRepository;
 }): SettingsDomainService {
   return {
-    get: () => settingsRepository.get(),
+    get: () => settingsSupportRepository.applyExternalSettings(settingsRepository.get()),
     update: (request: SettingsUpdateRequest) => {
-      const snapshot = settingsRepository.update(request);
+      const snapshot = settingsSupportRepository.applyExternalSettings(
+        settingsRepository.update(request)
+      );
 
       if (
         request.mcpEnabled !== undefined ||
@@ -148,7 +153,23 @@ export function createSqliteSettingsDomainService({
     importPortableArchive: (request: PortableImportRequest) =>
       settingsRepository.importPortableArchive(request.path),
     listLocalPointers: (request) => settingsRepository.listLocalPointers(request),
-    repairLocalPointer: (request) => settingsRepository.repairLocalPointer(request)
+    repairLocalPointer: (request) => settingsRepository.repairLocalPointer(request),
+    customizationStatus: () => settingsSupportRepository.customizationStatus(),
+    reloadCustomization: () => settingsSupportRepository.reloadCustomization(),
+    setSnippetEnabled: (request) => settingsSupportRepository.setSnippetEnabled(request),
+    setExtensionEnabled: (request) => settingsSupportRepository.setExtensionEnabled(request),
+    logExtensionMessage: (request) => settingsSupportRepository.logExtensionMessage(request),
+    listAttachments: (request) => settingsSupportRepository.listAttachments(request),
+    addAttachment: (request) => settingsSupportRepository.addAttachment(request),
+    removeAttachment: (request) => settingsSupportRepository.removeAttachment(request),
+    openAttachment: (request) => settingsSupportRepository.openAttachment(request),
+    downloadAttachment: (request) => settingsSupportRepository.downloadAttachment(request),
+    importIcs: (request) => settingsSupportRepository.importIcs(request),
+    listIcsSubscriptions: () => settingsSupportRepository.listIcsSubscriptions(),
+    subscribeIcs: (request) => settingsSupportRepository.subscribeIcs(request),
+    refreshIcsSubscription: (request) => settingsSupportRepository.refreshIcsSubscription(request),
+    deleteIcsSubscription: (request) => settingsSupportRepository.deleteIcsSubscription(request),
+    exportLocalReport: (request) => settingsSupportRepository.exportLocalReport(request)
   };
 }
 

@@ -886,6 +886,10 @@ export class CalendarLocalRepository extends TaskLocalRepository {
       throw notFound("Calendar was not found.");
     }
 
+    if (row.accountId === "local:ics" || row.accessRole === "reader" || row.accessRole === "freeBusyReader") {
+      throw validationFailure("This calendar is read-only. Copy the event to a writable Google calendar before editing.");
+    }
+
     return row;
   }
 }
