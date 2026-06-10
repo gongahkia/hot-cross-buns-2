@@ -312,6 +312,7 @@ function createService(input: {
   tasks?: TaskSummary[];
   events?: CalendarEventSummary[];
   dispatch?: (action: NativeAction) => void;
+  webhookEmit?: (...args: unknown[]) => void;
 } = {}) {
   const adapter = input.adapter ?? new FakeNativeAdapter();
   const settings = { current: input.settings ?? defaultSettings() };
@@ -336,6 +337,13 @@ function createService(input: {
     sync: {
       runNow: sync
     },
+    webhooks: input.webhookEmit
+      ? {
+          emit: (event, payload) => {
+            input.webhookEmit?.(event, payload);
+          }
+        }
+      : undefined,
     now: () => now
   });
 
@@ -392,6 +400,34 @@ describe("native shell service", () => {
         scheduledCount: 2,
         state: "ready"
       }
+    });
+  });
+
+  it("emits event-starting webhooks when event notifications are scheduled", async () => {
+    const webhookEmit = vi.fn();
+    const { service } = createService({
+      webhookEmit,
+      events: [
+        {
+          id: "event-1",
+          calendarId: "cal-1",
+          title: "Standup",
+          startsAt: "2026-05-22T12:20:00.000Z",
+          endsAt: "2026-05-22T12:40:00.000Z",
+          allDay: false,
+          updatedAt: now.toISOString(),
+          reminderMinutes: []
+        }
+      ]
+    });
+
+    service.startDeferredStartup();
+    await flushNativeStartup();
+
+    expect(webhookEmit).toHaveBeenCalledWith("event.starting", {
+      id: "event-1",
+      title: "Standup",
+      notificationDeliveryAt: "2026-05-22T12:10:00.000Z"
     });
   });
 
