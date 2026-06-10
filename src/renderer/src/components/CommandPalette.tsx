@@ -312,9 +312,9 @@ export function CommandPalette({
               ))}
             </div>
           ) : null}
-          {search.parsed.explain.length > 0 ? (
+          {search.parsed.explain.filter((item) => !item.startsWith("Text: ")).length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Search query explanation">
-              {search.parsed.explain.map((item) => (
+              {search.parsed.explain.filter((item) => !item.startsWith("Text: ")).map((item) => (
                 <span
                   className="max-w-full truncate rounded-hcbMd border border-border bg-surface-0 px-2 py-1 text-[var(--text-xs)] text-text-muted"
                   key={item}

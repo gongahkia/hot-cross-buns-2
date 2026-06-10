@@ -10,6 +10,14 @@ import type { NativeDomainService } from "./domainInterfaces";
 export function createSqliteNativeDomainService(): NativeDomainService {
   return {
     capabilities: () => nativeCapabilities(),
+    checkForUpdates: () => ({
+      state: "unsupported",
+      message: "Preview update checks are unavailable through the fallback domain service."
+    }),
+    openExternalUrl: () => ({
+      state: "unsupported",
+      message: "External URL opening is unavailable through the fallback domain service."
+    }),
     requestNotificationPermission: () => nativeNotificationPermission(),
     listFontFamilies: () => ({
       platform: detectNativePlatform(),

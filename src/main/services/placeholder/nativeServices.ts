@@ -10,6 +10,14 @@ import {
 export function createPlaceholderNativeServices(): NativeDomainService {
   return {
     capabilities: () => nativeCapabilities(),
+    checkForUpdates: () => ({
+      state: "unsupported",
+      message: "Preview update checks are unavailable through placeholder services."
+    }),
+    openExternalUrl: () => ({
+      state: "unsupported",
+      message: "External URL opening is unavailable through placeholder services."
+    }),
     requestNotificationPermission: () => ({
       state: "unsupported"
     }),

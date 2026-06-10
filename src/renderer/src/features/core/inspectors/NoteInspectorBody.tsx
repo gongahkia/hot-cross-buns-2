@@ -591,6 +591,10 @@ export const NoteInspectorBody = forwardRef<NoteInspectorBodyHandle, NoteInspect
           )}
         </div>
 
+        {!createMode && viewMode === "edit" ? (
+          <AttachmentPanel editable entityId={note.id} entityKind="note" />
+        ) : null}
+
         <div className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
           <div className="flex items-center gap-2 text-[var(--text-sm)] font-medium text-text-primary">
             <Link2 aria-hidden="true" size={15} />

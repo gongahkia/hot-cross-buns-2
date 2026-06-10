@@ -435,6 +435,7 @@ export function TaskInspectorBody({
           Add subtask
         </Button>
       </div>
+      {dirty.value.id ? <AttachmentPanel editable entityId={dirty.value.id} entityKind="task" /> : null}
     </div>
   );
 }

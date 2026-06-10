@@ -29,6 +29,7 @@ import type {
   McpSetEnabledRequest,
   McpStatusResponse,
   NativeCapabilitiesResponse,
+  NativeFeatureStatus,
   NativeFontFamiliesResponse,
   NativeNotificationPermissionResponse,
   NoteBrokenLinksRequest,
@@ -439,6 +440,8 @@ export interface WebhookDomainService {
 
 export interface NativeDomainService {
   capabilities: () => MaybePromise<NativeCapabilitiesResponse>;
+  checkForUpdates: () => MaybePromise<NativeCapabilitiesResponse["updaterStatus"]>;
+  openExternalUrl: (request: { url: string }) => MaybePromise<NativeFeatureStatus>;
   requestNotificationPermission: () => MaybePromise<NativeNotificationPermissionResponse>;
   listFontFamilies: () => MaybePromise<NativeFontFamiliesResponse>;
 }

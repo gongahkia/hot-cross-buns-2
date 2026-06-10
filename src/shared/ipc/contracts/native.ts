@@ -25,6 +25,19 @@ export const nativeFeatureStatusSchema = z
 
 export type NativeFeatureStatus = z.infer<typeof nativeFeatureStatusSchema>;
 
+export const nativeUpdaterStatusSchema = nativeFeatureStatusSchema
+  .extend({
+    checkedAt: isoDateTimeSchema.optional(),
+    downloadUrl: z.string().url().max(2_048).optional(),
+    latestVersion: z.string().min(1).max(80).optional(),
+    releaseName: z.string().min(1).max(200).optional(),
+    releaseUrl: z.string().url().max(2_048).optional(),
+    updateAvailable: z.boolean().optional()
+  })
+  .strict();
+
+export type NativeUpdaterStatus = z.infer<typeof nativeUpdaterStatusSchema>;
+
 export const nativeCapabilityKeySchema = z.enum([
   "appPaths",
   "credentialStorage",
@@ -178,7 +191,7 @@ export const nativeCapabilitiesResponseSchema = z
     trayStatus: nativeFeatureStatusSchema,
     notificationsStatus: nativeNotificationStatusSchema,
     deepLinkStatus: nativeDeepLinkStatusSchema,
-    updaterStatus: nativeFeatureStatusSchema,
+    updaterStatus: nativeUpdaterStatusSchema,
     mcpStatus: nativeFeatureStatusSchema,
     capabilityReport: nativeCapabilityReportSchema,
     deferredStartup: nativeDeferredStartupStatusSchema
@@ -186,6 +199,14 @@ export const nativeCapabilitiesResponseSchema = z
   .strict();
 
 export type NativeCapabilitiesResponse = z.infer<typeof nativeCapabilitiesResponseSchema>;
+
+export const nativeOpenExternalUrlRequestSchema = z
+  .object({
+    url: z.string().url().max(2_048)
+  })
+  .strict();
+
+export type NativeOpenExternalUrlRequest = z.infer<typeof nativeOpenExternalUrlRequestSchema>;
 
 export const nativeNotificationPermissionRequestSchema = emptyRequestSchema;
 

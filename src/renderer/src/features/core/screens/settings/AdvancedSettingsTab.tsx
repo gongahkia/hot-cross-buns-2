@@ -49,9 +49,11 @@ import {
   Save,
   Tag,
   Trash2,
-  Upload
+  Upload,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Badge, Button, Input } from "../../../../components/primitives";
 import { EmptyState } from "../../../../components/states";
 import { parseTagText } from "../../TagInput";
@@ -145,6 +147,8 @@ export function AdvancedSettingsTab({
   const selectedTaskLists = new Set(settings.selectedTaskListIds);
   const selectedCalendars = new Set(settings.selectedCalendarIds);
   const noteTemplates = settings.noteTemplates ?? [];
+  const [editingTaskTemplateId, setEditingTaskTemplateId] = useState<string | null>(null);
+  const [editingEventTemplateId, setEditingEventTemplateId] = useState<string | null>(null);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#7C3AED");
   const [tagDrafts, setTagDrafts] = useState<Record<string, { color: string; name: string }>>({});
@@ -568,11 +572,12 @@ export function AdvancedSettingsTab({
 
   function addTaskTemplate(): void {
     const now = new Date().toISOString();
+    const templateId = crypto.randomUUID();
     updateSettings({
       taskTemplates: [
         ...settings.taskTemplates,
         {
-          id: crypto.randomUUID(),
+          id: templateId,
           name: `Task Template ${settings.taskTemplates.length + 1}`,
           title: "{{prompt:Title}}",
           notes: null,
@@ -583,15 +588,17 @@ export function AdvancedSettingsTab({
         }
       ]
     });
+    setEditingTaskTemplateId(templateId);
   }
 
   function addEventTemplate(): void {
     const now = new Date().toISOString();
+    const templateId = crypto.randomUUID();
     updateSettings({
       eventTemplates: [
         ...settings.eventTemplates,
         {
-          id: crypto.randomUUID(),
+          id: templateId,
           name: `Event Template ${settings.eventTemplates.length + 1}`,
           title: "{{prompt:Topic}}",
           notes: null,
@@ -605,6 +612,45 @@ export function AdvancedSettingsTab({
         }
       ]
     });
+    setEditingEventTemplateId(templateId);
+  }
+
+  function updateTaskTemplate(
+    templateId: string,
+    patch: Partial<SettingsSnapshot["taskTemplates"][number]>
+  ): void {
+    const now = new Date().toISOString();
+    updateSettings({
+      taskTemplates: settings.taskTemplates.map((template) =>
+        template.id === templateId ? { ...template, ...patch, updatedAt: now } : template
+      )
+    });
+  }
+
+  function updateEventTemplate(
+    templateId: string,
+    patch: Partial<SettingsSnapshot["eventTemplates"][number]>
+  ): void {
+    const now = new Date().toISOString();
+    updateSettings({
+      eventTemplates: settings.eventTemplates.map((template) =>
+        template.id === templateId ? { ...template, ...patch, updatedAt: now } : template
+      )
+    });
+  }
+
+  function removeTaskTemplate(templateId: string): void {
+    updateSettings({
+      taskTemplates: settings.taskTemplates.filter((template) => template.id !== templateId)
+    });
+    setEditingTaskTemplateId(null);
+  }
+
+  function removeEventTemplate(templateId: string): void {
+    updateSettings({
+      eventTemplates: settings.eventTemplates.filter((template) => template.id !== templateId)
+    });
+    setEditingEventTemplateId(null);
   }
 
   function addNoteTemplate(): void {
@@ -772,8 +818,31 @@ export function AdvancedSettingsTab({
     void refreshLocalPointers();
   }
 
+  const editingTaskTemplate =
+    settings.taskTemplates.find((template) => template.id === editingTaskTemplateId) ?? null;
+  const editingEventTemplate =
+    settings.eventTemplates.find((template) => template.id === editingEventTemplateId) ?? null;
+
   return (
     <div className="grid gap-5">
+      {editingTaskTemplate ? (
+        <TaskTemplateDialog
+          onClose={() => setEditingTaskTemplateId(null)}
+          onRemove={() => removeTaskTemplate(editingTaskTemplate.id)}
+          onUpdate={(patch) => updateTaskTemplate(editingTaskTemplate.id, patch)}
+          taskLists={taskLists}
+          template={editingTaskTemplate}
+        />
+      ) : null}
+      {editingEventTemplate ? (
+        <EventTemplateDialog
+          calendars={calendarSources}
+          onClose={() => setEditingEventTemplateId(null)}
+          onRemove={() => removeEventTemplate(editingEventTemplate.id)}
+          onUpdate={(patch) => updateEventTemplate(editingEventTemplate.id, patch)}
+          template={editingEventTemplate}
+        />
+      ) : null}
       <SettingsGroup title="Calendars">
         <SettingsSwitch
           checked={settings.showCompletedInCalendarViews}
@@ -1926,8 +1995,19 @@ export function AdvancedSettingsTab({
             New Task Template
           </Button>
         </SettingsControlRow>
-        {settings.taskTemplates.map((template) => (
-          <SettingsControlRow key={template.id} label={template.name} description={template.title} />
+        {settings.taskTemplates.length === 0 ? (
+          <EmptyState description="No custom task templates yet." title="No task templates" />
+        ) : settings.taskTemplates.map((template) => (
+          <SettingsControlRow key={template.id} label={template.name} description={template.title}>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setEditingTaskTemplateId(template.id)} size="sm" variant="secondary">
+                Edit
+              </Button>
+              <Button onClick={() => removeTaskTemplate(template.id)} size="sm" variant="ghost">
+                Remove
+              </Button>
+            </div>
+          </SettingsControlRow>
         ))}
       </SettingsGroup>
 
@@ -1941,8 +2021,19 @@ export function AdvancedSettingsTab({
             New Event Template
           </Button>
         </SettingsControlRow>
-        {settings.eventTemplates.map((template) => (
-          <SettingsControlRow key={template.id} label={template.name} description={template.title} />
+        {settings.eventTemplates.length === 0 ? (
+          <EmptyState description="No custom event templates yet." title="No event templates" />
+        ) : settings.eventTemplates.map((template) => (
+          <SettingsControlRow key={template.id} label={template.name} description={template.title}>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setEditingEventTemplateId(template.id)} size="sm" variant="secondary">
+                Edit
+              </Button>
+              <Button onClick={() => removeEventTemplate(template.id)} size="sm" variant="ghost">
+                Remove
+              </Button>
+            </div>
+          </SettingsControlRow>
         ))}
       </SettingsGroup>
 
@@ -1993,4 +2084,212 @@ export function AdvancedSettingsTab({
       </SettingsGroup>
     </div>
   );
+}
+
+function TemplateDialogFrame({
+  children,
+  onClose,
+  title
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  title: string;
+}): JSX.Element {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
+      <section
+        aria-labelledby="template-dialog-title"
+        aria-modal="true"
+        className="grid max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-hcbLg border border-border bg-bg-secondary shadow-hcbLg"
+        role="dialog"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <h2 className="truncate text-[var(--text-lg)] font-semibold text-text-primary" id="template-dialog-title">
+            {title}
+          </h2>
+          <Button onClick={onClose} size="sm" variant="ghost">
+            <X aria-hidden="true" size={14} />
+            Close
+          </Button>
+        </div>
+        <div className="max-h-[calc(85vh-4rem)] overflow-auto p-4">
+          {children}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TaskTemplateDialog({
+  onClose,
+  onRemove,
+  onUpdate,
+  taskLists,
+  template
+}: {
+  onClose: () => void;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<SettingsSnapshot["taskTemplates"][number]>) => void;
+  taskLists: TaskListSummary[];
+  template: SettingsSnapshot["taskTemplates"][number];
+}): JSX.Element {
+  return (
+    <TemplateDialogFrame onClose={onClose} title="Edit task template">
+      <div className="grid gap-3">
+        <Input
+          aria-label="Task template name"
+          label="Name"
+          onChange={(event) => onUpdate({ name: event.currentTarget.value || "Task Template" })}
+          value={template.name}
+        />
+        <Input
+          aria-label="Task template title"
+          label="Title"
+          onChange={(event) => onUpdate({ title: event.currentTarget.value || "Untitled task" })}
+          value={template.title}
+        />
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span>Notes</span>
+          <textarea
+            aria-label="Task template notes"
+            className="min-h-24 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => onUpdate({ notes: event.currentTarget.value || null })}
+            value={template.notes ?? ""}
+          />
+        </label>
+        <Input
+          aria-label="Task template due expression"
+          label="Due expression"
+          onChange={(event) => onUpdate({ dueExpression: event.currentTarget.value || null })}
+          value={template.dueExpression ?? ""}
+        />
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span>Task list</span>
+          <select
+            aria-label="Task template list"
+            className={settingsSelectClass}
+            onChange={(event) => onUpdate({ listId: event.currentTarget.value || null })}
+            value={template.listId ?? ""}
+          >
+            <option value="">Default list</option>
+            {taskLists.map((taskList) => (
+              <option key={taskList.id} value={taskList.id}>
+                {taskList.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex justify-between gap-2 pt-2">
+          <Button onClick={onRemove} variant="danger">
+            <Trash2 aria-hidden="true" size={14} />
+            Delete template
+          </Button>
+          <Button onClick={onClose} variant="primary">
+            Done
+          </Button>
+        </div>
+      </div>
+    </TemplateDialogFrame>
+  );
+}
+
+function EventTemplateDialog({
+  calendars,
+  onClose,
+  onRemove,
+  onUpdate,
+  template
+}: {
+  calendars: CalendarListSummary[];
+  onClose: () => void;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<SettingsSnapshot["eventTemplates"][number]>) => void;
+  template: SettingsSnapshot["eventTemplates"][number];
+}): JSX.Element {
+  return (
+    <TemplateDialogFrame onClose={onClose} title="Edit event template">
+      <div className="grid gap-3">
+        <Input
+          aria-label="Event template name"
+          label="Name"
+          onChange={(event) => onUpdate({ name: event.currentTarget.value || "Event Template" })}
+          value={template.name}
+        />
+        <Input
+          aria-label="Event template title"
+          label="Title"
+          onChange={(event) => onUpdate({ title: event.currentTarget.value || "Untitled event" })}
+          value={template.title}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            aria-label="Event template start expression"
+            label="Start expression"
+            onChange={(event) => onUpdate({ startExpression: event.currentTarget.value || null })}
+            value={template.startExpression ?? ""}
+          />
+          <Input
+            aria-label="Event template end expression"
+            label="End expression"
+            onChange={(event) => onUpdate({ endExpression: event.currentTarget.value || null })}
+            value={template.endExpression ?? ""}
+          />
+        </div>
+        <Input
+          aria-label="Event template location"
+          label="Location"
+          onChange={(event) => onUpdate({ location: event.currentTarget.value || null })}
+          value={template.location ?? ""}
+        />
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span>Calendar</span>
+          <select
+            aria-label="Event template calendar"
+            className={settingsSelectClass}
+            onChange={(event) => onUpdate({ calendarId: event.currentTarget.value || null })}
+            value={template.calendarId ?? ""}
+          >
+            <option value="">Default calendar</option>
+            {calendars.map((calendar) => (
+              <option key={calendar.id} value={calendar.id}>
+                {calendar.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Input
+          aria-label="Event template attendees"
+          label="Attendees"
+          onChange={(event) => onUpdate({ attendeeEmails: parseTemplateEmails(event.currentTarget.value) })}
+          value={template.attendeeEmails.join(", ")}
+        />
+        <label className="grid gap-1 text-[var(--text-sm)] text-text-secondary">
+          <span>Notes</span>
+          <textarea
+            aria-label="Event template notes"
+            className="min-h-24 rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-base)] text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            onChange={(event) => onUpdate({ notes: event.currentTarget.value || null })}
+            value={template.notes ?? ""}
+          />
+        </label>
+        <div className="flex justify-between gap-2 pt-2">
+          <Button onClick={onRemove} variant="danger">
+            <Trash2 aria-hidden="true" size={14} />
+            Delete template
+          </Button>
+          <Button onClick={onClose} variant="primary">
+            Done
+          </Button>
+        </div>
+      </div>
+    </TemplateDialogFrame>
+  );
+}
+
+function parseTemplateEmails(value: string): string[] {
+  return value
+    .split(/[,\s]+/)
+    .map((email) => email.trim())
+    .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    .slice(0, 50);
 }

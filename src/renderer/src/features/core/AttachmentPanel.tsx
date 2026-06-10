@@ -4,9 +4,11 @@ import { Download, ExternalLink, Paperclip, Trash2, Upload } from "lucide-react"
 import { Badge, Button } from "../../components/primitives";
 
 export function AttachmentPanel({
+  editable = false,
   entityId,
   entityKind
 }: {
+  editable?: boolean;
   entityId: string;
   entityKind: AttachmentEntityKind;
 }): JSX.Element {
@@ -80,21 +82,23 @@ export function AttachmentPanel({
           Attachments
           <Badge>{items.length}</Badge>
         </div>
-        <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-sm)] font-semibold text-text-primary">
-          <Upload aria-hidden="true" size={14} />
-          Add
-          <input
-            className="sr-only"
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = "";
-              if (file) {
-                void add(file);
-              }
-            }}
-            type="file"
-          />
-        </label>
+        {editable ? (
+          <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-sm)] font-semibold text-text-primary">
+            <Upload aria-hidden="true" size={14} />
+            Add
+            <input
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file) {
+                  void add(file);
+                }
+              }}
+              type="file"
+            />
+          </label>
+        ) : null}
       </div>
       {items.length > 0 ? (
         <div className="grid gap-2">

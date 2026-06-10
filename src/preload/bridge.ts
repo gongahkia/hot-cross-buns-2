@@ -564,6 +564,13 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
           request,
           "Menu bar icon import failed"
         ),
+      openExternalUrl: (request) =>
+        invokeContract(
+          ipc,
+          ipcContracts.native.openExternalUrl,
+          request,
+          "External URL open failed"
+        ),
       subscribeAction: (listener) => {
         if (!ipc.on || !ipc.removeListener) {
           return () => undefined;

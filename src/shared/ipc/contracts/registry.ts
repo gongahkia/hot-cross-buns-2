@@ -91,10 +91,12 @@ import { mcpSetEnabledRequestSchema, mcpStatusRequestSchema, mcpStatusResponseSc
 import {
   nativeCapabilitiesRequestSchema,
   nativeCapabilitiesResponseSchema,
+  nativeFeatureStatusSchema,
   nativeFontFamiliesRequestSchema,
   nativeFontFamiliesResponseSchema,
   nativeImportMenuBarIconRequestSchema,
   nativeImportMenuBarIconResponseSchema,
+  nativeOpenExternalUrlRequestSchema,
   nativeNotificationPermissionRequestSchema,
   nativeNotificationPermissionResponseSchema
 } from "./native";
@@ -682,6 +684,12 @@ export const ipcContracts = {
       "importMenuBarIcon",
       nativeImportMenuBarIconRequestSchema,
       nativeImportMenuBarIconResponseSchema
+    ),
+    openExternalUrl: defineIpcContract(
+      "native",
+      "openExternalUrl",
+      nativeOpenExternalUrlRequestSchema,
+      nativeFeatureStatusSchema
     )
   },
   diagnostics: {

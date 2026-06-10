@@ -52,6 +52,8 @@ export function ProfileSettingsTab({
   const selectedCalendars = new Set(settings.selectedCalendarIds);
   const account = googleStatus.account;
   const accounts = googleStatus.accounts.length > 0 ? googleStatus.accounts : account ? [account] : [];
+  const visibleAccounts = accounts.filter(isVisibleGoogleAccount);
+  const primaryAccount = visibleAccounts[0] ?? (account && isVisibleGoogleAccount(account) ? account : undefined);
   const [resourceAccountFilter, setResourceAccountFilter] = useState("all");
   const visibleTaskLists = resourceAccountFilter === "all"
     ? taskLists
@@ -59,17 +61,17 @@ export function ProfileSettingsTab({
   const visibleCalendarSources = resourceAccountFilter === "all"
     ? calendarSources
     : calendarSources.filter((calendar) => calendar.accountId === resourceAccountFilter);
-  const connected = account?.connectionState === "connected";
-  const accountLabel = account?.displayName || account?.email || (connected ? "Connected Google account" : "Not connected");
-  const accountDetail = account?.email ?? account?.googleAccountId ?? account?.connectionState ?? "Google account is not connected";
+  const connected = primaryAccount?.connectionState === "connected";
+  const accountLabel = primaryAccount?.displayName || primaryAccount?.email || (connected ? "Connected Google account" : "Not connected");
+  const accountDetail = primaryAccount?.email ?? primaryAccount?.googleAccountId ?? primaryAccount?.connectionState ?? "Google account is not connected";
 
   useEffect(() => {
-    if (resourceAccountFilter === "all" || accounts.some((candidate) => candidate.accountId === resourceAccountFilter)) {
+    if (resourceAccountFilter === "all" || visibleAccounts.some((candidate) => candidate.accountId === resourceAccountFilter)) {
       return;
     }
 
     setResourceAccountFilter("all");
-  }, [accounts, resourceAccountFilter]);
+  }, [resourceAccountFilter, visibleAccounts]);
 
   return (
     <div className="grid gap-5">
@@ -127,8 +129,8 @@ export function ProfileSettingsTab({
       </SettingsGroup>
 
       <SettingsGroup title="Google accounts">
-        {accounts.length > 0 ? (
-          accounts.map((candidate) => {
+        {visibleAccounts.length > 0 ? (
+          visibleAccounts.map((candidate) => {
             const candidateConnected = candidate.connectionState === "connected";
             const candidateLabel = candidate.displayName || candidate.email || "Google account";
             const candidateDetail = candidate.email ?? candidate.googleAccountId ?? candidate.connectionState;
@@ -199,16 +201,20 @@ export function ProfileSettingsTab({
             <Users aria-hidden="true" size={14} />
             Add Google Account
           </Button>
-          <Button disabled={accounts.length === 0} onClick={() => void disconnectGoogle()} variant="secondary">
+          <Button
+            disabled={visibleAccounts.length === 0}
+            onClick={() => void Promise.all(visibleAccounts.map((candidate) => disconnectGoogle(candidate.accountId)))}
+            variant="secondary"
+          >
             Disconnect all
           </Button>
         </div>
       </SettingsGroup>
 
       <SettingsGroup title="Task lists">
-        {accounts.length > 1 ? (
+        {visibleAccounts.length > 1 ? (
           <ResourceAccountFilter
-            accounts={accounts}
+            accounts={visibleAccounts}
             value={resourceAccountFilter}
             onChange={setResourceAccountFilter}
           />
@@ -223,7 +229,7 @@ export function ProfileSettingsTab({
             onChange={(checked) => updateSelectedTaskList(taskList.id, checked)}
             trailing={(
               <span className="flex items-center gap-2">
-                {accounts.length > 1 && taskList.accountId ? <Badge tone="neutral">{accountName(accounts, taskList.accountId)}</Badge> : null}
+                {visibleAccounts.length > 1 && taskList.accountId ? <Badge tone="neutral">{accountName(visibleAccounts, taskList.accountId)}</Badge> : null}
                 <Badge>{taskList.activeTaskCount ?? taskList.taskCount ?? 0}</Badge>
               </span>
             )}
@@ -232,9 +238,9 @@ export function ProfileSettingsTab({
       </SettingsGroup>
 
       <SettingsGroup title="Calendars">
-        {accounts.length > 1 ? (
+        {visibleAccounts.length > 1 ? (
           <ResourceAccountFilter
-            accounts={accounts}
+            accounts={visibleAccounts}
             value={resourceAccountFilter}
             onChange={setResourceAccountFilter}
           />
@@ -250,7 +256,7 @@ export function ProfileSettingsTab({
             onChange={(checked) => updateSelectedCalendar(calendar.id, checked)}
             trailing={(
               <span className="flex items-center gap-2">
-                {accounts.length > 1 && calendar.accountId ? <Badge tone="neutral">{accountName(accounts, calendar.accountId)}</Badge> : null}
+                {visibleAccounts.length > 1 && calendar.accountId ? <Badge tone="neutral">{accountName(visibleAccounts, calendar.accountId)}</Badge> : null}
                 <Badge>{calendar.eventCount ?? 0}</Badge>
               </span>
             )}
@@ -259,6 +265,18 @@ export function ProfileSettingsTab({
       </SettingsGroup>
     </div>
   );
+}
+
+function isVisibleGoogleAccount(account: GoogleStatusResponse["accounts"][number]): boolean {
+  if (account.connectionState === "signed_out") {
+    return false;
+  }
+
+  if (account.accountId === "local-google-account" || account.accountId === "local:ics") {
+    return false;
+  }
+
+  return Boolean(account.email || account.googleAccountId || account.connectionState === "connected");
 }
 
 function accountName(

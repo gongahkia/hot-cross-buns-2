@@ -128,10 +128,10 @@ export function CalendarHeader({
         aria-expanded={smartRescheduleOpen}
         onClick={onToggleSmartReschedule}
         size="sm"
-        variant={smartRescheduleOpen ? "secondary" : "ghost"}
+        variant="primary"
       >
         <Sparkles aria-hidden="true" size={14} />
-        Smart reschedule
+        Reschedule
       </Button>
       <div aria-label="Calendar status" className="sr-only" role="status" />
     </div>

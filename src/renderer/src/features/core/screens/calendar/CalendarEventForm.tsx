@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   type AutoTagRule,
@@ -75,6 +76,108 @@ function DetailLine({
         <div className="min-w-0 text-[var(--text-base)] leading-relaxed text-text-primary">{children}</div>
       </div>
     </div>
+  );
+}
+
+function formatReminderMinutes(minutes: number): string {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const days = Math.floor(safeMinutes / 1440);
+  const hours = Math.floor((safeMinutes % 1440) / 60);
+  const mins = safeMinutes % 60;
+  const parts: string[] = [];
+
+  if (days > 0) {
+    parts.push(`${days} day${days === 1 ? "" : "s"}`);
+  }
+
+  if (hours > 0) {
+    parts.push(`${hours} hr${hours === 1 ? "" : "s"}`);
+  }
+
+  if (mins > 0 || parts.length === 0) {
+    parts.push(`${mins} min${mins === 1 ? "" : "s"}`);
+  }
+
+  return parts.join(" ");
+}
+
+function parseReminderMinutes(value: string): number | null {
+  const trimmed = value.trim().toLowerCase();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+
+  let total = 0;
+  let matched = false;
+  const pattern = /(\d+)\s*(d|day|days|h|hr|hrs|hour|hours|m|min|mins|minute|minutes)\b/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(trimmed)) !== null) {
+    const amount = Number.parseInt(match[1] ?? "0", 10);
+    const unit = match[2] ?? "min";
+    matched = true;
+
+    if (unit.startsWith("d")) {
+      total += amount * 1440;
+    } else if (unit.startsWith("h")) {
+      total += amount * 60;
+    } else {
+      total += amount;
+    }
+  }
+
+  return matched ? total : null;
+}
+
+function ReminderOffsetInput({
+  label,
+  minutes,
+  onChange
+}: {
+  label: string;
+  minutes: number;
+  onChange: (minutes: number) => void;
+}): JSX.Element {
+  const [text, setText] = useState(() => formatReminderMinutes(minutes));
+
+  useEffect(() => {
+    setText(formatReminderMinutes(minutes));
+  }, [minutes]);
+
+  function commit(value: string): void {
+    const parsed = parseReminderMinutes(value);
+
+    if (parsed === null) {
+      setText(formatReminderMinutes(minutes));
+      return;
+    }
+
+    const nextMinutes = Math.min(40320, Math.max(0, parsed));
+    onChange(nextMinutes);
+    setText(formatReminderMinutes(nextMinutes));
+  }
+
+  return (
+    <Input
+      aria-label={label}
+      onBlur={(event) => commit(event.currentTarget.value)}
+      onChange={(event) => {
+        const nextText = event.currentTarget.value;
+        setText(nextText);
+        const parsed = parseReminderMinutes(nextText);
+
+        if (parsed !== null) {
+          onChange(Math.min(40320, Math.max(0, parsed)));
+        }
+      }}
+      onFocus={(event) => event.currentTarget.select()}
+      value={text}
+    />
   );
 }
 
@@ -338,7 +441,7 @@ function ReminderControls({
       {mode === "custom" ? (
         <div className="grid gap-2">
           {draft.reminders.map((reminder, index) => (
-            <div className="grid grid-cols-[minmax(0,1fr)_96px_32px] gap-2" key={`${reminder.method}-${index}`}>
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(9rem,0.55fr)_32px] gap-2" key={`${reminder.method}-${index}`}>
               <select
                 aria-label={`Reminder ${index + 1} method`}
                 className="h-8 rounded-hcbMd border border-border bg-surface-0 px-2 text-[var(--text-base)] text-text-primary"
@@ -348,13 +451,10 @@ function ReminderControls({
                 <option value="popup">Popup</option>
                 <option value="email">Email</option>
               </select>
-              <Input
-                aria-label={`Reminder ${index + 1} minutes`}
-                min={0}
-                max={40320}
-                onChange={(event) => setReminder(index, { minutes: Math.max(0, Number.parseInt(event.target.value, 10) || 0) })}
-                type="number"
-                value={String(reminder.minutes)}
+              <ReminderOffsetInput
+                label={`Reminder ${index + 1} offset`}
+                minutes={reminder.minutes}
+                onChange={(minutes) => setReminder(index, { minutes })}
               />
               <button
                 aria-label={`Remove reminder ${index + 1}`}
@@ -536,7 +636,7 @@ export function CalendarEventDetails({
         </DetailLine>
       ) : null}
 
-      {draft.id ? <AttachmentPanel entityId={draft.id} entityKind="event" /> : null}
+      {draft.id ? <AttachmentPanel editable entityId={draft.id} entityKind="event" /> : null}
 
       {showReminder ? (
         <DetailLine icon={Bell}>

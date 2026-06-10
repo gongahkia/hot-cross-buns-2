@@ -25,6 +25,7 @@ import {
   type McpSetEnabledRequest,
   type NativeCapabilitiesResponse,
   type NativeImportMenuBarIconRequest,
+  type NativeOpenExternalUrlRequest,
   type NoteBrokenLinksRequest,
   type NoteCreateRequest,
   type NoteDeleteRequest,
@@ -615,6 +616,10 @@ export function createCoreIpcHandlers(
     {
       contract: ipcContracts.native.importMenuBarIcon,
       handle: (request) => importMenuBarIcon(request as NativeImportMenuBarIconRequest)
+    },
+    {
+      contract: ipcContracts.native.openExternalUrl,
+      handle: (request) => services.native.openExternalUrl(request as NativeOpenExternalUrlRequest)
     }
   ];
 }

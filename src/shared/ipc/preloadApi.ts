@@ -55,9 +55,11 @@ import type {
   MutationAck,
   NativeAction,
   NativeCapabilitiesResponse,
+  NativeFeatureStatus,
   NativeFontFamiliesResponse,
   NativeImportMenuBarIconRequest,
   NativeImportMenuBarIconResponse,
+  NativeOpenExternalUrlRequest,
   NativeNotificationPermissionResponse,
   NoteCreateRequest,
   NoteDeleteRequest,
@@ -354,6 +356,7 @@ export interface HcbApi {
     importMenuBarIcon: (
       request: NativeImportMenuBarIconRequest
     ) => Promise<HcbResult<NativeImportMenuBarIconResponse>>;
+    openExternalUrl: (request: NativeOpenExternalUrlRequest) => Promise<HcbResult<NativeFeatureStatus>>;
     subscribeAction: (listener: (action: NativeAction) => void) => () => void;
   };
   diagnostics: {
