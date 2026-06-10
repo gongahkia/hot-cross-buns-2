@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session } from "electron";
+import { app, BrowserWindow, nativeTheme, session } from "electron";
 import { join } from "node:path";
 import { IPC_CHANNELS, type NativeAction } from "@shared/ipc/contracts";
 import { appLogger } from "./diagnostics/appLogger";
@@ -12,6 +12,12 @@ import {
   configureSessionHardening
 } from "./security";
 import { createServiceContainer, type ServiceContainer } from "./services/serviceContainer";
+import {
+  fallbackSyncStatusTheme,
+  resolveSyncStatusTheme,
+  syncStatusHtml,
+  type SyncStatusTheme
+} from "./syncStatusOverlay";
 import { markStartupTiming } from "./startupTiming";
 
 let mainWindow: BrowserWindow | null = null;
@@ -127,6 +133,8 @@ function showMainWindow(): void {
 }
 
 function showSyncStatusWindow(pendingMutationCount: number, parent: BrowserWindow | null = mainWindow): BrowserWindow {
+  const theme = currentSyncStatusTheme();
+
   if (syncStatusWindow && !syncStatusWindow.isDestroyed()) {
     syncStatusWindow.show();
     return syncStatusWindow;
@@ -134,7 +142,7 @@ function showSyncStatusWindow(pendingMutationCount: number, parent: BrowserWindo
 
   syncStatusWindow = new BrowserWindow({
     alwaysOnTop: true,
-    backgroundColor: "#1e1e2e",
+    backgroundColor: theme.background,
     height: 132,
     maximizable: false,
     minimizable: false,
@@ -149,11 +157,29 @@ function showSyncStatusWindow(pendingMutationCount: number, parent: BrowserWindo
   syncStatusWindow.on("closed", () => {
     syncStatusWindow = null;
   });
-  void syncStatusWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(syncStatusHtml(pendingMutationCount))}`);
+  void syncStatusWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(syncStatusHtml(pendingMutationCount, theme))}`);
   syncStatusWindow.once("ready-to-show", () => {
     syncStatusWindow?.show();
   });
   return syncStatusWindow;
+}
+
+function currentSyncStatusTheme(): SyncStatusTheme {
+  const activeServices = services;
+
+  if (!activeServices) {
+    return fallbackSyncStatusTheme;
+  }
+
+  try {
+    const settings = activeServices.localData.settingsSupportRepository.applyExternalSettings(
+      activeServices.localData.settingsRepository.get()
+    );
+
+    return resolveSyncStatusTheme(settings, nativeTheme.shouldUseDarkColors);
+  } catch {
+    return fallbackSyncStatusTheme;
+  }
 }
 
 async function runFullSyncWithStatusWindow(reason: "quit" | "startup", parent: BrowserWindow | null = mainWindow): Promise<void> {
@@ -358,71 +384,3 @@ app.on("before-quit", (event) => {
   services?.close();
   services = null;
 });
-
-function syncStatusHtml(pendingMutationCount: number): string {
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <style>
-      * { box-sizing: border-box; }
-      :root {
-        --sync-bg: #1e1e2e;
-        --sync-text: #cdd6f4;
-        --sync-muted: #bac2de;
-        --sync-track: #313244;
-        --sync-fill: #89b4fa;
-      }
-      @media (prefers-color-scheme: light) {
-        :root {
-          --sync-bg: #f8fafc;
-          --sync-text: #1f2937;
-          --sync-muted: #64748b;
-          --sync-track: #e2e8f0;
-          --sync-fill: #2563eb;
-        }
-      }
-      body {
-        margin: 0;
-        background: var(--sync-bg);
-        color: var(--sync-text);
-        font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      .wrap {
-        display: grid;
-        gap: 8px;
-        height: 100vh;
-        place-content: center;
-        padding: 18px 22px;
-        text-align: center;
-      }
-      .title { font-size: 15px; font-weight: 700; }
-      .row { color: var(--sync-muted); line-height: 1.35; }
-      .bar {
-        height: 8px;
-        overflow: hidden;
-        border-radius: 999px;
-        background: var(--sync-track);
-      }
-      .bar::before {
-        display: block;
-        width: 55%;
-        height: 100%;
-        border-radius: inherit;
-        background: var(--sync-fill);
-        box-shadow: 0 0 16px var(--sync-fill);
-        content: "";
-        animation: pulse 1s ease-in-out infinite alternate;
-      }
-      @keyframes pulse { from { transform: translateX(-18%); } to { transform: translateX(90%); } }
-    </style>
-  </head>
-  <body>
-    <main class="wrap" role="status" aria-live="polite">
-      <div class="title">Syncing</div>
-      <div class="row">Queued writes: ${pendingMutationCount}<br>Removed: 0 up 0 down</div>
-      <div class="bar"></div>
-    </main>
-  </body>
-</html>`;
-}
