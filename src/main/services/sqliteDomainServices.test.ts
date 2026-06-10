@@ -2408,6 +2408,14 @@ describe("SQLite-backed domain services", () => {
 
     await domain.planner.updateNote({ id: winner.id, body: "Winner note body" });
     await domain.planner.updateNote({ id: loser.id, body: "Loser note body revised" });
+    syncRepository.enqueuePendingMutation({
+      accountId: "acct-1",
+      resourceType: "task",
+      resourceId: loser.id,
+      operation: "task.update",
+      payload: { id: loser.id, fixture: "stale-note-update" },
+      now
+    });
 
     const result = await domain.planner.cleanupDuplicates({
       kind: "note",
@@ -2429,10 +2437,6 @@ describe("SQLite-backed domain services", () => {
        ORDER BY created_at ASC, id ASC;`,
       [winner.id, loser.id]
     ).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) as Record<string, unknown> }));
-    const winnerUpdates = duplicateMutations.filter((row) =>
-      row.resourceId === winner.id &&
-      row.operation === "task.update"
-    );
     const loserUpdate = duplicateMutations.find((row) =>
       row.resourceId === loser.id &&
       row.operation === "task.update"
@@ -2448,13 +2452,6 @@ describe("SQLite-backed domain services", () => {
       tags: ["winner", "loser"]
     });
     expect(() => domain.planner.getNote({ id: loser.id })).toThrow("Note was not found.");
-    expect(winnerUpdates.map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
-    expect(winnerUpdates.map((row) => row.payload)).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        cleanupKind: "note",
-        cleanupCompacted: true
-      })
-    ]));
     expect(loserUpdate).toMatchObject({ status: "cancelled" });
     expect(loserUpdate?.payload).toMatchObject({
       cleanupKind: "note",

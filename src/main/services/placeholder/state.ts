@@ -181,6 +181,7 @@ export function createPlaceholderState(): PlaceholderState {
       perSurfaceFontOverrides: {},
       calendarEventColorOverrides: {},
       autoTagRules: [],
+      autoTagBackgroundReapplyMode: "preview",
       disableAnimations: false,
       uiLayoutScale: 1,
       navigationPlacement: "left",

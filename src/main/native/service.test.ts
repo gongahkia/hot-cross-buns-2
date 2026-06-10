@@ -42,6 +42,7 @@ function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSna
     perSurfaceFontOverrides: {},
     calendarEventColorOverrides: {},
     autoTagRules: [],
+    autoTagBackgroundReapplyMode: "preview",
     disableAnimations: false,
     uiLayoutScale: 1,
     navigationPlacement: "left",
