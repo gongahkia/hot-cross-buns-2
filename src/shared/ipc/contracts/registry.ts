@@ -43,18 +43,6 @@ import {
   smartRescheduleResponseSchema
 } from "./calendar";
 import {
-  chatClearRequestSchema,
-  chatClearResponseSchema,
-  chatListMessagesRequestSchema,
-  chatListMessagesResponseSchema,
-  chatListSessionsRequestSchema,
-  chatListSessionsResponseSchema,
-  chatProviderHealthRequestSchema,
-  chatProviderHealthResponseSchema,
-  chatSendRequestSchema,
-  chatSendResponseSchema
-} from "./chat";
-import {
   diagnosticsCachedDataRenderedRequestSchema,
   diagnosticsClearLogsRequestSchema,
   diagnosticsClearLogsResponseSchema,
@@ -435,28 +423,6 @@ export const ipcContracts = {
     upsert: defineIpcContract("webhooks", "upsert", webhookUpsertRequestSchema, webhookMutationResponseSchema),
     delete: defineIpcContract("webhooks", "delete", webhookDeleteRequestSchema, webhookMutationResponseSchema),
     test: defineIpcContract("webhooks", "test", webhookTestRequestSchema, webhookMutationResponseSchema)
-  },
-  chat: {
-    listSessions: defineIpcContract(
-      "chat",
-      "listSessions",
-      chatListSessionsRequestSchema,
-      chatListSessionsResponseSchema
-    ),
-    listMessages: defineIpcContract(
-      "chat",
-      "listMessages",
-      chatListMessagesRequestSchema,
-      chatListMessagesResponseSchema
-    ),
-    send: defineIpcContract("chat", "send", chatSendRequestSchema, chatSendResponseSchema),
-    clear: defineIpcContract("chat", "clear", chatClearRequestSchema, chatClearResponseSchema),
-    providerHealth: defineIpcContract(
-      "chat",
-      "providerHealth",
-      chatProviderHealthRequestSchema,
-      chatProviderHealthResponseSchema
-    )
   },
   sync: {
     status: defineIpcContract("sync", "status", syncStatusRequestSchema, syncStatusResponseSchema),

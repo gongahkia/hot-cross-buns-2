@@ -425,18 +425,6 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
       test: (request) =>
         invokeContract(ipc, ipcContracts.webhooks.test, request, "Webhook test request failed")
     },
-    chat: {
-      listSessions: (request = {}) =>
-        invokeContract(ipc, ipcContracts.chat.listSessions, request, "Chat session list request failed"),
-      listMessages: (request) =>
-        invokeContract(ipc, ipcContracts.chat.listMessages, request, "Chat message list request failed"),
-      send: (request) =>
-        invokeContract(ipc, ipcContracts.chat.send, request, "Chat send request failed"),
-      clear: (request = {}) =>
-        invokeContract(ipc, ipcContracts.chat.clear, request, "Chat clear request failed"),
-      providerHealth: () =>
-        invokeContract(ipc, ipcContracts.chat.providerHealth, {}, "Chat provider health request failed")
-    },
     native: {
       capabilities: () =>
         invokeContract(ipc, ipcContracts.native.capabilities, {}, "Native capability request failed"),

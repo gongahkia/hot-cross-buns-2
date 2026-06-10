@@ -172,34 +172,6 @@ export {
 } from "./contracts/agent";
 
 export {
-  chatClearRequestSchema,
-  chatClearResponseSchema,
-  chatListMessagesRequestSchema,
-  chatListMessagesResponseSchema,
-  chatListSessionsRequestSchema,
-  chatListSessionsResponseSchema,
-  chatMessageSchema,
-  chatProviderHealthRequestSchema,
-  chatProviderHealthResponseSchema,
-  chatRoleSchema,
-  chatSendRequestSchema,
-  chatSendResponseSchema,
-  chatSessionSchema,
-  type ChatClearRequest,
-  type ChatClearResponse,
-  type ChatListMessagesRequest,
-  type ChatListMessagesResponse,
-  type ChatListSessionsRequest,
-  type ChatListSessionsResponse,
-  type ChatMessage,
-  type ChatProviderHealthResponse,
-  type ChatRole,
-  type ChatSendRequest,
-  type ChatSendResponse,
-  type ChatSession
-} from "./contracts/chat";
-
-export {
   duplicateCleanupRequestSchema,
   duplicateCleanupResponseSchema,
   duplicateEntityKindSchema,
@@ -404,7 +376,6 @@ export {
   settingsSnapshotSchema,
   settingsUpdateRequestSchema,
   semanticSearchModeSettingSchema,
-  llmProviderSchema,
   syncModeSchema,
   taskTemplateSchema,
   toolbarActionSchema,

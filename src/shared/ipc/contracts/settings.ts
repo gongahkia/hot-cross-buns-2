@@ -21,7 +21,6 @@ export const uiTextSizePointsSchema = z.number().min(9).max(24);
 export const uiFontNameSchema = z.string().trim().min(1).max(120).nullable();
 export const syncModeSchema = z.enum(["manual", "balanced", "near-real-time"]);
 export const semanticSearchModeSettingSchema = z.enum(["lexical", "semantic", "hybrid"]);
-export const llmProviderSchema = z.enum(["ollama", "openai-compatible"]);
 export const appLanguageSchema = z.enum(["system", "en", "zh-Hans", "ta", "ms", "ko", "ja"]);
 export const navigationPlacementSchema = z.enum(["left", "right"]);
 export const navigationTabSchema = z.enum(navigationTabIds);
@@ -323,11 +322,6 @@ export const settingsSnapshotSchema = z
     semanticSearchEnabled: z.boolean(),
     semanticSearchMode: semanticSearchModeSettingSchema,
     embeddingModelId: z.string().trim().min(1).max(120),
-    llmEnabled: z.boolean(),
-    llmProvider: llmProviderSchema,
-    llmEndpoint: z.string().trim().max(2_000).nullable(),
-    llmModel: z.string().trim().min(1).max(120),
-    llmAllowRemoteEndpoint: z.boolean(),
     agentActionTrayEnabled: z.boolean(),
     webhooksEnabled: z.boolean()
   })
@@ -416,11 +410,6 @@ export const settingsUpdateRequestSchema = z
     semanticSearchEnabled: z.boolean().optional(),
     semanticSearchMode: semanticSearchModeSettingSchema.optional(),
     embeddingModelId: z.string().trim().min(1).max(120).optional(),
-    llmEnabled: z.boolean().optional(),
-    llmProvider: llmProviderSchema.optional(),
-    llmEndpoint: z.string().trim().max(2_000).nullable().optional(),
-    llmModel: z.string().trim().min(1).max(120).optional(),
-    llmAllowRemoteEndpoint: z.boolean().optional(),
     agentActionTrayEnabled: z.boolean().optional(),
     webhooksEnabled: z.boolean().optional()
   })

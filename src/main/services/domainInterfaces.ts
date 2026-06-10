@@ -12,15 +12,6 @@ import type {
   AgentActionListResponse,
   AgentActionRejectRequest,
   AgentActionRejectResponse,
-  ChatClearRequest,
-  ChatClearResponse,
-  ChatListMessagesRequest,
-  ChatListMessagesResponse,
-  ChatListSessionsRequest,
-  ChatListSessionsResponse,
-  ChatProviderHealthResponse,
-  ChatSendRequest,
-  ChatSendResponse,
   DuplicateCleanupRequest,
   DuplicateCleanupResponse,
   CalendarEventCompletionRequest,
@@ -383,14 +374,6 @@ export interface WebhookDomainService {
   emit: (event: WebhookEvent, payload: DomainJsonObject) => MaybePromise<void>;
 }
 
-export interface ChatDomainService {
-  listSessions: (request: ChatListSessionsRequest) => MaybePromise<ChatListSessionsResponse>;
-  listMessages: (request: ChatListMessagesRequest) => MaybePromise<ChatListMessagesResponse>;
-  send: (request: ChatSendRequest) => MaybePromise<ChatSendResponse>;
-  clear: (request: ChatClearRequest) => MaybePromise<ChatClearResponse>;
-  providerHealth: () => MaybePromise<ChatProviderHealthResponse>;
-}
-
 export interface NativeDomainService {
   capabilities: () => MaybePromise<NativeCapabilitiesResponse>;
   requestNotificationPermission: () => MaybePromise<NativeNotificationPermissionResponse>;
@@ -406,7 +389,6 @@ export interface AppDomainServices {
   mcp: McpControlDomainService;
   agent: AgentActionDomainService;
   webhooks: WebhookDomainService;
-  chat: ChatDomainService;
   native: NativeDomainService;
   mcpTools: McpDomainServices;
 }

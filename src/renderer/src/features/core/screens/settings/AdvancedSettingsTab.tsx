@@ -742,48 +742,6 @@ export function AdvancedSettingsTab({
           description="Delivers enabled localhost webhook subscriptions."
           onChange={(checked) => updateSettings({ webhooksEnabled: checked })}
         />
-        <SettingsSwitch
-          checked={settings.llmEnabled}
-          icon={FilePlus2}
-          label="LLM provider"
-          description="Uses a configured local or explicitly allowed remote chat endpoint."
-          onChange={(checked) => updateSettings({ llmEnabled: checked })}
-        />
-        <SettingsControlRow label="Provider">
-          <select
-            aria-label="LLM provider"
-            className={settingsSelectClass}
-            onChange={(event) =>
-              updateSettings({ llmProvider: event.currentTarget.value as SettingsSnapshot["llmProvider"] })
-            }
-            value={settings.llmProvider}
-          >
-            <option value="ollama">Ollama</option>
-            <option value="openai-compatible">OpenAI-compatible</option>
-          </select>
-        </SettingsControlRow>
-        <SettingsControlRow label="Endpoint">
-          <Input
-            aria-label="LLM endpoint"
-            className="min-w-80"
-            onBlur={(event) => updateSettings({ llmEndpoint: event.currentTarget.value.trim() || null })}
-            defaultValue={settings.llmEndpoint ?? ""}
-            placeholder="http://127.0.0.1:11434"
-          />
-        </SettingsControlRow>
-        <SettingsControlRow label="Model">
-          <Input
-            aria-label="LLM model"
-            className="min-w-56"
-            onBlur={(event) => updateSettings({ llmModel: event.currentTarget.value.trim() || "llama3.1" })}
-            defaultValue={settings.llmModel}
-          />
-        </SettingsControlRow>
-        <SettingsSwitch
-          checked={settings.llmAllowRemoteEndpoint}
-          label="Allow remote LLM endpoint"
-          onChange={(checked) => updateSettings({ llmAllowRemoteEndpoint: checked })}
-        />
       </SettingsGroup>
 
       <SettingsGroup title="Portable export">

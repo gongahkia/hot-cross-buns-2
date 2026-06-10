@@ -7,7 +7,6 @@ import { runLocalDataMigrations, type MigrationResult } from "../data/migrations
 import {
   LocalHistoryRepository,
   LocalAgentRepository,
-  LocalChatRepository,
   LocalPerformanceRepository,
   LocalPlannerRepository,
   LocalSettingsRepository,
@@ -57,7 +56,6 @@ export interface LocalDataService {
   historyRepository: LocalHistoryRepository;
   undoRepository: LocalUndoRepository;
   agentRepository: LocalAgentRepository;
-  chatRepository: LocalChatRepository;
   webhookRepository: LocalWebhookRepository;
   performanceRepository: LocalPerformanceRepository;
 }
@@ -115,7 +113,6 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const historyRepository = new LocalHistoryRepository(connection);
   const undoRepository = new LocalUndoRepository(connection);
   const agentRepository = new LocalAgentRepository(connection);
-  const chatRepository = new LocalChatRepository(connection);
   const webhookRepository = new LocalWebhookRepository(connection);
   const plannerRepository = new LocalPlannerRepository(connection, performanceRepository);
   const settingsRepository = new LocalSettingsRepository(connection);
@@ -152,7 +149,6 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     settingsRepository,
     undoRepository,
     agentRepository,
-    chatRepository,
     webhookRepository,
     syncRepository,
     historyRepository,
@@ -254,7 +250,6 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     },
     agent: createSqliteAgentDomainService(agentRepository, mcpToolRegistry),
     webhooks: sqliteDomain.webhooks,
-    chat: sqliteDomain.chat,
     native: nativeShell
   };
   mcpToolRegistry.setAdminServices({
@@ -290,7 +285,6 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
       historyRepository,
       undoRepository,
       agentRepository,
-      chatRepository,
       webhookRepository,
       performanceRepository
     },

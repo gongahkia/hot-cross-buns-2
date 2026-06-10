@@ -141,11 +141,6 @@ const DEFAULT_SETTINGS: SettingsSnapshot = {
   semanticSearchEnabled: false,
   semanticSearchMode: "lexical",
   embeddingModelId: "hcb-local-hash-384",
-  llmEnabled: false,
-  llmProvider: "ollama",
-  llmEndpoint: "http://127.0.0.1:11434",
-  llmModel: "llama3.1",
-  llmAllowRemoteEndpoint: false,
   agentActionTrayEnabled: true,
   webhooksEnabled: false
 };
@@ -479,15 +474,6 @@ export class LocalSettingsRepository {
         "search",
         "embeddingModelId",
         DEFAULT_SETTINGS.embeddingModelId
-      ),
-      llmEnabled: this.readSetting("llm", "enabled", DEFAULT_SETTINGS.llmEnabled),
-      llmProvider: this.readSetting("llm", "provider", DEFAULT_SETTINGS.llmProvider),
-      llmEndpoint: this.readSetting("llm", "endpoint", DEFAULT_SETTINGS.llmEndpoint),
-      llmModel: this.readSetting("llm", "model", DEFAULT_SETTINGS.llmModel),
-      llmAllowRemoteEndpoint: this.readSetting(
-        "llm",
-        "allowRemoteEndpoint",
-        DEFAULT_SETTINGS.llmAllowRemoteEndpoint
       ),
       agentActionTrayEnabled: this.readSetting(
         "agent",
@@ -862,26 +848,6 @@ export class LocalSettingsRepository {
 
     if (request.embeddingModelId !== undefined) {
       this.writeSetting("search", "embeddingModelId", request.embeddingModelId, now);
-    }
-
-    if (request.llmEnabled !== undefined) {
-      this.writeSetting("llm", "enabled", request.llmEnabled, now);
-    }
-
-    if (request.llmProvider !== undefined) {
-      this.writeSetting("llm", "provider", request.llmProvider, now);
-    }
-
-    if (request.llmEndpoint !== undefined) {
-      this.writeSetting("llm", "endpoint", request.llmEndpoint, now);
-    }
-
-    if (request.llmModel !== undefined) {
-      this.writeSetting("llm", "model", request.llmModel, now);
-    }
-
-    if (request.llmAllowRemoteEndpoint !== undefined) {
-      this.writeSetting("llm", "allowRemoteEndpoint", request.llmAllowRemoteEndpoint, now);
     }
 
     if (request.agentActionTrayEnabled !== undefined) {

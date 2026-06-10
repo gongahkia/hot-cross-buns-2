@@ -8,7 +8,6 @@ import { GooglePendingMutationWorker } from "../sync/mutationWorker";
 import type {
   LocalHistoryRepository,
   LocalAgentRepository,
-  LocalChatRepository,
   LocalPlannerRepository,
   LocalSettingsRepository,
   LocalUndoRepository,
@@ -17,7 +16,6 @@ import type {
 import type { GoogleSyncRepository } from "../sync/readSyncRepository";
 import type { AppDomainServices } from "./domainInterfaces";
 import { createSqliteAgentDomainService } from "./sqliteAgentDomainService";
-import { createSqliteChatDomainService } from "./sqliteChatDomainService";
 import { createUnavailableGoogleDomainService } from "./sqliteGoogleDomainService";
 import { createMcpDomainServices } from "./sqliteMcpDomainServices";
 import {
@@ -40,7 +38,6 @@ export interface SqliteDomainServiceOptions {
   settingsRepository: LocalSettingsRepository;
   undoRepository: LocalUndoRepository;
   agentRepository: LocalAgentRepository;
-  chatRepository: LocalChatRepository;
   webhookRepository: LocalWebhookRepository;
   syncRepository: GoogleSyncRepository;
   historyRepository?: LocalHistoryRepository;
@@ -93,11 +90,6 @@ export function createSqliteDomainServices(
     }),
     agent: createSqliteAgentDomainService(options.agentRepository),
     webhooks: createSqliteWebhookDomainService(options.webhookRepository, options.settingsRepository),
-    chat: createSqliteChatDomainService(
-      options.chatRepository,
-      options.plannerRepository,
-      options.settingsRepository
-    ),
     native: createSqliteNativeDomainService(),
     mcpTools: createMcpDomainServices({
       plannerRepository: options.plannerRepository,

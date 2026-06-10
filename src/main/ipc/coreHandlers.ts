@@ -17,10 +17,6 @@ import {
   type CalendarEventUpdateRequest,
   type CalendarRangeRequest,
   type CalendarScheduleSuggestRequest,
-  type ChatClearRequest,
-  type ChatListMessagesRequest,
-  type ChatListSessionsRequest,
-  type ChatSendRequest,
   type DuplicateCleanupRequest,
   type EntityByIdRequest,
   type GoogleDisconnectRequest,
@@ -413,26 +409,6 @@ export function createCoreIpcHandlers(
     {
       contract: ipcContracts.webhooks.test,
       handle: (request) => services.webhooks.test(request as WebhookTestRequest)
-    },
-    {
-      contract: ipcContracts.chat.listSessions,
-      handle: (request) => services.chat.listSessions(request as ChatListSessionsRequest)
-    },
-    {
-      contract: ipcContracts.chat.listMessages,
-      handle: (request) => services.chat.listMessages(request as ChatListMessagesRequest)
-    },
-    {
-      contract: ipcContracts.chat.send,
-      handle: (request) => services.chat.send(request as ChatSendRequest)
-    },
-    {
-      contract: ipcContracts.chat.clear,
-      handle: (request) => services.chat.clear(request as ChatClearRequest)
-    },
-    {
-      contract: ipcContracts.chat.providerHealth,
-      handle: () => services.chat.providerHealth()
     },
     {
       contract: ipcContracts.sync.status,

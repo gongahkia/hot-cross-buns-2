@@ -270,53 +270,6 @@ export function createPlaceholderControlServices(
       delete: (request) => ({ id: request.id, queued: false, revision: new Date().toISOString() }),
       test: (request) => ({ id: request.id, queued: false, revision: new Date().toISOString() }),
       emit: () => undefined
-    },
-    chat: {
-      listSessions: (request) => ({
-        items: [],
-        page: { limit: request.limit ?? 50, totalKnown: 0 }
-      }),
-      listMessages: (request) => ({
-        items: [],
-        page: { limit: request.limit ?? 50, totalKnown: 0 }
-      }),
-      send: (request) => {
-        const now = new Date().toISOString();
-        const session = {
-          id: request.sessionId ?? "chat:placeholder",
-          title: request.message.slice(0, 120),
-          createdAt: now,
-          updatedAt: now
-        };
-        return {
-          session,
-          userMessage: {
-            id: "chat-message:user",
-            sessionId: session.id,
-            role: "user" as const,
-            content: request.message,
-            createdAt: now
-          },
-          assistantMessage: {
-            id: "chat-message:assistant",
-            sessionId: session.id,
-            role: "assistant" as const,
-            content: "Placeholder chat provider.",
-            createdAt: now
-          },
-          provider: "placeholder",
-          proposedActionIds: []
-        };
-      },
-      clear: () => ({ cleared: 0 }),
-      providerHealth: () => ({
-        enabled: false,
-        provider: "placeholder",
-        endpoint: null,
-        remoteAllowed: false,
-        ok: true,
-        message: "Placeholder chat provider."
-      })
     }
   };
 }
