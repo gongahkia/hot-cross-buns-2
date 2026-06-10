@@ -1401,10 +1401,12 @@ describe("App calendar", () => {
     const inspector = await screen.findByTestId("inspector-shell");
     const inspectorBody = within(inspector).getByTestId("inspector-body");
     expect(within(inspectorBody).getByRole("heading", { name: "Planner shell standup" })).toBeInTheDocument();
+    expect(within(inspector).queryByText("Attachments")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Event title" })).not.toBeInTheDocument();
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
+    expect(await within(inspector).findByText("Attachments")).toBeInTheDocument();
     const titleInput = screen.getByRole("textbox", { name: "Event title" });
     await user.clear(titleInput);
     await user.type(titleInput, "Planner shell sync");
@@ -1420,7 +1422,9 @@ describe("App calendar", () => {
     });
 
     await user.click(within(agenda).getByText("Planner shell standup"));
-    await user.click(screen.getByRole("button", { name: "Delete event" }));
+    const deleteButton = screen.getByRole("button", { name: "Delete event" });
+    expect(deleteButton.className).toContain("ring-danger");
+    await user.click(deleteButton);
     expect(api.calendar.delete).toHaveBeenCalledWith({ id: "event-standup" });
   });
 
@@ -1457,6 +1461,7 @@ describe("App calendar", () => {
     expect(within(preview).getByText("Full-time")).toBeInTheDocument();
     const docsLink = within(preview).getByRole("link", { name: "Docs" });
     expect(docsLink).toHaveAttribute("href", "https://example.com");
+    expect(within(inspector).queryByText("Attachments")).not.toBeInTheDocument();
 
     await user.click(docsLink);
 

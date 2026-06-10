@@ -40,6 +40,14 @@ describe("App tasks", () => {
     const inboxTasks = screen.getByRole("list", { name: "Inbox tasks" });
     expect(within(inboxTasks).getByText("Draft inbox triage rules")).toBeInTheDocument();
     expect(within(inboxTasks).getByText("Today")).toBeInTheDocument();
+    expect(within(inboxTasks).queryByRole("checkbox", { name: "Select Draft inbox triage rules" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Inbox list menu" }));
+    await user.click(screen.getByRole("button", { name: "Select tasks" }));
+    const bulkCheckbox = within(inboxTasks).getByRole("checkbox", { name: "Select Draft inbox triage rules" });
+    await user.click(bulkCheckbox);
+    expect(screen.getByText("1 task selected")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear task selection" }));
+    expect(within(inboxTasks).queryByRole("checkbox", { name: "Select Draft inbox triage rules" })).not.toBeInTheDocument();
     const completedToggle = screen.getByRole("button", { name: "Completed (1)" });
     expect(completedToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Report shell-visible timing")).not.toBeInTheDocument();
@@ -318,7 +326,9 @@ describe("App tasks", () => {
     });
 
     await user.click(screen.getByRole("button", { name: /^Review calendar fixture shape / }));
-    await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Delete" }));
+    const deleteButton = within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Delete" });
+    expect(deleteButton.className).toContain("ring-danger");
+    await user.click(deleteButton);
     expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-calendar-fixtures" });
 
   });
@@ -515,6 +525,7 @@ describe("App tasks", () => {
     expect(within(preview).getByRole("heading", { name: "Checklist" })).toBeInTheDocument();
     expect(within(preview).getByText("context")).toBeInTheDocument();
     expect(within(preview).getAllByRole("checkbox")).toHaveLength(2);
+    expect(within(inspector).queryByText("Attachments")).not.toBeInTheDocument();
   });
 
   it("reverts optimistic task creation and retries recoverable task errors", async () => {

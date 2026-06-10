@@ -167,6 +167,7 @@ export function GoogleTasksBoard({
   starred
 }: GoogleTasksBoardProps): JSX.Element {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [bulkModeActive, setBulkModeActive] = useState(false);
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkCustomDueDate, setBulkCustomDueDate] = useState("");
   const { autoCollapsed, containerRef } = useAutoCollapsedSidebar();
@@ -208,6 +209,7 @@ export function GoogleTasksBoard({
   }, [listSorts, selectedView.mode, source, starred, visibleListIdSet]);
   const bulkSelectedTasks = source.largeTaskWindow.filter((task) => bulkSelectedIds.has(task.id));
   const bulkSelectedIdsInWindow = bulkSelectedTasks.map((task) => task.id);
+  const showBulkSelection = bulkModeActive || bulkSelectedIdsInWindow.length > 0;
 
   useEffect(() => {
     setBulkSelectedIds((current) => {
@@ -243,6 +245,7 @@ export function GoogleTasksBoard({
 
     if (saved) {
       setBulkSelectedIds(new Set());
+      setBulkModeActive(false);
     }
   }
 
@@ -270,7 +273,10 @@ export function GoogleTasksBoard({
           <BoardBulkRescheduleBanner
             customDueDate={bulkCustomDueDate}
             onApplyCustom={() => void bulkReschedule(bulkCustomDueDate || null)}
-            onClearSelection={() => setBulkSelectedIds(new Set())}
+            onClearSelection={() => {
+              setBulkSelectedIds(new Set());
+              setBulkModeActive(false);
+            }}
             onCustomDueDateChange={setBulkCustomDueDate}
             onReschedule={(dueDate) => void bulkReschedule(dueDate)}
             pending={source.taskMutationPending}
@@ -299,11 +305,13 @@ export function GoogleTasksBoard({
                 onOpenTask={onOpenTask}
                 onRenameList={onRenameList}
                 onSetListSort={onSetListSort}
+                onStartBulkSelect={() => setBulkModeActive(true)}
                 onToggleStar={onToggleStar}
                 onToggleTask={onToggleTask}
                 onAddSubtask={onAddSubtask}
                 bulkSelectedIds={bulkSelectedIds}
                 onBulkSelectTask={toggleBulkTask}
+                showBulkSelection={showBulkSelection}
                 scheduledBlocksByTask={scheduledBlocksByTask}
                 selectedTaskId={selectedTaskId}
                 source={source}
@@ -602,11 +610,13 @@ function TaskListColumn({
   onOpenTask,
   onRenameList,
   onSetListSort,
+  onStartBulkSelect,
   onToggleStar,
   onToggleTask,
   onAddSubtask,
   bulkSelectedIds,
   onBulkSelectTask,
+  showBulkSelection,
   scheduledBlocksByTask,
   selectedTaskId,
   source,
@@ -627,11 +637,13 @@ function TaskListColumn({
   onOpenTask: (taskId: string) => void;
   onRenameList: (list: TaskListSummary) => void;
   onSetListSort: (listId: string, sort: TaskListSort) => void;
+  onStartBulkSelect: () => void;
   onToggleStar: (taskId: string) => void;
   onToggleTask: (taskId: string) => void;
   onAddSubtask: (task: TaskViewModel) => void;
   bulkSelectedIds: ReadonlySet<string>;
   onBulkSelectTask: (taskId: string, selected: boolean) => void;
+  showBulkSelection: boolean;
   scheduledBlocksByTask: Map<string, ScheduledTaskBlockViewModel>;
   selectedTaskId: string | null;
   source: CoreViewModelSource;
@@ -703,6 +715,7 @@ function TaskListColumn({
             onDeleteList={onDeleteList}
             onRenameList={onRenameList}
             onSetListSort={onSetListSort}
+            onStartBulkSelect={onStartBulkSelect}
             selectedSort={listSort}
           />
         ) : null}
@@ -736,6 +749,7 @@ function TaskListColumn({
               bulkSelected={bulkSelectedIds.has(task.id)}
               bulkSelectedIds={bulkSelectedIds}
               onBulkSelectTask={onBulkSelectTask}
+              showBulkSelection={showBulkSelection}
               scheduledBlock={scheduledBlocksByTask.get(task.id)}
               selected={selectedTaskId === task.id}
               selectedTaskId={selectedTaskId}
@@ -777,6 +791,7 @@ function TaskListColumn({
                     bulkSelected={bulkSelectedIds.has(task.id)}
                     bulkSelectedIds={bulkSelectedIds}
                     onBulkSelectTask={onBulkSelectTask}
+                    showBulkSelection={showBulkSelection}
                     scheduledBlock={scheduledBlocksByTask.get(task.id)}
                     selected={selectedTaskId === task.id}
                     selectedTaskId={selectedTaskId}
@@ -808,6 +823,7 @@ function ListActionMenu({
   onDeleteList,
   onRenameList,
   onSetListSort,
+  onStartBulkSelect,
   selectedSort
 }: {
   list: TaskListSummary;
@@ -815,6 +831,7 @@ function ListActionMenu({
   onDeleteList: (listId: string) => void;
   onRenameList: (list: TaskListSummary) => void;
   onSetListSort: (listId: string, sort: TaskListSort) => void;
+  onStartBulkSelect: () => void;
   selectedSort: TaskListSort;
 }): JSX.Element {
   function chooseSort(sort: TaskListSort): void {
@@ -834,6 +851,7 @@ function ListActionMenu({
       <MenuSeparator />
       <MenuButton onClick={() => { onRenameList(list); onClose(); }}>Rename list</MenuButton>
       <MenuButton onClick={() => { onDeleteList(list.id); onClose(); }}>Delete list</MenuButton>
+      <MenuButton onClick={() => { onStartBulkSelect(); onClose(); }}>Select tasks</MenuButton>
       <MenuButton disabled>Move list to first position</MenuButton>
       <MenuSeparator />
       <MenuButton onClick={() => { window.print(); onClose(); }}>Print list</MenuButton>
@@ -856,6 +874,7 @@ function GoogleTaskRow({
   onToggleTask,
   onAddSubtask,
   onBulkSelectTask,
+  showBulkSelection,
   scheduledBlock,
   selected,
   selectedTaskId,
@@ -876,6 +895,7 @@ function GoogleTaskRow({
   onToggleTask: (taskId: string) => void;
   onAddSubtask: (task: TaskViewModel) => void;
   onBulkSelectTask: (taskId: string, selected: boolean) => void;
+  showBulkSelection: boolean;
   scheduledBlock?: ScheduledTaskBlockViewModel;
   selected: boolean;
   selectedTaskId: string | null;
@@ -905,7 +925,8 @@ function GoogleTaskRow({
     <div onContextMenu={openContextMenu} role="listitem">
       <div
         className={cx(
-          "group relative grid grid-cols-[24px_32px_minmax(0,1fr)_auto] gap-2 px-4 py-2 transition-colors duration-fast ease-hcb",
+          "group relative grid gap-2 px-4 py-2 transition-colors duration-fast ease-hcb",
+          showBulkSelection ? "grid-cols-[24px_32px_minmax(0,1fr)_auto]" : "grid-cols-[32px_minmax(0,1fr)_auto]",
           selected ? "bg-surface-0" : "hover:bg-surface-0",
           futureSnoozed && "opacity-65"
         )}
@@ -916,13 +937,15 @@ function GoogleTaskRow({
           event.dataTransfer.setData(taskDragType, task.id);
         }}
       >
-        <input
-          aria-label={`Select ${task.title}`}
-          checked={bulkSelected}
-          className="mt-2 size-4 accent-[var(--color-accent)]"
-          onChange={(event) => onBulkSelectTask(task.id, event.target.checked)}
-          type="checkbox"
-        />
+        {showBulkSelection ? (
+          <input
+            aria-label={`Select ${task.title}`}
+            checked={bulkSelected}
+            className="mt-2 size-4 accent-[var(--color-accent)]"
+            onChange={(event) => onBulkSelectTask(task.id, event.target.checked)}
+            type="checkbox"
+          />
+        ) : null}
         <TaskCompletionButton completed={completed} onToggle={onToggleTask} task={task} />
         <button
           className="min-w-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -1001,15 +1024,16 @@ function GoogleTaskRow({
               onCreateList={onCreateList}
               onDeleteTask={onDeleteTask}
               onDuplicateTask={onDuplicateTask}
-              onBulkSelectTask={onBulkSelectTask}
-              onMoveTask={onMoveTask}
+          onBulkSelectTask={onBulkSelectTask}
+          onMoveTask={onMoveTask}
               onMoveTaskRequest={onMoveTaskRequest}
               onOpenTask={onOpenTask}
               onToggleTask={onToggleTask}
-              selected={selectedTaskId === child.id}
-              task={child}
-              selectedForBulk={bulkSelectedIds.has(child.id)}
-              showAccountBadge={showAccountBadge}
+          selected={selectedTaskId === child.id}
+          task={child}
+          selectedForBulk={bulkSelectedIds.has(child.id)}
+          showBulkSelection={showBulkSelection}
+          showAccountBadge={showAccountBadge}
               source={source}
             />
           ))}
@@ -1031,6 +1055,7 @@ function TaskChildRow({
   onToggleTask,
   selected,
   selectedForBulk,
+  showBulkSelection,
   showAccountBadge,
   source,
   task
@@ -1046,6 +1071,7 @@ function TaskChildRow({
   onToggleTask: (taskId: string) => void;
   selected: boolean;
   selectedForBulk: boolean;
+  showBulkSelection: boolean;
   showAccountBadge: boolean;
   source: CoreViewModelSource;
   task: TaskViewModel;
@@ -1057,7 +1083,8 @@ function TaskChildRow({
   return (
     <div
       className={cx(
-        "group relative grid grid-cols-[24px_28px_minmax(0,1fr)_auto] items-start gap-2 py-1.5 pl-3 pr-4 transition-colors duration-fast ease-hcb",
+        "group relative grid items-start gap-2 py-1.5 pl-3 pr-4 transition-colors duration-fast ease-hcb",
+        showBulkSelection ? "grid-cols-[24px_28px_minmax(0,1fr)_auto]" : "grid-cols-[28px_minmax(0,1fr)_auto]",
         selected ? "bg-surface-0" : "hover:bg-surface-0"
       )}
       draggable
@@ -1073,13 +1100,15 @@ function TaskChildRow({
       }}
       role="listitem"
     >
-      <input
-        aria-label={`Select ${task.title}`}
-        checked={selectedForBulk}
-        className="mt-2 size-4 accent-[var(--color-accent)]"
-        onChange={(event) => onBulkSelectTask(task.id, event.target.checked)}
-        type="checkbox"
-      />
+      {showBulkSelection ? (
+        <input
+          aria-label={`Select ${task.title}`}
+          checked={selectedForBulk}
+          className="mt-2 size-4 accent-[var(--color-accent)]"
+          onChange={(event) => onBulkSelectTask(task.id, event.target.checked)}
+          type="checkbox"
+        />
+      ) : null}
       <TaskCompletionButton completed={completed} onToggle={onToggleTask} task={task} />
       <button
         className="min-w-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

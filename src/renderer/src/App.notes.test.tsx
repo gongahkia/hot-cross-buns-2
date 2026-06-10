@@ -87,7 +87,9 @@ describe("App notes", () => {
       });
     });
 
-    await user.click(screen.getByRole("button", { name: "Delete selected note" }));
+    const deleteButton = screen.getByRole("button", { name: "Delete selected note" });
+    expect(deleteButton.className).toContain("ring-danger");
+    await user.click(deleteButton);
     expect(api.tasks.delete).toHaveBeenCalledWith({ id: "task-created-1" });
 
     await user.click(screen.getByRole("button", { name: "Delete selected note" }));
@@ -108,11 +110,13 @@ describe("App notes", () => {
     expect(inspector).toHaveAttribute("data-inspector-kind", "note");
     const inspectorBody = within(inspector).getByTestId("inspector-body");
     expect(within(inspectorBody).getByRole("heading", { name: "Startup data flow" })).toBeInTheDocument();
+    expect(within(inspector).queryByText("Attachments")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Note body" })).not.toBeInTheDocument();
 
     await user.click(
       within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Edit" })
     );
+    expect(await within(inspector).findByText("Attachments")).toBeInTheDocument();
     const bodyInput = await screen.findByRole("textbox", { name: "Note body" });
     fireEvent.change(bodyInput, {
       target: { value: `${(bodyInput as HTMLTextAreaElement).value} Pending close flush.` }

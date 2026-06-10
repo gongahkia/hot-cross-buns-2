@@ -13,6 +13,7 @@ export function AttachmentPanel({
   entityKind: AttachmentEntityKind;
 }): JSX.Element {
   const [items, setItems] = useState<AttachmentSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,10 +21,12 @@ export function AttachmentPanel({
   }, [entityId, entityKind]);
 
   async function refresh(): Promise<void> {
+    setLoaded(false);
     const result = await window.hcb?.settings.listAttachments({ entityKind, entityId });
     if (result?.ok) {
       setItems(result.data.items);
     }
+    setLoaded(true);
   }
 
   async function add(file: File): Promise<void> {
@@ -72,6 +75,10 @@ export function AttachmentPanel({
     }
     setItems(result.data.items);
     setMessage(result.data.queued ? "Attachment removed and queued for sync." : "Attachment removed locally.");
+  }
+
+  if (!editable && (!loaded || items.length === 0)) {
+    return <></>;
   }
 
   return (

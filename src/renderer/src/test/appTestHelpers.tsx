@@ -1058,6 +1058,14 @@ export function seededHcb(): HcbApi {
       ...api.google,
       status: vi.fn(async () => ok(connectedGoogleStatus()))
     },
+    settings: {
+      ...api.settings,
+      listAttachments: vi.fn(async () => ok({ items: [] })),
+      addAttachment: vi.fn(async () => ok({ items: [], queued: false, revision: now })),
+      removeAttachment: vi.fn(async () => ok({ items: [], queued: false, revision: now })),
+      openAttachment: vi.fn(async () => ok({ path: "/tmp/hcb-attachment", message: "Attachment opened." })),
+      downloadAttachment: vi.fn(async () => ok({ path: "/tmp/hcb-attachment", message: "Attachment downloaded." }))
+    },
     undo: {
       ...api.undo,
       status: vi.fn(async () => ok({ canUndo: false, canRedo: false })),

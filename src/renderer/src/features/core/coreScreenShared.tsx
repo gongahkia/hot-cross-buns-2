@@ -470,6 +470,7 @@ export function TaskRow({
   onToggle,
   selected,
   scheduledBlock,
+  showBulkSelection = false,
   task
 }: {
   bulkSelected: boolean;
@@ -480,6 +481,7 @@ export function TaskRow({
   onToggle: (taskId: string) => void;
   selected: boolean;
   scheduledBlock?: ScheduledTaskBlockViewModel;
+  showBulkSelection?: boolean;
   task: TaskViewModel;
 }): JSX.Element {
   const dueCue = taskDueCue(task);
@@ -495,13 +497,15 @@ export function TaskRow({
     >
       <div className="flex min-w-0 flex-wrap items-start gap-3 sm:flex-nowrap">
         <TaskCompletionButton completed={completed} onToggle={onToggle} task={task} />
-        <input
-          aria-label={`Select ${task.title}`}
-          checked={bulkSelected}
-          className="mt-1 size-4 shrink-0 accent-[var(--color-accent)]"
-          onChange={(event) => onBulkSelect(task.id, event.target.checked)}
-          type="checkbox"
-        />
+        {showBulkSelection ? (
+          <input
+            aria-label={`Select ${task.title}`}
+            checked={bulkSelected}
+            className="mt-1 size-4 shrink-0 accent-[var(--color-accent)]"
+            onChange={(event) => onBulkSelect(task.id, event.target.checked)}
+            type="checkbox"
+          />
+        ) : null}
         <button
           className="min-w-0 flex-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           onClick={() => onSelect(task.id)}
@@ -622,6 +626,7 @@ export function TaskGroupPanel({
             onToggle={onToggleTask}
             scheduledBlock={scheduledBlocksByTaskId?.get(task.id)}
             selected={task.id === selectedTaskId}
+            showBulkSelection={bulkSelectedTaskIds.length > 0}
             task={task}
           />
         )}

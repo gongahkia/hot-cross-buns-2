@@ -636,7 +636,7 @@ export function CalendarEventDetails({
         </DetailLine>
       ) : null}
 
-      {draft.id ? <AttachmentPanel editable entityId={draft.id} entityKind="event" /> : null}
+      {draft.id ? <AttachmentPanel entityId={draft.id} entityKind="event" /> : null}
 
       {showReminder ? (
         <DetailLine icon={Bell}>
@@ -1132,6 +1132,7 @@ export function CalendarEventForm({
           rules={rules}
         />
       </fieldset>
+      {draft.id ? <AttachmentPanel editable entityId={draft.id} entityKind="event" /> : null}
       <fieldset className="grid gap-2 rounded-hcbMd border border-border bg-bg-tertiary p-3">
         <legend className="px-1 text-[var(--text-sm)] font-medium text-text-secondary">
           <span className="inline-flex items-center gap-1">

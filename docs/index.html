@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="google-site-verification" content="RKZM3YxESf2Iix4AN2Vg2imTGviRv4jSq6uXevXnTjs">
-<title>Hot Cross Buns 2 - Planner App for macOS</title>
-<meta name="description" content="Hot Cross Buns 2 is a keyboard-first, macOS-native planner for tasks, calendars, notes, and multiple Google account workspaces.">
+<title>Hot Cross Buns 2 - New Planner App for macOS</title>
+<meta name="description" content="Hot Cross Buns 2 is the new keyboard-first macOS planner for tasks, calendars, notes, Google account workspaces, automation, and local customization.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&amp;family=Geist:wght@400;500;600&amp;family=Source+Serif+4:ital,opsz,wght@0,8..60,300..500;1,8..60,400&amp;display=swap">
@@ -36,7 +36,7 @@
 <header class="hero">
   <div class="hero-copy">
     <h1>A planner for<br>busy people<br>with a <em>system</em>.</h1>
-    <p class="deck">Hot Cross Buns 2 is a keyboard-first macOS-native client for Google&nbsp;Tasks and Google&nbsp;Calendar, now with separate Google account workspaces and faster large-calendar rendering.</p>
+    <p class="deck">Hot Cross Buns 2 is the new version of Hot Cross Buns: a keyboard-first macOS client for Google&nbsp;Tasks and Google&nbsp;Calendar with account workspaces, automation, local customization, and faster large-calendar rendering.</p>
     <div class="hero-ctas">
       <a class="cta-primary" href="#download">Download for macOS</a>
       <a class="cta-secondary" href="https://github.com/gongahkia/hot-cross-buns-2" target="_blank" rel="noopener">GitHub →</a>
@@ -327,10 +327,29 @@
 	<section id="updates" class="updates">
   <div class="updates-head">
     <p class="eyebrow">Changelog</p>
-    <h2>Latest changes in <em>v4.0.0</em>.</h2>
+    <h2>Latest changes in <em>v5.0.0</em>.</h2>
   </div>
 
   <div class="updates-list">
+    <article class="update-entry">
+      <div class="update-meta">
+        <h3>v5.0.0</h3>
+        <p>10 Jun 2026</p>
+      </div>
+      <div class="update-copy">
+        <ul>
+          <li>Declared Hot Cross Buns 2 as the new maintained version, carrying forward the full archived Hot Cross Buns changelog below.</li>
+          <li>Moved the app to an Electron-first macOS build with typed IPC, a hardened preload bridge, native shell adapters, and packaged preview release tooling.</li>
+          <li>Expanded Google account handling with account-scoped cache rows, per-account resource filtering, explicit calendar/list destinations, and cleaner signed-out account hiding.</li>
+          <li>Added local customization with CSS snippets, external <code>keymap.json</code>, sandboxed extension panels, safe mode, and Settings controls for enabling each item.</li>
+          <li>Added portable <code>.hcbexport</code> archives, attachment bundling, local pointer repair, attachment add/open/download/remove flows, ICS imports, ICS subscriptions, and local report exports.</li>
+          <li>Upgraded templates, reminders, command palette behavior, event editing, recurrence handling, smart rescheduling, and Google Calendar/Tasks conversion flows.</li>
+          <li>Added agent-facing MCP and CLI surfaces with dry-run/write policies, redacted diagnostics, webhook retry/rate limiting, <code>event.starting</code> emits, and <code>mutation.failed</code> emits.</li>
+          <li>Expanded release hardening with GitHub release checks, native capability reporting, diagnostics redaction, low-power/constrained-network backoff, and 15k-event performance coverage.</li>
+        </ul>
+      </div>
+    </article>
+
     <article class="update-entry">
       <div class="update-meta">
         <h3>v4.0.0</h3>
@@ -375,7 +394,7 @@
       <div class="update-copy">
         <ul>
           <li>Added retention settings for past calendar events and completed tasks, including configurable lookback windows and forever retention.</li>
-          <li>Calendar sync now follows calendars selected in Google Calendar until the user customizes selection in Hot Cross Buns 2, including subscribed and read-only calendars.</li>
+          <li>Calendar sync now follows calendars selected in Google Calendar until the user customizes selection in Hot Cross Buns, including subscribed and read-only calendars.</li>
           <li>Improved custom image readability across year, week, multi-day, day, Tasks, and Notes surfaces.</li>
           <li>Added image-derived custom themes so users can generate, tweak, name, save, and select a palette from their chosen background.</li>
         </ul>
@@ -538,7 +557,7 @@
           <li>Expanded theme customization with user-defined color schemes, in-app editing, config persistence, and export support.</li>
           <li>Localized the app and help content for Singapore language needs, including Simplified Chinese, Malay, and Tamil coverage.</li>
           <li>Improved notification permission denial flows so users get clear recovery guidance when macOS notifications are blocked.</li>
-          <li>Added a branded loading screen using the Hot Cross Buns 2 welcome artwork while longer startup work completes.</li>
+          <li>Added a branded loading screen using the Hot Cross Buns welcome artwork while longer startup work completes.</li>
           <li>Improved quick-add discoverability with clearer event grammar and sidebar guidance.</li>
           <li>Improved accessibility with Dynamic Type scaling, reduced-motion support, and stronger VoiceOver labels.</li>
           <li>Clarified sync failure states for quota, rate-limit, offline, and missing-scope cases.</li>
