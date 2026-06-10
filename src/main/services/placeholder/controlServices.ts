@@ -194,6 +194,66 @@ export function createPlaceholderControlServices(
         revision: new Date().toISOString()
       })
     },
+    searchModels: {
+      listModels: () => ({
+        models: state.settings.semanticSearchModels,
+        selectedModelId: state.settings.embeddingModelId,
+        enabled: state.settings.semanticSearchEnabled
+      }),
+      installModel: (request) => {
+        const now = new Date().toISOString();
+        state.settings = {
+          ...state.settings,
+          semanticSearchEnabled: true,
+          embeddingModelId: request.modelId,
+          semanticSearchModels: state.settings.semanticSearchModels.map((model) =>
+            model.id === request.modelId
+              ? { ...model, installed: true, installState: "installed", lastError: null, updatedAt: now }
+              : model
+          )
+        };
+        const model = state.settings.semanticSearchModels.find((candidate) => candidate.id === request.modelId);
+
+        if (!model) {
+          throw new Error("Unknown semantic model.");
+        }
+
+        return {
+          model,
+          selectedModelId: state.settings.embeddingModelId,
+          enabled: state.settings.semanticSearchEnabled
+        };
+      },
+      uninstallModel: (request) => {
+        const now = new Date().toISOString();
+        state.settings = {
+          ...state.settings,
+          semanticSearchEnabled: false,
+          embeddingModelId: "hcb-local-hash-384",
+          semanticSearchModels: state.settings.semanticSearchModels.map((model) =>
+            model.id === request.modelId
+              ? { ...model, installed: false, installState: "not-installed", cachePath: null, lastError: null, updatedAt: now }
+              : model
+          )
+        };
+        const model = state.settings.semanticSearchModels.find((candidate) => candidate.id === request.modelId);
+
+        if (!model) {
+          throw new Error("Unknown semantic model.");
+        }
+
+        return {
+          model,
+          selectedModelId: state.settings.embeddingModelId,
+          enabled: state.settings.semanticSearchEnabled
+        };
+      },
+      rebuildIndex: (request) => ({
+        modelId: request.modelId ?? state.settings.embeddingModelId,
+        indexedCount: 0,
+        staleCount: 0
+      })
+    },
     undo: {
       status: () => ({
         canUndo: false,

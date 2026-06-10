@@ -144,6 +144,7 @@ export function AdvancedSettingsTab({
   const [portableArchivePath, setPortableArchivePath] = useState("");
   const [portableImportPreview, setPortableImportPreview] = useState<PortableImportPreview | null>(null);
   const [portableStatus, setPortableStatus] = useState<string | null>(null);
+  const [semanticStatus, setSemanticStatus] = useState<string | null>(null);
   const [localPointers, setLocalPointers] = useState<LocalPointerListResponse | null>(null);
   const [pointerReplacementPath, setPointerReplacementPath] = useState("");
   const autoTagAutoDisableRequestRef = useRef<string | null>(null);
@@ -300,6 +301,59 @@ export function AdvancedSettingsTab({
     }
 
     updateSettings({ pinnedSavedSearchViewIds: [...pinned].slice(0, 20) });
+  }
+
+  async function installSemanticModel(modelId: string): Promise<void> {
+    setSemanticStatus("Installing model...");
+    const result = await window.hcb?.search.installModel({ modelId });
+
+    if (!result?.ok) {
+      setSemanticStatus(result?.error.message ?? "Model install failed.");
+      return;
+    }
+
+    updateSettings({
+      embeddingModelId: result.data.selectedModelId,
+      semanticSearchEnabled: result.data.enabled,
+      semanticSearchModels: settings.semanticSearchModels.map((model) =>
+        model.id === result.data.model.id ? result.data.model : model
+      )
+    });
+    setSemanticStatus(`${result.data.model.label} installed.`);
+  }
+
+  async function uninstallSemanticModel(modelId: string): Promise<void> {
+    setSemanticStatus("Uninstalling model...");
+    const result = await window.hcb?.search.uninstallModel({ modelId });
+
+    if (!result?.ok) {
+      setSemanticStatus(result?.error.message ?? "Model uninstall failed.");
+      return;
+    }
+
+    updateSettings({
+      embeddingModelId: result.data.selectedModelId,
+      semanticSearchEnabled: result.data.enabled,
+      semanticSearchModels: settings.semanticSearchModels.map((model) =>
+        model.id === result.data.model.id ? result.data.model : model
+      )
+    });
+    setSemanticStatus(`${result.data.model.label} uninstalled.`);
+  }
+
+  async function rebuildSemanticIndex(): Promise<void> {
+    setSemanticStatus("Rebuilding index...");
+    const result = await window.hcb?.search.rebuildIndex({ modelId: settings.embeddingModelId });
+
+    if (!result?.ok) {
+      setSemanticStatus(result?.error.message ?? "Index rebuild failed.");
+      return;
+    }
+
+    setSemanticStatus(
+      result.data.unavailableReason ??
+        `Indexed ${result.data.indexedCount} entities; ${result.data.staleCount} stale.`
+    );
   }
 
   async function addTag(): Promise<void> {
@@ -728,6 +782,56 @@ export function AdvancedSettingsTab({
             <option value="hybrid">Hybrid</option>
           </select>
         </SettingsControlRow>
+        <SettingsControlRow
+          description="Models stay local. Semantic search can be disabled entirely."
+          label="Local model"
+        >
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <select
+              aria-label="Embedding model"
+              className={settingsSelectClass}
+              onChange={(event) => updateSettings({ embeddingModelId: event.currentTarget.value })}
+              value={settings.embeddingModelId}
+            >
+              {settings.semanticSearchModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label} {model.installed ? "installed" : "not installed"}
+                </option>
+              ))}
+            </select>
+            <Button onClick={() => void rebuildSemanticIndex()} size="sm" variant="secondary">
+              <RotateCcw aria-hidden="true" size={14} />
+              Rebuild
+            </Button>
+          </div>
+        </SettingsControlRow>
+        {settings.semanticSearchModels.map((model) => (
+          <SettingsControlRow
+            description={`${model.provider}; ${model.dimensions}d${model.lastError ? `; ${model.lastError}` : ""}`}
+            key={model.id}
+            label={model.label}
+          >
+            <div className="flex flex-wrap gap-2">
+              <Badge tone={model.installed ? "success" : "neutral"}>{model.installState}</Badge>
+              {model.installed && model.id !== "hcb-local-hash-384" ? (
+                <Button onClick={() => void uninstallSemanticModel(model.id)} size="sm" variant="secondary">
+                  <Trash2 aria-hidden="true" size={14} />
+                  Uninstall
+                </Button>
+              ) : !model.installed ? (
+                <Button onClick={() => void installSemanticModel(model.id)} size="sm" variant="secondary">
+                  <FileDown aria-hidden="true" size={14} />
+                  Install
+                </Button>
+              ) : null}
+            </div>
+          </SettingsControlRow>
+        ))}
+        {semanticStatus ? (
+          <div className="rounded-hcbMd border border-border bg-surface-0 px-3 py-2 text-[var(--text-sm)] text-text-secondary">
+            {semanticStatus}
+          </div>
+        ) : null}
         <SettingsSwitch
           checked={settings.agentActionTrayEnabled}
           icon={Layers3}

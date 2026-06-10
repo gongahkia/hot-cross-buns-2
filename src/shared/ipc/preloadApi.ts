@@ -82,6 +82,11 @@ import type {
   PortableImportResponse,
   SearchQueryRequest,
   SearchQueryResponse,
+  SearchIndexRebuildRequest,
+  SearchIndexRebuildResponse,
+  SearchModelListResponse,
+  SearchModelMutationRequest,
+  SearchModelMutationResponse,
   ScheduledTaskBlockCreateRequest,
   ScheduledTaskBlockListRequest,
   ScheduledTaskBlockListResponse,
@@ -207,6 +212,10 @@ export interface HcbApi {
   };
   search: {
     query: (request: SearchQueryRequest) => Promise<HcbResult<SearchQueryResponse>>;
+    listModels: () => Promise<HcbResult<SearchModelListResponse>>;
+    installModel: (request: SearchModelMutationRequest) => Promise<HcbResult<SearchModelMutationResponse>>;
+    uninstallModel: (request: SearchModelMutationRequest) => Promise<HcbResult<SearchModelMutationResponse>>;
+    rebuildIndex: (request?: SearchIndexRebuildRequest) => Promise<HcbResult<SearchIndexRebuildResponse>>;
   };
   tags: {
     list: (request?: TagListRequest) => Promise<HcbResult<TagListResponse>>;

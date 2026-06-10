@@ -24,6 +24,7 @@ import {
 } from "./sqliteMcpControlService";
 import { createSqliteNativeDomainService } from "./sqliteNativeDomainService";
 import { createSqlitePlannerDomainService } from "./sqlitePlannerDomainService";
+import { createSqliteSearchModelDomainService } from "./sqliteSearchModelDomainService";
 import { createSqliteSettingsDomainService } from "./sqliteSettingsDomainService";
 import { createSqliteUndoDomainService } from "./sqliteUndoDomainService";
 import { createSqliteWebhookDomainService } from "./sqliteWebhookDomainService";
@@ -83,6 +84,10 @@ export function createSqliteDomainServices(
       sync,
       syncRepository: options.syncRepository
     }),
+    searchModels: createSqliteSearchModelDomainService(
+      options.plannerRepository,
+      options.settingsRepository
+    ),
     undo,
     mcp: createSqliteMcpControlService({
       mcpState,

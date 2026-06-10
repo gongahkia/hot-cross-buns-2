@@ -38,6 +38,8 @@ import {
   type PortableArchivePathRequest,
   type PortableImportRequest,
   type SearchQueryRequest,
+  type SearchIndexRebuildRequest,
+  type SearchModelMutationRequest,
   type ScheduledTaskBlockCreateRequest,
   type ScheduledTaskBlockListRequest,
   type ScheduledTaskBlockMoveRequest,
@@ -375,6 +377,22 @@ export function createCoreIpcHandlers(
     {
       contract: ipcContracts.search.query,
       handle: (request) => services.planner.search(request as SearchQueryRequest)
+    },
+    {
+      contract: ipcContracts.search.listModels,
+      handle: () => services.searchModels.listModels()
+    },
+    {
+      contract: ipcContracts.search.installModel,
+      handle: (request) => services.searchModels.installModel(request as SearchModelMutationRequest)
+    },
+    {
+      contract: ipcContracts.search.uninstallModel,
+      handle: (request) => services.searchModels.uninstallModel(request as SearchModelMutationRequest)
+    },
+    {
+      contract: ipcContracts.search.rebuildIndex,
+      handle: (request) => services.searchModels.rebuildIndex(request as SearchIndexRebuildRequest)
     },
     {
       contract: ipcContracts.agent.listActions,

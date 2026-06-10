@@ -274,7 +274,15 @@ export function createHcbApi(ipc: IpcBridge): HcbApi {
     },
     search: {
       query: (request) =>
-        invokeContract(ipc, ipcContracts.search.query, request, "Search request failed")
+        invokeContract(ipc, ipcContracts.search.query, request, "Search request failed"),
+      listModels: () =>
+        invokeContract(ipc, ipcContracts.search.listModels, {}, "Semantic model list request failed"),
+      installModel: (request) =>
+        invokeContract(ipc, ipcContracts.search.installModel, request, "Semantic model install failed"),
+      uninstallModel: (request) =>
+        invokeContract(ipc, ipcContracts.search.uninstallModel, request, "Semantic model uninstall failed"),
+      rebuildIndex: (request = {}) =>
+        invokeContract(ipc, ipcContracts.search.rebuildIndex, request, "Semantic index rebuild failed")
     },
     tags: {
       list: (request = {}) =>
