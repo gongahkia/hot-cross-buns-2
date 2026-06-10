@@ -1012,7 +1012,35 @@ export function seededHcb(): HcbApi {
           items,
           page: { limit: 30, totalKnown: items.length }
         });
-      })
+      }),
+      listModels: vi.fn(async () =>
+        ok({
+          models: defaultSemanticSearchModels,
+          selectedModelId: "Xenova/all-MiniLM-L6-v2",
+          enabled: false
+        })
+      ),
+      installModel: vi.fn(async (request) =>
+        ok({
+          model: { ...defaultSemanticSearchModels[0], id: request.modelId, installed: true, installState: "installed" as const, updatedAt: now },
+          selectedModelId: request.modelId,
+          enabled: true
+        })
+      ),
+      uninstallModel: vi.fn(async (request) =>
+        ok({
+          model: { ...defaultSemanticSearchModels[0], id: request.modelId, installed: false, installState: "not-installed" as const, updatedAt: now },
+          selectedModelId: "hcb-local-hash-384",
+          enabled: false
+        })
+      ),
+      rebuildIndex: vi.fn(async (request = {}) =>
+        ok({
+          modelId: request.modelId ?? "Xenova/all-MiniLM-L6-v2",
+          indexedCount: 0,
+          staleCount: 0
+        })
+      )
     },
     sync: {
       ...api.sync,
