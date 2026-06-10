@@ -812,6 +812,39 @@ export function AppShell(): JSX.Element {
         return;
       }
 
+      if (leaderActive) {
+        event.preventDefault();
+
+        if (event.key === "Escape") {
+          setLeaderActive(false);
+          return;
+        }
+
+        const entry = leaderEntries.find((candidate) =>
+          !candidate.conflict && eventMatchesAccelerator(event, candidate.accelerator)
+        );
+
+        setLeaderActive(false);
+
+        if (entry) {
+          runHotkeyAction(entry.id);
+        }
+
+        return;
+      }
+
+      if (eventMatchesAccelerator(event, source.settings.leaderKey)) {
+        event.preventDefault();
+        setLeaderActive(true);
+
+        if (leaderTimerRef.current) {
+          clearTimeout(leaderTimerRef.current);
+        }
+
+        leaderTimerRef.current = setTimeout(() => setLeaderActive(false), 3200);
+        return;
+      }
+
       for (const [actionId, accelerator] of Object.entries(source.settings.keybindings) as Array<
         [keyof SettingsSnapshot["keybindings"], string | null]
       >) {
@@ -833,10 +866,18 @@ export function AppShell(): JSX.Element {
     }
 
     window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+      if (leaderTimerRef.current) {
+        clearTimeout(leaderTimerRef.current);
+      }
+    };
   }, [
+    leaderActive,
+    leaderEntries,
     runHotkeyAction,
-    source.settings.keybindings
+    source.settings.keybindings,
+    source.settings.leaderKey
   ]);
 
   useEffect(() => {
