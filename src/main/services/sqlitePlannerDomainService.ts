@@ -572,6 +572,9 @@ export function createSqlitePlannerDomainService(
     search: (request) => {
       const settings = settingsRepository?.get();
       const mode = request.mode ?? settings?.semanticSearchMode ?? "lexical";
+      const modelId = settings?.embeddingModelId ?? "hcb-local-hash-384";
+      const semanticInstalled =
+        settings?.semanticSearchModels.find((model) => model.id === modelId)?.installed ?? modelId === "hcb-local-hash-384";
 
       if ((mode === "semantic" || mode === "hybrid") && settings?.semanticSearchEnabled !== true) {
         const lexical = repository.search({ ...request, mode: "lexical" });
@@ -582,13 +585,13 @@ export function createSqlitePlannerDomainService(
             semanticEnabled: false,
             indexedCount: 0,
             staleCount: 0,
-            modelId: settings?.embeddingModelId ?? "hcb-local-hash-384",
+            modelId,
             fallbackReason: "semantic-disabled" as const
           }
         };
       }
 
-      return repository.search({ ...request, mode });
+      return repository.search({ ...request, mode, embeddingModelId: modelId, semanticInstalled });
     },
     cleanupDuplicates: (request) => {
       const cleanupGroupId = `duplicates:${request.kind}:${request.winnerId}:${Date.now()}`;
