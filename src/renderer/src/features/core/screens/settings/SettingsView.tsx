@@ -537,7 +537,7 @@ export function SettingsView({
   }
 
   function beginRecoveryAction(action: SettingsRecoveryActionRequest["action"]): void {
-    if (action === "refresh" || action === "resetOnboarding") {
+    if (action === "refresh" || action === "resetOnboarding" || action === "checkForUpdates") {
       void runRecovery({ action });
       return;
     }
@@ -863,6 +863,7 @@ export function SettingsView({
           <AboutSettingsTab
             beginRecoveryAction={beginRecoveryAction}
             diagnostics={diagnostics}
+            nativeUpdaterStatus={source.native.updaterStatus}
             settings={settings}
             updateSettings={updateSettings}
           />

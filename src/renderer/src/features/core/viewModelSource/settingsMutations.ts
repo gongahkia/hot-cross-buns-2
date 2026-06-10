@@ -83,6 +83,18 @@ export function useSettingsMutations({
       const result = await window.hcb.settings.recoveryAction(request);
 
       if (result.ok) {
+        const [settingsResult, nativeResult] = await Promise.all([
+          window.hcb.settings.get(),
+          window.hcb.native.capabilities()
+        ]);
+        setLoadState((current) => ({
+          ...current,
+          snapshot: {
+            ...current.snapshot,
+            ...(settingsResult.ok ? { settings: settingsResult.data } : {}),
+            ...(nativeResult.ok ? { native: nativeResult.data } : {})
+          }
+        }));
         setSettingsMutation({ pending: false });
         refreshSyncStatus();
         refreshDiagnosticsSummary();
@@ -102,7 +114,7 @@ export function useSettingsMutations({
       });
       return null;
     },
-    [load, refreshDiagnosticsSummary, refreshSyncStatus]
+    [load, refreshDiagnosticsSummary, refreshSyncStatus, setLoadState]
   );
 
   return {

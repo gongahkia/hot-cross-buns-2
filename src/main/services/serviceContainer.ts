@@ -246,6 +246,14 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
           syncScheduler?.triggerSoon(0);
         }
 
+        if (request.action === "checkForUpdates") {
+          const updaterStatus = await nativeShell.checkForUpdates();
+          return {
+            ...response,
+            message: updaterStatus.message ?? response.message
+          };
+        }
+
         return response;
       },
       exportPortableArchive: () => sqliteDomain.settings.exportPortableArchive(),

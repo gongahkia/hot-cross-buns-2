@@ -1,15 +1,17 @@
 import type {
   DiagnosticsSummaryResponse,
+  NativeUpdaterStatus,
   SettingsRecoveryActionRequest,
   SettingsSnapshot
 } from "@shared/ipc/contracts";
-import { Copy, Download, Info } from "lucide-react";
-import { Button } from "../../../../components/primitives";
+import { Copy, Download, ExternalLink, Info } from "lucide-react";
+import { Badge, Button } from "../../../../components/primitives";
 import { SettingsControlRow, SettingsGroup, SettingsSwitch } from "./SettingsPrimitives";
 
 interface AboutSettingsTabProps {
   beginRecoveryAction: (action: SettingsRecoveryActionRequest["action"]) => void;
   diagnostics?: DiagnosticsSummaryResponse;
+  nativeUpdaterStatus: NativeUpdaterStatus;
   settings: SettingsSnapshot;
   updateSettings: (request: { lastUpdateCheckAt?: string | null }) => void;
 }
@@ -17,6 +19,7 @@ interface AboutSettingsTabProps {
 export function AboutSettingsTab({
   beginRecoveryAction,
   diagnostics,
+  nativeUpdaterStatus,
   settings,
   updateSettings
 }: AboutSettingsTabProps): JSX.Element {
@@ -33,6 +36,10 @@ export function AboutSettingsTab({
 
   function copyVersionInfo(): void {
     void navigator.clipboard?.writeText(versionInfo);
+  }
+
+  function openExternalUrl(url: string): void {
+    void window.hcb?.native.openExternalUrl({ url });
   }
 
   return (
@@ -55,9 +62,42 @@ export function AboutSettingsTab({
             Check for Updates Now
           </Button>
         </SettingsControlRow>
+        <SettingsControlRow label="Update status">
+          <span className="flex flex-wrap items-center justify-end gap-2 text-[var(--text-sm)] text-text-muted">
+            <Badge tone={nativeUpdaterStatus.updateAvailable ? "warning" : nativeUpdaterStatus.state === "error" ? "danger" : "success"}>
+              {nativeUpdaterStatus.updateAvailable ? "Update available" : nativeUpdaterStatus.state}
+            </Badge>
+            {nativeUpdaterStatus.message ?? "No update status reported"}
+          </span>
+        </SettingsControlRow>
+        {nativeUpdaterStatus.latestVersion ? (
+          <SettingsControlRow label="Latest release">
+            <span className="text-[var(--text-sm)] text-text-muted">
+              {nativeUpdaterStatus.releaseName ?? nativeUpdaterStatus.latestVersion}
+            </span>
+          </SettingsControlRow>
+        ) : null}
+        {nativeUpdaterStatus.releaseUrl || nativeUpdaterStatus.downloadUrl ? (
+          <SettingsControlRow label="Release actions">
+            <div className="flex flex-wrap justify-end gap-2">
+              {nativeUpdaterStatus.releaseUrl ? (
+                <Button onClick={() => openExternalUrl(nativeUpdaterStatus.releaseUrl as string)} size="sm" variant="secondary">
+                  <ExternalLink aria-hidden="true" size={14} />
+                  Open release
+                </Button>
+              ) : null}
+              {nativeUpdaterStatus.downloadUrl ? (
+                <Button onClick={() => openExternalUrl(nativeUpdaterStatus.downloadUrl as string)} size="sm" variant="secondary">
+                  <Download aria-hidden="true" size={14} />
+                  Open download
+                </Button>
+              ) : null}
+            </div>
+          </SettingsControlRow>
+        ) : null}
         <SettingsControlRow label="Last checked">
           <span className="text-[var(--text-sm)] text-text-muted">
-            {settings.lastUpdateCheckAt ?? "Never"}
+            {nativeUpdaterStatus.checkedAt ?? settings.lastUpdateCheckAt ?? "Never"}
           </span>
         </SettingsControlRow>
       </SettingsGroup>

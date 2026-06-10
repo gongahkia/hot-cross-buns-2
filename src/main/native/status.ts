@@ -78,7 +78,13 @@ export function statusFromResult(
     state: result.ok ? successState : result.state ?? "error",
     message: sanitizedNativeMessage(
       result.message ?? (result.ok ? successMessage : "Native adapter operation failed.")
-    )
+    ),
+    ...(result.checkedAt ? { checkedAt: result.checkedAt } : {}),
+    ...(result.downloadUrl ? { downloadUrl: result.downloadUrl } : {}),
+    ...(result.latestVersion ? { latestVersion: result.latestVersion } : {}),
+    ...(result.releaseName ? { releaseName: result.releaseName } : {}),
+    ...(result.releaseUrl ? { releaseUrl: result.releaseUrl } : {}),
+    ...(result.updateAvailable !== undefined ? { updateAvailable: result.updateAvailable } : {})
   };
 }
 

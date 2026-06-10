@@ -16,8 +16,14 @@ export const HCB_DEEP_LINK_SCHEME = "hotcrossbuns";
 
 export interface NativeOperationResult {
   ok: boolean;
+  checkedAt?: string;
+  downloadUrl?: string;
+  latestVersion?: string;
+  releaseName?: string;
+  releaseUrl?: string;
   state?: NativeFeatureState;
   message?: string;
+  updateAvailable?: boolean;
 }
 
 export interface NativeAppPaths {

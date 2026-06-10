@@ -158,6 +158,24 @@ export class NativeShellService implements NativeDomainService {
     return permission;
   }
 
+  async checkForUpdates(): Promise<NativeCapabilitiesResponse["updaterStatus"]> {
+    const result = this.options.adapter.checkForUpdates();
+    const resolved = isPromise(result) ? await result : result;
+    this.applyUpdateStatus(resolved);
+    return structuredClone(this.status.updaterStatus);
+  }
+
+  async openExternalUrl(request: { url: string }): Promise<NativeCapabilitiesResponse["updaterStatus"]> {
+    const result = this.options.adapter.openExternalUrl(request.url);
+    const resolved = isPromise(result) ? await result : result;
+
+    return statusFromResult(
+      resolved,
+      "ready",
+      "External URL was opened by the operating system."
+    );
+  }
+
   rescheduleNotificationsForDiagnostics(): NativeCapabilitiesResponse["notificationsStatus"] {
     this.scheduleNotificationsFromCache();
 
@@ -380,18 +398,6 @@ export class NativeShellService implements NativeDomainService {
       account: this.options.account?.latest() ?? null,
       now: this.now()
     });
-  }
-
-  private checkForUpdates(): void | Promise<void> {
-    const result = this.options.adapter.checkForUpdates();
-
-    if (isPromise(result)) {
-      return result.then((resolved) => {
-        this.applyUpdateStatus(resolved);
-      });
-    }
-
-    this.applyUpdateStatus(result);
   }
 
   private applyUpdateStatus(result: NativeOperationResult): void {

@@ -99,7 +99,7 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
     return autostartStatus();
   }
 
-  checkForUpdates(): NativeOperationResult {
+  checkForUpdates(): Promise<NativeOperationResult> {
     return checkForUpdates();
   }
 
