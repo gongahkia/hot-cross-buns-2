@@ -125,6 +125,20 @@ export function AppShell(): JSX.Element {
     () => new Set(source.calendarSources.map((calendar) => calendar.id)),
     [source.calendarSources]
   );
+  const leaderConflictActionIds = useMemo(() => {
+    const duplicates = duplicateAccelerators(source.settings.leaderKeybindings);
+    return new Set([...duplicates.values()].flat());
+  }, [source.settings.leaderKeybindings]);
+  const leaderEntries = useMemo(
+    () => hotkeyDefinitions
+      .map((definition) => ({
+        ...definition,
+        accelerator: source.settings.leaderKeybindings[definition.id] ?? null,
+        conflict: leaderConflictActionIds.has(definition.id)
+      }))
+      .filter((entry) => entry.accelerator),
+    [leaderConflictActionIds, source.settings.leaderKeybindings]
+  );
   const visibleCalendarIdSet = useMemo(
     () => new Set(visibleCalendarIds.filter((calendarId) => availableCalendarIds.has(calendarId))),
     [availableCalendarIds, visibleCalendarIds]
