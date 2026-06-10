@@ -1494,8 +1494,9 @@ describe("App calendar", () => {
 
     const inspector = await screen.findByTestId("inspector-shell");
     const inspectorBody = within(inspector).getByTestId("inspector-body");
+    const recurrenceSummary = `Every 2 months on day ${new Date(`${todayDate}T00:00:00.000Z`).getUTCDate()}, 4 times`;
     expect(inspector).toHaveAttribute("data-inspector-kind", "event");
-    expect(within(inspectorBody).getByText("Every 2 months on day 9, 4 times")).toBeInTheDocument();
+    expect(within(inspectorBody).getByText(recurrenceSummary)).toBeInTheDocument();
     expect(within(inspectorBody).getByText("Popup 7 hr 0 min before")).toBeInTheDocument();
     expect(screen.queryByLabelText("Event repeat frequency")).not.toBeInTheDocument();
     await user.click(
@@ -1505,7 +1506,7 @@ describe("App calendar", () => {
     expect(screen.getByLabelText("Repeat unit")).toHaveValue("monthly");
     expect(screen.getByLabelText("Repeat interval")).toHaveValue(2);
     expect(screen.getByLabelText("Repeat count")).toHaveValue(4);
-    expect(screen.getByText("Every 2 months on day 9, 4 times")).toBeInTheDocument();
+    expect(screen.getByText(recurrenceSummary)).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Event repeat frequency"), "none");
     expect(screen.queryByLabelText("Repeat interval")).not.toBeInTheDocument();

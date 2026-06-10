@@ -11,6 +11,7 @@ const nodeBuiltins = new Set([
 const forbiddenAliases = ["@main/", "@preload/"];
 const allowedSharedContracts = [
   "@shared/ipc",
+  "@shared/plannerLinks",
   "@shared/preloadApi",
   "@shared/result",
   "@shared/search"

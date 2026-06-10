@@ -93,30 +93,17 @@ Status key:
 
 ## 4. Linked markdown and knowledge graph
 
-- Status: `Partial`; task-backed note link parsing/broken-link tests exist, universal entity graph/backlinks are still missing.
-- Add shared wikilink parser for every markdown surface:
-  - `[[note:...]]`
-  - `[[task:...]]`
-  - `[[event:...]]`
-  - list/calendar links
-  - aliases where needed
-- Render clickable wikilinks in note bodies, task notes, event descriptions, and list metadata.
-- Add read-only transclusion/live embeds:
-  - `![[note:...]]`
-  - `![[task:#id]]`
-  - event/list/calendar embeds if useful
-  - cycle and depth limits
-  - loading/error/broken-target states
-- Add universal entity-link graph:
-  - `src_kind`
-  - `src_id`
-  - `dst_kind`
-  - `dst_id`
-  - `link_type`
-  - source field/surface metadata where useful
-- Re-index links after note/task/event/list/calendar edits and Google read sync.
-- Expose graph-backed backlinks and outgoing links for every primitive.
-- Make broken links visible and repairable for every primitive, not just notes.
+- Status: `Mostly implemented`.
+- Done:
+  - shared wikilink parser for note/task/event/list/calendar links, aliases, and `#id` targets
+  - clickable wikilinks in note bodies, task notes, and event descriptions
+  - read-only transclusion embeds with broken-target and depth-limit states
+  - universal entity-link graph table with source/target kind/id, source field, link type, alias, raw text, and broken state
+  - graph-backed outgoing links, backlinks, and broken-link visibility for note/task/event/list/calendar entities
+  - focused parser/index/renderer/regression tests
+- Still open:
+  - broken-link repair UI beyond note bodies
+  - live/manual QA after Google sync edits on large real datasets
 
 ## 5. Search, filters, and command surfaces
 

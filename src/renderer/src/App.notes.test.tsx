@@ -176,6 +176,7 @@ describe("App notes", () => {
     await goToSection("Notes");
     await user.click(await screen.findByText("Startup data flow"));
     await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Duplicate" }));
+    expect(await screen.findByRole("textbox", { name: "Note title" })).toHaveValue("Startup data flow (copy)");
     await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Task queue is unavailable.");
@@ -239,8 +240,8 @@ describe("App notes", () => {
     expect(within(preview).getByText("Plan")).toBeInTheDocument();
     expect(within(preview).getByRole("checkbox")).toBeChecked();
     expect(preview).toHaveTextContent("Kickoff");
-    expect(preview).toHaveTextContent("See [[Daily note]]");
-    const dailyLink = screen.getByRole("button", { name: "Open linked note Daily note" });
+    expect(preview).toHaveTextContent("See Daily note");
+    const dailyLink = within(preview).getByRole("button", { name: "Daily note" });
 
     dailyLink.focus();
     await user.keyboard("{Enter}");
