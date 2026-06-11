@@ -488,6 +488,10 @@ code, kbd {
   .keys-intro { grid-template-columns: 1.05fr 1fr; gap: 72px; }
 }
 .keys-shot { margin: 0; }
+.keys-copy {
+  margin-bottom: 0;
+  max-width: 46ch;
+}
 .section-head.end {
   text-align: right;
   margin-left: auto;
@@ -609,9 +613,6 @@ kbd {
 
 .webviews {
   border-top: 1px solid color-mix(in srgb, var(--surface0) 55%, transparent);
-}
-.webviews-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, .86fr);
 }
 
 /* reviews */
