@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   calendarEventColorForTheme,
   googleCalendarEventColors,
@@ -12,8 +12,8 @@ import type {
   ColorThemeDefinition
 } from "@shared/ipc/themeCatalog";
 import { customBackgroundThemeId } from "@shared/ipc/themeCatalog";
-import { ArrowDown, ArrowUp, Image, PanelLeft, PanelRight, RotateCcw, Trash2 } from "lucide-react";
-import { Button, Input } from "../../../../components/primitives";
+import { ArrowDown, ArrowUp, PanelLeft, PanelRight, RotateCcw } from "lucide-react";
+import { Button, Input, cx } from "../../../../components/primitives";
 import { useI18n } from "../../../../i18n";
 import { customBackgroundFromFile } from "./backgroundTheme";
 import {
@@ -40,6 +40,17 @@ type PerSurfaceFontOverride = NonNullable<
 type CalendarEventColorOverride = NonNullable<
   SettingsSnapshot["calendarEventColorOverrides"][GoogleCalendarEventColorId]
 >;
+type CropAspect = "16:10" | "16:9" | "4:3";
+type PendingBackground = {
+  file: File;
+  url: string;
+};
+
+const cropAspects: Array<{ label: string; value: CropAspect }> = [
+  { label: "16:10", value: "16:10" },
+  { label: "16:9", value: "16:9" },
+  { label: "4:3", value: "4:3" }
+];
 
 interface AppearanceSettingsTabProps {
   activeColorTheme: ColorThemeDefinition;
@@ -60,7 +71,22 @@ export function AppearanceSettingsTab({
 }: AppearanceSettingsTabProps): JSX.Element {
   const { t } = useI18n();
   const [customBackgroundMessage, setCustomBackgroundMessage] = useState<string | null>(null);
+  const [pendingBackground, setPendingBackground] = useState<PendingBackground | null>(null);
+  const [cropAspect, setCropAspect] = useState<CropAspect>("16:10");
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropX, setCropX] = useState(50);
+  const [cropY, setCropY] = useState(50);
   const inferredThemeActive = activeColorTheme.id === customBackgroundThemeId;
+  const customBackgroundPreviewUrl = customBackgroundPreview(settings);
+  const cropAspectValue = useMemo(() => cropAspectNumber(cropAspect), [cropAspect]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingBackground) {
+        URL.revokeObjectURL(pendingBackground.url);
+      }
+    };
+  }, [pendingBackground]);
 
   function updateNavigationTab(tabId: NavigationTabId, visible: boolean): void {
     const hidden = new Set(settings.hiddenNavigationTabs);
@@ -179,9 +205,49 @@ export function AppearanceSettingsTab({
         customBackground,
         useInferredBackgroundTheme: true
       });
+      setPendingBackground(null);
       setCustomBackgroundMessage("Background applied.");
     } catch (error) {
       setCustomBackgroundMessage(error instanceof Error ? error.message : "Background import failed.");
+    }
+  }
+
+  function previewCustomBackground(file: File | null): void {
+    if (!file) {
+      return;
+    }
+
+    setPendingBackground({ file, url: URL.createObjectURL(file) });
+    setCropAspect("16:10");
+    setCropZoom(1);
+    setCropX(50);
+    setCropY(50);
+    setCustomBackgroundMessage("Preview ready.");
+  }
+
+  async function applyCroppedCustomBackground(): Promise<void> {
+    if (!pendingBackground) {
+      return;
+    }
+
+    setCustomBackgroundMessage("Cropping background.");
+
+    try {
+      const blob = await cropImageToBlob({
+        aspectRatio: cropAspectValue,
+        mimeType: pendingBackground.file.type || "image/png",
+        positionX: cropX,
+        positionY: cropY,
+        url: pendingBackground.url,
+        zoom: cropZoom
+      });
+      const file = new File([blob], croppedBackgroundFileName(pendingBackground.file.name, blob.type), {
+        type: blob.type
+      });
+
+      await selectCustomBackground(file);
+    } catch (error) {
+      setCustomBackgroundMessage(error instanceof Error ? error.message : "Background crop failed.");
     }
   }
 
@@ -195,14 +261,6 @@ export function AppearanceSettingsTab({
       colorTheme: value as AppColorThemeId,
       ...(settings.customBackground ? { useInferredBackgroundTheme: false } : {})
     });
-  }
-
-  function customBackgroundPreview(): string | null {
-    if (!settings.customBackground) {
-      return null;
-    }
-
-    return `data:${settings.customBackground.mimeType};base64,${settings.customBackground.dataBase64}`;
   }
 
   return (
@@ -245,25 +303,28 @@ export function AppearanceSettingsTab({
         </SettingsControlRow>
         <SettingsControlRow
           description="Use a local image as the app backdrop and infer the palette from its pixels."
-          icon={Image}
           label="Custom background"
         >
-          <div className="grid min-w-0 gap-2 sm:min-w-[24rem]">
+          <div className="grid min-w-0 gap-3 sm:min-w-[28rem]">
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              {customBackgroundPreview() ? (
-                <img
-                  alt="Custom background preview"
-                  className="h-12 w-20 rounded-hcbSm border border-border object-cover"
-                  src={customBackgroundPreview() ?? undefined}
+              <label
+                className={cx(
+                  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-hcbMd border border-border bg-surface-0 px-3 text-[var(--text-base)] font-medium leading-none text-text-primary transition-colors duration-fast ease-hcb hover:bg-surface-1",
+                  "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"
+                )}
+              >
+                Choose Image...
+                <input
+                  accept="image/png,image/jpeg,image/webp"
+                  aria-label="Custom background image"
+                  className="sr-only"
+                  onChange={(event) => previewCustomBackground(event.currentTarget.files?.[0] ?? null)}
+                  type="file"
                 />
-              ) : null}
-              <Input
-                accept="image/png,image/jpeg,image/webp"
-                aria-label="Custom background image"
-                className="max-w-60"
-                onChange={(event) => void selectCustomBackground(event.currentTarget.files?.[0] ?? null)}
-                type="file"
-              />
+              </label>
+              <span className="min-w-0 max-w-48 truncate text-[var(--text-sm)] text-text-muted">
+                {pendingBackground?.file.name ?? settings.customBackground?.fileName ?? "No image selected"}
+              </span>
               <Button
                 disabled={!settings.customBackground}
                 onClick={() => {
@@ -272,10 +333,94 @@ export function AppearanceSettingsTab({
                 }}
                 variant="secondary"
               >
-                <Trash2 aria-hidden="true" size={14} />
                 Clear
               </Button>
             </div>
+            {pendingBackground ? (
+              <div className="grid gap-3 rounded-hcbMd border border-border bg-surface-0 p-2">
+                <div
+                  className="relative w-full overflow-hidden rounded-hcbSm border border-border bg-bg-secondary"
+                  style={{ aspectRatio: cropAspectValue }}
+                >
+                  <img
+                    alt="Selected background crop preview"
+                    className="h-full w-full object-cover"
+                    src={pendingBackground.url}
+                    style={{
+                      transform: `scale(${cropZoom})`,
+                      transformOrigin: `${cropX}% ${cropY}%`
+                    }}
+                  />
+                </div>
+                <div className="grid gap-2 text-[var(--text-xs)] text-text-muted sm:grid-cols-3">
+                  <label className="grid gap-1">
+                    <span>Zoom</span>
+                    <input
+                      aria-label="Crop zoom"
+                      className="accent-[var(--color-accent)]"
+                      max={3}
+                      min={1}
+                      onChange={(event) => setCropZoom(Number(event.currentTarget.value))}
+                      step={0.05}
+                      type="range"
+                      value={cropZoom}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span>Horizontal</span>
+                    <input
+                      aria-label="Crop horizontal position"
+                      className="accent-[var(--color-accent)]"
+                      max={100}
+                      min={0}
+                      onChange={(event) => setCropX(Number(event.currentTarget.value))}
+                      step={1}
+                      type="range"
+                      value={cropX}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span>Vertical</span>
+                    <input
+                      aria-label="Crop vertical position"
+                      className="accent-[var(--color-accent)]"
+                      max={100}
+                      min={0}
+                      onChange={(event) => setCropY(Number(event.currentTarget.value))}
+                      step={1}
+                      type="range"
+                      value={cropY}
+                    />
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <select
+                    aria-label="Crop rectangle"
+                    className={settingsSelectClass}
+                    onChange={(event) => setCropAspect(event.currentTarget.value as CropAspect)}
+                    value={cropAspect}
+                  >
+                    {cropAspects.map((aspect) => (
+                      <option key={aspect.value} value={aspect.value}>{aspect.label}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <Button onClick={() => void selectCustomBackground(pendingBackground.file)} variant="ghost">
+                      Use full image
+                    </Button>
+                    <Button onClick={() => void applyCroppedCustomBackground()} variant="primary">
+                      Apply crop
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : customBackgroundPreviewUrl ? (
+              <img
+                alt="Custom background preview"
+                className="h-24 w-full rounded-hcbSm border border-border object-cover"
+                src={customBackgroundPreviewUrl}
+              />
+            ) : null}
             {settings.customBackground ? (
               <div className="flex flex-wrap justify-end gap-1">
                 {[
@@ -670,6 +815,91 @@ function moveItem<T>(items: readonly T[], item: T, direction: -1 | 1): T[] {
 
   [next[index], next[target]] = [next[target], next[index]];
   return next;
+}
+
+function customBackgroundPreview(settings: SettingsSnapshot): string | null {
+  if (!settings.customBackground) {
+    return null;
+  }
+
+  return `data:${settings.customBackground.mimeType};base64,${settings.customBackground.dataBase64}`;
+}
+
+function cropAspectNumber(aspect: CropAspect): number {
+  if (aspect === "16:9") {
+    return 16 / 9;
+  }
+
+  if (aspect === "4:3") {
+    return 4 / 3;
+  }
+
+  return 16 / 10;
+}
+
+function croppedBackgroundFileName(fileName: string, mimeType: string): string {
+  const baseName = fileName.replace(/\.[^.]+$/, "") || "background";
+  const extension = mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : "png";
+
+  return `${baseName}-crop.${extension}`;
+}
+
+async function cropImageToBlob({
+  aspectRatio,
+  mimeType,
+  positionX,
+  positionY,
+  url,
+  zoom
+}: {
+  aspectRatio: number;
+  mimeType: string;
+  positionX: number;
+  positionY: number;
+  url: string;
+  zoom: number;
+}): Promise<Blob> {
+  const image = await loadCropImage(url);
+  const sourceAspect = image.naturalWidth / image.naturalHeight;
+  const baseWidth = sourceAspect > aspectRatio ? image.naturalHeight * aspectRatio : image.naturalWidth;
+  const baseHeight = sourceAspect > aspectRatio ? image.naturalHeight : image.naturalWidth / aspectRatio;
+  const cropWidth = Math.max(1, baseWidth / zoom);
+  const cropHeight = Math.max(1, baseHeight / zoom);
+  const sourceX = ((image.naturalWidth - cropWidth) * positionX) / 100;
+  const sourceY = ((image.naturalHeight - cropHeight) * positionY) / 100;
+  const outputWidth = 1600;
+  const outputHeight = Math.round(outputWidth / aspectRatio);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not crop image.");
+  }
+
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  context.drawImage(image, sourceX, sourceY, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+
+      reject(new Error("Could not export cropped image."));
+    }, ["image/jpeg", "image/png", "image/webp"].includes(mimeType) ? mimeType : "image/png", 0.92);
+  });
+}
+
+function loadCropImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not load image."));
+    image.src = url;
+  });
 }
 
 function navigationLabel(tabId: NavigationTabId, t: ReturnType<typeof useI18n>["t"]): string {

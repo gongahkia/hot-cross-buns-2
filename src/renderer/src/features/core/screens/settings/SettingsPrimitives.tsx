@@ -98,7 +98,7 @@ export function SettingsSearchProvider({
 export function SettingsTabButton({
   active,
   alertCount = 0,
-  icon: Icon,
+  icon: _Icon,
   label,
   onClick
 }: {
@@ -120,7 +120,6 @@ export function SettingsTabButton({
       onClick={onClick}
       type="button"
     >
-      <Icon aria-hidden="true" className="shrink-0" size={16} strokeWidth={2} />
       <span className="truncate">{label}</span>
       {alertCount > 0 ? (
         <span
@@ -169,7 +168,7 @@ export function SettingsGroup({
 export function SettingsControlRow({
   children,
   description,
-  icon: Icon,
+  icon: _Icon,
   label
 }: {
   children?: ReactNode;
@@ -188,9 +187,6 @@ export function SettingsControlRow({
   return (
     <div className="grid min-h-11 gap-2 border-b border-border px-3 py-2 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 items-start gap-2.5">
-        {Icon ? (
-          <Icon aria-hidden="true" className="mt-0.5 shrink-0 text-text-muted" size={16} />
-        ) : null}
         <div className="min-w-0">
           <div className="truncate text-[var(--text-base)] font-medium text-text-primary">{label}</div>
           {description ? (
@@ -248,7 +244,6 @@ export function SegmentedControl({
   return (
     <div className="inline-flex max-w-full overflow-hidden rounded-hcbMd border border-border bg-surface-0 p-1">
       {options.map((option) => {
-        const Icon = option.icon;
         const active = option.value === value;
 
         return (
@@ -262,7 +257,6 @@ export function SegmentedControl({
             onClick={() => onChange(option.value)}
             type="button"
           >
-            {Icon ? <Icon aria-hidden="true" size={14} /> : null}
             {option.label}
           </button>
         );

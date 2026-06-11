@@ -265,7 +265,7 @@ export function GeneralSettingsTab({
             <Button onClick={applyCustomRetention} variant="primary">Apply</Button>
           </div>
         </SettingsControlRow>
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-3">
           <Button onClick={() => beginRecoveryAction("refresh")} variant="secondary">
             <RotateCcw aria-hidden="true" size={14} />
             Refresh

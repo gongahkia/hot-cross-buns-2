@@ -41,7 +41,7 @@ export function Button({
   return (
     <button
       className={cx(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-hcbMd border font-medium transition-colors duration-fast ease-hcb disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        "inline-flex shrink-0 items-center justify-center gap-2 rounded-hcbMd border font-medium leading-none transition-colors duration-fast ease-hcb disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         buttonVariants[variant],
         buttonSizes[size],
         className
