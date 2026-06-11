@@ -607,6 +607,13 @@ kbd {
   max-width: none;
 }
 
+.webviews {
+  border-top: 1px solid color-mix(in srgb, var(--surface0) 55%, transparent);
+}
+.webviews-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, .86fr);
+}
+
 /* reviews */
 .reviews {
   padding: clamp(72px, 10vw, 120px) clamp(20px, 4vw, 56px);
