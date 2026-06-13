@@ -124,6 +124,96 @@ pnpm release:smoke-dmg
 
 The smoke script mounts the DMG read-only and verifies the `.app` bundle, executable, and bundle id. It is not a substitute for signed/notarized Gatekeeper QA.
 
+## Linux AppImage Technical Preview
+
+Initial Linux target:
+
+- AppImage artifact only
+- `SHA256` checksum file
+- stable latest alias for the newest local AppImage
+- per-artifact `.sha256` file
+- GitHub Releases upload after Linux release gates pass
+- support page with known limitations and diagnostics guidance
+
+The Linux preview is intentionally narrower than the macOS preview:
+
+- AppImage is the only package format in this phase.
+- In-place Linux auto-update is not enabled.
+- `hotcrossbuns://` protocol metadata is not registered for Linux until deep-link validation is complete.
+- Tray, global shortcuts, notifications, and autostart remain disabled unless their later phases validate them.
+- Credential storage requires Electron `safeStorage` with an OS-backed Linux provider such as GNOME Keyring/libsecret or KWallet; Electron `basic_text` plaintext fallback is rejected.
+
+Linux package metadata:
+
+| Field | Value |
+|---|---|
+| Product name | `Hot Cross Buns 2` |
+| Artifact pattern | `Hot-Cross-Buns-2-${version}-linux-${arch}.AppImage`; electron-builder emits `x86_64` for x64 AppImages |
+| Linux category | `Office` |
+| Executable name | `hot-cross-buns-2` |
+| Generic name | `Planner` |
+| Keywords | `tasks;calendar;notes;planner;productivity;` |
+| StartupWMClass | `hot-cross-buns-2` |
+| Linux icons | `build/icons/<size>x<size>.png` generated from `assets/brand/app-icon.png` |
+| Protocol metadata | omitted until Linux deep links are validated |
+
+Run the full Linux preview release gate on a Linux host or Linux CI runner:
+
+```sh
+pnpm release:linux:preview
+```
+
+That command runs:
+
+```sh
+pnpm test
+pnpm build:release:linux
+pnpm release:review-bundle
+pnpm exec electron-builder --linux AppImage --publish never
+pnpm release:linux-artifacts
+pnpm release:checksums
+```
+
+For a packaging-only preview after local validation:
+
+```sh
+pnpm pack:linux:preview
+```
+
+Expected artifact paths:
+
+```text
+release/Hot-Cross-Buns-2-<version>-linux-x86_64.AppImage
+release/Hot-Cross-Buns-2-linux.AppImage
+release/Hot-Cross-Buns-2-linux-x64.AppImage
+release/SHASUMS256.txt
+release/*.sha256
+artifacts/release/bundle-review.json
+artifacts/release/bundle-review.md
+```
+
+Run the AppImage metadata smoke after packaging:
+
+```sh
+pnpm release:smoke-appimage
+```
+
+The smoke script verifies that the stable AppImage alias exists, is executable, can be extracted with `--appimage-extract`, contains expected desktop metadata, and does not register `hotcrossbuns://`. To also launch the AppImage with isolated user data and require startup logs, run:
+
+```sh
+HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage
+```
+
+Verify checksums locally:
+
+```sh
+cd release
+sha256sum -c SHASUMS256.txt
+cd -
+```
+
+Linux preview support and run instructions live in [Linux Preview Support](../support/linux-preview-support.md).
+
 ## Version Metadata
 
 `pnpm build:release:mac` injects build metadata into the compiled main process:
@@ -251,17 +341,17 @@ V1 preview updater may be a check-for-new-version flow:
 
 In-place auto-update can be added later through Electron updater tooling once signing, notarization, release metadata, and rollback behavior are reliable. Do not claim seamless auto-update until a signed updater flow is configured and tested.
 
-## Linux Future
+## Linux Remaining Gates
 
-Required before Linux preview:
+Still required before publishing a Linux preview:
 
-- AppImage target first unless another package is explicitly chosen
-- desktop file metadata
-- icon and `StartupWMClass` behavior
 - protocol registration behavior
 - updater stance by package format
 - distro and desktop-environment support matrix
 - tray/global shortcut caveats documented
+- AppImage build on a Linux host or Linux CI runner
+- AppImage launch from terminal and file manager
+- Linux manual QA matrix from `TODO.md`
 
 Linux preview should use check-for-new-version before in-place updates. Electron's built-in `autoUpdater` does not support Linux; package-manager and electron-builder updater behavior must be evaluated per package target before claiming automatic updates.
 

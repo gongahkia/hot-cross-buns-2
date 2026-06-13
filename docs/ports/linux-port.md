@@ -18,7 +18,7 @@ Do not claim universal Linux support. Linux desktop behavior varies by distribut
 
 ## Package Targets
 
-Start with AppImage because it is portable and maps well to preview distribution. Add DEB/RPM only after the core Linux app is useful.
+The current technical-preview package target is AppImage because it is portable and maps well to preview distribution. Add DEB/RPM only after the core Linux app is useful.
 
 Recommended order:
 
@@ -29,14 +29,15 @@ Recommended order:
 
 AppImage desktop integration depends on `.desktop` metadata. AppImages carry a desktop file in the AppDir, and desktop files follow the FreeDesktop Desktop Entry Specification.
 
-Desktop metadata must include:
+The AppImage config currently includes:
 
 - app name: Hot Cross Buns 2
 - generic name: Planner
-- categories appropriate for productivity/office
-- icon metadata
-- custom protocol handling if supported by the package
-- `StartupWMClass` when needed for window/taskbar association
+- category: Office
+- icon metadata from `build/icons/<size>x<size>.png`
+- `StartupWMClass=hot-cross-buns-2`
+
+Linux package metadata intentionally does not register `hotcrossbuns://` until deep-link behavior is validated.
 
 ## Linux Paths
 
@@ -55,12 +56,15 @@ Do not hardcode macOS `Application Support` paths or Windows `%APPDATA%` assumpt
 
 ## Credential Storage
 
-Preferred credential strategy:
+Implemented credential strategy:
 
-- Use a maintained keychain abstraction that supports Secret Service/libsecret on Linux.
+- Use `LinuxSecretServiceStore` through the shared `SecretStore` abstraction.
+- Use Electron `safeStorage` only when it selects an OS-backed Linux provider such as `gnome_libsecret`, `kwallet`, `kwallet5`, or `kwallet6`.
+- Reject Electron `basic_text` plaintext fallback.
+- Persist encrypted metadata under the app config path and hash service/account storage keys.
 - Detect missing or locked secret service at runtime.
 - Provide clear setup guidance when credentials cannot be saved.
-- Never fall back to plaintext token storage without explicit user opt-in and a separate security decision.
+- Never fall back to plaintext token storage.
 
 Linux preview must test:
 
@@ -187,4 +191,3 @@ Before Linux technical preview:
 - AppImage desktop integration: https://docs.appimage.org/reference/desktop-integration.html
 - FreeDesktop desktop entry keys: https://specifications.freedesktop.org/desktop-entry-spec/latest/recognized-keys.html
 - electron-builder Linux targets: https://www.electron.build/linux
-

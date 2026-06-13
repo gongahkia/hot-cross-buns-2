@@ -33,20 +33,38 @@ extraResources:
   - from: assets/brand
     to: assets/brand
 
-protocols:
-  - name: Hot Cross Buns Links
-    schemes:
-      - hotcrossbuns
-
 mac:
   identity: null
   icon: build/icon.icns
   category: public.app-category.productivity
   gatekeeperAssess: false
   hardenedRuntime: false
+  protocols:
+    - name: Hot Cross Buns Links
+      schemes:
+        - hotcrossbuns
   target:
     - dmg
     - zip
 
 dmg:
   sign: false
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: build/icons
+  category: Office
+  executableName: hot-cross-buns-2
+  synopsis: Private planner for tasks, calendars, notes, and local agent workflows.
+  description: Hot Cross Buns 2 Linux technical preview for GNOME desktops.
+  desktop:
+    entry:
+      GenericName: Planner
+      Keywords: tasks;calendar;notes;planner;productivity;
+      StartupWMClass: hot-cross-buns-2
+
+appImage:
+  artifactName: Hot-Cross-Buns-2-${version}-linux-${arch}.${ext}
