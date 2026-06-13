@@ -1,0 +1,557 @@
+# TODO: Linux Port Technical Preview
+
+This document is the implementation handoff for porting Hot Cross Buns 2 from
+macOS-only preview support to a Linux technical preview without deprecating,
+weakening, or renaming the existing macOS support.
+
+The first committed pass is documentation-only. Do not add runtime Linux support
+claims until the implementation phases and release gates below are complete.
+
+## Current Decisions
+
+- First Linux target: Ubuntu LTS on GNOME.
+- First package target: AppImage technical preview.
+- Secondary manual checks: Fedora Workstation GNOME, KDE Plasma, one Wayland
+  session, and one X11 session.
+- Linux credential backend: Secret Service/libsecret through a maintained
+  abstraction, initially `keytar` unless implementation proves it unsuitable.
+- Linux update policy: check for GitHub Releases only. Do not claim in-place
+  Linux auto-update for the technical preview.
+- Tray, global shortcuts, notifications, deep links, and autostart must be
+  capability-driven. Unsupported or unverified Linux behavior must remain
+  recoverable and visible in diagnostics.
+
+## Current Repo State
+
+- The app is an Electron, Vite, React, TypeScript, and SQLite desktop app.
+- `electron-builder.yml` currently defines macOS DMG/zip packaging only.
+- `package.json` release scripts are macOS-focused:
+  - `build:release:mac`
+  - `pack:mac:preview`
+  - `release:mac:preview`
+  - `release:smoke-dmg`
+- `src/main/index.ts` currently creates `createElectronMacNativeAdapter()`
+  unconditionally. Linux startup must not instantiate mac-specific native code.
+- `NativePlatformAdapter` in `src/main/native/types.ts` is the correct boundary
+  for Linux-specific native behavior.
+- `createNoopNativeAdapter()` already reports unsupported Linux behavior without
+  claiming support and should remain the unsupported-platform contract fixture.
+- `MacOsKeychainSecretStore` is the only OS-backed `SecretStore`
+  implementation. Non-macOS currently falls back to `UnsupportedSecretStore`.
+- Google OAuth tokens, the optional OAuth client secret, and the MCP bearer token
+  already flow through `SecretStore` abstractions, so Linux credential work
+  should extend that abstraction rather than inventing a new credential path.
+- Existing porting docs already live under `docs/ports/`, especially:
+  - `docs/ports/linux-port.md`
+  - `docs/ports/platform-adapter-audit.md`
+  - `docs/ports/cross-platform-porting.md`
+
+## Non-Negotiables
+
+- Do not remove, rename, or degrade the macOS adapter, macOS Keychain storage,
+  DMG/zip packaging, macOS release scripts, or macOS support docs.
+- Do not store Google OAuth tokens, OAuth client secrets, MCP bearer tokens, or
+  future sensitive material in plaintext as a Linux fallback.
+- Do not expose raw tokens, raw Google payloads, absolute local paths, or bearer
+  tokens in renderer state, diagnostics, logs, release artifacts, or support
+  bundles.
+- Do not branch deeply in renderer code on `process.platform`. Renderer behavior
+  should use typed preload capability data from the native adapter.
+- Do not claim Linux tray, global shortcut, notification, protocol, autostart,
+  or updater parity until each feature has automated tests where feasible and
+  manual QA on the supported Linux matrix.
+- Do not assume GNOME tray/status-icon behavior matches macOS menu bar behavior.
+  The app must remain fully usable without a tray icon.
+
+## Phase 1: Non-Claiming Linux Scaffold
+
+Goal: make Linux startup select a Linux-aware adapter that reports honest
+capabilities without trying to implement fragile desktop-environment behavior
+too early.
+
+Implementation tasks:
+
+- Add a native adapter factory, for example
+  `src/main/native/createNativeAdapter.ts`, with this selection:
+  - `darwin`: existing `createElectronMacNativeAdapter()`
+  - `linux`: new Linux preview adapter
+  - `win32` and unknown platforms: existing `createNoopNativeAdapter()`
+- Update `src/main/index.ts` to use the factory instead of importing the macOS
+  adapter directly.
+- Add a Linux adapter module, for example
+  `src/main/native/electronLinuxAdapter.ts`, plus small helper files under
+  `src/main/native/electronLinux/` only as needed.
+- Initial Linux adapter behavior:
+  - `appPaths()`: map config, data, cache, logs, diagnostics, and temp through
+    Electron/app path APIs and verify they respect XDG expectations on Ubuntu.
+  - `capabilities()`: report Linux platform, adapter id, package format, path
+    roles, and per-feature states.
+  - `credentialStorageStatus()`: report `pending` until Phase 2 is implemented.
+  - `openExternalUrl()`: use Electron `shell.openExternal()` and return a
+    sanitized success/error result.
+  - `openPath()`: use Electron `shell.openPath()` and return a sanitized
+    success/error result.
+  - `collectDiagnostics()`: return an adapter diagnostic result without raw
+    paths beyond existing redacted path capabilities.
+  - `installAppMenu()`: install a conventional Linux app menu only if simple and
+    low-risk; otherwise return unsupported for the first scaffold.
+  - `createTray()`, `registerGlobalShortcut()`, `registerProtocolClient()`,
+    `scheduleNotification()`, and `setAutostart()`: return unsupported or
+    pending until their dedicated phases are complete.
+  - `listFontFamilies()`: return an empty normalized list for the scaffold unless
+    a low-risk fontconfig query is added with tests.
+- Preserve the noop adapter behavior and tests. The Linux adapter is not a
+  replacement for noop.
+
+Automated tests:
+
+- Add adapter factory tests for `darwin`, `linux`, `win32`, and unknown platform
+  selection. If direct `process.platform` mocking is awkward, extract the
+  selection logic into a pure function that accepts a platform argument.
+- Add Linux adapter contract tests that validate:
+  - `nativeCapabilitiesResponseSchema` accepts the Linux capability response.
+  - mac-specific adapter ids are not reported on Linux.
+  - unsupported features are recoverable and carry diagnostic messages.
+  - `openExternalUrl()` and `openPath()` sanitize failure messages.
+- Keep existing macOS native tests passing unchanged.
+
+Acceptance criteria:
+
+- A Linux dev run no longer instantiates `electronMac` adapter code.
+- Linux capability reports are schema-valid.
+- Linux still does not claim tray, shortcut, notification, protocol, autostart,
+  credential, or updater parity.
+- macOS behavior and macOS tests remain unchanged.
+
+## Phase 2: Linux Credential Storage
+
+Goal: make Google OAuth, optional OAuth client secret storage, and MCP bearer
+token storage secure and recoverable on Linux.
+
+Implementation tasks:
+
+- Add the chosen Secret Service backend dependency. Default plan is `keytar`.
+  Validate native-module compatibility with the repo's Electron version before
+  wiring it into production.
+- Add a Linux `SecretStore` implementation, for example
+  `LinuxSecretServiceStore`, in or near `src/main/credentials/secretStore.ts`.
+- Keep the public `SecretStore` interface unchanged unless a stateful status
+  check needs an explicit async method.
+- Update `defaultSecretStore()` in `src/main/services/serviceContainer.ts`:
+  - `darwin`: `MacOsKeychainSecretStore`
+  - `linux`: `LinuxSecretServiceStore`
+  - other platforms: `UnsupportedSecretStore`
+- Define Linux credential states:
+  - `ready`: Secret Service is available and read/write/delete smoke succeeds.
+  - `disabled` or `unsupported`: no compatible Secret Service provider exists.
+  - `error`: service is locked, unavailable, denied by user, or returns an
+    unexpected error.
+- Ensure missing or locked Secret Service produces actionable messages in native
+  diagnostics and Google/MCP setup flows.
+- Ensure all token parse failures keep the existing behavior: delete corrupted
+  token material and force reconnection instead of returning partial secrets.
+- Update package config so any native `keytar` module is rebuilt and unpacked
+  correctly for Linux packages.
+
+Manual Linux credential checks:
+
+- Fresh Ubuntu GNOME profile with GNOME Keyring available.
+- Profile with Secret Service missing.
+- Profile with Secret Service locked before app launch.
+- Save OAuth client id and optional client secret.
+- Connect Google account, quit app, relaunch, and confirm token persistence.
+- Reset MCP bearer token, quit app, relaunch, and confirm revision changes.
+- Confirm diagnostics and logs never include raw token or secret values.
+
+Automated tests:
+
+- Unit-test `LinuxSecretServiceStore` with a fake backend for read, write,
+  delete, missing service, locked service, and unexpected backend error.
+- Service-container tests should assert Linux chooses the Linux store when no
+  explicit store is injected.
+- Existing `MemorySecretStore` tests must continue to pass.
+
+Acceptance criteria:
+
+- Runtime Google OAuth can be enabled on Linux without plaintext storage.
+- MCP bearer tokens persist on Linux without plaintext storage.
+- Missing or locked Secret Service blocks credential-dependent features with a
+  clear recoverable status, not a crash.
+
+## Phase 3: Linux AppImage Packaging
+
+Goal: produce a signed-status-neutral Linux AppImage preview artifact with
+correct desktop metadata and no changes to macOS packaging.
+
+Implementation tasks:
+
+- Extend `electron-builder.yml` with a Linux AppImage target:
+  - keep the existing macOS config intact
+  - add `linux.target: AppImage`
+  - set Linux category to a productivity/office category accepted by
+    electron-builder and desktop environments
+  - provide Linux PNG icon assets in the expected directory layout
+  - set desktop metadata for app name, generic name, categories, keywords, icon,
+    and `StartupWMClass` where supported
+  - include protocol metadata only when Phase 6 validates deep-link behavior
+- Do not wrap AppImage output in zip or tar archives.
+- Add npm scripts:
+  - `build:release:linux`
+  - `pack:linux:preview`
+  - `release:linux:preview`
+  - an AppImage smoke script once the artifact exists
+- Extend release artifact helpers only where needed:
+  - `scripts/release-checksums.ts` already recognizes `.AppImage`; verify this
+    remains true after artifact naming changes.
+  - Add a Linux alias helper if stable latest names are desired, for example
+    `Hot-Cross-Buns-2-linux-x64.AppImage`.
+- Add or update docs:
+  - `docs/release/distribution.md` with Linux preview commands and expected
+    artifact paths.
+  - `docs/support/linux-preview-support.md` with AppImage run, chmod, checksum,
+    known limitations, and support diagnostics guidance.
+  - README badges/copy only after the Linux preview release gate passes.
+
+Manual package checks:
+
+- Build AppImage on Linux CI or a Linux host.
+- Verify `chmod +x Hot-Cross-Buns-2-*.AppImage` launches the app.
+- Launch from terminal and file manager.
+- Confirm app icon appears.
+- Confirm taskbar/window grouping uses the expected name/class.
+- Confirm app data lands under expected XDG/Electron directories.
+- Confirm uninstall/removal policy is documented.
+
+Automated tests:
+
+- Add a lightweight config test or script that verifies Linux target metadata is
+  present without removing macOS targets.
+- Add an AppImage smoke script that checks artifact existence, executable bit,
+  embedded desktop metadata if feasible, and launch startup logs in a clean temp
+  user-data directory.
+
+Acceptance criteria:
+
+- macOS DMG/zip release commands still work.
+- Linux AppImage can be produced with electron-builder.
+- Checksums cover AppImage artifacts.
+- Public docs identify Linux as a technical preview, not broad Linux support.
+
+## Phase 4: Linux Notifications
+
+Goal: support local reminders on Linux only when Electron and the desktop
+environment can show notifications.
+
+Implementation tasks:
+
+- Implement Linux notification detection with Electron `Notification.isSupported()`.
+- Schedule notifications through Electron's `Notification` class, matching the
+  existing `NativeNotificationRequest` contract.
+- Treat notification permission query as unsupported unless Electron exposes a
+  reliable Linux permission state for the target version.
+- If notification creation or display fails, set native status to `error` and
+  keep sync/task/calendar behavior unaffected.
+- Keep notification content concise and privacy-conscious.
+
+Manual checks:
+
+- GNOME notification delivery.
+- KDE notification delivery.
+- Notification click opens/focuses the app and dispatches the intended action.
+- Notifications disabled in Settings clear scheduled notifications.
+- Notification failures are visible in diagnostics and do not crash the app.
+
+Acceptance criteria:
+
+- Linux notifications can be enabled only when supported.
+- Unsupported or failed notifications are recoverable.
+- Existing macOS notification behavior remains unchanged.
+
+## Phase 5: Linux Global Shortcuts
+
+Goal: support quick capture/global shortcuts where Linux desktop infrastructure
+allows it, while treating denial and unsupported sessions as normal outcomes.
+
+Implementation tasks:
+
+- For X11 sessions, test Electron `globalShortcut` directly.
+- For Wayland sessions, gate support behind Chromium/Electron
+  `GlobalShortcutsPortal` support and XDG Desktop Portal availability.
+- Detect session type with environment signals such as `XDG_SESSION_TYPE`, but
+  treat it as diagnostic context, not proof that registration will work.
+- Add capability fields or diagnostics for:
+  - Wayland session detected
+  - portal shortcut support detected or missing
+  - registration conflict
+  - user denial
+- If registration fails, keep quick capture available in-app and show recovery
+  guidance in Settings/Diagnostics.
+
+Manual checks:
+
+- Ubuntu GNOME Wayland with portal support.
+- Ubuntu GNOME X11 where available.
+- KDE Plasma Wayland.
+- Shortcut conflict with an existing desktop shortcut.
+- User denial or missing portal support.
+
+Acceptance criteria:
+
+- No Linux session crashes if a shortcut cannot be registered.
+- Linux shortcut status is explicit and actionable.
+- The app does not claim global hotkeys are reliable across all Linux desktops.
+
+## Phase 6: Linux Tray And Status Area
+
+Goal: provide optional tray/status-area behavior without making it central to
+Linux usability.
+
+Implementation tasks:
+
+- Implement tray with Electron `Tray` only after validating icon behavior on
+  GNOME and KDE.
+- Prefer a conventional context menu for Linux first. Do not port the macOS
+  menu-bar panel assumptions directly unless the behavior is validated.
+- Expose tray registration success, failure, and unsupported states through the
+  existing native capability report.
+- If GNOME hides status icons or requires extensions, report that as a caveat and
+  keep the app usable through the main window.
+
+Manual checks:
+
+- GNOME default session without status-icon extensions.
+- GNOME with common appindicator/status-icon support if used.
+- KDE Plasma status area.
+- Show/hide main window.
+- Refresh action.
+- Open settings.
+- Quit.
+
+Acceptance criteria:
+
+- Linux tray is optional.
+- Missing tray never blocks startup, sync, notifications, or Google/MCP setup.
+- macOS menu bar panel behavior remains intact.
+
+## Phase 7: Linux Custom Protocol And Deep Links
+
+Goal: support `hotcrossbuns://` links after package metadata and desktop
+registration are verified.
+
+Implementation tasks:
+
+- Keep deep links unsupported in the Linux adapter until AppImage desktop
+  integration is validated.
+- Add desktop metadata for the custom scheme only when packaging support is
+  ready.
+- Implement protocol registration/check behavior in the Linux adapter if
+  Electron and the installed desktop entry can support it reliably.
+- Preserve existing parser behavior in `src/main/native/deepLinks.ts`.
+- Add explicit safe handling for malformed links and links to missing local
+  resources.
+
+Manual checks:
+
+- Installed/integrated AppImage opens from `hotcrossbuns://` URL.
+- Running app receives and routes a deep link.
+- Closed app launches and routes a deep link after renderer readiness.
+- Malformed links show a safe error.
+- Links do not expose filesystem paths or tokens.
+
+Acceptance criteria:
+
+- Deep-link support is package-verified before public docs mention it.
+- No malformed link can crash startup or expose sensitive data.
+
+## Phase 8: Linux Autostart
+
+Goal: decide whether open-at-login belongs in the Linux preview after core app,
+credentials, packaging, and native shell behavior are stable.
+
+Implementation tasks:
+
+- Keep autostart unsupported for the first Linux preview unless a simple desktop
+  entry implementation is validated.
+- If implemented, create/remove a user-level autostart `.desktop` entry through
+  the platform adapter only.
+- Report status and failures in native diagnostics.
+- Document desktop-environment limitations.
+
+Acceptance criteria:
+
+- Autostart is optional and never blocks the Linux preview.
+- Settings copy does not imply universal Linux support.
+
+## Phase 9: Linux Update Checks
+
+Goal: preserve preview-safe update behavior without package-manager conflicts.
+
+Implementation tasks:
+
+- Keep the current check-for-GitHub-release pattern.
+- Make download asset selection platform-aware:
+  - macOS should prefer DMG/zip as today.
+  - Linux should prefer AppImage once release assets exist.
+- Do not enable Electron's built-in `autoUpdater` for Linux.
+- Do not claim automatic in-place updates for AppImage, DEB, or RPM until a
+  package-specific updater decision is made and tested.
+
+Acceptance criteria:
+
+- Linux users can manually discover a newer GitHub Release.
+- The app does not download or install Linux updates automatically.
+- macOS update-check behavior remains compatible with current preview docs.
+
+## Phase 10: OAuth, MCP, Networking, And Security
+
+Goal: validate that shared network flows work correctly on Linux and remain
+locked to local/safe boundaries.
+
+Implementation tasks:
+
+- Verify default browser handoff from Linux through the native adapter's
+  external URL opener.
+- Verify Google OAuth loopback listener on localhost.
+- Verify firewall/security tools do not break the supported Ubuntu GNOME path.
+- Verify MCP binds only to `127.0.0.1`.
+- Verify MCP rejects non-local or unauthorized requests.
+- Verify runtime files are written under Linux config paths and do not contain
+  raw bearer tokens.
+- Re-run diagnostics redaction tests with Linux path examples.
+
+Manual checks:
+
+- OAuth connect with browser round trip.
+- OAuth disconnect and reconnect.
+- Token refresh after app restart.
+- MCP enabled, disabled, token reset, and external CLI smoke.
+- Logs and diagnostics inspected for token/path redaction.
+
+Acceptance criteria:
+
+- OAuth and MCP work on Linux only with OS-backed secret storage.
+- No sensitive material appears in renderer IPC, logs, diagnostics, or support
+  exports.
+
+## Phase 11: Linux QA Matrix
+
+Required automated gates before any Linux preview release:
+
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm build`
+- release bundle review
+- SQLite migration/repository tests
+- IPC contract tests
+- MCP contract tests
+- Google transport mock tests
+- Playwright launch/navigation smoke on Linux
+- AppImage smoke script
+- performance smoke report on Linux
+
+Required manual Linux checks:
+
+- Ubuntu LTS GNOME AppImage launch from terminal.
+- Ubuntu LTS GNOME AppImage launch from file manager.
+- AppImage launched with isolated `HCB_USER_DATA_DIR`.
+- App icon and taskbar grouping.
+- Window open, close, hide/show, and quit.
+- OAuth browser round trip.
+- Secret Service ready, missing, and locked states.
+- MCP localhost smoke.
+- Notifications, if implemented.
+- Global shortcut on X11, if implemented.
+- Global shortcut on Wayland, if implemented.
+- Tray behavior on GNOME and KDE, if implemented.
+- `hotcrossbuns://` protocol smoke, if implemented.
+- Package removal/uninstall data policy documented.
+
+Performance checks:
+
+- AppImage cold launch shell visible.
+- Warm launch shell visible.
+- Command palette open.
+- In-app quick capture open.
+- Local search against medium fixture.
+- Task list scroll against large fixture.
+- Calendar month navigation against large fixture.
+- SQLite query-plan report.
+
+## Phase 12: Documentation And Product Copy
+
+Goal: keep user-facing claims accurate.
+
+Implementation tasks:
+
+- Update `docs/ports/linux-port.md` as implementation decisions land.
+- Add `docs/testing/manual-linux-native-shell.md`.
+- Add `docs/support/linux-preview-support.md`.
+- Update `docs/release/distribution.md` with Linux preview build and install
+  steps.
+- Update README only after Linux preview gates pass:
+  - keep macOS download/install instructions
+  - add Linux technical preview instructions
+  - clearly label AppImage as preview
+  - list unsupported Linux native features honestly
+- Update public docs site only after the release artifact exists.
+
+Acceptance criteria:
+
+- User-facing docs do not say Linux is generally supported before the preview is
+  released.
+- Support docs include diagnostics, known limitations, and rollback/removal
+  guidance.
+
+## Suggested Implementation Order
+
+1. Adapter factory and non-claiming Linux adapter.
+2. Linux `SecretStore` and credential diagnostics.
+3. Linux AppImage packaging.
+4. Linux OAuth and MCP live smoke.
+5. Notifications.
+6. Global shortcuts.
+7. Tray/status area.
+8. Deep links.
+9. Optional autostart.
+10. Linux release docs and README updates.
+
+## Release Readiness Checklist
+
+- [ ] macOS tests and packaging still pass.
+- [ ] Linux adapter selected on Linux without importing mac adapter code.
+- [ ] Linux capability report is schema-valid.
+- [ ] Linux credential storage uses Secret Service/libsecret and no plaintext
+      fallback.
+- [ ] AppImage builds on a Linux host or Linux CI runner.
+- [ ] AppImage checksum is generated and verified.
+- [ ] OAuth browser round trip works on Ubuntu GNOME.
+- [ ] MCP binds to `127.0.0.1` and uses OS-backed bearer token storage.
+- [ ] Notifications are either validated or explicitly unsupported.
+- [ ] Global shortcuts are either validated per session type or explicitly
+      unsupported.
+- [ ] Tray behavior is either validated per desktop environment or explicitly
+      unsupported.
+- [ ] Deep links are either package-validated or explicitly unsupported.
+- [ ] Linux manual QA matrix is complete.
+- [ ] Linux support docs are written.
+- [ ] README/public copy is updated only with accurate preview claims.
+
+## External References
+
+- Electron global shortcuts:
+  https://www.electronjs.org/docs/latest/api/global-shortcut
+- Electron notifications:
+  https://www.electronjs.org/docs/latest/tutorial/notifications
+- Electron safeStorage and Linux key providers:
+  https://www.electronjs.org/docs/latest/api/safe-storage
+- electron-builder Linux targets:
+  https://www.electron.build/docs/linux/
+- electron-builder AppImage target:
+  https://www.electron.build/docs/appimage/
+- FreeDesktop Desktop Entry Specification:
+  https://specifications.freedesktop.org/desktop-entry-spec/latest/
+- XDG Desktop Portal global shortcuts:
+  https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html
+- Secret Service API:
+  https://specifications.freedesktop.org/secret-service-spec/latest/
+
