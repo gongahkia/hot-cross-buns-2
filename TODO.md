@@ -343,6 +343,12 @@ Verification completed:
 - `pnpm typecheck`
 - `pnpm build`
 - `pnpm test` (`60` Vitest files, `468` tests)
+- Secondary live host probe on 2026-06-13: Fedora 43 KDE Plasma 6 Wayland
+  exposes `org.freedesktop.Notifications` as `Plasma/KDE 6.6.5`, accepted a
+  direct D-Bus `Notify` request (`notification_id=133`), and an isolated app
+  capability probe reported Linux notifications supported with permission query
+  `unsupported`. This is useful KDE evidence, but it does not close the GNOME
+  delivery or packaged AppImage click-through gates.
 
 Remaining manual release gates: GNOME delivery, KDE delivery, packaged
 AppImage click-through that opens/focuses the app and dispatches the intended
@@ -398,6 +404,12 @@ Verification completed:
 - `pnpm build`
 - `pnpm test` (`60` Vitest files, `471` tests)
 - `pnpm exec vitest run --config vitest.config.ts src/main/native/service.test.ts src/renderer/src/App.shell.test.tsx src/shared/ipc/contracts.test.ts`
+- Secondary live host probe on 2026-06-13: Fedora 43 KDE Plasma 6 Wayland
+  exposes XDG Desktop Portal `GlobalShortcuts` version `1`; an isolated app
+  capability probe reported `hasWaylandSession: true` and
+  `hasPortalShortcutSupport: true`. This proves portal availability on the
+  current secondary desktop only; shortcut registration, denial, conflict, and
+  packaged AppImage dispatch remain manual gates.
 
 Remaining manual release gates: Ubuntu GNOME Wayland portal registration and
 denial, Ubuntu GNOME X11 registration/conflict behavior, KDE Plasma Wayland
@@ -673,6 +685,12 @@ Verification completed:
 - `HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage`
 - `pnpm test:smoke`
 - `pnpm test:perf`
+- Secondary Fedora 43 KDE Plasma 6 Wayland probe on 2026-06-13:
+  Freedesktop notification service available, notification request accepted,
+  XDG Desktop Portal `GlobalShortcuts` available, isolated app capability
+  report schema-valid for the current session, Linux tray/deep-link/autostart
+  remain unsupported, and credential storage remains blocked when Electron
+  would fall back to plaintext.
 
 Remaining manual release gates: Ubuntu GNOME terminal and file-manager launch,
 real desktop icon/window grouping, OAuth browser round trip, Secret Service
