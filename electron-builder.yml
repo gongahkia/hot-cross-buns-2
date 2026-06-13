@@ -68,3 +68,24 @@ linux:
 
 appImage:
   artifactName: Hot-Cross-Buns-2-${version}-linux-${arch}.${ext}
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  executableName: Hot Cross Buns 2
+  protocols:
+    - name: Hot Cross Buns Links
+      schemes:
+        - hotcrossbuns
+
+nsis:
+  artifactName: Hot-Cross-Buns-2-${version}-windows-${arch}.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Hot Cross Buns 2

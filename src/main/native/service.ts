@@ -284,6 +284,10 @@ export class NativeShellService implements NativeDomainService {
       primaryClick: () => this.handleTrayPrimaryAction(),
       openMainWindow: this.options.windows.showMainWindow,
       showOrHideMainWindow: this.options.windows.showOrHideMainWindow,
+      openQuickAdd: () => {
+        this.options.windows.showMainWindow();
+        this.options.windows.dispatchAction({ type: "openQuickAdd" });
+      },
       refresh: () => {
         this.options.windows.showMainWindow();
         this.options.windows.dispatchAction({ type: "refresh" });

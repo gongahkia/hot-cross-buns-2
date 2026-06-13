@@ -9,9 +9,11 @@ import { KeychainMcpCredentialAdapter } from "../mcp/keychainCredentials";
 import {
   LinuxSecretServiceStore,
   MemorySecretStore,
+  WindowsSafeStorageSecretStore,
   linuxSecretServiceStatus,
   type LinuxSafeStorageBackend,
-  type LinuxSafeStorageBackendName
+  type LinuxSafeStorageBackendName,
+  type WindowsSafeStorageBackend
 } from "./secretStore";
 
 class FakeLinuxSafeStorageBackend implements LinuxSafeStorageBackend {
@@ -50,6 +52,32 @@ class FakeLinuxSafeStorageBackend implements LinuxSafeStorageBackend {
   }
 }
 
+class FakeWindowsSafeStorageBackend implements WindowsSafeStorageBackend {
+  encryptionAvailable = true;
+  throwOnEncrypt = false;
+  throwOnDecrypt = false;
+
+  decryptString(encrypted: Buffer): string {
+    if (this.throwOnDecrypt) {
+      throw new Error("windows decrypt failed with token=raw-secret");
+    }
+
+    return encrypted.toString("utf8").replace(/^windows-encrypted:/, "");
+  }
+
+  encryptString(plainText: string): Buffer {
+    if (this.throwOnEncrypt) {
+      throw new Error("windows encrypt failed with token=raw-secret");
+    }
+
+    return Buffer.from(`windows-encrypted:${plainText}`, "utf8");
+  }
+
+  isEncryptionAvailable(): boolean {
+    return this.encryptionAvailable;
+  }
+}
+
 async function withLinuxStore<T>(
   run: (input: {
     backend: FakeLinuxSafeStorageBackend;
@@ -64,6 +92,30 @@ async function withLinuxStore<T>(
     backend,
     now: () => new Date("2026-06-13T00:00:00.000Z"),
     platform: "linux",
+    storageFile
+  });
+
+  try {
+    return await run({ backend, storageFile, store });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function withWindowsStore<T>(
+  run: (input: {
+    backend: FakeWindowsSafeStorageBackend;
+    storageFile: string;
+    store: WindowsSafeStorageSecretStore;
+  }) => Promise<T>
+): Promise<T> {
+  const directory = await mkdtemp(join(tmpdir(), "hcb2-windows-secret-store-"));
+  const backend = new FakeWindowsSafeStorageBackend();
+  const storageFile = join(directory, "secrets.windows-safe-storage.json");
+  const store = new WindowsSafeStorageSecretStore({
+    backend,
+    now: () => new Date("2026-06-13T00:00:00.000Z"),
+    platform: "win32",
     storageFile
   });
 
@@ -158,6 +210,56 @@ describe("secret stores", () => {
     });
   });
 
+  it("persists Google OAuth token sets through the Windows safe storage store", async () => {
+    await withWindowsStore(async ({ backend, storageFile, store }) => {
+      const adapter = new KeychainGoogleCredentialAdapter(store);
+
+      await adapter.saveTokenSet("acct-1", {
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+        scope: "tasks calendar",
+        tokenType: "Bearer"
+      });
+
+      const reloaded = new KeychainGoogleCredentialAdapter(
+        new WindowsSafeStorageSecretStore({
+          backend,
+          platform: "win32",
+          storageFile
+        })
+      );
+
+      await expect(reloaded.readTokenSet("acct-1")).resolves.toEqual({
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+        scope: "tasks calendar",
+        tokenType: "Bearer"
+      });
+      const raw = await readFile(storageFile, "utf8");
+      expect(raw).not.toContain("refresh-token");
+      expect(raw).not.toContain("acct-1");
+    });
+  });
+
+  it("persists MCP bearer tokens through the Windows safe storage store", async () => {
+    await withWindowsStore(async ({ backend, storageFile, store }) => {
+      const adapter = new KeychainMcpCredentialAdapter(store);
+      const token = await adapter.loadBearerToken();
+      const revision = await adapter.credentialRevision();
+      const reloaded = new KeychainMcpCredentialAdapter(
+        new WindowsSafeStorageSecretStore({
+          backend,
+          platform: "win32",
+          storageFile
+        })
+      );
+
+      await expect(reloaded.loadBearerToken()).resolves.toBe(token);
+      await expect(reloaded.credentialRevision()).resolves.toBe(revision);
+      expect(await readFile(storageFile, "utf8")).not.toContain(token);
+    });
+  });
+
   it("refuses Electron basic_text plaintext fallback on Linux", async () => {
     await withLinuxStore(async ({ backend, store }) => {
       backend.selectedBackend = "basic_text";
@@ -197,6 +299,36 @@ describe("secret stores", () => {
         message: "Linux Secret Service backend gnome_libsecret failed an encryption smoke check."
       });
       expect(status.message).not.toContain("raw-secret");
+      await expect(
+        store.write({ service: "svc", account: "acct" }, "secret")
+      ).rejects.toThrow("failed an encryption smoke check");
+    });
+  });
+
+  it("reports locked or unavailable Windows safe storage as an error", async () => {
+    await withWindowsStore(async ({ backend, store }) => {
+      backend.encryptionAvailable = false;
+
+      expect(store.status()).toMatchObject({
+        ok: false,
+        state: "error"
+      });
+      await expect(
+        store.read({ service: "svc", account: "acct" })
+      ).rejects.toThrow("unavailable or locked");
+    });
+  });
+
+  it("reports unexpected Windows safe storage failures without exposing backend error text", async () => {
+    await withWindowsStore(async ({ backend, store }) => {
+      backend.throwOnEncrypt = true;
+
+      expect(store.status()).toMatchObject({
+        ok: false,
+        state: "error",
+        message: "Windows safe storage failed an encryption smoke check."
+      });
+      expect(store.status().message).not.toContain("raw-secret");
       await expect(
         store.write({ service: "svc", account: "acct" }, "secret")
       ).rejects.toThrow("failed an encryption smoke check");

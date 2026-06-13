@@ -14,6 +14,44 @@ Secondary manual-check target:
 
 Do not claim Windows support until launch, OAuth, SQLite, MCP, tray, notifications, protocol registration, packaging, and uninstall behavior have been tested on a real Windows machine or CI runner with appropriate manual checks.
 
+## Current Status
+
+Status: Windows technical preview scaffold is implemented but not release
+validated. The repo now has an `electron-windows-preview` native adapter,
+Windows safeStorage-backed credential persistence, NSIS packaging config,
+Windows release scripts, stable installer alias generation, an installer
+artifact smoke script, a manual Windows native-shell checklist, and a manual
+Windows Preview Validation GitHub Actions workflow.
+
+Automated validation that can run off-Windows must pass before Windows-host
+validation starts:
+
+- `pnpm typecheck`
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts src/main/credentials/secretStore.test.ts scripts/linux-packaging-config.test.ts`
+- `pnpm build`
+- `pnpm release:review-bundle`
+
+Remaining release blockers require a real Windows host or Windows CI runner:
+
+- `pnpm release:win:preview`
+- `pnpm release:smoke-nsis`
+- `Windows Preview Validation` GitHub Actions workflow artifacts
+- installed app launch from installer finish, Start Menu, and desktop shortcut
+- AppUserModelID and taskbar grouping
+- Windows safeStorage token persistence after restart
+- OAuth browser round trip and Windows Defender/firewall behavior
+- MCP localhost smoke against the installed app
+- tray, global shortcut, notification, protocol, and autostart behavior
+- uninstall and retained-user-data behavior
+- SmartScreen/code-signing decision for anything beyond internal preview
+
+Linux cross-packaging note: a Fedora 43 attempt on 2026-06-13 reached
+`release/win-unpacked/Hot Cross Buns 2.exe`, then stopped before NSIS installer
+creation because Wine was not installed. Prefer Windows CI for the first
+validation pass, or install Wine before using Linux cross-packaging. The
+release scripts use cross-platform TypeScript wrappers so native Windows shells
+do not need POSIX environment assignment syntax.
+
 ## Package Targets
 
 Recommended order:
@@ -207,4 +245,3 @@ Before Windows technical preview:
 - Electron autoUpdater: https://www.electronjs.org/docs/latest/api/auto-updater
 - electron-builder targets: https://www.electron.build/docs/
 - electron-builder auto-update: https://www.electron.build/docs/features/auto-update/
-

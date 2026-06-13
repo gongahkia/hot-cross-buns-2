@@ -6,7 +6,7 @@ import type {
 
 const maxNotificationDelayMs = 2_147_483_647;
 
-type ElectronNotificationPlatform = "darwin" | "linux";
+type ElectronNotificationPlatform = "darwin" | "linux" | "win32";
 
 export class ElectronNotificationScheduler {
   private readonly notificationTimers = new Map<string, NodeJS.Timeout>();

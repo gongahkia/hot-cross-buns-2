@@ -16,6 +16,7 @@ import {
 } from "./createNativeAdapter";
 import type { LinuxSafeStorageBackendName } from "../credentials/secretStore";
 import { createElectronLinuxNativeAdapter } from "./electronLinuxAdapter";
+import { createElectronWindowsNativeAdapter } from "./electronWindowsAdapter";
 import { createNoopNativeAdapter } from "./noopAdapter";
 import { NativeShellService } from "./service";
 
@@ -27,6 +28,7 @@ const electronMock = vi.hoisted(() => {
     temp: "/tmp"
   };
   const notificationInstances: MockNotification[] = [];
+  const trayInstances: MockTray[] = [];
 
   class MockNotification {
     static isSupported = vi.fn(() => true);
@@ -49,13 +51,54 @@ const electronMock = vi.hoisted(() => {
     }
   }
 
+  class MockTray {
+    readonly listeners = new Map<string, (...args: unknown[]) => void>();
+    readonly destroy = vi.fn();
+    readonly setContextMenu = vi.fn();
+    readonly setToolTip = vi.fn();
+    readonly popUpContextMenu = vi.fn();
+
+    constructor(readonly image: unknown) {
+      trayInstances.push(this);
+    }
+
+    on(event: string, listener: (...args: unknown[]) => void): this {
+      this.listeners.set(event, listener);
+      return this;
+    }
+  }
+
   return {
+    Menu: {
+      buildFromTemplate: vi.fn((template: unknown[]) => ({ template }))
+    },
     Notification: MockNotification,
+    Tray: MockTray,
+    nativeImage: {
+      createEmpty: vi.fn(() => ({
+        addRepresentation: vi.fn(),
+        isEmpty: () => true,
+        setTemplateImage: vi.fn()
+      })),
+      createFromPath: vi.fn(() => ({
+        addRepresentation: vi.fn(),
+        isEmpty: () => false,
+        setTemplateImage: vi.fn()
+      }))
+    },
     notificationInstances,
+    paths,
+    trayInstances,
     app: {
       isPackaged: false,
+      getAppPath: vi.fn(() => "/repo"),
       getName: vi.fn(() => "Hot Cross Buns 2"),
-      getPath: vi.fn((name: string) => paths[name] ?? `/tmp/hcb-${name}`)
+      getPath: vi.fn((name: string) => paths[name] ?? `/tmp/hcb-${name}`),
+      getVersion: vi.fn(() => "5.0.0"),
+      getLoginItemSettings: vi.fn(() => ({ openAtLogin: false })),
+      setAppUserModelId: vi.fn((_id: string) => undefined),
+      setAsDefaultProtocolClient: vi.fn((_scheme: string) => true),
+      setLoginItemSettings: vi.fn((_settings: { openAtLogin: boolean }) => undefined)
     },
     globalShortcut: {
       register: vi.fn((_accelerator: string, _action: () => void) => true),
@@ -84,14 +127,30 @@ const originalUnvalidatedNativeShell = process.env.HCB_LINUX_ENABLE_UNVALIDATED_
 const originalSessionType = process.env.XDG_SESSION_TYPE;
 
 beforeEach(() => {
+  electronMock.paths.userData = "/home/test/.config/Hot Cross Buns 2";
+  electronMock.paths.sessionData = "/home/test/.cache/Hot Cross Buns 2";
+  electronMock.paths.logs = "/home/test/.local/state/Hot Cross Buns 2/logs";
+  electronMock.paths.temp = "/tmp";
   electronMock.Notification.isSupported.mockReset();
   electronMock.Notification.isSupported.mockReturnValue(true);
   electronMock.notificationInstances.length = 0;
+  electronMock.trayInstances.length = 0;
+  electronMock.Menu.buildFromTemplate.mockClear();
+  electronMock.nativeImage.createEmpty.mockClear();
+  electronMock.nativeImage.createFromPath.mockClear();
   electronMock.globalShortcut.register.mockReset();
   electronMock.globalShortcut.register.mockReturnValue(true);
   electronMock.globalShortcut.unregister.mockReset();
   electronMock.app.isPackaged = false;
+  electronMock.app.getAppPath.mockClear();
   electronMock.app.getPath.mockClear();
+  electronMock.app.getVersion.mockClear();
+  electronMock.app.getLoginItemSettings.mockReset();
+  electronMock.app.getLoginItemSettings.mockReturnValue({ openAtLogin: false });
+  electronMock.app.setAppUserModelId.mockClear();
+  electronMock.app.setAsDefaultProtocolClient.mockReset();
+  electronMock.app.setAsDefaultProtocolClient.mockReturnValue(true);
+  electronMock.app.setLoginItemSettings.mockClear();
   electronMock.shell.openExternal.mockReset();
   electronMock.shell.openExternal.mockResolvedValue(undefined);
   electronMock.shell.openPath.mockReset();
@@ -271,7 +330,7 @@ describe("native adapter factory", () => {
 
     expect(nativeAdapterKindForPlatform("darwin")).toBe("electron-mac");
     expect(nativeAdapterKindForPlatform("linux")).toBe("electron-linux-preview");
-    expect(nativeAdapterKindForPlatform("win32")).toBe("noop");
+    expect(nativeAdapterKindForPlatform("win32")).toBe("electron-windows-preview");
     expect(nativeAdapterKindForPlatform("freebsd")).toBe("noop");
   });
 });
@@ -580,6 +639,108 @@ describe("native adapter contract", () => {
     });
   });
 
+  it("reports schema-valid Windows preview capabilities", () => {
+    electronMock.paths.userData = "C:\\Users\\test\\AppData\\Roaming\\Hot Cross Buns 2";
+    electronMock.paths.sessionData = "C:\\Users\\test\\AppData\\Local\\Hot Cross Buns 2\\Session";
+    electronMock.paths.logs = "C:\\Users\\test\\AppData\\Local\\Hot Cross Buns 2\\logs";
+    electronMock.paths.temp = "C:\\Users\\test\\AppData\\Local\\Temp";
+    electronMock.app.isPackaged = true;
+    const adapter = createElectronWindowsNativeAdapter();
+    const service = createContractService(adapter);
+    const response = service.capabilities();
+    const report = response.capabilityReport;
+    const parsed = nativeCapabilitiesResponseSchema.safeParse(response);
+
+    expect(parsed.success).toBe(true);
+    expect(response.platform).toBe("win32");
+    expect(report.platform).toBe("win32");
+    expect(report.adapterId).toBe("electron-windows-preview");
+    expect(report.packageFormat).toBe("nsis");
+    expect(response).toMatchObject({
+      notifications: true,
+      globalShortcuts: true,
+      tray: true,
+      deepLinks: true
+    });
+    expect(report.flags).toMatchObject({
+      supportsAppPaths: true,
+      supportsTray: true,
+      supportsGlobalShortcut: true,
+      supportsNotifications: true,
+      supportsProtocolRegistration: true,
+      supportsAutostart: true,
+      supportsInPlaceAutoUpdate: false,
+      supportsCredentialStorage: true,
+      requiresSignedBuildForNotifications: true
+    });
+    expect(electronMock.app.setAppUserModelId).toHaveBeenCalledWith(
+      "dev.hotcrossbuns.hotcrossbuns2"
+    );
+    expect(adapter.credentialStorageStatus()).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+  });
+
+  it("wires Windows tray, shortcut, protocol, and autostart operations", () => {
+    const adapter = createElectronWindowsNativeAdapter();
+    const action = vi.fn();
+
+    expect(adapter.registerGlobalShortcut("CommandOrControl+Shift+Space", action)).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+    expect(electronMock.globalShortcut.register).toHaveBeenCalledWith(
+      "CommandOrControl+Shift+Space",
+      action
+    );
+
+    expect(adapter.registerProtocolClient("hotcrossbuns")).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+    expect(electronMock.app.setAsDefaultProtocolClient).toHaveBeenCalledWith("hotcrossbuns");
+
+    electronMock.app.isPackaged = true;
+    electronMock.app.getLoginItemSettings.mockReturnValueOnce({ openAtLogin: true });
+    expect(adapter.setAutostart(true)).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+    expect(electronMock.app.setLoginItemSettings).toHaveBeenCalledWith({ openAtLogin: true });
+
+    electronMock.app.isPackaged = false;
+    const tray = adapter.createTray({
+      primaryClick: vi.fn(),
+      openMainWindow: vi.fn(),
+      showOrHideMainWindow: vi.fn(),
+      openQuickAdd: vi.fn(),
+      refresh: vi.fn(),
+      openSettings: vi.fn(),
+      openRoute: vi.fn(),
+      snapshot: () => ({
+        panelStyle: "adaptive",
+        iconName: "calendar",
+        calendarIconId: "calendar",
+        calendarDoneMode: "visibleTodayDone",
+        customMenuBarIcons: [],
+        calendarDone: false,
+        primaryClickAction: "open-menu",
+        title: "Hot Cross Buns 2",
+        syncLabel: "Ready",
+        tooltip: "Hot Cross Buns 2",
+        sections: []
+      }),
+      quit: vi.fn()
+    });
+
+    expect(tray).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+    expect(electronMock.trayInstances).toHaveLength(1);
+  });
+
   it("reports every required capability through the noop adapter without claiming Linux support", () => {
     const adapter = createNoopNativeAdapter("linux");
     const report = adapter.capabilities().capabilityReport;
@@ -621,7 +782,7 @@ describe("native adapter contract", () => {
   });
 
   it("keeps unsupported platform operations recoverable and schema-valid", () => {
-    const adapter = createNoopNativeAdapter("win32");
+    const adapter = createNoopNativeAdapter("unknown");
     const service = new NativeShellService({
       adapter,
       planner: {

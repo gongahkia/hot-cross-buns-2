@@ -1,0 +1,72 @@
+name: Windows Preview Validation
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: windows-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  CSC_IDENTITY_AUTO_DISCOVERY: false
+
+jobs:
+  windows-preview:
+    name: NSIS package and runtime smoke
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows preview installer
+        run: pnpm release:win:preview
+
+      - name: Smoke Windows installer artifact
+        run: pnpm release:smoke-nsis
+
+      - name: Verify Windows installer checksum
+        shell: pwsh
+        run: |
+          Get-FileHash .\release\Hot-Cross-Buns-2-windows-x64.exe -Algorithm SHA256
+          Get-Content .\release\SHASUMS256.txt
+
+      - name: Electron smoke on Windows
+        run: pnpm test:smoke
+
+      - name: Performance smoke on Windows
+        run: pnpm test:perf
+
+      - name: Upload Windows preview artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-preview-artifacts-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.sha256
+            release/SHASUMS256.txt
+            release/*.blockmap
+            release/*.yml
+            artifacts/release/**
+            artifacts/perf/**
+            output/playwright/**
+            test-results/**
+            playwright-report/**

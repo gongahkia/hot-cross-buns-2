@@ -52,6 +52,7 @@ export interface NativeTrayActions {
   primaryClick: () => void;
   openMainWindow: () => void;
   showOrHideMainWindow: () => void;
+  openQuickAdd: () => void;
   refresh: () => void;
   openSettings: () => void;
   openRoute: (route: NativeRoute) => void;

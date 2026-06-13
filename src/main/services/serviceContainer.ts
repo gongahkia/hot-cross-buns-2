@@ -6,8 +6,10 @@ import {
   LinuxSecretServiceStore,
   MacOsKeychainSecretStore,
   UnsupportedSecretStore,
+  WindowsSafeStorageSecretStore,
   type LinuxSafeStorageBackend,
-  type SecretStore
+  type SecretStore,
+  type WindowsSafeStorageBackend
 } from "../credentials/secretStore";
 import { runLocalDataMigrations, type MigrationResult } from "../data/migrations";
 import {
@@ -90,6 +92,7 @@ export interface ServiceContainerOptions {
   syncCalendarWriteTransport?: GoogleCalendarWriteTransport;
   secretStore?: SecretStore;
   linuxSafeStorageBackend?: LinuxSafeStorageBackend;
+  windowsSafeStorageBackend?: WindowsSafeStorageBackend;
   enableRuntimeGoogle?: boolean;
   enableRuntimeGoogleWrites?: boolean;
 }
@@ -142,7 +145,8 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
     options.enableRuntimeGoogleWrites ?? runtimeGoogleEnabled;
   const secretStore = options.secretStore ?? defaultSecretStoreForPlatform({
     appPaths,
-    linuxSafeStorageBackend: options.linuxSafeStorageBackend
+    linuxSafeStorageBackend: options.linuxSafeStorageBackend,
+    windowsSafeStorageBackend: options.windowsSafeStorageBackend
   });
   const googleCredentialAdapter = new KeychainGoogleCredentialAdapter(secretStore);
   const googleClientSecretStore = new KeychainGoogleOAuthClientSecretStore(secretStore);
@@ -374,6 +378,7 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
 export function defaultSecretStoreForPlatform(input: {
   appPaths?: NativeAppPaths;
   linuxSafeStorageBackend?: LinuxSafeStorageBackend;
+  windowsSafeStorageBackend?: WindowsSafeStorageBackend;
   platform?: NodeJS.Platform | string;
 } = {}): SecretStore {
   const platform = input.platform ?? process.platform;
@@ -400,12 +405,40 @@ export function defaultSecretStoreForPlatform(input: {
     );
   }
 
+  if (platform === "win32") {
+    const backend = input.windowsSafeStorageBackend ?? loadElectronWindowsSafeStorageBackend();
+
+    if (backend && input.appPaths) {
+      return new WindowsSafeStorageSecretStore({
+        backend,
+        platform,
+        storageFile: join(input.appPaths.configDirectory, "secrets.windows-safe-storage.json")
+      });
+    }
+
+    return new UnsupportedSecretStore(
+      backend
+        ? "Windows safe storage requires app paths before secrets can be persisted."
+        : "Electron safeStorage is unavailable; Windows credential storage cannot be used."
+    );
+  }
+
   return new UnsupportedSecretStore("OS credential storage is unavailable on this platform.");
 }
 
 function loadElectronSafeStorageBackend(): LinuxSafeStorageBackend | undefined {
   try {
     const electron = require("electron") as { safeStorage?: LinuxSafeStorageBackend } | string;
+
+    return typeof electron === "object" ? electron.safeStorage : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function loadElectronWindowsSafeStorageBackend(): WindowsSafeStorageBackend | undefined {
+  try {
+    const electron = require("electron") as { safeStorage?: WindowsSafeStorageBackend } | string;
 
     return typeof electron === "object" ? electron.safeStorage : undefined;
   } catch {

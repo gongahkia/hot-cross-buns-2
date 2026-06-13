@@ -20,7 +20,22 @@ interface ElectronBuilderConfig {
     protocols?: Array<{ schemes?: string[] }>;
     target?: string[];
   };
+  nsis?: {
+    allowToChangeInstallationDirectory?: boolean;
+    artifactName?: string;
+    createDesktopShortcut?: boolean;
+    createStartMenuShortcut?: boolean;
+    oneClick?: boolean;
+    perMachine?: boolean;
+    shortcutName?: string;
+  };
   protocols?: unknown;
+  win?: {
+    executableName?: string;
+    icon?: string;
+    protocols?: Array<{ schemes?: string[] }>;
+    target?: Array<{ arch?: string[]; target?: string } | string> | string;
+  };
 }
 
 async function loadBuilderConfig(): Promise<ElectronBuilderConfig> {
@@ -82,5 +97,31 @@ describe("Linux packaging config", () => {
     for (const size of [16, 24, 32, 48, 64, 96, 128, 256, 512, 1024]) {
       await expect(access(join(iconDir, `${size}x${size}.png`))).resolves.toBeUndefined();
     }
+  });
+
+  it("adds Windows NSIS metadata without removing existing platform targets", async () => {
+    const config = await loadBuilderConfig();
+
+    expect(config.win).toMatchObject({
+      executableName: "Hot Cross Buns 2",
+      icon: "build/icon.ico"
+    });
+    expect(config.win?.target).toEqual([
+      {
+        target: "nsis",
+        arch: ["x64"]
+      }
+    ]);
+    expect(config.win?.protocols?.flatMap((protocol) => protocol.schemes ?? [])).toContain("hotcrossbuns");
+    expect(config.nsis).toMatchObject({
+      artifactName: "Hot-Cross-Buns-2-${version}-windows-${arch}.${ext}",
+      allowToChangeInstallationDirectory: true,
+      createDesktopShortcut: true,
+      createStartMenuShortcut: true,
+      oneClick: false,
+      perMachine: false,
+      shortcutName: "Hot Cross Buns 2"
+    });
+    await expect(access(resolve("build/icon.ico"))).resolves.toBeUndefined();
   });
 });

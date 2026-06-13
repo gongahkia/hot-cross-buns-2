@@ -1,0 +1,103 @@
+# Manual Windows Native Shell Checklist
+
+Use this checklist on a Windows 11 x64 machine before claiming a Windows
+technical preview release.
+
+## Build And Install
+
+- Run `pnpm release:win:preview` on a Windows host or Windows CI runner.
+- Verify `release/Hot-Cross-Buns-2-<version>-windows-x64.exe` exists.
+- Verify `release/Hot-Cross-Buns-2-windows.exe` and
+  `release/Hot-Cross-Buns-2-windows-x64.exe` aliases exist.
+- Run `certutil -hashfile release\Hot-Cross-Buns-2-windows-x64.exe SHA256`
+  and compare with `release\SHASUMS256.txt`.
+- Run `pnpm release:smoke-nsis`.
+- Install with the NSIS installer.
+- Confirm SmartScreen/Defender behavior is documented for unsigned preview
+  artifacts.
+
+## Launch And Identity
+
+- Launch from installer finish action.
+- Launch from Start Menu.
+- Launch from desktop shortcut if created.
+- Confirm app icon appears in Start Menu, taskbar, and window titlebar.
+- Confirm taskbar grouping uses one Hot Cross Buns 2 identity.
+- Confirm Diagnostics reports platform `win32`, adapter
+  `electron-windows-preview`, package format `nsis`, and AppUserModelID
+  `dev.hotcrossbuns.hotcrossbuns2`.
+
+## Credentials And OAuth
+
+- Complete Google OAuth with the default browser.
+- Confirm the localhost callback succeeds.
+- Restart the app and confirm Google token refresh still works.
+- Disconnect and reconnect the account.
+- Confirm diagnostics/logs do not expose OAuth tokens or raw local paths.
+- Confirm behavior if Windows safe storage is unavailable or locked.
+
+## MCP
+
+- Enable MCP.
+- Confirm the listener binds only to `127.0.0.1`.
+- Confirm unauthorized requests are rejected.
+- Run the external HCB CLI smoke against the installed app.
+- Reset the MCP token and confirm the old token is rejected.
+- Confirm the runtime discovery file does not contain the bearer token.
+
+## Tray And Window Behavior
+
+- Confirm notification-area tray icon appears.
+- Open tray menu and run show/hide, quick capture, refresh, settings, and quit.
+- Confirm close/minimize behavior matches Settings copy.
+- Confirm disabling the tray keeps the app usable from the main window.
+
+## Global Shortcuts
+
+- Configure global quick capture.
+- Confirm the shortcut opens quick capture when the app is focused and
+  unfocused.
+- Try a conflicting shortcut and confirm Settings/Diagnostics show actionable
+  recovery guidance.
+- Quit the app and confirm the shortcut is unregistered.
+
+## Notifications
+
+- Confirm Windows notifications display for due tasks and upcoming events.
+- Click a notification and confirm the expected app route opens.
+- Disable notifications in Windows Settings and confirm the app reports a
+  disabled or recoverable state.
+- Confirm notification text is concise and does not include sensitive content.
+
+## Deep Links
+
+- Open `hotcrossbuns://today` while the app is running.
+- Open `hotcrossbuns://today` while the app is closed.
+- Test malformed links and confirm the app shows safe errors.
+- Confirm links do not expose filesystem paths or tokens.
+
+## Autostart
+
+- Enable open-at-login.
+- Restart Windows and confirm the app launches according to Settings copy.
+- Disable open-at-login.
+- Confirm uninstall removes installer-created startup entries.
+
+## Update Check And Uninstall
+
+- Confirm Settings check-for-updates finds Windows installer assets from GitHub
+  Releases when a newer release exists.
+- Confirm the app does not claim in-place auto-update.
+- Uninstall through Windows Apps settings.
+- Confirm uninstall behavior and retained user-data policy are documented.
+
+## Performance
+
+- Cold launch shell visible.
+- Warm launch shell visible.
+- Command palette opens.
+- Quick capture opens.
+- Local search against medium fixture.
+- Task list scroll against large fixture.
+- Calendar month navigation against large fixture.
+- SQLite query-plan report is generated.

@@ -24,7 +24,8 @@ The current macOS preview build is intentionally unsigned:
 
 - `electron-builder.yml` sets `mac.identity: null`.
 - `electron-builder.yml` sets `dmg.sign: false`.
-- Release scripts run with `CSC_IDENTITY_AUTO_DISCOVERY=false`.
+- Release scripts run with `CSC_IDENTITY_AUTO_DISCOVERY=false` through
+  `scripts/electron-builder-preview.ts`.
 - No signing certificates, Apple account credentials, or notarization secrets are stored in the repository.
 - Auto-update is not enabled.
 
@@ -59,7 +60,7 @@ That command runs:
 pnpm test
 pnpm build:release:mac
 pnpm release:review-bundle
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never
+tsx scripts/electron-builder-preview.ts --mac --publish never
 pnpm release:mac-artifacts
 pnpm release:checksums
 ```
@@ -76,7 +77,7 @@ To run the steps manually:
 pnpm test
 pnpm build:release:mac
 pnpm release:review-bundle
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --publish never
+tsx scripts/electron-builder-preview.ts --mac --publish never
 pnpm release:mac-artifacts
 pnpm release:checksums
 ```
@@ -215,9 +216,81 @@ cd -
 
 Linux preview support and run instructions live in [Linux Preview Support](../support/linux-preview-support.md).
 
+## Windows Technical Preview
+
+Run the full Windows technical preview release gate on a Windows host or
+Windows CI runner:
+
+```sh
+pnpm release:win:preview
+```
+
+The manual GitHub Actions gate is `.github/workflows/windows-preview.yml`. Run
+`Windows Preview Validation` from GitHub Actions for the first Windows-host
+package and runtime pass.
+
+Linux cross-packaging for the Windows NSIS target requires Wine. A Linux host
+without Wine can still complete the release build and `win-unpacked` step, but
+electron-builder will stop before NSIS installer creation.
+
+That command runs:
+
+```sh
+pnpm test
+pnpm build:release:win
+pnpm release:review-bundle
+tsx scripts/electron-builder-preview.ts --win nsis --x64 --publish never
+pnpm release:win-artifacts
+pnpm release:checksums
+```
+
+For a packaging-only preview after local validation:
+
+```sh
+pnpm pack:win:preview
+```
+
+Expected artifact paths:
+
+```text
+release/Hot-Cross-Buns-2-<version>-windows-x64.exe
+release/Hot-Cross-Buns-2-windows.exe
+release/Hot-Cross-Buns-2-windows-x64.exe
+release/SHASUMS256.txt
+release/*.sha256
+artifacts/release/bundle-review.json
+artifacts/release/bundle-review.md
+```
+
+Run the Windows installer artifact smoke after packaging:
+
+```sh
+pnpm release:smoke-nsis
+```
+
+The smoke script verifies that the stable Windows x64 installer alias exists
+and is not unexpectedly small. It does not replace the installed-app manual
+checks in [Manual Windows Native Shell Checklist](../testing/manual-windows-native-shell.md).
+
+Verify checksums locally on Windows:
+
+```powershell
+Get-FileHash .\release\Hot-Cross-Buns-2-windows-x64.exe -Algorithm SHA256
+```
+
+or from a shell with GNU coreutils:
+
+```sh
+cd release
+sha256sum -c SHASUMS256.txt
+cd -
+```
+
 ## Version Metadata
 
-`pnpm build:release:mac` injects build metadata into the compiled main process:
+`pnpm build:release:mac`, `pnpm build:release:linux`, and
+`pnpm build:release:win` use `scripts/release-build.ts` to inject build
+metadata into the compiled main process on macOS, Linux, and Windows:
 
 - `HCB_BUILD_COMMIT`: short Git commit, derived from `git rev-parse --short=12 HEAD`
 - `HCB_BUILD_DATE`: UTC ISO timestamp from the release build
@@ -261,7 +334,8 @@ mkdir -p docs/release/notes
 $EDITOR "docs/release/notes/${TAG}.md"
 ```
 
-Create a draft GitHub Release after `pnpm release:mac:preview` passes:
+Create a draft GitHub Release after the platform preview gates pass. For the
+macOS preview artifacts:
 
 ```sh
 VERSION=$(node -p "require('./package.json').version")
@@ -288,6 +362,51 @@ The GitHub Release notes must include:
 - signing/notarization status
 
 Do not publish the draft until the uploaded artifact names and checksums match `release/SHASUMS256.txt`.
+
+For the Linux AppImage technical preview artifacts, either create a Linux-only
+draft release or upload these files to the existing `v${VERSION}` draft after
+`pnpm release:linux:preview`, checksum verification, and AppImage smoke pass:
+
+```sh
+VERSION=$(node -p "require('./package.json').version")
+TAG="v${VERSION}"
+gh release upload "$TAG" \
+  release/Hot-Cross-Buns-2-${VERSION}-linux-x86_64.AppImage \
+  release/Hot-Cross-Buns-2-linux.AppImage \
+  release/Hot-Cross-Buns-2-linux-x64.AppImage \
+  release/Hot-Cross-Buns-2-${VERSION}-linux-x86_64.AppImage.sha256 \
+  release/Hot-Cross-Buns-2-linux.AppImage.sha256 \
+  release/Hot-Cross-Buns-2-linux-x64.AppImage.sha256 \
+  release/SHASUMS256.txt \
+  --clobber
+```
+
+The Linux release notes must clearly say AppImage technical preview, list the
+unsupported Linux native features, and use `sha256sum -c SHASUMS256.txt` for
+checksum verification.
+
+For the Windows NSIS technical preview artifacts, either create a Windows-only
+draft release or upload these files to the existing `v${VERSION}` draft after
+`pnpm release:win:preview`, checksum verification, installer smoke, and manual
+Windows installed-app QA pass:
+
+```sh
+VERSION=$(node -p "require('./package.json').version")
+TAG="v${VERSION}"
+gh release upload "$TAG" \
+  release/Hot-Cross-Buns-2-${VERSION}-windows-x64.exe \
+  release/Hot-Cross-Buns-2-windows.exe \
+  release/Hot-Cross-Buns-2-windows-x64.exe \
+  release/Hot-Cross-Buns-2-${VERSION}-windows-x64.exe.sha256 \
+  release/Hot-Cross-Buns-2-windows.exe.sha256 \
+  release/Hot-Cross-Buns-2-windows-x64.exe.sha256 \
+  release/SHASUMS256.txt \
+  --clobber
+```
+
+The Windows release notes must clearly say unsigned NSIS technical preview
+unless signing is enabled, list SmartScreen expectations, and use SHA-256
+checksum verification.
 
 ## Unsigned Preview Install Notes
 
@@ -346,12 +465,14 @@ In-place auto-update can be added later through Electron updater tooling once si
 
 Still required before publishing a Linux preview:
 
-- protocol registration behavior
-- updater stance by package format
 - distro and desktop-environment support matrix
-- tray/global shortcut caveats documented
-- AppImage build on a Linux host or Linux CI runner
 - AppImage launch from terminal and file manager
+- app icon and window grouping on the supported desktop matrix
+- OAuth browser round trip on Ubuntu GNOME
+- Secret Service ready, missing, and locked states
+- live MCP CLI smoke against the packaged AppImage
+- packaged preview confirmation that Linux notifications and global shortcuts
+  remain explicitly unsupported
 - Linux manual QA matrix from `TODO.md`
 
 Linux preview uses check-for-new-version before in-place updates. The app's Linux release check reads GitHub Releases and prefers AppImage assets, but it does not download or install updates automatically. Electron's built-in `autoUpdater` does not support Linux; package-manager and electron-builder updater behavior must be evaluated per package target before claiming automatic updates.
@@ -362,13 +483,19 @@ See [Linux Port](../ports/linux-port.md).
 
 Required before Windows preview:
 
-- NSIS installer target first unless another package is explicitly chosen
-- code signing plan
-- AppUserModelID and installer identity
-- protocol registration
-- update metadata strategy
-- SmartScreen expectations documented
-- Start Menu, shortcut, tray, and notification behavior tested
+- Windows host or CI run of `pnpm release:win:preview`
+- Manual run of the `Windows Preview Validation` GitHub Actions workflow
+- NSIS installer smoke with `pnpm release:smoke-nsis`
+- installed app launch from installer, Start Menu, and desktop shortcut if
+  created
+- AppUserModelID and taskbar grouping verified
+- Windows safeStorage token persistence verified across restart
+- OAuth browser round trip verified
+- MCP localhost smoke verified
+- tray, global shortcut, notification, protocol, and autostart behavior tested
+- update-check UI verified against Windows assets
+- uninstall behavior documented and tested
+- code signing plan and SmartScreen expectations documented
 
 Windows preview may be unsigned only for local/internal testing. Public Windows distribution requires an explicit signing and SmartScreen plan.
 

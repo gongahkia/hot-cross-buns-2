@@ -137,6 +137,7 @@ async function launchAppImage(artifact: string, workDir: string): Promise<void> 
   const userDataDir = join(workDir, "user-data");
   const child = spawn(artifact, [], {
     cwd: workDir,
+    detached: true,
     env: {
       ...process.env,
       HCB_USER_DATA_DIR: userDataDir,
@@ -150,25 +151,68 @@ async function launchAppImage(artifact: string, workDir: string): Promise<void> 
   child.stderr.on("data", (chunk) => output.push(Buffer.from(chunk)));
 
   await new Promise<void>((resolveLaunch, rejectLaunch) => {
-    const timeout = setTimeout(() => {
-      child.kill("SIGTERM");
+    let forceKillTimeout: NodeJS.Timeout | null = null;
+    let settled = false;
+    const settle = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout);
+      }
       resolveLaunch();
-    }, launchTimeoutMs);
+    };
+    const stopApp = () => {
+      signalAppImage(child.pid, "SIGTERM");
+      forceKillTimeout = setTimeout(() => {
+        signalAppImage(child.pid, "SIGKILL");
+        child.stdout.destroy();
+        child.stderr.destroy();
+        settle();
+      }, 1_500);
+    };
+    const timeout = setTimeout(stopApp, launchTimeoutMs);
 
     child.on("error", (error) => {
       clearTimeout(timeout);
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout);
+      }
       rejectLaunch(error);
     });
-    child.on("exit", () => {
-      clearTimeout(timeout);
-      resolveLaunch();
-    });
+    child.on("close", settle);
   });
 
   const logs = Buffer.concat(output).toString("utf8");
 
   if (!logs.trim()) {
     throw new Error("AppImage launch produced no startup logs.");
+  }
+}
+
+function signalAppImage(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (pid === undefined) {
+    return;
+  }
+
+  try {
+    process.kill(-pid, signal);
+    return;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+
+    if (code !== "ESRCH") {
+      try {
+        process.kill(pid, signal);
+      } catch (fallbackError) {
+        if ((fallbackError as NodeJS.ErrnoException).code !== "ESRCH") {
+          throw fallbackError;
+        }
+      }
+    }
   }
 }
 

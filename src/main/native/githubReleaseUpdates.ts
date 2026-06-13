@@ -23,6 +23,21 @@ export const linuxReleaseAssetPreferences: GitHubReleaseAssetPreference[] = [
   }
 ];
 
+export const windowsReleaseAssetPreferences: GitHubReleaseAssetPreference[] = [
+  {
+    label: "Windows installer",
+    matches: (asset) => assetMatchesExtension(asset, "exe")
+  },
+  {
+    label: "Windows MSI",
+    matches: (asset) => assetMatchesExtension(asset, "msi")
+  },
+  {
+    label: "Windows ZIP",
+    matches: (asset) => assetMatchesExtension(asset, "zip")
+  }
+];
+
 export async function checkGitHubReleaseForUpdates(input: {
   appVersion: string;
   assetPreferences: GitHubReleaseAssetPreference[];

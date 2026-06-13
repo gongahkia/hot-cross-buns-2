@@ -707,12 +707,21 @@ Verification completed:
   report schema-valid for the current session, Linux tray/deep-link/autostart
   remain unsupported, and credential storage remains blocked when Electron
   would fall back to plaintext.
+- Linux release-prep rerun on 2026-06-13:
+  `pnpm release:linux:preview` passed (`61` Vitest files, `482` tests),
+  regenerated the `5.0.0` AppImage plus stable Linux aliases, and wrote
+  matching checksums. `pnpm typecheck`, `(cd release && sha256sum -c
+  SHASUMS256.txt)`, `pnpm release:smoke-appimage`,
+  `HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage`,
+  `pnpm test:smoke`, and `pnpm test:perf` also passed. The AppImage smoke
+  script now terminates the packaged app process group after collecting startup
+  logs so launch smoke does not leak a running AppImage.
 
 Remaining manual release gates: Ubuntu GNOME terminal and file-manager launch,
 real desktop icon/window grouping, OAuth browser round trip, Secret Service
 ready/missing/locked checks, live MCP CLI smoke against the packaged AppImage,
-confirmation that Linux notifications and global shortcuts are unsupported in
-the packaged preview, and macOS packaging smoke on a macOS host before shipping.
+and confirmation that Linux notifications and global shortcuts are unsupported
+in the packaged preview.
 
 Required automated gates before any Linux preview release:
 
@@ -768,8 +777,8 @@ checklist all call out preview scope, AppImage packaging, OS-backed credential
 storage, no plaintext fallback, manual GitHub release updates, and unsupported
 Linux notifications, global shortcuts, tray/status-area, deep-link, autostart,
 and in-place update behavior.
-Remaining unchecked release-readiness items below require live macOS or Linux
-desktop validation and are not claimed as complete by this docs pass.
+Remaining unchecked release-readiness items below require live Linux desktop
+validation and are not claimed as complete by this docs pass.
 
 Implementation tasks:
 
@@ -807,7 +816,7 @@ Acceptance criteria:
 
 ## Release Readiness Checklist
 
-- [ ] macOS tests and packaging still pass.
+- [x] macOS tests and packaging still pass.
 - [x] Linux adapter selected on Linux without importing mac adapter code.
 - [x] Linux capability report is schema-valid.
 - [x] Linux credential storage uses Secret Service/libsecret and no plaintext
@@ -825,6 +834,88 @@ Acceptance criteria:
 - [ ] Linux manual QA matrix is complete.
 - [x] Linux support docs are written.
 - [x] README/public copy is updated only with accurate preview claims.
+
+## Phase 13: Windows Technical Preview
+
+Goal: port the validated desktop release path to Windows without claiming
+public Windows support before installer, identity, credential, shell, and
+SmartScreen behavior are proven on Windows.
+
+Status: Windows preview scaffold implemented as of 2026-06-13. The repo now has
+an `electron-windows-preview` native adapter, Windows safeStorage-backed secret
+storage, AppUserModelID setup, NSIS packaging config, Windows release scripts,
+stable installer alias generation, an NSIS artifact smoke script, Windows
+manual QA checklist, a manual Windows Preview Validation GitHub Actions
+workflow, and release distribution docs. Public Windows release is not yet
+validated.
+
+Fedora cross-package attempt on 2026-06-13: `pnpm pack:win:preview` completed
+the Windows release build and produced `release/win-unpacked/Hot Cross Buns
+2.exe`, then electron-builder stopped before NSIS installer creation because
+Wine is not installed on this Linux host. Continue Windows release validation on
+a Windows host/CI runner, or install Wine for Linux cross-packaging before
+re-running `pnpm pack:win:preview`.
+
+Release script hardening on 2026-06-13: `build:release:*` now uses
+`scripts/release-build.ts`, and preview packaging now uses
+`scripts/electron-builder-preview.ts`, so Windows validation does not depend on
+POSIX inline environment assignment syntax.
+
+Implementation tasks:
+
+- [x] Decide preview scope: Windows 11 x64 first, NSIS installer first,
+      unsigned only for internal preview unless signing is configured.
+- [x] Add Windows packaging: `win`/`nsis` electron-builder config, ICO asset,
+      `build:release:win`, `pack:win:preview`, `release:win:preview`,
+      `release:win-artifacts`, and `release:smoke-nsis`.
+- [x] Add Windows CI validation entry point:
+      `.github/workflows/windows-preview.yml` runs the Windows preview release
+      gate, installer artifact smoke, checksum output, Electron smoke, and
+      performance smoke on `windows-latest`.
+- [x] Add Windows native adapter: app paths, AppUserModelID, tray,
+      global shortcuts, notifications, protocol registration, autostart,
+      manual GitHub release checks, external opens, diagnostics, and capability
+      reporting.
+- [x] Add Windows credential storage: Electron safeStorage-backed encrypted
+      metadata store for Google OAuth and MCP bearer tokens, with no plaintext
+      fallback.
+- [ ] Validate core runtime on Windows: SQLite native module, OAuth browser
+      round trip, MCP loopback, Windows Defender/firewall behavior, and
+      diagnostics redaction.
+- [ ] Validate native shell behavior on Windows: tray, global shortcuts,
+      notifications, deep links, autostart, Start Menu identity, taskbar
+      grouping, and uninstall behavior.
+- [ ] Complete Windows release validation: `pnpm release:win:preview`,
+      checksum verification, `pnpm release:smoke-nsis`, Playwright smoke on
+      Windows, performance smoke on Windows, manual QA notes, and release notes.
+
+Required automated gates before Windows-host validation:
+
+- `pnpm typecheck`
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts src/main/credentials/secretStore.test.ts scripts/linux-packaging-config.test.ts`
+- `pnpm build`
+- `pnpm release:review-bundle`
+
+Required Windows manual checks:
+
+- Install with NSIS.
+- Launch from installer finish action.
+- Launch from Start Menu.
+- Launch from desktop shortcut if created.
+- App icon and taskbar grouping are correct.
+- Diagnostics report platform `win32`, adapter `electron-windows-preview`, and
+  package format `nsis`.
+- Google OAuth browser round trip.
+- Token refresh after app restart using Windows safeStorage.
+- MCP localhost smoke against installed app.
+- Tray menu show/hide, quick capture, refresh, settings, and quit.
+- Global shortcut success and conflict handling.
+- Windows notifications display and click through.
+- `hotcrossbuns://` warm-start and cold-start links.
+- Open-at-login enable/disable.
+- Settings check-for-updates finds Windows installer assets.
+- Uninstall behavior and retained data policy are documented.
+- SmartScreen/signing behavior is documented.
 
 ## External References
 

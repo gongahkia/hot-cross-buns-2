@@ -125,6 +125,9 @@ Later smoke tests:
 CI smoke artifact policy:
 
 - The tracked GitHub Actions smoke job runs on `macos-14`.
+- The manual `Windows Preview Validation` workflow runs on `windows-latest` and
+  uploads Windows installer, checksum, bundle-review, performance, and
+  Playwright artifacts.
 - On failure or cancellation it uploads Playwright traces, screenshots, and any release diagnostics under `output/playwright/`, `test-results/`, `playwright-report/`, and `artifacts/release/`.
 - Smoke artifacts may contain screenshots of local fixture data. Do not upload real user app data paths or private databases.
 
@@ -153,6 +156,8 @@ Manual checks are required for platform-specific OS behavior:
 - macOS tray/menu bar behavior
 - Linux AppImage launch behavior
 - Linux Secret Service availability, locked, and missing states
+- Windows NSIS install, launch, and uninstall behavior
+- Windows AppUserModelID, Start Menu identity, and taskbar grouping
 - global shortcut registration conflict
 - notifications permission prompt
 - custom protocol links
@@ -166,6 +171,8 @@ Use [Mac Preview Support](../support/mac-preview-support.md) for unsigned previe
 Use [Manual Linux Native Shell Checklist](manual-linux-native-shell.md) for AppImage launch, OAuth, Secret Service, MCP, notification, shortcut, and unsupported-feature verification across the Linux technical preview matrix.
 
 Use [Linux Preview Support](../support/linux-preview-support.md) for AppImage install, known limitations, diagnostics, rollback, and clean-removal guidance.
+
+Use [Manual Windows Native Shell Checklist](manual-windows-native-shell.md) for NSIS install, Start Menu/taskbar identity, tray, global shortcut, notification, OAuth, MCP, protocol, autostart, uninstall, and performance validation.
 
 Record manual verification notes in release PRs.
 

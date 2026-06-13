@@ -12,8 +12,9 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "pnpm typecheck && electron-vite build",
-    "build:release:mac": "HCB_BUILD_COMMIT=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown) HCB_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) HCB_PACKAGE_TOOL=electron-builder pnpm build",
-    "build:release:linux": "HCB_BUILD_COMMIT=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown) HCB_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) HCB_PACKAGE_TOOL=electron-builder pnpm build",
+    "build:release:mac": "tsx scripts/release-build.ts",
+    "build:release:linux": "tsx scripts/release-build.ts",
+    "build:release:win": "tsx scripts/release-build.ts",
     "hcb": "tsx scripts/hcb.ts",
     "hcb:smoke": "tsx scripts/hcb-cli-smoke.ts",
     "hcb:july-smoke": "tsx scripts/july-2026-smoke.ts",
@@ -26,13 +27,17 @@
     "release:review-bundle": "tsx scripts/review-bundle.ts",
     "release:mac-artifacts": "tsx scripts/mac-preview-artifacts.ts",
     "release:linux-artifacts": "tsx scripts/linux-preview-artifacts.ts",
+    "release:win-artifacts": "tsx scripts/windows-preview-artifacts.ts",
     "release:checksums": "tsx scripts/release-checksums.ts",
     "release:smoke-dmg": "scripts/smoke-test-dmg.sh release",
     "release:smoke-appimage": "tsx scripts/smoke-test-appimage.ts release",
-    "pack:mac:preview": "pnpm build:release:mac && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never && pnpm release:mac-artifacts && pnpm release:checksums",
-    "pack:linux:preview": "pnpm build:release:linux && electron-builder --linux AppImage --publish never && pnpm release:linux-artifacts && pnpm release:checksums",
-    "release:mac:preview": "pnpm test && pnpm build:release:mac && pnpm release:review-bundle && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never && pnpm release:mac-artifacts && pnpm release:checksums",
-    "release:linux:preview": "pnpm test && pnpm build:release:linux && pnpm release:review-bundle && electron-builder --linux AppImage --publish never && pnpm release:linux-artifacts && pnpm release:checksums"
+    "release:smoke-nsis": "tsx scripts/smoke-test-nsis.ts release",
+    "pack:mac:preview": "pnpm build:release:mac && tsx scripts/electron-builder-preview.ts --mac --publish never && pnpm release:mac-artifacts && pnpm release:checksums",
+    "pack:linux:preview": "pnpm build:release:linux && tsx scripts/electron-builder-preview.ts --linux AppImage --publish never && pnpm release:linux-artifacts && pnpm release:checksums",
+    "pack:win:preview": "pnpm build:release:win && tsx scripts/electron-builder-preview.ts --win nsis --x64 --publish never && pnpm release:win-artifacts && pnpm release:checksums",
+    "release:mac:preview": "pnpm test && pnpm build:release:mac && pnpm release:review-bundle && tsx scripts/electron-builder-preview.ts --mac --publish never && pnpm release:mac-artifacts && pnpm release:checksums",
+    "release:linux:preview": "pnpm test && pnpm build:release:linux && pnpm release:review-bundle && tsx scripts/electron-builder-preview.ts --linux AppImage --publish never && pnpm release:linux-artifacts && pnpm release:checksums",
+    "release:win:preview": "pnpm test && pnpm build:release:win && pnpm release:review-bundle && tsx scripts/electron-builder-preview.ts --win nsis --x64 --publish never && pnpm release:win-artifacts && pnpm release:checksums"
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",
