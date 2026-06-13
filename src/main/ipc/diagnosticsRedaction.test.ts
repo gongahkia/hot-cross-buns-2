@@ -40,10 +40,11 @@ describe("diagnostics redaction", () => {
 
   it("scrubs bearer and OAuth-looking strings in diagnostic text", () => {
     const text = redactDiagnosticText(
-      "Authorization: Bearer abc.def.ghi access_token=secret client_secret=client-secret"
+      "Authorization: Bearer abc.def.ghi access_token=secret client_secret=client-secret path=/home/alice/.config/Hot Cross Buns 2"
     );
 
     expect(text).not.toMatch(/abc\.def\.ghi|=secret(?:\s|$)|=client-secret/);
+    expect(text).not.toContain("/home/alice");
     expect(text).toContain("Bearer [REDACTED]");
   });
 });

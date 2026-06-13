@@ -40,6 +40,7 @@ export class LocalMcpServerController {
 
   async start(port: number): Promise<void> {
     try {
+      await this.options.credentialAdapter.loadBearerToken();
       const runningPort = await this.server.start(port);
       this.runningPort = runningPort;
       this.lastError = undefined;

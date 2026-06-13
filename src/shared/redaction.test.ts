@@ -33,12 +33,14 @@ describe("central redaction utilities", () => {
         "refreshToken: fake-refresh-token",
         "client_secret=fake-client-secret",
         "Authorization: Bearer fake-bearer-token",
-        '{"mcpToken":"fake-mcp-token"}'
+        '{"mcpToken":"fake-mcp-token"}',
+        "/home/alice/.config/Hot Cross Buns 2"
       ].join(" ")
     );
 
     expect(redacted).toContain(REDACTED_VALUE);
     expectNoFakeSecrets(redacted);
+    expect(redacted).not.toContain("/home/alice");
   });
 
   it("redacts log objects recursively without preserving sensitive keys", () => {

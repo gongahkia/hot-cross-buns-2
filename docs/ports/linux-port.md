@@ -185,6 +185,26 @@ Required Linux checks:
 - MCP rejects non-local/unauthorized requests
 - no tokens appear in logs, diagnostics, or renderer state
 
+Current implementation:
+
+- Google OAuth loopback binds to `127.0.0.1` with an ephemeral port and hands the
+  authorization URL to the native adapter's external URL opener.
+- MCP binds to `127.0.0.1` and rejects non-local request contexts, browser
+  origins, missing bearer tokens, invalid bearer tokens, and oversized requests.
+- MCP startup loads or creates the bearer token through `SecretStore` before the
+  listener is reported running.
+- The MCP runtime discovery file is written under the app config directory with
+  mode `0600` and contains only non-secret loopback metadata.
+- Diagnostics redaction covers bearer/OAuth secrets and Linux `/home/...` paths.
+
+Remaining release gates:
+
+- OAuth browser round trip on Ubuntu GNOME.
+- Firewall/security-tool behavior on the supported Ubuntu path.
+- Token refresh after app restart with Secret Service ready, missing, and locked
+  states.
+- External CLI MCP smoke against a packaged AppImage.
+
 ## Performance Checks
 
 Required Linux performance checks:

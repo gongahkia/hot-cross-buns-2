@@ -114,6 +114,23 @@ describe("local MCP server contract", () => {
     expect(response.status).toBe(403);
   });
 
+  it("rejects non-local request contexts before bearer-token authorization", async () => {
+    const { server } = fixture("read-only");
+    const response = await server.handleRawHttpRequest(
+      rawHttpRequest({
+        headers: authHeaders(),
+        body: rpc("tools/list")
+      }),
+      {
+        remoteAddress: "192.168.1.50",
+        remoteIsLocal: false
+      }
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.body.toString("utf8")).not.toContain(testToken);
+  });
+
   it("executes a read tool in read-only mode", async () => {
     const { server } = fixture("read-only");
 

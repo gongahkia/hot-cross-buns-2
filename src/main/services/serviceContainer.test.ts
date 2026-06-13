@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HCB_MCP_RUNTIME_FILE_NAME } from "@shared/mcpRuntime";
 import {
   LinuxSecretServiceStore,
   MemorySecretStore,
@@ -48,6 +49,52 @@ describe("service container integration", () => {
       ok: true,
       state: "ready"
     });
+  });
+
+  it("writes MCP discovery metadata under the Linux config path without bearer tokens", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hcb2-linux-mcp-runtime-"));
+    const appPaths = {
+      configDirectory: join(root, "config"),
+      dataDirectory: join(root, "data"),
+      cacheDirectory: join(root, "cache"),
+      logsDirectory: join(root, "logs"),
+      diagnosticsDirectory: join(root, "diagnostics"),
+      tempDirectory: join(root, "tmp")
+    };
+    const secretStore = new MemorySecretStore();
+    const services = createServiceContainer({
+      appPaths,
+      secretStore
+    });
+    const runtimePath = join(appPaths.configDirectory, HCB_MCP_RUNTIME_FILE_NAME);
+
+    try {
+      const status = await services.domain.mcp.setEnabled({ enabled: true, port: 0 });
+      const parsed = JSON.parse(readFileSync(runtimePath, "utf8")) as Record<string, unknown>;
+      const mode = statSync(runtimePath).mode & 0o777;
+      const token = await secretStore.read({
+        service: "Hot Cross Buns 2 MCP",
+        account: "loopback-bearer-token"
+      });
+
+      expect(status).toMatchObject({
+        running: true,
+        tokenState: "configured",
+        url: "http://127.0.0.1"
+      });
+      expect(parsed).toMatchObject({
+        running: true,
+        url: "http://127.0.0.1",
+        port: status.port
+      });
+      expect(runtimePath.startsWith(appPaths.configDirectory)).toBe(true);
+      expect(mode).toBe(0o600);
+      expect(JSON.stringify(parsed)).not.toMatch(/token|secret|bearer/i);
+      expect(token).toEqual(expect.any(String));
+    } finally {
+      services.close();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("shares domain services between MCP tool handlers and planner IPC services", async () => {

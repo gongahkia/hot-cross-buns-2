@@ -49,13 +49,16 @@ visible.
 - Credential storage requires an OS-backed Electron `safeStorage` provider such
   as GNOME Keyring/libsecret or KWallet. The app refuses Electron's
   `basic_text` plaintext fallback.
+- Google OAuth and local MCP use loopback-only listeners. OAuth and external MCP
+  CLI smoke still require release validation on Ubuntu GNOME before public
+  preview claims expand beyond the technical preview.
 
 ## Diagnostics
 
 Open Settings > Diagnostics and export a support bundle when reporting preview
 issues. Diagnostics are designed to redact raw tokens, raw Google payloads,
-bearer tokens, and local paths. Do not paste terminal output that includes
-secrets.
+bearer tokens, Linux home paths, and other local paths. Do not paste terminal
+output that includes secrets.
 
 Useful checks for support reports:
 

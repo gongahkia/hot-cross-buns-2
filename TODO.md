@@ -67,6 +67,11 @@ claims until the implementation phases and release gates below are complete.
 - Linux update checks use the shared GitHub Releases check-for-new-version flow
   and prefer AppImage assets. No Linux update is downloaded or installed
   automatically.
+- Google OAuth and MCP both use loopback-only network surfaces. OAuth opens the
+  system browser through the native external URL adapter and listens on
+  `127.0.0.1`; MCP binds to `127.0.0.1`, writes only non-secret discovery
+  metadata under the app config path, and stores bearer tokens through the
+  OS-backed `SecretStore`.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
 - `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
@@ -598,6 +603,24 @@ Acceptance criteria:
 Goal: validate that shared network flows work correctly on Linux and remain
 locked to local/safe boundaries.
 
+Status: Implementation and automated security coverage complete as of
+2026-06-13. Google OAuth loopback already binds to `127.0.0.1` and opens the
+authorization URL through the native external URL opener. MCP startup now
+materializes the bearer token in the configured `SecretStore` before binding,
+binds only to `127.0.0.1`, rejects non-local, unauthorized, oversized, and
+browser-origin requests, and writes only token-free runtime discovery metadata
+under the Linux app config path. Diagnostics redaction now includes Linux
+`/home/...` path examples.
+
+Verification completed:
+
+- `pnpm exec vitest run --config vitest.config.ts src/main/google/oauthLoopback.test.ts src/main/mcp/server.test.ts src/main/mcp/runtimeFile.test.ts src/main/mcp/keychainCredentials.test.ts src/main/services/serviceContainer.test.ts src/shared/redaction.test.ts src/main/ipc/diagnosticsRedaction.test.ts src/main/native/adapterContract.test.ts`
+
+Remaining manual release gates: Ubuntu GNOME OAuth browser round trip, firewall
+or security-tool callback behavior on the supported distro path, token refresh
+after an app restart, and external CLI MCP smoke against a packaged AppImage
+with Secret Service ready, missing, and locked states.
+
 Implementation tasks:
 
 - Verify default browser handoff from Linux through the native adapter's
@@ -716,7 +739,7 @@ Acceptance criteria:
 - [x] AppImage builds on a Linux host or Linux CI runner.
 - [x] AppImage checksum is generated and verified.
 - [ ] OAuth browser round trip works on Ubuntu GNOME.
-- [ ] MCP binds to `127.0.0.1` and uses OS-backed bearer token storage.
+- [x] MCP binds to `127.0.0.1` and uses OS-backed bearer token storage.
 - [ ] Notifications are either validated or explicitly unsupported.
 - [ ] Global shortcuts are either validated per session type or explicitly
       unsupported.
