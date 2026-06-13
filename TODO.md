@@ -69,12 +69,16 @@ Goal: make Linux startup select a Linux-aware adapter that reports honest
 capabilities without trying to implement fragile desktop-environment behavior
 too early.
 
-Status: Complete as of 2026-06-13. The app now selects native adapters through
-an async platform factory, lazy-loads the macOS adapter only for `darwin`, uses a
-non-claiming `electron-linux-preview` adapter for `linux`, and leaves Windows
-and unknown platforms on the existing noop adapter. Verification: `pnpm
-typecheck` and `pnpm exec vitest run --config vitest.config.ts
-src/main/native/adapterContract.test.ts`.
+Status: Complete as of 2026-06-13 in implementation commit `905210c`. The app
+now selects native adapters through an async platform factory, lazy-loads the
+macOS adapter only for `darwin`, uses a non-claiming
+`electron-linux-preview` adapter for `linux`, and leaves Windows and unknown
+platforms on the existing noop adapter. Verification:
+
+- `pnpm typecheck`
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts`
+- `pnpm test`
+- `pnpm build`
 
 Implementation tasks:
 
