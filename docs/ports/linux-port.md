@@ -155,6 +155,10 @@ Required checks:
 
 Open-at-login should be treated as optional for Linux preview. Implement only through a platform adapter and document desktop-environment limitations.
 
+Current technical-preview decision: Linux open-at-login is explicitly
+unsupported. The adapter does not create or remove user-level autostart
+`.desktop` entries, and Settings/Diagnostics report the unsupported state.
+
 Do not block the Linux preview on autostart.
 
 ## Updater Strategy

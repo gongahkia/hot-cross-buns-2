@@ -61,6 +61,9 @@ claims until the implementation phases and release gates below are complete.
 - Linux `hotcrossbuns://` registration is explicitly unsupported until installed
   AppImage desktop integration is validated. Linux AppImage metadata
   intentionally omits the scheme.
+- Linux open-at-login/autostart is explicitly unsupported in the technical
+  preview. The adapter does not create or remove user-level autostart
+  `.desktop` entries.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
 - `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
@@ -520,6 +523,22 @@ Acceptance criteria:
 
 Goal: decide whether open-at-login belongs in the Linux preview after core app,
 credentials, packaging, and native shell behavior are stable.
+
+Status: Closed as explicitly unsupported as of 2026-06-13. Linux open-at-login
+is not enabled because a user-level autostart `.desktop` entry implementation
+has not been validated across desktop environments. The Linux adapter reports
+autostart as unsupported, does not write or remove autostart entries, and
+Settings/Diagnostics expose the unsupported state.
+
+Verification completed:
+
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts`
+- `pnpm typecheck`
+- `pnpm build`
+
+Remaining manual release gates: user-level autostart `.desktop` create/remove
+behavior, desktop-environment-specific login behavior, and uninstall/removal
+policy if a later release enables autostart.
 
 Implementation tasks:
 

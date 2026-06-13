@@ -419,7 +419,8 @@ describe("native adapter contract", () => {
     });
     expect(adapter.setAutostart(true)).toMatchObject({
       ok: false,
-      state: "unsupported"
+      state: "unsupported",
+      message: expect.stringContaining("explicitly unsupported")
     });
     expect(adapter.requestNotificationPermission()).toEqual({
       state: "unsupported"

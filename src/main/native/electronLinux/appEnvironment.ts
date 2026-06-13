@@ -100,7 +100,7 @@ export function capabilities(): NativePlatformCapabilities {
         },
         autostart: {
           state: "unsupported",
-          message: "Linux open-at-login is disabled until desktop-entry behavior is validated."
+          message: "Linux open-at-login is explicitly unsupported in this technical preview until a user-level autostart desktop-entry flow is validated."
         },
         updater: {
           state: "pending",
@@ -169,6 +169,11 @@ export function capabilities(): NativePlatformCapabilities {
           "customProtocol",
           "warning",
           "Linux hotcrossbuns:// registration is disabled and AppImage desktop metadata intentionally omits the scheme until installed-app validation passes."
+        ),
+        capabilityDiagnostic(
+          "autostart",
+          "warning",
+          "Linux open-at-login is disabled for this preview; no autostart .desktop entry is created or removed."
         )
       ]
     })
@@ -190,11 +195,13 @@ export function registerProtocolClient(_scheme: typeof HCB_DEEP_LINK_SCHEME): Na
 }
 
 export function setAutostart(_enabled: boolean): NativeOperationResult {
-  return unsupported("Linux open-at-login is pending desktop-entry validation.");
+  return unsupported(
+    "Linux open-at-login is explicitly unsupported until a user-level autostart desktop-entry flow is validated."
+  );
 }
 
 export function autostartStatus(): NativeOperationResult {
-  return unsupported("Linux open-at-login is not enabled.");
+  return unsupported("Linux open-at-login is explicitly unsupported in this technical preview.");
 }
 
 export function checkForUpdates(): NativeOperationResult {
