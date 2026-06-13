@@ -917,6 +917,130 @@ Required Windows manual checks:
 - Uninstall behavior and retained data policy are documented.
 - SmartScreen/signing behavior is documented.
 
+## Independent Agent Handoff: Finish Linux And Windows Ports
+
+Status at pause on 2026-06-13: Linux automated release prep is substantially
+complete, Windows scaffold is implemented, and release validation was paused
+before any Windows-host run. Do not mark either port as fully rounded out until
+the unchecked items below have direct evidence from the named target OS.
+
+Latest local validation evidence before pause:
+
+- `pnpm test` passed on Fedora 43 KDE: `61` Vitest files, `489` tests.
+- `pnpm test:smoke` passed on Fedora 43 KDE: `1` Playwright Electron smoke
+  test.
+- `pnpm test:perf` passed and wrote `artifacts/perf/latest.json` plus
+  `artifacts/perf/latest.md`.
+- Earlier Windows-prep checks passed locally: `pnpm typecheck`, the focused
+  Windows/native/credential packaging Vitest run, `pnpm build:release:win`,
+  and `pnpm release:review-bundle`.
+- `wine` is not installed on this host.
+- Docker is installed, but this user cannot access `/var/run/docker.sock`, so
+  Wine-in-Docker packaging is unavailable from this session.
+- `.github/workflows/windows-preview.yml` exists locally but has not been
+  committed/pushed in this worktree, so GitHub cannot dispatch it yet.
+
+Linux remaining work:
+
+- [ ] Run the packaged AppImage on Ubuntu LTS GNOME, not Fedora only.
+- [ ] Launch the AppImage from a terminal and record stdout/stderr plus exit
+      behavior.
+- [ ] Launch the AppImage from the file manager and verify no shell-only
+      assumptions are required.
+- [ ] Verify the app icon, window title, and taskbar/window grouping on Ubuntu
+      GNOME.
+- [ ] Run the app with an isolated `HCB_USER_DATA_DIR` and confirm no real user
+      data is touched during QA.
+- [ ] Complete Google OAuth browser round trip on Ubuntu GNOME.
+- [ ] Validate Secret Service states on Ubuntu GNOME:
+      ready/unlocked, locked, and missing/unavailable. Confirm there is no
+      plaintext token fallback.
+- [ ] Run a live MCP localhost smoke against the packaged AppImage. Confirm it
+      binds to `127.0.0.1`, requires the OS-backed bearer token, and rejects
+      unauthorized requests.
+- [ ] Open Settings diagnostics from the packaged AppImage and confirm paths,
+      adapter id, package format, credential status, and redaction are accurate.
+- [ ] Confirm packaged Linux notifications remain explicitly unsupported in
+      diagnostics and UI copy.
+- [ ] Confirm packaged Linux global shortcuts remain explicitly unsupported and
+      in-app quick add still works.
+- [ ] Confirm tray/status-area, `hotcrossbuns://` protocol handling, autostart,
+      and in-place auto-update are either still unsupported by design or have
+      fresh implementation plus manual QA before any support claim changes.
+- [ ] Verify Settings check-for-updates prefers Linux AppImage assets once a
+      draft or published GitHub release contains the Linux artifacts.
+- [ ] Re-run the Linux release gate after manual fixes:
+      `pnpm release:linux:preview`,
+      `(cd release && sha256sum -c SHASUMS256.txt)`,
+      `pnpm release:smoke-appimage`,
+      `HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage`,
+      `pnpm test:smoke`, and `pnpm test:perf`.
+- [ ] Update `docs/release/notes/v5.0.0.md` with the final Linux QA result,
+      unsupported feature list, artifact names, and checksum instructions.
+- [ ] Upload Linux AppImage artifacts only after the Ubuntu GNOME manual matrix
+      is complete.
+
+Windows remaining work:
+
+- [ ] Commit/push the Windows scaffold and `.github/workflows/windows-preview.yml`
+      to a branch so GitHub Actions can see the workflow, or run the same
+      commands on a real Windows 11 x64 machine.
+- [ ] Dispatch the `Windows Preview Validation` workflow on GitHub Actions, or
+      run these commands on Windows:
+      `pnpm release:win:preview`,
+      `pnpm release:smoke-nsis`,
+      `pnpm test:smoke`, and `pnpm test:perf`.
+- [ ] Confirm the Windows preview artifacts exist:
+      `release/Hot-Cross-Buns-2-5.0.0-windows-x64.exe`,
+      `release/Hot-Cross-Buns-2-windows.exe`,
+      `release/Hot-Cross-Buns-2-windows-x64.exe`,
+      matching `.sha256` files, and `release/SHASUMS256.txt`.
+- [ ] Verify the Windows installer checksum with PowerShell:
+      `Get-FileHash .\release\Hot-Cross-Buns-2-windows-x64.exe -Algorithm SHA256`.
+- [ ] Install the NSIS preview on Windows 11 x64.
+- [ ] Launch from installer finish action, Start Menu, and desktop shortcut.
+- [ ] Confirm AppUserModelID, app icon, Start Menu identity, and taskbar
+      grouping are correct.
+- [ ] Confirm SQLite native module loads in the installed Windows app and real
+      planner CRUD flows work.
+- [ ] Complete Google OAuth browser round trip on Windows and note any Defender
+      or firewall prompts.
+- [ ] Restart the app and confirm Windows safeStorage persists Google OAuth and
+      MCP bearer tokens without plaintext fallback.
+- [ ] Run a live MCP localhost smoke against the installed Windows app.
+- [ ] Validate Windows tray menu: show/hide, quick capture, refresh, settings,
+      and quit.
+- [ ] Validate global shortcut success path and conflict handling.
+- [ ] Validate Windows notifications display and click through with the correct
+      app identity.
+- [ ] Validate `hotcrossbuns://` warm-start and cold-start deep links.
+- [ ] Validate open-at-login enable/disable and persistence across app restart.
+- [ ] Verify Settings check-for-updates prefers Windows `.exe` assets.
+- [ ] Uninstall the app and document installer cleanup plus retained user-data
+      behavior.
+- [ ] Document SmartScreen behavior for unsigned preview artifacts. Do not make
+      a public Windows support claim without an explicit code-signing plan.
+- [ ] Update `docs/release/notes/v5.0.0.md`,
+      `docs/ports/windows-port.md`, `docs/release/distribution.md`, and
+      `docs/testing/manual-windows-native-shell.md` with actual Windows runner
+      and manual QA evidence.
+- [ ] Upload Windows NSIS artifacts only after Windows CI or Windows-host
+      packaging, checksum verification, installer smoke, and manual installed
+      app QA pass.
+
+Completion definition for the next agent:
+
+- Linux can be called rounded out only when the Ubuntu GNOME manual matrix is
+  complete, final Linux release artifacts/checksums are regenerated, and release
+  notes accurately describe preview scope and unsupported native features.
+- Windows can be called rounded out only when NSIS artifacts are built on a
+  Windows host or Windows CI runner, installed-app QA passes on Windows 11 x64,
+  SmartScreen/signing expectations are documented, and release notes accurately
+  describe unsigned preview scope.
+- If any feature changes from unsupported to supported, update adapter
+  capability reporting, docs, manual QA checklists, and release notes in the
+  same change.
+
 ## External References
 
 - Electron global shortcuts:
