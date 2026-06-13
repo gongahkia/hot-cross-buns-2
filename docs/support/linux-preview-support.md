@@ -35,8 +35,11 @@ visible.
 - AppImage is the only Linux package format.
 - In-place automatic Linux updates are not enabled.
 - `hotcrossbuns://` deep links are not registered for Linux yet.
-- Tray/status area, global shortcuts, notifications, and autostart remain
-  disabled until their dedicated Linux validation phases are complete.
+- Tray/status area, global shortcuts, and autostart remain disabled until their
+  dedicated Linux validation phases are complete.
+- Local notifications are enabled only when Electron reports desktop
+  notification support. GNOME/KDE delivery and notification click-through still
+  require release validation.
 - Credential storage requires an OS-backed Electron `safeStorage` provider such
   as GNOME Keyring/libsecret or KWallet. The app refuses Electron's
   `basic_text` plaintext fallback.

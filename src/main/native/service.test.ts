@@ -186,6 +186,7 @@ class FakeNativeAdapter implements NativePlatformAdapter {
   unregisteredShortcuts: string[] = [];
   protocolSchemes: string[] = [];
   scheduledNotifications: NativeNotificationRequest[] = [];
+  notificationFailureCallbacks: Array<(message: string) => void> = [];
   autostartRequests: boolean[] = [];
   fontFamilies: string[] = ["Avenir", "SF Pro Text"];
   trayCreateCount = 0;
@@ -246,8 +247,16 @@ class FakeNativeAdapter implements NativePlatformAdapter {
     return this.fontFamilies;
   }
 
-  scheduleNotification(request: NativeNotificationRequest): ScheduledNativeNotification {
+  scheduleNotification(
+    request: NativeNotificationRequest,
+    _onClick: () => void,
+    onFailure?: (message: string) => void
+  ): ScheduledNativeNotification {
     this.scheduledNotifications.push(request);
+    if (onFailure) {
+      this.notificationFailureCallbacks.push(onFailure);
+    }
+
     return {
       id: request.id,
       cancel: () => undefined
@@ -256,6 +265,7 @@ class FakeNativeAdapter implements NativePlatformAdapter {
 
   clearScheduledNotifications(): void {
     this.scheduledNotifications = [];
+    this.notificationFailureCallbacks = [];
   }
 
   setAutostart(enabled: boolean): NativeOperationResult {
@@ -306,6 +316,7 @@ class FakeNativeAdapter implements NativePlatformAdapter {
   dispose(): void {
     this.registeredShortcuts = [];
     this.scheduledNotifications = [];
+    this.notificationFailureCallbacks = [];
   }
 }
 
@@ -653,6 +664,44 @@ describe("native shell service", () => {
         scheduledCount: 0
       }
     });
+  });
+
+  it("marks native notification delivery failures as sanitized recoverable errors", async () => {
+    const { adapter, service } = createService({
+      tasks: [
+        {
+          id: "task-1",
+          listId: "inbox",
+          title: "Pay invoice",
+          status: "active",
+          dueAt: "2026-05-22T00:00:00.000Z",
+          updatedAt: now.toISOString(),
+          priority: "none"
+        }
+      ]
+    });
+
+    service.startDeferredStartup();
+    await flushNativeStartup();
+
+    expect(service.capabilities().notificationsStatus).toMatchObject({
+      scheduledCount: 1,
+      state: "ready"
+    });
+
+    adapter.notificationFailureCallbacks[0](
+      "access_token=fake-token failed under /Users/example/Library"
+    );
+
+    const message = service.capabilities().notificationsStatus.message ?? "";
+
+    expect(service.capabilities().notificationsStatus).toMatchObject({
+      scheduledCount: 1,
+      state: "error"
+    });
+    expect(message).not.toContain("fake-token");
+    expect(message).not.toContain("/Users/example");
+    expect(message).toContain("[REDACTED]");
   });
 
   it("applies settings changes to tray, notifications, and MCP status", async () => {

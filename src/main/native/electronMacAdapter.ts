@@ -82,9 +82,10 @@ class ElectronMacNativeAdapter implements NativePlatformAdapter {
 
   scheduleNotification(
     request: NativeNotificationRequest,
-    onClick: () => void
+    onClick: () => void,
+    onFailure?: (message: string) => void
   ): ScheduledNativeNotification | undefined {
-    return this.notifications.schedule(request, onClick);
+    return this.notifications.schedule(request, onClick, onFailure);
   }
 
   clearScheduledNotifications(): void {

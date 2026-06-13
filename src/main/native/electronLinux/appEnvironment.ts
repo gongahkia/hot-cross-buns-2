@@ -1,4 +1,4 @@
-import { app, safeStorage, shell } from "electron";
+import { Notification, app, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { linuxSecretServiceStatus } from "../../credentials/secretStore";
 import {
@@ -32,12 +32,13 @@ export function appPaths(): NativeAppPaths {
 export function capabilities(): NativePlatformCapabilities {
   const paths = appPaths();
   const credentialStatus = credentialStorageStatus();
+  const notifications = Notification.isSupported();
   const flags = {
     supportsAppPaths: true,
     supportsTray: false,
     supportsAppMenu: false,
     supportsGlobalShortcut: false,
-    supportsNotifications: false,
+    supportsNotifications: notifications,
     supportsNotificationPermissionQuery: false,
     supportsProtocolRegistration: false,
     supportsProtocolRegistrationCheck: false,
@@ -57,7 +58,7 @@ export function capabilities(): NativePlatformCapabilities {
   return {
     platform: "linux",
     adapterId: "electron-linux-preview",
-    notifications: false,
+    notifications,
     globalShortcuts: false,
     tray: false,
     deepLinks: false,
@@ -86,8 +87,10 @@ export function capabilities(): NativePlatformCapabilities {
           message: "Linux global shortcuts are disabled until X11, Wayland, and portal behavior is validated."
         },
         notifications: {
-          state: "unsupported",
-          message: "Linux notifications are disabled until Electron and desktop-environment delivery is validated."
+          state: notifications ? "ready" : "unsupported",
+          message: notifications
+            ? "Electron reports Linux desktop notifications are available through the current session."
+            : "Electron reports Linux desktop notifications are unavailable in the current session."
         },
         customProtocol: {
           state: "unsupported",
@@ -155,8 +158,10 @@ export function capabilities(): NativePlatformCapabilities {
         ),
         capabilityDiagnostic(
           "notifications",
-          "info",
-          "Linux notifications require desktop-environment validation before support can be claimed."
+          notifications ? "info" : "warning",
+          notifications
+            ? "Linux notification scheduling is enabled; delivery still requires GNOME/KDE manual release validation."
+            : "Electron Notification.isSupported() returned false for this Linux session."
         )
       ]
     })

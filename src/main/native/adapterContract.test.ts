@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   nativeCapabilitiesResponseSchema,
   type SettingsSnapshot
@@ -26,8 +26,32 @@ const electronMock = vi.hoisted(() => {
     logs: "/home/test/.local/state/Hot Cross Buns 2/logs",
     temp: "/tmp"
   };
+  const notificationInstances: MockNotification[] = [];
+
+  class MockNotification {
+    static isSupported = vi.fn(() => true);
+
+    readonly listeners = new Map<string, (...args: unknown[]) => void>();
+    readonly show = vi.fn();
+    readonly close = vi.fn();
+
+    constructor(readonly options: Record<string, unknown>) {
+      notificationInstances.push(this);
+    }
+
+    on(event: string, listener: (...args: unknown[]) => void): this {
+      this.listeners.set(event, listener);
+      return this;
+    }
+
+    emit(event: string, ...args: unknown[]): void {
+      this.listeners.get(event)?.({}, ...args);
+    }
+  }
 
   return {
+    Notification: MockNotification,
+    notificationInstances,
     app: {
       isPackaged: false,
       getName: vi.fn(() => "Hot Cross Buns 2"),
@@ -52,6 +76,9 @@ vi.mock("electron", () => electronMock);
 const originalAppImage = process.env.APPIMAGE;
 
 beforeEach(() => {
+  electronMock.Notification.isSupported.mockReset();
+  electronMock.Notification.isSupported.mockReturnValue(true);
+  electronMock.notificationInstances.length = 0;
   electronMock.app.isPackaged = false;
   electronMock.app.getPath.mockClear();
   electronMock.shell.openExternal.mockReset();
@@ -71,6 +98,10 @@ beforeEach(() => {
   } else {
     process.env.APPIMAGE = originalAppImage;
   }
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
@@ -206,7 +237,7 @@ describe("native adapter factory", () => {
 });
 
 describe("native adapter contract", () => {
-  it("reports schema-valid non-claiming Linux preview capabilities", () => {
+  it("reports schema-valid Linux preview capabilities", () => {
     const adapter = createElectronLinuxNativeAdapter();
     const service = createContractService(adapter);
     const response = service.capabilities();
@@ -219,7 +250,7 @@ describe("native adapter contract", () => {
     expect(report.adapterId).toBe("electron-linux-preview");
     expect(report.adapterId).not.toContain("mac");
     expect(response).toMatchObject({
-      notifications: false,
+      notifications: true,
       globalShortcuts: false,
       tray: false,
       deepLinks: false
@@ -231,7 +262,7 @@ describe("native adapter contract", () => {
       supportsCredentialStorage: true,
       supportsTray: false,
       supportsGlobalShortcut: false,
-      supportsNotifications: false,
+      supportsNotifications: true,
       supportsProtocolRegistration: false,
       supportsAutostart: false,
       supportsInPlaceAutoUpdate: false
@@ -255,8 +286,8 @@ describe("native adapter contract", () => {
         }),
         expect.objectContaining({
           key: "notifications",
-          supported: false,
-          state: "unsupported"
+          supported: true,
+          state: "ready"
         }),
         expect.objectContaining({
           key: "updater",
@@ -268,6 +299,23 @@ describe("native adapter contract", () => {
     expect(adapter.credentialStorageStatus()).toMatchObject({
       ok: true,
       state: "ready"
+    });
+  });
+
+  it("reports Linux notifications unsupported when Electron cannot deliver them", () => {
+    electronMock.Notification.isSupported.mockReturnValue(false);
+
+    const adapter = createElectronLinuxNativeAdapter();
+    const response = createContractService(adapter).capabilities();
+    const notificationCapability = response.capabilityReport.capabilities.find(
+      (capability) => capability.key === "notifications"
+    );
+
+    expect(response.notifications).toBe(false);
+    expect(response.capabilityReport.flags.supportsNotifications).toBe(false);
+    expect(notificationCapability).toMatchObject({
+      supported: false,
+      state: "unsupported"
     });
   });
 
@@ -319,6 +367,62 @@ describe("native adapter contract", () => {
       ok: true,
       state: "ready"
     });
+  });
+
+  it("schedules Linux notifications through Electron and routes notification clicks", () => {
+    vi.useFakeTimers();
+    const adapter = createElectronLinuxNativeAdapter();
+    const onClick = vi.fn();
+    const onFailure = vi.fn();
+
+    const scheduled = adapter.scheduleNotification({
+      id: "task:task-1",
+      title: "Task due",
+      body: "Pay invoice",
+      deliveryDate: new Date(Date.now() + 1_000),
+      action: {
+        type: "openRoute",
+        route: {
+          kind: "task",
+          id: "task-1"
+        }
+      }
+    }, onClick, onFailure);
+
+    expect(scheduled).toMatchObject({ id: "task:task-1" });
+    vi.advanceTimersByTime(1_000);
+
+    expect(electronMock.notificationInstances).toHaveLength(1);
+    expect(electronMock.notificationInstances[0].options).toMatchObject({
+      title: "Task due",
+      body: "Pay invoice",
+      timeoutType: "default",
+      urgency: "normal"
+    });
+
+    electronMock.notificationInstances[0].emit("click");
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("reports Linux notification display failures to the caller", () => {
+    vi.useFakeTimers();
+    const adapter = createElectronLinuxNativeAdapter();
+    const onFailure = vi.fn();
+
+    adapter.scheduleNotification({
+      id: "event:event-1",
+      title: "Upcoming event",
+      body: "Standup",
+      deliveryDate: new Date(Date.now())
+    }, vi.fn(), onFailure);
+    vi.advanceTimersByTime(0);
+    electronMock.notificationInstances[0].emit("failed", "libnotify service unavailable");
+
+    expect(onFailure).toHaveBeenCalledWith(
+      "Native notification failed: libnotify service unavailable"
+    );
   });
 
   it("sanitizes Linux shell open failures", async () => {

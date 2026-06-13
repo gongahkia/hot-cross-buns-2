@@ -1,7 +1,7 @@
 import { ElectronNotificationScheduler } from "../electronNotificationScheduler";
 
-export class NotificationScheduler extends ElectronNotificationScheduler {
+export class LinuxNotificationScheduler extends ElectronNotificationScheduler {
   constructor() {
-    super("darwin");
+    super("linux");
   }
 }

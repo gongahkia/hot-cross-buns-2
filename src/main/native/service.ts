@@ -148,11 +148,22 @@ export class NativeShellService implements NativeDomainService {
       notificationsStatus: {
         ...this.status.notificationsStatus,
         permission: permission.state,
-        state: permission.state === "unsupported" ? "unsupported" : "ready",
+        state:
+          permission.state === "unsupported"
+            ? this.status.notifications
+              ? "ready"
+              : "unsupported"
+            : permission.state === "denied"
+              ? "error"
+              : "ready",
         message:
           permission.state === "unsupported"
-            ? "Local notifications are not supported by this platform adapter."
-            : "Notification permission request was handed to the operating system."
+            ? this.status.notifications
+              ? "Notification permission state cannot be queried on this platform; delivery is validated when reminders are shown."
+              : "Local notifications are not supported by this platform adapter."
+            : permission.state === "denied"
+              ? "Notification permission was denied by the operating system."
+              : "Notification permission request was handed to the operating system."
       }
     };
 
@@ -379,6 +390,7 @@ export class NativeShellService implements NativeDomainService {
       leadMinutes: settings.notificationLeadMinutes
     });
     let scheduledCount = 0;
+    let failedCount = 0;
 
     for (const request of requests) {
       const scheduled = this.options.adapter.scheduleNotification(request, () => {
@@ -386,11 +398,15 @@ export class NativeShellService implements NativeDomainService {
           this.options.windows.showMainWindow();
           this.options.windows.dispatchAction(request.action);
         }
+      }, (message) => {
+        this.markNotificationFailure(message);
       });
 
       if (scheduled) {
         scheduledCount += 1;
         this.emitEventStartingWebhook(request);
+      } else {
+        failedCount += 1;
       }
     }
 
@@ -399,11 +415,24 @@ export class NativeShellService implements NativeDomainService {
       notificationsStatus: {
         ...this.status.notificationsStatus,
         scheduledCount,
-        state: "ready",
+        state: failedCount > 0 ? "error" : "ready",
         message:
-          scheduledCount === 0
+          failedCount > 0
+            ? `${failedCount} local notification${failedCount === 1 ? "" : "s"} could not be scheduled.`
+            : scheduledCount === 0
             ? "No due tasks or upcoming events are in the next 24 hours."
             : `${scheduledCount} local notification${scheduledCount === 1 ? "" : "s"} scheduled.`
+      }
+    };
+  }
+
+  private markNotificationFailure(message: string): void {
+    this.status = {
+      ...this.status,
+      notificationsStatus: {
+        ...this.status.notificationsStatus,
+        state: "error",
+        message: sanitizedNativeMessage(message)
       }
     };
   }

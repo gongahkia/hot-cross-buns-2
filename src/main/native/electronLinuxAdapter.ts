@@ -22,12 +22,15 @@ import {
   setAutostart
 } from "./electronLinux/appEnvironment";
 import { unsupported } from "./electronLinux/operationResults";
+import { LinuxNotificationScheduler } from "./electronLinux/notifications";
 
 export function createElectronLinuxNativeAdapter(): NativePlatformAdapter {
   return new ElectronLinuxNativeAdapter();
 }
 
 class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
+  private readonly notifications = new LinuxNotificationScheduler();
+
   appPaths(): NativeAppPaths {
     return appPaths();
   }
@@ -75,14 +78,15 @@ class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
   }
 
   scheduleNotification(
-    _request: NativeNotificationRequest,
-    _onClick: () => void
+    request: NativeNotificationRequest,
+    onClick: () => void,
+    onFailure?: (message: string) => void
   ): ScheduledNativeNotification | undefined {
-    return undefined;
+    return this.notifications.schedule(request, onClick, onFailure);
   }
 
   clearScheduledNotifications(): void {
-    return undefined;
+    this.notifications.clear();
   }
 
   setAutostart(enabled: boolean): NativeOperationResult {
@@ -110,6 +114,6 @@ class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
   }
 
   dispose(): void {
-    return undefined;
+    this.clearScheduledNotifications();
   }
 }

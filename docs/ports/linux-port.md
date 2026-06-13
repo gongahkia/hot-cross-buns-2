@@ -103,6 +103,17 @@ Electron documents a `GlobalShortcutsPortal` feature flag for Wayland sessions. 
 
 Electron sends Linux notifications through `libnotify` on desktop environments following the Desktop Notifications Specification. The adapter must check support and expose failures as diagnostics.
 
+Current implementation:
+
+- the Linux adapter enables local notification scheduling only when
+  `Notification.isSupported()` is true
+- permission state remains unsupported because Electron does not expose a
+  reliable Linux permission query for the target runtime
+- scheduled notifications use Electron's main-process `Notification` class and
+  retain active notification objects for click routing
+- notification display failures update native diagnostics without interrupting
+  sync, tasks, or calendar state
+
 Required behavior:
 
 - notification scheduling can be enabled only when notification support is detected

@@ -151,7 +151,8 @@ export interface NativePlatformAdapter {
   listFontFamilies: () => string[] | Promise<string[]>;
   scheduleNotification: (
     request: NativeNotificationRequest,
-    onClick: () => void
+    onClick: () => void,
+    onFailure?: (message: string) => void
   ) => ScheduledNativeNotification | undefined;
   clearScheduledNotifications: () => void;
   setAutostart: (enabled: boolean) => NativeOperationResult;
