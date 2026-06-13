@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="google-site-verification" content="RKZM3YxESf2Iix4AN2Vg2imTGviRv4jSq6uXevXnTjs">
-<title>Hot Cross Buns 2 - New Planner App for macOS</title>
-<meta name="description" content="Hot Cross Buns 2: Keyboard-first macOS client for Google Tasks and Google Calendar with account workspaces, automation and endless customization.">
+<title>Hot Cross Buns 2 - Planner App for macOS and Linux Preview</title>
+<meta name="description" content="Hot Cross Buns 2: Keyboard-first desktop planner for Google Tasks and Google Calendar, with a macOS preview and Linux AppImage technical preview.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&amp;family=Geist:wght@400;500;600&amp;family=Source+Serif+4:ital,opsz,wght@0,8..60,300..500;1,8..60,400&amp;display=swap">
@@ -37,9 +37,9 @@
 <header class="hero">
   <div class="hero-copy">
     <h1>A planner for<br>busy people<br>with a <em>system</em>.</h1>
-    <p class="deck">Hot Cross Buns 2: Keyboard-first macOS client for Google Tasks and Google Calendar with account workspaces, automation and endless customization.</p>
+    <p class="deck">Hot Cross Buns 2: Keyboard-first desktop planner for Google Tasks and Google Calendar, with a macOS preview and Linux AppImage technical preview.</p>
     <div class="hero-ctas">
-      <a class="cta-primary" href="#download">Download for macOS</a>
+      <a class="cta-primary" href="#download">Download preview</a>
       <a class="cta-secondary" href="https://github.com/gongahkia/hot-cross-buns-2" target="_blank" rel="noopener">GitHub →</a>
     </div>
   </div>
@@ -159,9 +159,9 @@
     </figure>
 
     <div class="menubar-copy">
-      <p class="eyebrow">Menu bar</p>
+      <p class="eyebrow">macOS menu bar</p>
       <h2>The planner that stays<br><em>within reach</em>.</h2>
-      <p class="lede">Three lighter menu bar surfaces for glanceable calendar, quick capture, and fast return to the main app.</p>
+      <p class="lede">Three lighter macOS menu bar surfaces for glanceable calendar, quick capture, and fast return to the main app.</p>
 
       <div class="menubar-list">
         <article class="menubar-item">
@@ -236,7 +236,7 @@
 	  <div class="download-inner">
 	    <p class="eyebrow">Ready when you are</p>
 	    <h2>Get Hot Cross Buns 2.</h2>
-	    <p class="lede">Free. macOS 14 Sonoma and up.</p>
+	    <p class="lede">Free. macOS 14 Sonoma and up, plus a Linux AppImage technical preview for Ubuntu LTS on GNOME.</p>
 
 	    <div class="download-cta">
 	      <a
@@ -248,7 +248,7 @@
 	        Open Releases
 	      </a>
 	      <p class="download-meta">
-	        <span>GitHub Releases hosts DMG assets with published SHA-256 checksums.</span>
+	        <span>GitHub Releases hosts DMG and AppImage assets with published SHA-256 checksums.</span>
 	      </p>
 	    </div>
 
@@ -271,10 +271,10 @@
 	    aria-describedby="download-modal-copy"
 	  >
 	    <button class="download-modal-close" type="button" aria-label="Close" data-modal-close>×</button>
-	    <p class="eyebrow">First launch on macOS</p>
+	    <p class="eyebrow">Preview download notes</p>
 	    <h3 id="download-modal-title">One quick thing before you open releases.</h3>
 	    <p id="download-modal-copy" class="download-modal-copy">
-	      Preview DMGs are unsigned for now, so macOS may ask you to approve Hot Cross Buns 2 once before it opens normally. Google sync asks for your own Desktop OAuth client during setup, then lets you connect individual Google accounts with the browser sign-in flow.
+	      Preview downloads are not final public distribution builds. macOS DMGs are unsigned for now, and Linux is currently an AppImage technical preview with explicit native-shell limitations. Google sync asks for your own Desktop OAuth client during setup, then lets you connect individual Google accounts with the browser sign-in flow.
 	    </p>
 	    <figure class="download-modal-warning">
 	      <img
@@ -292,7 +292,8 @@
 	      <li>Move Hot Cross Buns 2 into your Applications folder after opening the DMG.</li>
 	      <li>Try opening the app once.</li>
 	      <li>If macOS blocks it, go to System Settings &gt; Privacy &amp; Security and click Open Anyway.</li>
-	      <li>You should only need to do this once per Mac.</li>
+	      <li>For Linux, verify the AppImage checksum, mark it executable, and run it directly.</li>
+	      <li>Linux tray/status-area surfaces, deep links, autostart, and in-place auto-update are not supported in the technical preview.</li>
 	    </ul>
 	    <p class="download-modal-footnote">You&apos;ll open GitHub Releases.</p>
         <p class="download-modal-footnote">Checksums are published for each release. See <a href="privacy.html">Privacy and Trust</a> and the GitHub README for OAuth setup.</p>
@@ -324,7 +325,7 @@
       <div class="update-copy">
         <ul>
           <li>Declared Hot Cross Buns 2 as the new maintained version, carrying forward the full archived Hot Cross Buns changelog below.</li>
-          <li>Moved the app to an Electron-first macOS build with typed IPC, a hardened preload bridge, native shell adapters, and packaged preview release tooling.</li>
+          <li>Moved the app to an Electron-first desktop build with typed IPC, a hardened preload bridge, native shell adapters, macOS preview packaging, and Linux AppImage technical preview tooling.</li>
           <li>Expanded Google account handling with account-scoped cache rows, per-account resource filtering, explicit calendar/list destinations, and cleaner signed-out account hiding.</li>
           <li>Added local customization with CSS snippets, external <code>keymap.json</code>, sandboxed extension panels, safe mode, and Settings controls for enabling each item.</li>
           <li>Added portable <code>.hcbexport</code> archives, attachment bundling, local pointer repair, attachment add/open/download/remove flows, ICS imports, ICS subscriptions, and local report exports.</li>
@@ -591,7 +592,7 @@
     <div class="foot-cols">
       <div>
         <p class="foot-title">Hot Cross Buns 2</p>
-        <p>A small, personal macOS planner.</p>
+        <p>A small, personal desktop planner.</p>
       </div>
       <div class="foot-links">
         <a href="https://github.com/gongahkia/hot-cross-buns-2">GitHub</a>

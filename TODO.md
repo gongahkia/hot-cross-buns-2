@@ -722,6 +722,16 @@ Performance checks:
 
 Goal: keep user-facing claims accurate.
 
+Status: Complete as of 2026-06-13. User-facing docs now describe the Linux
+work as an AppImage technical preview instead of general Linux support. The
+README, public docs site, privacy page, docs index, QA plan, release
+distribution docs, Linux preview support doc, and manual Linux native-shell
+checklist all call out preview scope, AppImage packaging, OS-backed credential
+storage, no plaintext fallback, manual GitHub release updates, and unsupported
+Linux tray/status-area, deep-link, autostart, and in-place update behavior.
+Remaining unchecked release-readiness items below require live macOS or Linux
+desktop validation and are not claimed as complete by this docs pass.
+
 Implementation tasks:
 
 - Update `docs/ports/linux-port.md` as implementation decisions land.
@@ -775,7 +785,7 @@ Acceptance criteria:
 - [x] Deep links are either package-validated or explicitly unsupported.
 - [ ] Linux manual QA matrix is complete.
 - [x] Linux support docs are written.
-- [ ] README/public copy is updated only with accurate preview claims.
+- [x] README/public copy is updated only with accurate preview claims.
 
 ## External References
 

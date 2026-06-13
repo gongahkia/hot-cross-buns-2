@@ -151,6 +151,8 @@ Performance tests should initially report timings without failing the build. Con
 Manual checks are required for platform-specific OS behavior:
 
 - macOS tray/menu bar behavior
+- Linux AppImage launch behavior
+- Linux Secret Service availability, locked, and missing states
 - global shortcut registration conflict
 - notifications permission prompt
 - custom protocol links
@@ -160,6 +162,10 @@ Manual checks are required for platform-specific OS behavior:
 Use [Manual macOS Native Shell Checklist](manual-macos-native-shell.md) for tray/menu bar, global quick capture hotkey, local notification, and `hotcrossbuns://` deep-link verification.
 
 Use [Mac Preview Support](../support/mac-preview-support.md) for unsigned preview install, checksum verification, support diagnostics, and rollback guidance.
+
+Use [Manual Linux Native Shell Checklist](manual-linux-native-shell.md) for AppImage launch, OAuth, Secret Service, MCP, notification, shortcut, and unsupported-feature verification across the Linux technical preview matrix.
+
+Use [Linux Preview Support](../support/linux-preview-support.md) for AppImage install, known limitations, diagnostics, rollback, and clean-removal guidance.
 
 Record manual verification notes in release PRs.
 

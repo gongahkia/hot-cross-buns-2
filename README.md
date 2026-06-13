@@ -6,7 +6,7 @@
 
 <h1 align="center">Hot Cross Buns 2</h1>
 
-<h3 align="center">Keyboard-first macOS client for Google Tasks and Google Calendar with account workspaces, automation and endless customization.</h3>
+<h3 align="center">Keyboard-first desktop planner for Google Tasks and Google Calendar, with a macOS preview and Linux AppImage technical preview.</h3>
 
 <p align="center">
   <a href="https://gongahkia.github.io/hot-cross-buns-2/">Website</a> ·
@@ -19,6 +19,9 @@
   <a href="https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-macOS.dmg">
     <img src="https://img.shields.io/badge/Preview-DMG-F2B36D?style=for-the-badge&logo=apple&logoColor=white&labelColor=1f2430" alt="Preview DMG" />
   </a>
+  <a href="https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-linux-x64.AppImage">
+    <img src="https://img.shields.io/badge/Linux-AppImage%20Technical%20Preview-5E8C61?style=for-the-badge&logo=linux&logoColor=white&labelColor=1f2430" alt="Linux AppImage technical preview" />
+  </a>
 </p>
 
 <p align="center">
@@ -26,11 +29,12 @@
     <img src="https://img.shields.io/github/v/release/gongahkia/hot-cross-buns-2?display_name=tag" alt="Latest release" />
   </a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black" alt="macOS 14 or later" />
-  <img src="https://img.shields.io/badge/Distribution-Unsigned%20Preview%20DMG-orange" alt="Unsigned preview DMG distribution" />
+  <img src="https://img.shields.io/badge/Linux-AppImage%20Preview-black" alt="Linux AppImage technical preview" />
+  <img src="https://img.shields.io/badge/Distribution-Unsigned%20Preview-orange" alt="Unsigned preview distribution" />
 </p>
 
 > [!IMPORTANT]
-> Preview downloads currently ship as unsigned DMGs. On first launch, macOS may ask the user to allow the app once from `System Settings > Privacy & Security > Open Anyway`.
+> Preview downloads are not final public distribution builds. macOS currently ships as an unsigned DMG and may require `System Settings > Privacy & Security > Open Anyway` on first launch. Linux currently ships only as an AppImage technical preview with no in-place auto-update; tray/status-area surfaces, deep links, and autostart are intentionally unsupported.
 
 ## Table of Contents
 
@@ -45,7 +49,7 @@
 
 ## Highlights
 
-Hot Cross Buns 2 is an Electron-first macOS planner built around three everyday surfaces:
+Hot Cross Buns 2 is an Electron-first desktop planner built around three everyday surfaces:
 
 - Tasks for inbox capture and day-to-day execution, synced with Google Tasks
 - Calendar views for agenda, day, week, multi-day, month, year, and longer-range planning, synced with Google Calendar
@@ -56,7 +60,7 @@ Around those core surfaces, the app also includes:
 - Command palette capture and keyboard-first navigation
 - Account workspaces for multiple Google accounts
 - Smart rescheduling, task/event/note conversion, reminders, recurrence, templates, and saved views
-- Menu bar surfaces for glanceable calendar, compact capture, and fast return to the main app
+- Native shell surfaces where supported, including macOS menu bar panels for glanceable calendar, compact capture, and fast return to the main app
 - Local customization with CSS snippets, keymaps, extension panels, custom backgrounds, and inferred color themes
 - Portable `.hcbexport` archives, local attachments, ICS import/subscription support, and local report exports
 - Optional local MCP server, CLI, webhook, and dry-run/write-policy surfaces for user-configured agent clients
@@ -66,9 +70,10 @@ Around those core surfaces, the app also includes:
 
 **Preview downloads**
 
-- DMG: `https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-macOS.dmg`
+- macOS DMG: `https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-macOS.dmg`
+- Linux AppImage technical preview: `https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-linux-x64.AppImage`
 - Release page: `https://github.com/gongahkia/hot-cross-buns-2/releases/latest`
-- One-line installer:
+- macOS one-line installer:
 
 ```bash
 curl -fsSL https://gongahkia.github.io/hot-cross-buns-2/install-macos-preview.sh | bash
@@ -82,9 +87,29 @@ curl -fsSL https://gongahkia.github.io/hot-cross-buns-2/install-macos-preview.sh
 
 You should only need to do that once per Mac.
 
+**First launch on Linux**
+
+The Linux package is an AppImage technical preview. It is intended first for Ubuntu LTS on GNOME, with secondary manual checks on Fedora GNOME, KDE Plasma, Wayland, and X11 before broader claims.
+
+```bash
+curl -LO https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-linux-x64.AppImage
+curl -LO https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/SHASUMS256.txt
+sha256sum -c SHASUMS256.txt --ignore-missing
+chmod +x Hot-Cross-Buns-2-linux-x64.AppImage
+./Hot-Cross-Buns-2-linux-x64.AppImage
+```
+
+Known Linux preview limits:
+
+- AppImage is the only Linux package format.
+- The app can check GitHub Releases for newer AppImage builds, but does not download or install Linux updates automatically.
+- Tray/status-area surfaces, `hotcrossbuns://` deep links, and open-at-login/autostart are unsupported.
+- Notifications and global shortcuts are capability-gated and still require live desktop-environment validation before release.
+- Google OAuth tokens, OAuth client secrets, and MCP bearer tokens require an OS-backed Secret Service provider such as GNOME Keyring/libsecret or KWallet. Plaintext fallback is rejected.
+
 **Google Cloud OAuth setup**
 
-Downloaded DMGs use a bring-your-own Google Cloud Desktop OAuth client:
+Preview downloads use a bring-your-own Google Cloud Desktop OAuth client:
 
 1. Create a Google Cloud project.
 2. Enable the Google Tasks API and Google Calendar API.
@@ -92,20 +117,22 @@ Downloaded DMGs use a bring-your-own Google Cloud Desktop OAuth client:
 4. Create a `Desktop app` OAuth client.
 5. Open Hot Cross Buns 2, paste the desktop client ID and optional client secret into setup, then connect Google.
 
+Tokens are stored in macOS Keychain on macOS. On Linux technical preview builds, tokens are stored through Electron `safeStorage` only when backed by an OS credential provider such as GNOME Keyring/libsecret or KWallet.
+
 Do not distribute a build that embeds your personal OAuth client for other people's accounts.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    user["macOS user"] --> app["Hot Cross Buns 2<br>Electron + React + TypeScript"]
+    user["desktop user"] --> app["Hot Cross Buns 2<br>Electron + React + TypeScript"]
 
     subgraph runtime["Desktop runtime"]
         app --> renderer["Renderer<br>Tasks · Calendar · Notes<br>Command palette · Settings"]
         app --> preload["Hardened preload bridge"]
         preload --> ipc["Typed IPC contracts"]
         ipc --> main["Main process services"]
-        main --> native["Native shell adapters<br>tray · notifications · updater · files"]
+        main --> native["Native shell adapters<br>menu bar/tray capability · notifications · updater · files"]
     end
 
     subgraph data["Local data"]
@@ -143,6 +170,7 @@ Start with [docs/README.md](docs/README.md) before changing product, architectur
 **Requirements**
 
 - macOS 14+
+- Linux AppImage technical preview: Ubuntu LTS on GNOME first, Secret Service provider required for credentials
 - Node 20+
 - pnpm 9.15.4 through Corepack
 
@@ -166,10 +194,13 @@ pnpm hcb --help
 
 ## Preview Release Checks
 
-Preview packages are unsigned and unnotarized. They are not final public distribution builds.
+Preview packages are unsigned. macOS preview packages are also unnotarized. They are not final public distribution builds.
 
 ```bash
 pnpm release:mac:preview
+pnpm release:linux:preview
+pnpm release:smoke-appimage
+HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage
 ```
 
 Useful docs:
@@ -177,6 +208,8 @@ Useful docs:
 - [Distribution](docs/release/distribution.md)
 - [Release Candidate Checklist](docs/release/release-candidate-checklist.md)
 - [Mac Preview Support](docs/support/mac-preview-support.md)
+- [Linux Preview Support](docs/support/linux-preview-support.md)
+- [Manual Linux Native Shell Checklist](docs/testing/manual-linux-native-shell.md)
 - [Privacy and Threat Model](docs/security/privacy-and-threat-model.md)
 
 ## Testing

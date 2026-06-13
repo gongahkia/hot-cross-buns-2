@@ -17,7 +17,8 @@ Then read the spec for the subsystem you are changing. Do not scaffold app code 
 
 - Product name: Hot Cross Buns 2
 - Initial platform: macOS
-- Future platforms: Windows and Linux
+- Linux status: AppImage technical preview
+- Future platform: Windows
 - Default stack: Electron, React, TypeScript, Vite, Tailwind, SQLite
 - Source of truth: Google Tasks and Google Calendar
 - Local database role: Google Tasks/Calendar cache, settings, checkpoints, offline mutations, diagnostics
@@ -31,6 +32,7 @@ Then read the spec for the subsystem you are changing. Do not scaffold app code 
 - Main-side SQLite domain services are shared by UI IPC handlers and MCP tool handlers. Task, note, task-list, note-list, and calendar writes update optimistic local mirror rows and enqueue Google-backed pending mutations.
 - Local data now includes migrations, repositories, temporary-database integration tests, search over current task/event/note state, pending mutation tracking, and sanitized performance timing storage.
 - Performance smoke runs in report-only mode with generated local fixtures and temporary app data paths.
+- Native shell support is adapter-driven. macOS remains the primary preview platform, while Linux has an AppImage technical preview with Secret Service-backed credentials, AppImage packaging, Linux release checks, capability-driven notifications and shortcuts, and explicit unsupported states for tray/status area, deep links, and autostart.
 
 ## Documentation Map
 
@@ -76,6 +78,8 @@ Operational docs:
 - [QA Plan](testing/qa-plan.md)
 - [Distribution](release/distribution.md)
 - [Mac Preview Support](support/mac-preview-support.md)
+- [Linux Preview Support](support/linux-preview-support.md)
+- [Manual Linux Native Shell Checklist](testing/manual-linux-native-shell.md)
 - [Agent Workflow](agents/workflow.md)
 
 ## Historical Non-Goals For The Initial Documentation Pass
