@@ -47,6 +47,10 @@ claims until the implementation phases and release gates below are complete.
   mac-specific native code.
 - `NativePlatformAdapter` in `src/main/native/types.ts` is the correct boundary
   for Linux-specific native behavior.
+- Linux local notification scheduling is implemented behind
+  `Notification.isSupported()`. Linux notification permission state remains
+  non-queryable, and display failures are surfaced as sanitized native
+  diagnostics without interrupting sync, tasks, or calendar state.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
 - `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
@@ -305,6 +309,24 @@ Acceptance criteria:
 
 Goal: support local reminders on Linux only when Electron and the desktop
 environment can show notifications.
+
+Status: Implementation complete as of 2026-06-13 in commit `b73b8a6`.
+Linux now detects notification support through Electron, schedules reminders
+through the main-process `Notification` class, keeps Linux permission query
+state unsupported, retains active notifications for click routing, and turns
+display failures into sanitized recoverable native status errors.
+
+Verification completed:
+
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts src/main/native/service.test.ts`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm test` (`60` Vitest files, `468` tests)
+
+Remaining manual release gates: GNOME delivery, KDE delivery, packaged
+AppImage click-through that opens/focuses the app and dispatches the intended
+action, Settings-disabled notification clearing in a live desktop session, and
+diagnostics visibility for real desktop delivery failures.
 
 Implementation tasks:
 
