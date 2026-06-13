@@ -58,6 +58,9 @@ claims until the implementation phases and release gates below are complete.
 - Linux tray/status-area support is explicitly unsupported in the technical
   preview until GNOME and KDE status-icon behavior is manually validated. The
   main window remains the supported Linux control surface.
+- Linux `hotcrossbuns://` registration is explicitly unsupported until installed
+  AppImage desktop integration is validated. Linux AppImage metadata
+  intentionally omits the scheme.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
 - `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
@@ -468,6 +471,26 @@ Acceptance criteria:
 Goal: support `hotcrossbuns://` links after package metadata and desktop
 registration are verified.
 
+Status: Closed as explicitly unsupported as of 2026-06-13. Linux
+`hotcrossbuns://` registration is not enabled because installed/integrated
+AppImage desktop-entry behavior has not been manually verified. The Linux
+adapter reports protocol registration as unsupported, AppImage metadata
+continues to omit the scheme, the AppImage smoke script enforces that omission,
+and the existing parser remains safe for malformed links without exposing raw
+paths or tokens.
+
+Verification completed:
+
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts scripts/linux-packaging-config.test.ts`
+- `pnpm release:smoke-appimage`
+- `pnpm typecheck`
+- `pnpm build`
+
+Remaining manual release gates: installed/integrated AppImage warm-start link
+routing, cold-start link routing after renderer readiness, malformed-link
+handling in the packaged app, and confirmation that Linux desktop integration
+does not expose filesystem paths or tokens.
+
 Implementation tasks:
 
 - Keep deep links unsupported in the Linux adapter until AppImage desktop
@@ -661,7 +684,7 @@ Acceptance criteria:
       unsupported.
 - [x] Tray behavior is either validated per desktop environment or explicitly
       unsupported.
-- [ ] Deep links are either package-validated or explicitly unsupported.
+- [x] Deep links are either package-validated or explicitly unsupported.
 - [ ] Linux manual QA matrix is complete.
 - [x] Linux support docs are written.
 - [ ] README/public copy is updated only with accurate preview claims.

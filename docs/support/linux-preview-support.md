@@ -34,7 +34,8 @@ visible.
 
 - AppImage is the only Linux package format.
 - In-place automatic Linux updates are not enabled.
-- `hotcrossbuns://` deep links are not registered for Linux yet.
+- `hotcrossbuns://` deep links are explicitly unsupported for Linux until
+  installed AppImage desktop integration is validated.
 - Tray/status area and autostart remain disabled until their dedicated Linux
   validation phases are complete.
 - Global shortcuts are adapter-gated: X11 can attempt Electron registration,

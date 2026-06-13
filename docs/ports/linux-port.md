@@ -139,6 +139,11 @@ Required behavior:
 
 The Linux port must support `hotcrossbuns://` links only after package metadata and desktop registration are verified.
 
+Current technical-preview decision: Linux `hotcrossbuns://` registration is
+explicitly unsupported. AppImage desktop metadata intentionally omits the scheme,
+the Linux adapter reports protocol registration as unsupported, and deep-link
+parser behavior remains covered without enabling package registration.
+
 Required checks:
 
 - protocol opens the installed app

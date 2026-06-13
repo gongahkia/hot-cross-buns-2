@@ -96,7 +96,7 @@ export function capabilities(): NativePlatformCapabilities {
         },
         customProtocol: {
           state: "unsupported",
-          message: "hotcrossbuns:// registration is disabled until AppImage desktop integration is validated."
+          message: "hotcrossbuns:// registration is explicitly unsupported on Linux until installed AppImage desktop integration is validated."
         },
         autostart: {
           state: "unsupported",
@@ -164,6 +164,11 @@ export function capabilities(): NativePlatformCapabilities {
           notifications
             ? "Linux notification scheduling is enabled; delivery still requires GNOME/KDE manual release validation."
             : "Electron Notification.isSupported() returned false for this Linux session."
+        ),
+        capabilityDiagnostic(
+          "customProtocol",
+          "warning",
+          "Linux hotcrossbuns:// registration is disabled and AppImage desktop metadata intentionally omits the scheme until installed-app validation passes."
         )
       ]
     })
@@ -179,7 +184,9 @@ export function installAppMenu(): NativeOperationResult {
 }
 
 export function registerProtocolClient(_scheme: typeof HCB_DEEP_LINK_SCHEME): NativeOperationResult {
-  return unsupported("Linux protocol registration is pending AppImage desktop integration validation.");
+  return unsupported(
+    "Linux hotcrossbuns:// registration is explicitly unsupported until installed AppImage desktop integration is validated."
+  );
 }
 
 export function setAutostart(_enabled: boolean): NativeOperationResult {

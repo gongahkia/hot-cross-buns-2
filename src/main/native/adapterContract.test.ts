@@ -414,7 +414,8 @@ describe("native adapter contract", () => {
     });
     expect(adapter.registerProtocolClient("hotcrossbuns")).toMatchObject({
       ok: false,
-      state: "unsupported"
+      state: "unsupported",
+      message: expect.stringContaining("explicitly unsupported")
     });
     expect(adapter.setAutostart(true)).toMatchObject({
       ok: false,

@@ -129,7 +129,7 @@ async function verifyDesktopEntry(workDir: string): Promise<void> {
   }
 
   if (desktop.includes("x-scheme-handler/hotcrossbuns")) {
-    throw new Error("AppImage desktop metadata must not register hotcrossbuns:// before Phase 7 validation.");
+    throw new Error("AppImage desktop metadata must not register hotcrossbuns:// while Linux deep links are explicitly unsupported.");
   }
 }
 
