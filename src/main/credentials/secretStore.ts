@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import { dirname } from "node:path";
 import type { NativeOperationResult } from "../native/types";
 
 export interface SecretStoreKey {
@@ -12,6 +15,42 @@ export interface SecretStore {
   delete(key: SecretStoreKey): Promise<void>;
   status(): NativeOperationResult;
 }
+
+export type LinuxSafeStorageBackendName =
+  | "basic_text"
+  | "gnome_libsecret"
+  | "kwallet"
+  | "kwallet5"
+  | "kwallet6"
+  | "unknown";
+
+export interface LinuxSafeStorageBackend {
+  decryptString(encrypted: Buffer): string;
+  encryptString(plainText: string): Buffer;
+  getSelectedStorageBackend(): LinuxSafeStorageBackendName;
+  isEncryptionAvailable(): boolean;
+  setUsePlainTextEncryption?: (usePlainText: boolean) => void;
+}
+
+interface LinuxSecretServiceStoreOptions {
+  backend: LinuxSafeStorageBackend;
+  storageFile: string;
+  now?: () => Date;
+  platform?: NodeJS.Platform | string;
+}
+
+interface LinuxSecretStoreFile {
+  version: 1;
+  values: Record<string, LinuxSecretStoreEntry>;
+}
+
+interface LinuxSecretStoreEntry {
+  ciphertextBase64: string;
+  updatedAt: string;
+}
+
+const linuxSecretStoreVersion = 1;
+const linuxSecretSmokePlaintext = "hot-cross-buns-2-linux-secret-service-smoke";
 
 export class MacOsKeychainSecretStore implements SecretStore {
   status(): NativeOperationResult {
@@ -99,6 +138,106 @@ export class MacOsKeychainSecretStore implements SecretStore {
   }
 }
 
+export class LinuxSecretServiceStore implements SecretStore {
+  private readonly now: () => Date;
+  private readonly platform: NodeJS.Platform | string;
+
+  constructor(private readonly options: LinuxSecretServiceStoreOptions) {
+    this.now = options.now ?? (() => new Date());
+    this.platform = options.platform ?? process.platform;
+    options.backend.setUsePlainTextEncryption?.(false);
+  }
+
+  status(): NativeOperationResult {
+    return linuxSecretServiceStatus(this.options.backend, this.platform);
+  }
+
+  async read(key: SecretStoreKey): Promise<string | null> {
+    this.requireReady();
+    const file = await this.readStoreFile();
+    const entry = file.values[hashedSecretKey(key)];
+
+    if (!entry) {
+      return null;
+    }
+
+    try {
+      return this.options.backend.decryptString(Buffer.from(entry.ciphertextBase64, "base64"));
+    } catch {
+      throw new Error("Could not decrypt a secret from Linux Secret Service storage.");
+    }
+  }
+
+  async write(key: SecretStoreKey, secret: string): Promise<void> {
+    this.requireReady();
+    const file = await this.readStoreFile();
+
+    try {
+      file.values[hashedSecretKey(key)] = {
+        ciphertextBase64: this.options.backend.encryptString(secret).toString("base64"),
+        updatedAt: this.now().toISOString()
+      };
+    } catch {
+      throw new Error("Could not encrypt a secret with Linux Secret Service storage.");
+    }
+
+    await this.writeStoreFile(file);
+  }
+
+  async delete(key: SecretStoreKey): Promise<void> {
+    this.requireReady();
+    const file = await this.readStoreFile();
+    delete file.values[hashedSecretKey(key)];
+    await this.writeStoreFile(file);
+  }
+
+  private requireReady(): void {
+    const status = this.status();
+
+    if (!status.ok) {
+      throw new Error(status.message ?? "Linux Secret Service storage is unavailable.");
+    }
+  }
+
+  private async readStoreFile(): Promise<LinuxSecretStoreFile> {
+    let raw: string;
+
+    try {
+      raw = await fs.readFile(this.options.storageFile, "utf8");
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return emptyLinuxSecretStoreFile();
+      }
+
+      throw new Error("Could not read Linux Secret Service storage.");
+    }
+
+    try {
+      return parseLinuxSecretStoreFile(JSON.parse(raw));
+    } catch {
+      throw new Error("Linux Secret Service storage metadata is corrupted.");
+    }
+  }
+
+  private async writeStoreFile(file: LinuxSecretStoreFile): Promise<void> {
+    const directory = dirname(this.options.storageFile);
+    const temporaryFile = `${this.options.storageFile}.${process.pid}.${Date.now()}.tmp`;
+
+    try {
+      await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+      await fs.writeFile(temporaryFile, `${JSON.stringify(file, null, 2)}\n`, {
+        encoding: "utf8",
+        mode: 0o600
+      });
+      await fs.rename(temporaryFile, this.options.storageFile);
+      await fs.chmod(this.options.storageFile, 0o600);
+    } catch {
+      await fs.rm(temporaryFile, { force: true }).catch(() => undefined);
+      throw new Error("Could not write Linux Secret Service storage.");
+    }
+  }
+}
+
 export class UnsupportedSecretStore implements SecretStore {
   constructor(private readonly message = "OS credential storage is unavailable.") {}
 
@@ -149,6 +288,145 @@ export class MemorySecretStore implements SecretStore {
 
 function secretKey(key: SecretStoreKey): string {
   return `${key.service}\n${key.account}`;
+}
+
+export function linuxSecretServiceStatus(
+  backend: LinuxSafeStorageBackend | undefined,
+  platform: NodeJS.Platform | string = process.platform
+): NativeOperationResult {
+  if (platform !== "linux") {
+    return {
+      ok: false,
+      state: "unsupported",
+      message: "Linux Secret Service storage is unavailable on this platform."
+    };
+  }
+
+  if (!backend) {
+    return {
+      ok: false,
+      state: "unsupported",
+      message: "Electron safeStorage is unavailable; Linux Secret Service storage cannot be used."
+    };
+  }
+
+  let selectedBackend: LinuxSafeStorageBackendName;
+
+  try {
+    selectedBackend = backend.getSelectedStorageBackend();
+  } catch {
+    return {
+      ok: false,
+      state: "error",
+      message: "Linux Secret Service backend status could not be read."
+    };
+  }
+
+  if (selectedBackend === "unknown") {
+    return {
+      ok: false,
+      state: "pending",
+      message: "Linux Secret Service backend is not selected yet; retry after Electron app readiness."
+    };
+  }
+
+  if (selectedBackend === "basic_text") {
+    return {
+      ok: false,
+      state: "unsupported",
+      message: "Linux Secret Service storage is unavailable; refusing Electron basic_text plaintext fallback."
+    };
+  }
+
+  if (!backend.isEncryptionAvailable()) {
+    return {
+      ok: false,
+      state: "error",
+      message: `Linux Secret Service backend ${selectedBackend} is selected but encryption is unavailable or locked.`
+    };
+  }
+
+  try {
+    const encrypted = backend.encryptString(linuxSecretSmokePlaintext);
+    const decrypted = backend.decryptString(encrypted);
+
+    if (decrypted !== linuxSecretSmokePlaintext) {
+      throw new Error("Linux Secret Service smoke check returned mismatched plaintext.");
+    }
+  } catch {
+    return {
+      ok: false,
+      state: "error",
+      message: `Linux Secret Service backend ${selectedBackend} failed an encryption smoke check.`
+    };
+  }
+
+  return {
+    ok: true,
+    state: "ready",
+    message: `Linux Secret Service backend ${selectedBackend} is available for main-process secrets.`
+  };
+}
+
+function emptyLinuxSecretStoreFile(): LinuxSecretStoreFile {
+  return {
+    version: linuxSecretStoreVersion,
+    values: {}
+  };
+}
+
+function parseLinuxSecretStoreFile(value: unknown): LinuxSecretStoreFile {
+  const candidate = value as {
+    version?: unknown;
+    values?: unknown;
+  };
+
+  if (candidate.version !== linuxSecretStoreVersion || !candidate.values || typeof candidate.values !== "object") {
+    throw new Error("Unsupported Linux secret store metadata.");
+  }
+
+  const values: Record<string, LinuxSecretStoreEntry> = {};
+
+  for (const [key, entryValue] of Object.entries(candidate.values)) {
+    if (!/^[a-f0-9]{64}$/.test(key)) {
+      throw new Error("Invalid Linux secret store key.");
+    }
+
+    const entry = entryValue as {
+      ciphertextBase64?: unknown;
+      updatedAt?: unknown;
+    };
+
+    if (
+      typeof entry.ciphertextBase64 !== "string" ||
+      !/^[A-Za-z0-9+/]*={0,2}$/.test(entry.ciphertextBase64) ||
+      typeof entry.updatedAt !== "string"
+    ) {
+      throw new Error("Invalid Linux secret store entry.");
+    }
+
+    values[key] = {
+      ciphertextBase64: entry.ciphertextBase64,
+      updatedAt: entry.updatedAt
+    };
+  }
+
+  return {
+    version: linuxSecretStoreVersion,
+    values
+  };
+}
+
+function hashedSecretKey(key: SecretStoreKey): string {
+  return createHash("sha256")
+    .update(key.service)
+    .update("\0")
+    .update(key.account)
+    .digest("hex");
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function runSecurity(args: readonly string[]): Promise<{ stdout: string; stderr: string }> {

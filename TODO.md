@@ -13,8 +13,12 @@ claims until the implementation phases and release gates below are complete.
 - First package target: AppImage technical preview.
 - Secondary manual checks: Fedora Workstation GNOME, KDE Plasma, one Wayland
   session, and one X11 session.
-- Linux credential backend: Secret Service/libsecret through a maintained
-  abstraction, initially `keytar` unless implementation proves it unsuitable.
+- Linux credential backend: Electron `safeStorage` through a maintained
+  `SecretStore` abstraction, enabled only for OS-backed providers such as
+  `gnome_libsecret`, `kwallet`, `kwallet5`, or `kwallet6`. Electron
+  `basic_text` plaintext fallback is rejected. `keytar` was rejected as
+  unsuitable because its upstream repository is archived and its prebuilt
+  Electron support is stale for this repo's Electron 33 runtime.
 - Linux update policy: check for GitHub Releases only. Do not claim in-place
   Linux auto-update for the technical preview.
 - Tray, global shortcuts, notifications, deep links, and autostart must be
@@ -30,14 +34,16 @@ claims until the implementation phases and release gates below are complete.
   - `pack:mac:preview`
   - `release:mac:preview`
   - `release:smoke-dmg`
-- `src/main/index.ts` currently creates `createElectronMacNativeAdapter()`
-  unconditionally. Linux startup must not instantiate mac-specific native code.
+- `src/main/index.ts` selects native behavior through `createNativeAdapter()`.
+  Linux startup uses `electron-linux-preview` and does not instantiate
+  mac-specific native code.
 - `NativePlatformAdapter` in `src/main/native/types.ts` is the correct boundary
   for Linux-specific native behavior.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
-- `MacOsKeychainSecretStore` is the only OS-backed `SecretStore`
-  implementation. Non-macOS currently falls back to `UnsupportedSecretStore`.
+- `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
+  `SecretStore` implementations. Other platforms fall back to
+  `UnsupportedSecretStore`.
 - Google OAuth tokens, the optional OAuth client secret, and the MCP bearer token
   already flow through `SecretStore` abstractions, so Linux credential work
   should extend that abstraction rather than inventing a new credential path.
@@ -130,14 +136,30 @@ Acceptance criteria:
 
 - A Linux dev run no longer instantiates `electronMac` adapter code.
 - Linux capability reports are schema-valid.
-- Linux still does not claim tray, shortcut, notification, protocol, autostart,
-  credential, or updater parity.
+- At Phase 1 completion, Linux still did not claim tray, shortcut,
+  notification, protocol, autostart, credential, or updater parity. Phase 2 now
+  adds conditional credential support without changing the other unsupported
+  native features.
 - macOS behavior and macOS tests remain unchanged.
 
 ## Phase 2: Linux Credential Storage
 
 Goal: make Google OAuth, optional OAuth client secret storage, and MCP bearer
 token storage secure and recoverable on Linux.
+
+Status: Implementation complete as of 2026-06-13. Linux now uses
+`LinuxSecretServiceStore` backed by Electron `safeStorage`, persists only
+encrypted metadata under the app config path, hashes service/account storage
+keys, forces plaintext encryption off, and refuses Electron's `basic_text`
+fallback. The implementation reports ready, pending, unsupported, or error
+states through Linux native diagnostics and keeps the public `SecretStore`
+interface unchanged. Live desktop checks for GNOME Keyring ready, missing, and
+locked states remain release gates under Phase 11. Verification:
+
+- `pnpm typecheck`
+- `pnpm exec vitest run --config vitest.config.ts src/main/credentials/secretStore.test.ts src/main/native/adapterContract.test.ts src/main/services/serviceContainer.test.ts`
+- `pnpm test`
+- `pnpm build`
 
 Implementation tasks:
 
@@ -531,7 +553,7 @@ Acceptance criteria:
 - [ ] macOS tests and packaging still pass.
 - [x] Linux adapter selected on Linux without importing mac adapter code.
 - [x] Linux capability report is schema-valid.
-- [ ] Linux credential storage uses Secret Service/libsecret and no plaintext
+- [x] Linux credential storage uses Secret Service/libsecret and no plaintext
       fallback.
 - [ ] AppImage builds on a Linux host or Linux CI runner.
 - [ ] AppImage checksum is generated and verified.

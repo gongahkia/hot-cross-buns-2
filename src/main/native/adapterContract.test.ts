@@ -14,6 +14,7 @@ import {
   nativeAdapterKindForPlatform,
   nativePlatformFromNodePlatform
 } from "./createNativeAdapter";
+import type { LinuxSafeStorageBackendName } from "../credentials/secretStore";
 import { createElectronLinuxNativeAdapter } from "./electronLinuxAdapter";
 import { createNoopNativeAdapter } from "./noopAdapter";
 import { NativeShellService } from "./service";
@@ -35,6 +36,13 @@ const electronMock = vi.hoisted(() => {
     shell: {
       openExternal: vi.fn(async () => undefined),
       openPath: vi.fn(async () => "")
+    },
+    safeStorage: {
+      decryptString: vi.fn((encrypted: Buffer) => encrypted.toString("utf8").replace(/^encrypted:/, "")),
+      encryptString: vi.fn((plainText: string) => Buffer.from(`encrypted:${plainText}`, "utf8")),
+      getSelectedStorageBackend: vi.fn<() => LinuxSafeStorageBackendName>(() => "gnome_libsecret"),
+      isEncryptionAvailable: vi.fn(() => true),
+      setUsePlainTextEncryption: vi.fn()
     }
   };
 });
@@ -50,6 +58,13 @@ beforeEach(() => {
   electronMock.shell.openExternal.mockResolvedValue(undefined);
   electronMock.shell.openPath.mockReset();
   electronMock.shell.openPath.mockResolvedValue("");
+  electronMock.safeStorage.decryptString.mockClear();
+  electronMock.safeStorage.encryptString.mockClear();
+  electronMock.safeStorage.getSelectedStorageBackend.mockClear();
+  electronMock.safeStorage.getSelectedStorageBackend.mockReturnValue("gnome_libsecret");
+  electronMock.safeStorage.isEncryptionAvailable.mockClear();
+  electronMock.safeStorage.isEncryptionAvailable.mockReturnValue(true);
+  electronMock.safeStorage.setUsePlainTextEncryption.mockClear();
 
   if (originalAppImage === undefined) {
     delete process.env.APPIMAGE;
@@ -213,7 +228,7 @@ describe("native adapter contract", () => {
       supportsAppPaths: true,
       supportsExternalUrlOpen: true,
       supportsDiagnosticsCollection: true,
-      supportsCredentialStorage: false,
+      supportsCredentialStorage: true,
       supportsTray: false,
       supportsGlobalShortcut: false,
       supportsNotifications: false,
@@ -225,8 +240,8 @@ describe("native adapter contract", () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: "credentialStorage",
-          supported: false,
-          state: "pending"
+          supported: true,
+          state: "ready"
         }),
         expect.objectContaining({
           key: "tray",
@@ -250,14 +265,10 @@ describe("native adapter contract", () => {
         })
       ])
     );
-    expect(report.diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "credentialStorage",
-          severity: "blocker"
-        })
-      ])
-    );
+    expect(adapter.credentialStorageStatus()).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
   });
 
   it("maps Linux app path roles through Electron path APIs", () => {
@@ -280,9 +291,10 @@ describe("native adapter contract", () => {
   it("keeps Linux unsupported native features recoverable", () => {
     const adapter = createElectronLinuxNativeAdapter();
 
+    electronMock.safeStorage.getSelectedStorageBackend.mockReturnValueOnce("basic_text");
     expect(adapter.credentialStorageStatus()).toMatchObject({
       ok: false,
-      state: "pending"
+      state: "unsupported"
     });
     expect(adapter.createTray({} as never)).toMatchObject({
       ok: false,

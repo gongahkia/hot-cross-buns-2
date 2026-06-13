@@ -2,7 +2,13 @@ import { createAppSqliteConnection, type SqliteConnection } from "../data/sqlite
 import { dirname, join } from "node:path";
 import { HCB_MCP_RUNTIME_FILE_NAME } from "@shared/mcpRuntime";
 import { appLogger } from "../diagnostics/appLogger";
-import { MacOsKeychainSecretStore, UnsupportedSecretStore, type SecretStore } from "../credentials/secretStore";
+import {
+  LinuxSecretServiceStore,
+  MacOsKeychainSecretStore,
+  UnsupportedSecretStore,
+  type LinuxSafeStorageBackend,
+  type SecretStore
+} from "../credentials/secretStore";
 import { runLocalDataMigrations, type MigrationResult } from "../data/migrations";
 import {
   LocalHistoryRepository,
@@ -83,6 +89,7 @@ export interface ServiceContainerOptions {
   syncTasksWriteTransport?: GoogleTasksWriteTransport;
   syncCalendarWriteTransport?: GoogleCalendarWriteTransport;
   secretStore?: SecretStore;
+  linuxSafeStorageBackend?: LinuxSafeStorageBackend;
   enableRuntimeGoogle?: boolean;
   enableRuntimeGoogleWrites?: boolean;
 }
@@ -133,7 +140,10 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   const runtimeGoogleEnabled = options.enableRuntimeGoogle ?? options.nativeAdapter !== undefined;
   const runtimeGoogleWritesEnabled =
     options.enableRuntimeGoogleWrites ?? runtimeGoogleEnabled;
-  const secretStore = options.secretStore ?? defaultSecretStore();
+  const secretStore = options.secretStore ?? defaultSecretStoreForPlatform({
+    appPaths,
+    linuxSafeStorageBackend: options.linuxSafeStorageBackend
+  });
   const googleCredentialAdapter = new KeychainGoogleCredentialAdapter(secretStore);
   const googleClientSecretStore = new KeychainGoogleOAuthClientSecretStore(secretStore);
   const googleConfigStore = new GoogleOAuthClientConfigStore(connection, googleClientSecretStore);
@@ -361,8 +371,44 @@ export function createServiceContainer(options: ServiceContainerOptions): Servic
   };
 }
 
-function defaultSecretStore(): SecretStore {
-  return process.platform === "darwin"
-    ? new MacOsKeychainSecretStore()
-    : new UnsupportedSecretStore("OS credential storage is only wired for macOS in this preview.");
+export function defaultSecretStoreForPlatform(input: {
+  appPaths?: NativeAppPaths;
+  linuxSafeStorageBackend?: LinuxSafeStorageBackend;
+  platform?: NodeJS.Platform | string;
+} = {}): SecretStore {
+  const platform = input.platform ?? process.platform;
+
+  if (platform === "darwin") {
+    return new MacOsKeychainSecretStore();
+  }
+
+  if (platform === "linux") {
+    const backend = input.linuxSafeStorageBackend ?? loadElectronSafeStorageBackend();
+
+    if (backend && input.appPaths) {
+      return new LinuxSecretServiceStore({
+        backend,
+        platform,
+        storageFile: join(input.appPaths.configDirectory, "secrets.safe-storage.json")
+      });
+    }
+
+    return new UnsupportedSecretStore(
+      backend
+        ? "Linux Secret Service storage requires app paths before secrets can be persisted."
+        : "Electron safeStorage is unavailable; Linux Secret Service storage cannot be used."
+    );
+  }
+
+  return new UnsupportedSecretStore("OS credential storage is unavailable on this platform.");
+}
+
+function loadElectronSafeStorageBackend(): LinuxSafeStorageBackend | undefined {
+  try {
+    const electron = require("electron") as { safeStorage?: LinuxSafeStorageBackend } | string;
+
+    return typeof electron === "object" ? electron.safeStorage : undefined;
+  } catch {
+    return undefined;
+  }
 }

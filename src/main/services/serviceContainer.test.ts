@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MemorySecretStore } from "../credentials/secretStore";
+import {
+  LinuxSecretServiceStore,
+  MemorySecretStore,
+  type LinuxSafeStorageBackend
+} from "../credentials/secretStore";
 import {
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_TASKS_SCOPE,
@@ -13,9 +17,39 @@ import {
   type GoogleTasksReadTransport,
   type GoogleTasksWriteTransport
 } from "../google";
-import { createServiceContainer } from "./serviceContainer";
+import { createServiceContainer, defaultSecretStoreForPlatform } from "./serviceContainer";
+
+const fakeLinuxSafeStorageBackend: LinuxSafeStorageBackend = {
+  decryptString: (encrypted) => encrypted.toString("utf8").replace(/^encrypted:/, ""),
+  encryptString: (plainText) => Buffer.from(`encrypted:${plainText}`, "utf8"),
+  getSelectedStorageBackend: () => "gnome_libsecret",
+  isEncryptionAvailable: () => true,
+  setUsePlainTextEncryption: () => undefined
+};
 
 describe("service container integration", () => {
+  it("selects Linux Secret Service storage when Linux app paths and safeStorage are available", () => {
+    const appPaths = {
+      configDirectory: "/tmp/hcb-config",
+      dataDirectory: "/tmp/hcb-data",
+      cacheDirectory: "/tmp/hcb-cache",
+      logsDirectory: "/tmp/hcb-logs",
+      diagnosticsDirectory: "/tmp/hcb-diagnostics",
+      tempDirectory: "/tmp/hcb-temp"
+    };
+    const store = defaultSecretStoreForPlatform({
+      appPaths,
+      linuxSafeStorageBackend: fakeLinuxSafeStorageBackend,
+      platform: "linux"
+    });
+
+    expect(store).toBeInstanceOf(LinuxSecretServiceStore);
+    expect(store.status()).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+  });
+
   it("shares domain services between MCP tool handlers and planner IPC services", async () => {
     const appSupportDirectory = mkdtempSync(join(tmpdir(), "hcb2-service-container-"));
     const services = createServiceContainer({

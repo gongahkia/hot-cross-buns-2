@@ -1,5 +1,6 @@
-import { app, shell } from "electron";
+import { app, safeStorage, shell } from "electron";
 import { join } from "node:path";
+import { linuxSecretServiceStatus } from "../../credentials/secretStore";
 import {
   buildNativeCapabilityReport,
   capabilityDiagnostic
@@ -30,6 +31,7 @@ export function appPaths(): NativeAppPaths {
 
 export function capabilities(): NativePlatformCapabilities {
   const paths = appPaths();
+  const credentialStatus = credentialStorageStatus();
   const flags = {
     supportsAppPaths: true,
     supportsTray: false,
@@ -44,7 +46,7 @@ export function capabilities(): NativePlatformCapabilities {
     supportsInstallerMetadata: Boolean(process.env.APPIMAGE),
     supportsExternalUrlOpen: true,
     supportsDiagnosticsCollection: true,
-    supportsCredentialStorage: false,
+    supportsCredentialStorage: credentialStatus.ok,
     supportsOAuthLoopback: true,
     supportsMcpLoopback: true,
     requiresSignedBuildForNotifications: false,
@@ -68,8 +70,8 @@ export function capabilities(): NativePlatformCapabilities {
       flags,
       capabilityOverrides: {
         credentialStorage: {
-          state: "pending",
-          message: "Secret Service credential storage is planned for the Linux preview but is not wired yet."
+          state: credentialStatus.state ?? "error",
+          message: credentialStatus.message
         },
         tray: {
           state: "unsupported",
@@ -129,11 +131,18 @@ export function capabilities(): NativePlatformCapabilities {
         }
       },
       diagnostics: [
-        capabilityDiagnostic(
-          "credentialStorage",
-          "blocker",
-          "Linux Secret Service credential storage is not implemented yet; credential-dependent features must stay blocked."
-        ),
+        credentialStatus.ok
+          ? capabilityDiagnostic(
+              "credentialStorage",
+              "info",
+              "Linux Secret Service credential storage is available through Electron safeStorage."
+            )
+          : capabilityDiagnostic(
+              "credentialStorage",
+              "blocker",
+              credentialStatus.message ??
+                "Linux Secret Service credential storage is unavailable; credential-dependent features must stay blocked."
+            ),
         capabilityDiagnostic(
           "tray",
           "info",
@@ -155,7 +164,7 @@ export function capabilities(): NativePlatformCapabilities {
 }
 
 export function credentialStorageStatus(): NativeOperationResult {
-  return pending("Linux Secret Service credential storage is not implemented yet.");
+  return linuxSecretServiceStatus(safeStorage);
 }
 
 export function installAppMenu(): NativeOperationResult {
