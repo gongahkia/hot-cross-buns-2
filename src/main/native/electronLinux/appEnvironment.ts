@@ -166,7 +166,7 @@ export function registerProtocolClient(_scheme: typeof HCB_DEEP_LINK_SCHEME): Na
   return unsupported("Linux protocol registration is pending AppImage desktop integration validation.");
 }
 
-export function setAutostart(): NativeOperationResult {
+export function setAutostart(_enabled: boolean): NativeOperationResult {
   return unsupported("Linux open-at-login is pending desktop-entry validation.");
 }
 

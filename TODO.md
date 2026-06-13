@@ -69,6 +69,13 @@ Goal: make Linux startup select a Linux-aware adapter that reports honest
 capabilities without trying to implement fragile desktop-environment behavior
 too early.
 
+Status: Complete as of 2026-06-13. The app now selects native adapters through
+an async platform factory, lazy-loads the macOS adapter only for `darwin`, uses a
+non-claiming `electron-linux-preview` adapter for `linux`, and leaves Windows
+and unknown platforms on the existing noop adapter. Verification: `pnpm
+typecheck` and `pnpm exec vitest run --config vitest.config.ts
+src/main/native/adapterContract.test.ts`.
+
 Implementation tasks:
 
 - Add a native adapter factory, for example
@@ -518,8 +525,8 @@ Acceptance criteria:
 ## Release Readiness Checklist
 
 - [ ] macOS tests and packaging still pass.
-- [ ] Linux adapter selected on Linux without importing mac adapter code.
-- [ ] Linux capability report is schema-valid.
+- [x] Linux adapter selected on Linux without importing mac adapter code.
+- [x] Linux capability report is schema-valid.
 - [ ] Linux credential storage uses Secret Service/libsecret and no plaintext
       fallback.
 - [ ] AppImage builds on a Linux host or Linux CI runner.
@@ -554,4 +561,3 @@ Acceptance criteria:
   https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html
 - Secret Service API:
   https://specifications.freedesktop.org/secret-service-spec/latest/
-
