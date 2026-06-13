@@ -4,7 +4,8 @@ import { IPC_CHANNELS, type NativeAction } from "@shared/ipc/contracts";
 import { appLogger } from "./diagnostics/appLogger";
 import { registerHcbIpc } from "./ipc";
 import { brandAssetPath } from "./native/brandAssets";
-import { createElectronMacNativeAdapter } from "./native/electronMacAdapter";
+import { createNativeAdapter } from "./native/createNativeAdapter";
+import type { NativePlatformAdapter } from "./native/types";
 import {
   configureEmbeddedWebContentsLockdown,
   configureEmbeddedWebviewLockdown,
@@ -22,7 +23,7 @@ import { markStartupTiming } from "./startupTiming";
 
 let mainWindow: BrowserWindow | null = null;
 let services: ServiceContainer | null = null;
-const nativeAdapter = createElectronMacNativeAdapter();
+let nativeAdapter: NativePlatformAdapter | null = null;
 const pendingDeepLinks: string[] = [];
 const pendingNativeActions: NativeAction[] = [];
 const rendererReadyFallbackMs = 8_000;
@@ -57,6 +58,14 @@ app.on("open-url", (event, url) => {
 
   services.nativeShell.handleDeepLink(url);
 });
+
+function requireNativeAdapter(): NativePlatformAdapter {
+  if (!nativeAdapter) {
+    throw new Error("Native adapter was requested before startup initialization.");
+  }
+
+  return nativeAdapter;
+}
 
 function flushPendingNativeActions(): void {
   const target = mainWindow;
@@ -274,7 +283,7 @@ function createMainWindow(): BrowserWindow {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   configureNavigationLockdown(window, {
     allowedDevOrigin: rendererUrl,
-    externalOpener: nativeAdapter
+    externalOpener: requireNativeAdapter()
   });
   configureEmbeddedWebviewLockdown(window);
 
@@ -316,13 +325,15 @@ function createMainWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   markStartupTiming("appReadyMs");
-  appLogger.configure({ logsDirectory: nativeAdapter.appPaths().logsDirectory });
+  const adapter = await createNativeAdapter();
+  nativeAdapter = adapter;
+  appLogger.configure({ logsDirectory: adapter.appPaths().logsDirectory });
   appLogger.info("app ready", "misc");
   configureSessionHardening(session.defaultSession, { isPackaged: app.isPackaged });
   configureEmbeddedWebContentsLockdown(app);
   services = createServiceContainer({
-    appPaths: nativeAdapter.appPaths(),
-    nativeAdapter,
+    appPaths: adapter.appPaths(),
+    nativeAdapter: adapter,
     nativeWindows: {
       showMainWindow,
       hideMainWindow,
