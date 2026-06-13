@@ -77,31 +77,35 @@ Confirm the current release candidate already passed:
 
 ## Notifications
 
-- On GNOME, create a local reminder and confirm notification delivery.
-- On KDE, create a local reminder and confirm notification delivery.
-- Click the notification and confirm the app focuses or records a recoverable
-  unsupported state.
-- Disable notifications and confirm pending local notifications are cleared.
-- Confirm Diagnostics reports notification support accurately for the session.
+- Confirm Diagnostics reports Linux notifications as unsupported in the
+  technical preview.
+- Confirm enabling notification settings does not schedule Linux desktop
+  notifications.
+- Confirm the unsupported notification state does not block startup, sync,
+  tasks, calendar, notes, export, or diagnostics.
+- For future validation builds only, test GNOME delivery, KDE delivery,
+  click-through focus/action routing, disabled-setting clearing, and real
+  delivery-failure diagnostics.
 
 ## Global Shortcuts
 
-- On X11, register the quick-capture shortcut and confirm it opens capture while
-  the app is unfocused.
-- On X11, test a shortcut conflict and confirm the app reports the conflict
-  without breaking in-app capture.
-- On Wayland with the GlobalShortcuts portal available, register quick capture
-  and confirm the portal-mediated shortcut works.
-- On Wayland without portal support or after denial, confirm global capture is
-  marked unsupported and in-app capture remains available.
-- Confirm shortcut diagnostics identify the session type without exposing raw
-  environment details.
+- Confirm Diagnostics reports Linux global shortcuts as unsupported in the
+  technical preview.
+- Confirm in-app quick add remains available from the command palette and normal
+  app shortcuts.
+- Confirm the unsupported shortcut state does not block startup, sync, tasks,
+  calendar, notes, export, or diagnostics.
+- For future validation builds only, test X11 registration, X11 conflict,
+  Wayland portal registration, portal denial or missing portal support, and
+  packaged AppImage quick-capture dispatch.
 
 ## Explicitly Unsupported Preview Features
 
 The Linux technical preview intentionally does not support:
 
 - tray/status-area surfaces
+- Linux desktop notifications
+- Linux global shortcuts
 - `hotcrossbuns://` deep links
 - open-at-login/autostart
 - automatic in-place AppImage updates
@@ -133,4 +137,3 @@ For each unsupported feature:
 | Date | Build | Distro | Desktop | Session | Tester | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 |  |  |  |  |  |  |  |  |
-

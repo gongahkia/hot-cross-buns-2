@@ -103,8 +103,7 @@ Known Linux preview limits:
 
 - AppImage is the only Linux package format.
 - The app can check GitHub Releases for newer AppImage builds, but does not download or install Linux updates automatically.
-- Tray/status-area surfaces, `hotcrossbuns://` deep links, and open-at-login/autostart are unsupported.
-- Notifications and global shortcuts are capability-gated and still require live desktop-environment validation before release.
+- Tray/status-area surfaces, `hotcrossbuns://` deep links, open-at-login/autostart, local notifications, and global shortcuts are unsupported in the Linux technical preview.
 - Google OAuth tokens, OAuth client secrets, and MCP bearer tokens require an OS-backed Secret Service provider such as GNOME Keyring/libsecret or KWallet. Plaintext fallback is rejected.
 
 **Google Cloud OAuth setup**

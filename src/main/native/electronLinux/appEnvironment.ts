@@ -17,6 +17,7 @@ import {
   type NativePlatformCapabilities
 } from "../types";
 import { sanitizedFailure, unsupported } from "./operationResults";
+import { isLinuxUnvalidatedNativeShellEnabled } from "./previewGates";
 
 export function appPaths(): NativeAppPaths {
   const userData = app.getPath("userData");
@@ -37,7 +38,9 @@ export function appPaths(): NativeAppPaths {
 export function capabilities(): NativePlatformCapabilities {
   const paths = appPaths();
   const credentialStatus = credentialStorageStatus();
-  const notifications = Notification.isSupported();
+  const unvalidatedNativeShellEnabled = isLinuxUnvalidatedNativeShellEnabled();
+  const notificationRuntimeSupported = Notification.isSupported();
+  const notifications = unvalidatedNativeShellEnabled && notificationRuntimeSupported;
   const globalShortcutSupport = detectLinuxGlobalShortcutSupport();
   const flags = {
     supportsAppPaths: true,
@@ -96,7 +99,9 @@ export function capabilities(): NativePlatformCapabilities {
           state: notifications ? "ready" : "unsupported",
           message: notifications
             ? "Electron reports Linux desktop notifications are available through the current session."
-            : "Electron reports Linux desktop notifications are unavailable in the current session."
+            : notificationRuntimeSupported
+              ? "Linux notifications are explicitly unsupported in this technical preview until GNOME, KDE, packaged delivery, and click-through behavior are manually validated."
+              : "Electron reports Linux desktop notifications are unavailable in the current session."
         },
         customProtocol: {
           state: "unsupported",
@@ -167,7 +172,9 @@ export function capabilities(): NativePlatformCapabilities {
           notifications ? "info" : "warning",
           notifications
             ? "Linux notification scheduling is enabled; delivery still requires GNOME/KDE manual release validation."
-            : "Electron Notification.isSupported() returned false for this Linux session."
+            : notificationRuntimeSupported
+              ? "Linux notification scheduling is disabled for this technical preview despite runtime support; delivery and click-through remain unvalidated."
+              : "Electron Notification.isSupported() returned false for this Linux session."
         ),
         capabilityDiagnostic(
           "customProtocol",

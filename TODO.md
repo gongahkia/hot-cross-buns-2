@@ -47,14 +47,16 @@ claims until the implementation phases and release gates below are complete.
   mac-specific native code.
 - `NativePlatformAdapter` in `src/main/native/types.ts` is the correct boundary
   for Linux-specific native behavior.
-- Linux local notification scheduling is implemented behind
-  `Notification.isSupported()`. Linux notification permission state remains
-  non-queryable, and display failures are surfaced as sanitized native
-  diagnostics without interrupting sync, tasks, or calendar state.
-- Linux global shortcut registration is adapter-gated: X11 sessions can attempt
-  Electron `globalShortcut` registration directly, while Wayland sessions require
-  Electron's `GlobalShortcutsPortal` feature switch and the XDG Desktop Portal
-  GlobalShortcuts interface before registration is attempted.
+- Linux local notification scheduling is explicitly unsupported in the technical
+  preview until GNOME/KDE packaged delivery and click-through behavior are
+  manually validated. The lower-level Electron implementation remains guarded
+  behind `HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL=1` for future validation
+  runs.
+- Linux global shortcut registration is explicitly unsupported in the technical
+  preview until X11, Wayland portal, denial, conflict, and packaged AppImage
+  dispatch behavior are manually validated. The lower-level Electron
+  implementation remains guarded behind
+  `HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL=1` for future validation runs.
 - Linux tray/status-area support is explicitly unsupported in the technical
   preview until GNOME and KDE status-icon behavior is manually validated. The
   main window remains the supported Linux control surface.
@@ -331,11 +333,13 @@ Acceptance criteria:
 Goal: support local reminders on Linux only when Electron and the desktop
 environment can show notifications.
 
-Status: Implementation complete as of 2026-06-13 in commit `b73b8a6`.
-Linux now detects notification support through Electron, schedules reminders
-through the main-process `Notification` class, keeps Linux permission query
-state unsupported, retains active notifications for click routing, and turns
-display failures into sanitized recoverable native status errors.
+Status: Closed as explicitly unsupported for the Linux technical preview as of
+2026-06-13. The lower-level Electron notification implementation remains covered
+for future validation runs, but default Linux preview capability reports now
+mark notifications unsupported, direct scheduling returns no scheduled
+notification, and docs say Linux desktop notifications are not part of the
+public AppImage preview until GNOME/KDE packaged delivery and click-through are
+validated.
 
 Verification completed:
 
@@ -343,17 +347,23 @@ Verification completed:
 - `pnpm typecheck`
 - `pnpm build`
 - `pnpm test` (`60` Vitest files, `468` tests)
-- Secondary live host probe on 2026-06-13: Fedora 43 KDE Plasma 6 Wayland
-  exposes `org.freedesktop.Notifications` as `Plasma/KDE 6.6.5`, accepted a
-  direct D-Bus `Notify` request (`notification_id=133`), and an isolated app
-  capability probe reported Linux notifications supported with permission query
-  `unsupported`. This is useful KDE evidence, but it does not close the GNOME
-  delivery or packaged AppImage click-through gates.
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts src/main/native/service.test.ts src/renderer/src/App.shell.test.tsx src/shared/ipc/contracts.test.ts`
+- `pnpm typecheck`
+- `pnpm build`
+- Isolated Linux app capability probe on 2026-06-13 with
+  `HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL` unset reported
+  `notifications: false` and a `notifications` capability state of
+  `unsupported`.
+- Secondary live host probe on 2026-06-13, before fail-closed default:
+  Fedora 43 KDE Plasma 6 Wayland exposes `org.freedesktop.Notifications` as
+  `Plasma/KDE 6.6.5` and accepted a direct D-Bus `Notify` request
+  (`notification_id=133`). This is useful KDE environment evidence, but it does
+  not validate app reminder delivery or click-through.
 
-Remaining manual release gates: GNOME delivery, KDE delivery, packaged
-AppImage click-through that opens/focuses the app and dispatches the intended
-action, Settings-disabled notification clearing in a live desktop session, and
-diagnostics visibility for real desktop delivery failures.
+Remaining release gate: packaged AppImage QA must confirm Linux notification
+status is explicitly unsupported and does not block startup, sync, tasks,
+calendar, notes, export, or diagnostics. GNOME/KDE delivery and click-through
+checks move to future validation builds.
 
 Implementation tasks:
 
@@ -385,17 +395,14 @@ Acceptance criteria:
 Goal: support quick capture/global shortcuts where Linux desktop infrastructure
 allows it, while treating denial and unsupported sessions as normal outcomes.
 
-Status: Implementation complete as of 2026-06-13. Linux startup enables
-Electron's `GlobalShortcutsPortal` feature switch before app ready, the Linux
-adapter detects X11 versus Wayland with `XDG_SESSION_TYPE`, probes XDG Desktop
-Portal GlobalShortcuts availability for Wayland sessions, exposes
-Wayland/portal diagnostics in the native capability report, attempts
-`globalShortcut.register()` only for supported sessions, and returns conflict or
-unsupported recovery guidance without crashing. `NativeShellService` now wires
-the configured `quickAdd.open` keybinding into the native adapter after
-deferred startup, unregisters stale shortcuts when settings change, dispatches a
-typed `openQuickAdd` native action to the renderer, and keeps the in-app quick
-add path available when global registration is unavailable or denied.
+Status: Closed as explicitly unsupported for the Linux technical preview as of
+2026-06-13. The lower-level X11/Wayland portal implementation remains covered
+for future validation runs, and `NativeShellService` can wire the configured
+`quickAdd.open` keybinding into the native adapter when that validation gate is
+enabled. Default Linux preview capability reports now mark global shortcuts
+unsupported, and docs say in-app quick add is the supported Linux capture path
+until X11, Wayland portal, denial, conflict, and packaged AppImage dispatch are
+validated.
 
 Verification completed:
 
@@ -404,16 +411,24 @@ Verification completed:
 - `pnpm build`
 - `pnpm test` (`60` Vitest files, `471` tests)
 - `pnpm exec vitest run --config vitest.config.ts src/main/native/service.test.ts src/renderer/src/App.shell.test.tsx src/shared/ipc/contracts.test.ts`
-- Secondary live host probe on 2026-06-13: Fedora 43 KDE Plasma 6 Wayland
-  exposes XDG Desktop Portal `GlobalShortcuts` version `1`; an isolated app
-  capability probe reported `hasWaylandSession: true` and
-  `hasPortalShortcutSupport: true`. This proves portal availability on the
-  current secondary desktop only; shortcut registration, denial, conflict, and
-  packaged AppImage dispatch remain manual gates.
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts src/main/native/service.test.ts src/renderer/src/App.shell.test.tsx src/shared/ipc/contracts.test.ts`
+- `pnpm typecheck`
+- `pnpm build`
+- Isolated Linux app capability probe on 2026-06-13 with
+  `HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL` unset reported
+  `globalShortcuts: false` and a `globalShortcuts` capability state of
+  `unsupported`.
+- Secondary live host probe on 2026-06-13, before fail-closed default:
+  Fedora 43 KDE Plasma 6 Wayland exposes XDG Desktop Portal `GlobalShortcuts`
+  version `1`. This proves portal availability on the current secondary desktop
+  only; shortcut registration, denial, conflict, and packaged AppImage dispatch
+  move to future validation builds.
 
-Remaining manual release gates: Ubuntu GNOME Wayland portal registration and
-denial, Ubuntu GNOME X11 registration/conflict behavior, KDE Plasma Wayland
-behavior, and end-to-end quick-capture dispatch in a packaged AppImage session.
+Remaining release gate: packaged AppImage QA must confirm Linux global shortcut
+status is explicitly unsupported, in-app quick add remains available, and the
+unsupported state does not block startup, sync, tasks, calendar, notes, export,
+or diagnostics. X11/Wayland registration, denial, conflict, and packaged
+AppImage dispatch checks move to future validation builds.
 
 Implementation tasks:
 
@@ -685,7 +700,8 @@ Verification completed:
 - `HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage`
 - `pnpm test:smoke`
 - `pnpm test:perf`
-- Secondary Fedora 43 KDE Plasma 6 Wayland probe on 2026-06-13:
+- Secondary Fedora 43 KDE Plasma 6 Wayland probe on 2026-06-13, before
+  fail-closed notification/shortcut defaults:
   Freedesktop notification service available, notification request accepted,
   XDG Desktop Portal `GlobalShortcuts` available, isolated app capability
   report schema-valid for the current session, Linux tray/deep-link/autostart
@@ -695,8 +711,8 @@ Verification completed:
 Remaining manual release gates: Ubuntu GNOME terminal and file-manager launch,
 real desktop icon/window grouping, OAuth browser round trip, Secret Service
 ready/missing/locked checks, live MCP CLI smoke against the packaged AppImage,
-GNOME/KDE notification delivery, X11/Wayland shortcut behavior, and macOS
-packaging smoke on a macOS host before shipping.
+confirmation that Linux notifications and global shortcuts are unsupported in
+the packaged preview, and macOS packaging smoke on a macOS host before shipping.
 
 Required automated gates before any Linux preview release:
 
@@ -750,7 +766,8 @@ README, public docs site, privacy page, docs index, QA plan, release
 distribution docs, Linux preview support doc, and manual Linux native-shell
 checklist all call out preview scope, AppImage packaging, OS-backed credential
 storage, no plaintext fallback, manual GitHub release updates, and unsupported
-Linux tray/status-area, deep-link, autostart, and in-place update behavior.
+Linux notifications, global shortcuts, tray/status-area, deep-link, autostart,
+and in-place update behavior.
 Remaining unchecked release-readiness items below require live macOS or Linux
 desktop validation and are not claimed as complete by this docs pass.
 
@@ -799,8 +816,8 @@ Acceptance criteria:
 - [x] AppImage checksum is generated and verified.
 - [ ] OAuth browser round trip works on Ubuntu GNOME.
 - [x] MCP binds to `127.0.0.1` and uses OS-backed bearer token storage.
-- [ ] Notifications are either validated or explicitly unsupported.
-- [ ] Global shortcuts are either validated per session type or explicitly
+- [x] Notifications are either validated or explicitly unsupported.
+- [x] Global shortcuts are either validated per session type or explicitly
       unsupported.
 - [x] Tray behavior is either validated per desktop environment or explicitly
       unsupported.

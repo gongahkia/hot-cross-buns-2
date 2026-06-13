@@ -39,13 +39,14 @@ visible.
   installed AppImage desktop integration is validated.
 - Tray/status area and open-at-login are explicitly unsupported until their
   dedicated Linux validation phases are complete.
-- Global shortcuts are adapter-gated: X11 can attempt Electron registration,
-  while Wayland requires the XDG Desktop Portal GlobalShortcuts interface.
-  Desktop-matrix validation is still required before claiming reliable global
-  hotkey support.
-- Local notifications are enabled only when Electron reports desktop
-  notification support. GNOME/KDE delivery and notification click-through still
-  require release validation.
+- Global shortcuts are explicitly unsupported in the Linux technical preview.
+  Future validation builds can test X11 Electron registration and Wayland XDG
+  Desktop Portal GlobalShortcuts support, but the public preview keeps in-app
+  quick add as the supported capture path.
+- Local notifications are explicitly unsupported in the Linux technical preview.
+  Future validation builds can test GNOME/KDE delivery and notification
+  click-through, but the public preview does not schedule Linux desktop
+  notifications.
 - Credential storage requires an OS-backed Electron `safeStorage` provider such
   as GNOME Keyring/libsecret or KWallet. The app refuses Electron's
   `basic_text` plaintext fallback.

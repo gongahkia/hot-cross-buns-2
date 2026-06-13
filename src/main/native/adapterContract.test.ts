@@ -80,6 +80,7 @@ vi.mock("electron", () => electronMock);
 const originalAppImage = process.env.APPIMAGE;
 const originalDisplay = process.env.DISPLAY;
 const originalGlobalShortcutsPortal = process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL;
+const originalUnvalidatedNativeShell = process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL;
 const originalSessionType = process.env.XDG_SESSION_TYPE;
 
 beforeEach(() => {
@@ -111,6 +112,7 @@ beforeEach(() => {
 
   process.env.DISPLAY = ":1";
   delete process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL;
+  delete process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL;
   process.env.XDG_SESSION_TYPE = "x11";
 });
 
@@ -127,6 +129,12 @@ afterEach(() => {
     delete process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL;
   } else {
     process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL = originalGlobalShortcutsPortal;
+  }
+
+  if (originalUnvalidatedNativeShell === undefined) {
+    delete process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL;
+  } else {
+    process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = originalUnvalidatedNativeShell;
   }
 
   if (originalSessionType === undefined) {
@@ -282,8 +290,8 @@ describe("native adapter contract", () => {
     expect(report.adapterId).toBe("electron-linux-preview");
     expect(report.adapterId).not.toContain("mac");
     expect(response).toMatchObject({
-      notifications: true,
-      globalShortcuts: true,
+      notifications: false,
+      globalShortcuts: false,
       tray: false,
       deepLinks: false
     });
@@ -293,8 +301,8 @@ describe("native adapter contract", () => {
       supportsDiagnosticsCollection: true,
       supportsCredentialStorage: true,
       supportsTray: false,
-      supportsGlobalShortcut: true,
-      supportsNotifications: true,
+      supportsGlobalShortcut: false,
+      supportsNotifications: false,
       supportsProtocolRegistration: false,
       supportsAutostart: false,
       supportsInPlaceAutoUpdate: false
@@ -313,13 +321,13 @@ describe("native adapter contract", () => {
         }),
         expect.objectContaining({
           key: "globalShortcuts",
-          supported: true,
-          state: "pending"
+          supported: false,
+          state: "unsupported"
         }),
         expect.objectContaining({
           key: "notifications",
-          supported: true,
-          state: "ready"
+          supported: false,
+          state: "unsupported"
         }),
         expect.objectContaining({
           key: "updater",
@@ -371,6 +379,17 @@ describe("native adapter contract", () => {
     });
 
     process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL = "1";
+
+    const previewDefault = createElectronLinuxNativeAdapter();
+
+    expect(previewDefault.capabilities().globalShortcuts).toBe(false);
+    expect(previewDefault.capabilities().capabilityReport.flags).toMatchObject({
+      hasWaylandSession: true,
+      hasPortalShortcutSupport: true,
+      supportsGlobalShortcut: false
+    });
+
+    process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
 
     const portalReady = createElectronLinuxNativeAdapter();
 
@@ -432,6 +451,7 @@ describe("native adapter contract", () => {
   });
 
   it("registers Linux global shortcuts through Electron on supported sessions", () => {
+    process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
     const adapter = createElectronLinuxNativeAdapter();
     const action = vi.fn();
 
@@ -452,6 +472,7 @@ describe("native adapter contract", () => {
   });
 
   it("reports Linux global shortcut registration conflicts with recovery guidance", () => {
+    process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
     electronMock.globalShortcut.register.mockReturnValueOnce(false);
 
     const adapter = createElectronLinuxNativeAdapter();
@@ -464,6 +485,7 @@ describe("native adapter contract", () => {
   });
 
   it("schedules Linux notifications through Electron and routes notification clicks", () => {
+    process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
     vi.useFakeTimers();
     const adapter = createElectronLinuxNativeAdapter();
     const onClick = vi.fn();
@@ -501,6 +523,7 @@ describe("native adapter contract", () => {
   });
 
   it("reports Linux notification display failures to the caller", () => {
+    process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
     vi.useFakeTimers();
     const adapter = createElectronLinuxNativeAdapter();
     const onFailure = vi.fn();
@@ -516,6 +539,22 @@ describe("native adapter contract", () => {
 
     expect(onFailure).toHaveBeenCalledWith(
       "Native notification failed: libnotify service unavailable"
+    );
+  });
+
+  it("does not schedule Linux notifications while preview support is explicitly unsupported", () => {
+    const adapter = createElectronLinuxNativeAdapter();
+    const onFailure = vi.fn();
+
+    expect(adapter.scheduleNotification({
+      id: "task:task-1",
+      title: "Task due",
+      body: "Pay invoice",
+      deliveryDate: new Date(Date.now())
+    }, vi.fn(), onFailure)).toBeUndefined();
+    expect(electronMock.notificationInstances).toHaveLength(0);
+    expect(onFailure).toHaveBeenCalledWith(
+      "Linux notifications are explicitly unsupported in this technical preview until desktop delivery is validated."
     );
   });
 

@@ -141,7 +141,7 @@ The Linux preview is intentionally narrower than the macOS preview:
 - In-place Linux auto-update is not enabled.
 - `hotcrossbuns://` protocol metadata is not registered for Linux until deep-link validation is complete.
 - Tray and autostart remain disabled unless their later phases validate them.
-- Notifications and global shortcuts are capability-gated and remain technical-preview features until the Linux manual QA matrix validates them.
+- Notifications and global shortcuts are explicitly unsupported in this Linux technical preview until the Linux manual QA matrix validates them in future builds.
 - Credential storage requires Electron `safeStorage` with an OS-backed Linux provider such as GNOME Keyring/libsecret or KWallet; Electron `basic_text` plaintext fallback is rejected.
 
 Linux package metadata:

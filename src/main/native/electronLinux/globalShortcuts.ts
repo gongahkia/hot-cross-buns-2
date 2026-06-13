@@ -3,6 +3,7 @@ import { globalShortcut } from "electron";
 import { redactDiagnosticText } from "@shared/redaction";
 import type { NativeFeatureState } from "@shared/ipc/contracts";
 import type { NativeOperationResult } from "../types";
+import { isLinuxUnvalidatedNativeShellEnabled } from "./previewGates";
 
 export interface LinuxGlobalShortcutSupport {
   hasPortalShortcutSupport: boolean;
@@ -82,10 +83,23 @@ export function detectLinuxGlobalShortcutSupport(
   const sessionType = normalizeSessionType(env.XDG_SESSION_TYPE);
   const hasWaylandSession = sessionType === "wayland";
   const hasX11Display = Boolean(env.DISPLAY?.trim());
+  const hasPortalShortcutSupport = hasWaylandSession
+    ? resolvePortalShortcutSupport(env, portalProbe)
+    : false;
+
+  if (!isLinuxUnvalidatedNativeShellEnabled(env)) {
+    return {
+      hasPortalShortcutSupport,
+      hasWaylandSession,
+      message: "Linux global shortcuts are explicitly unsupported in this technical preview until X11, Wayland portal, denial, conflict, and packaged AppImage behavior are manually validated. In-app quick add remains available.",
+      sessionType,
+      sessionTypeLabel: sessionType === "unknown" ? "unknown session" : sessionType,
+      state: "unsupported",
+      supported: false
+    };
+  }
 
   if (hasWaylandSession) {
-    const hasPortalShortcutSupport = resolvePortalShortcutSupport(env, portalProbe);
-
     return {
       hasPortalShortcutSupport,
       hasWaylandSession,

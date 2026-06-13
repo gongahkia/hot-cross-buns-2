@@ -24,6 +24,7 @@ import {
 import { unsupported } from "./electronLinux/operationResults";
 import { LinuxGlobalShortcutRegistry } from "./electronLinux/globalShortcuts";
 import { LinuxNotificationScheduler } from "./electronLinux/notifications";
+import { isLinuxUnvalidatedNativeShellEnabled } from "./electronLinux/previewGates";
 
 export function createElectronLinuxNativeAdapter(): NativePlatformAdapter {
   return new ElectronLinuxNativeAdapter();
@@ -86,6 +87,13 @@ class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
     onClick: () => void,
     onFailure?: (message: string) => void
   ): ScheduledNativeNotification | undefined {
+    if (!isLinuxUnvalidatedNativeShellEnabled()) {
+      onFailure?.(
+        "Linux notifications are explicitly unsupported in this technical preview until desktop delivery is validated."
+      );
+      return undefined;
+    }
+
     return this.notifications.schedule(request, onClick, onFailure);
   }
 

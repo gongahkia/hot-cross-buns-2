@@ -95,7 +95,11 @@ Manual QA must cover GNOME and KDE separately.
 
 Linux global shortcuts are the highest-risk native feature.
 
-Rules:
+Current technical-preview decision: Linux global shortcuts are explicitly
+unsupported. The main window, command palette, and in-app quick add remain the
+supported capture paths.
+
+Future validation rules:
 
 - On Wayland, prefer the XDG Desktop Portal global shortcuts path where Electron/Chromium support is available.
 - On X11, test Electron `globalShortcut` directly.
@@ -104,21 +108,27 @@ Rules:
 
 Electron documents a `GlobalShortcutsPortal` feature flag for Wayland sessions. XDG Desktop Portal global shortcuts are session-bound and user-mediated, so the UI must tolerate user denial or missing portal support.
 
-Current implementation:
+Internal validation implementation:
 
-- Electron's `GlobalShortcutsPortal` feature switch is enabled before app ready
-  on Linux so Wayland sessions can use the portal path when available
+- Electron's `GlobalShortcutsPortal` feature switch can be enabled before app
+  ready on Linux so Wayland sessions can use the portal path when available
 - X11 sessions can attempt Electron `globalShortcut` registration directly
 - Wayland sessions report shortcut support only when the XDG Desktop Portal
   GlobalShortcuts interface is detected
 - registration conflicts, portal denial, or compositor blocks return explicit
   recovery guidance while the in-app quick add path remains available
+- public preview builds keep this path disabled until the manual matrix is
+  complete
 
 ## Notifications
 
 Electron sends Linux notifications through `libnotify` on desktop environments following the Desktop Notifications Specification. The adapter must check support and expose failures as diagnostics.
 
-Current implementation:
+Current technical-preview decision: Linux notifications are explicitly
+unsupported. Reminders remain visible inside the app, but the public preview
+does not schedule desktop notifications on Linux.
+
+Internal validation implementation:
 
 - the Linux adapter enables local notification scheduling only when
   `Notification.isSupported()` is true
@@ -128,8 +138,10 @@ Current implementation:
   retain active notification objects for click routing
 - notification display failures update native diagnostics without interrupting
   sync, tasks, or calendar state
+- public preview builds keep this path disabled until GNOME/KDE delivery and
+  click-through validation are complete
 
-Required behavior:
+Future required behavior:
 
 - notification scheduling can be enabled only when notification support is detected
 - failure to show a notification must not break sync or task/event data
