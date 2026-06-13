@@ -354,7 +354,7 @@ Still required before publishing a Linux preview:
 - AppImage launch from terminal and file manager
 - Linux manual QA matrix from `TODO.md`
 
-Linux preview should use check-for-new-version before in-place updates. Electron's built-in `autoUpdater` does not support Linux; package-manager and electron-builder updater behavior must be evaluated per package target before claiming automatic updates.
+Linux preview uses check-for-new-version before in-place updates. The app's Linux release check reads GitHub Releases and prefers AppImage assets, but it does not download or install updates automatically. Electron's built-in `autoUpdater` does not support Linux; package-manager and electron-builder updater behavior must be evaluated per package target before claiming automatic updates.
 
 See [Linux Port](../ports/linux-port.md).
 

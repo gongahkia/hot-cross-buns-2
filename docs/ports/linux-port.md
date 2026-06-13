@@ -167,6 +167,13 @@ Use check-for-new-version first. Do not promise seamless in-place auto-update in
 
 Electron's built-in `autoUpdater` does not support Linux. electron-builder's `electron-updater` supports Linux targets such as AppImage, DEB, Pacman, and RPM, but the product should still respect distro package manager expectations and package-specific behavior before enabling automatic updates.
 
+Current implementation:
+
+- Linux uses the shared GitHub Releases check-for-new-version flow
+- Linux release asset selection prefers `.AppImage` assets
+- no Linux update is downloaded or installed automatically
+- in-place AppImage/DEB/RPM updates remain explicitly unclaimed
+
 ## OAuth, MCP, And Networking
 
 Required Linux checks:

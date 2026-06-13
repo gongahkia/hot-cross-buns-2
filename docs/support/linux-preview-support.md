@@ -33,7 +33,8 @@ visible.
 ## Known Preview Limits
 
 - AppImage is the only Linux package format.
-- In-place automatic Linux updates are not enabled.
+- GitHub release checks can report newer Linux AppImage releases, but in-place
+  automatic Linux updates are not enabled.
 - `hotcrossbuns://` deep links are explicitly unsupported for Linux until
   installed AppImage desktop integration is validated.
 - Tray/status area and open-at-login are explicitly unsupported until their

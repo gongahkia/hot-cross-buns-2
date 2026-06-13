@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { linuxSecretServiceStatus } from "../../credentials/secretStore";
 import { detectLinuxGlobalShortcutSupport } from "./globalShortcuts";
 import {
+  checkGitHubReleaseForUpdates,
+  linuxReleaseAssetPreferences
+} from "../githubReleaseUpdates";
+import {
   buildNativeCapabilityReport,
   capabilityDiagnostic
 } from "../capabilityReport";
@@ -12,7 +16,7 @@ import {
   type NativeOperationResult,
   type NativePlatformCapabilities
 } from "../types";
-import { pending, sanitizedFailure, unsupported } from "./operationResults";
+import { sanitizedFailure, unsupported } from "./operationResults";
 
 export function appPaths(): NativeAppPaths {
   const userData = app.getPath("userData");
@@ -64,7 +68,7 @@ export function capabilities(): NativePlatformCapabilities {
     globalShortcuts: globalShortcutSupport.supported,
     tray: false,
     deepLinks: false,
-    updaterChecks: false,
+    updaterChecks: true,
     capabilityReport: buildNativeCapabilityReport({
       platform: "linux",
       adapterId: "electron-linux-preview",
@@ -103,8 +107,8 @@ export function capabilities(): NativePlatformCapabilities {
           message: "Linux open-at-login is explicitly unsupported in this technical preview until a user-level autostart desktop-entry flow is validated."
         },
         updater: {
-          state: "pending",
-          message: "Linux update checks are pending AppImage release-asset selection; in-place auto-update is disabled."
+          state: "ready",
+          message: "GitHub release checks are available for Linux AppImage assets; in-place auto-update remains disabled."
         },
         installerMetadata: {
           state: process.env.APPIMAGE ? "ready" : "pending",
@@ -204,8 +208,12 @@ export function autostartStatus(): NativeOperationResult {
   return unsupported("Linux open-at-login is explicitly unsupported in this technical preview.");
 }
 
-export function checkForUpdates(): NativeOperationResult {
-  return pending("Linux GitHub release checks are pending AppImage asset selection.");
+export function checkForUpdates(): Promise<NativeOperationResult> {
+  return checkGitHubReleaseForUpdates({
+    appVersion: app.getVersion(),
+    assetPreferences: linuxReleaseAssetPreferences,
+    userAgentVersion: app.getVersion()
+  });
 }
 
 export async function openExternalUrl(url: string): Promise<NativeOperationResult> {

@@ -324,7 +324,7 @@ describe("native adapter contract", () => {
         expect.objectContaining({
           key: "updater",
           supported: false,
-          state: "pending"
+          state: "ready"
         })
       ])
     );

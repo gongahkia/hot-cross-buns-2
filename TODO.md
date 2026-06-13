@@ -64,6 +64,9 @@ claims until the implementation phases and release gates below are complete.
 - Linux open-at-login/autostart is explicitly unsupported in the technical
   preview. The adapter does not create or remove user-level autostart
   `.desktop` entries.
+- Linux update checks use the shared GitHub Releases check-for-new-version flow
+  and prefer AppImage assets. No Linux update is downloaded or installed
+  automatically.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
 - `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
@@ -557,6 +560,22 @@ Acceptance criteria:
 ## Phase 9: Linux Update Checks
 
 Goal: preserve preview-safe update behavior without package-manager conflicts.
+
+Status: Implementation complete as of 2026-06-13. Release checking now uses a
+shared native GitHub Releases helper with platform-specific asset preferences:
+macOS prefers DMG then ZIP, while Linux prefers AppImage. Linux exposes manual
+GitHub release checks through the native adapter and keeps in-place auto-update
+disabled.
+
+Verification completed:
+
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/githubReleaseUpdates.test.ts src/main/native/adapterContract.test.ts`
+- `pnpm typecheck`
+- `pnpm build`
+
+Remaining manual release gates: confirm Settings check-for-updates opens the
+right Linux release asset once a published AppImage release exists, and confirm
+release copy does not imply automatic download or install.
 
 Implementation tasks:
 
