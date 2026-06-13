@@ -50,7 +50,9 @@ class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
   }
 
   createTray(_actions: NativeTrayActions): NativeOperationResult {
-    return unsupported("Linux tray/status-area support is not enabled in the technical preview scaffold.");
+    return unsupported(
+      "Linux tray/status-area support is explicitly unsupported in this technical preview; use the main window controls."
+    );
   }
 
   destroyTray(): void {

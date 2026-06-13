@@ -78,6 +78,11 @@ Linux preview must test:
 
 Linux tray support varies. The platform adapter must expose tray capability and diagnostics rather than assuming the tray exists.
 
+Current technical-preview decision: Linux tray/status-area support is explicitly
+unsupported until GNOME and KDE status-icon behavior is manually validated. The
+main window remains the supported control surface, and Settings/Diagnostics
+show tray as unsupported with desktop-session context where available.
+
 Required behavior:
 
 - If tray registration succeeds, support show/hide, quick capture, refresh, settings, quit.

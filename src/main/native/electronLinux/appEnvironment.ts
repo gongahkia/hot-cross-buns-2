@@ -78,7 +78,7 @@ export function capabilities(): NativePlatformCapabilities {
         },
         tray: {
           state: "unsupported",
-          message: "Linux tray behavior is not claimed; the main window remains the supported control surface."
+          message: "Linux tray/status-area support is explicitly unsupported in this technical preview until GNOME and KDE status-icon behavior is manually validated."
         },
         appMenu: {
           state: "unsupported",
@@ -150,8 +150,8 @@ export function capabilities(): NativePlatformCapabilities {
             ),
         capabilityDiagnostic(
           "tray",
-          "info",
-          "Linux tray/status-area support is intentionally disabled for the first non-claiming scaffold."
+          "warning",
+          `Linux tray/status-area support is disabled for this preview; use the main window controls. Desktop session: ${linuxDesktopLabel()}.`
         ),
         capabilityDiagnostic(
           "globalShortcuts",
@@ -238,6 +238,17 @@ function packageFormat(): NativePlatformCapabilities["capabilityReport"]["packag
   }
 
   return app.isPackaged ? "unknown" : "development";
+}
+
+function linuxDesktopLabel(): string {
+  const raw = process.env.XDG_CURRENT_DESKTOP ?? process.env.DESKTOP_SESSION ?? "unknown";
+  const normalized = raw
+    .split(":")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("/");
+
+  return normalized.slice(0, 80) || "unknown";
 }
 
 function safeAppPath(name: Parameters<typeof app.getPath>[0], fallback: string): string {

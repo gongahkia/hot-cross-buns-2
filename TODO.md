@@ -55,6 +55,9 @@ claims until the implementation phases and release gates below are complete.
   Electron `globalShortcut` registration directly, while Wayland sessions require
   Electron's `GlobalShortcutsPortal` feature switch and the XDG Desktop Portal
   GlobalShortcuts interface before registration is attempted.
+- Linux tray/status-area support is explicitly unsupported in the technical
+  preview until GNOME and KDE status-icon behavior is manually validated. The
+  main window remains the supported Linux control surface.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
 - `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
@@ -416,6 +419,23 @@ Acceptance criteria:
 Goal: provide optional tray/status-area behavior without making it central to
 Linux usability.
 
+Status: Closed as explicitly unsupported as of 2026-06-13. Electron `Tray` is
+not enabled on Linux because the required GNOME and KDE status-icon validation
+has not been completed. The Linux adapter now reports tray/status-area support
+as explicitly unsupported, includes desktop-session context in sanitized
+capability diagnostics, and keeps the main window as the supported control
+surface. macOS menu-bar behavior remains owned by the macOS adapter.
+
+Verification completed:
+
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts`
+- `pnpm typecheck`
+- `pnpm build`
+
+Remaining manual release gates: GNOME without status-icon extensions, GNOME with
+common appindicator/status-icon support, KDE Plasma status area, and Linux tray
+action behavior if a later release decides to enable Electron `Tray`.
+
 Implementation tasks:
 
 - Implement tray with Electron `Tray` only after validating icon behavior on
@@ -639,7 +659,7 @@ Acceptance criteria:
 - [ ] Notifications are either validated or explicitly unsupported.
 - [ ] Global shortcuts are either validated per session type or explicitly
       unsupported.
-- [ ] Tray behavior is either validated per desktop environment or explicitly
+- [x] Tray behavior is either validated per desktop environment or explicitly
       unsupported.
 - [ ] Deep links are either package-validated or explicitly unsupported.
 - [ ] Linux manual QA matrix is complete.
