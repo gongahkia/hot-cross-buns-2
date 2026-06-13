@@ -1,6 +1,7 @@
 import { Notification, app, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { linuxSecretServiceStatus } from "../../credentials/secretStore";
+import { detectLinuxGlobalShortcutSupport } from "./globalShortcuts";
 import {
   buildNativeCapabilityReport,
   capabilityDiagnostic
@@ -33,11 +34,12 @@ export function capabilities(): NativePlatformCapabilities {
   const paths = appPaths();
   const credentialStatus = credentialStorageStatus();
   const notifications = Notification.isSupported();
+  const globalShortcutSupport = detectLinuxGlobalShortcutSupport();
   const flags = {
     supportsAppPaths: true,
     supportsTray: false,
     supportsAppMenu: false,
-    supportsGlobalShortcut: false,
+    supportsGlobalShortcut: globalShortcutSupport.supported,
     supportsNotifications: notifications,
     supportsNotificationPermissionQuery: false,
     supportsProtocolRegistration: false,
@@ -51,15 +53,15 @@ export function capabilities(): NativePlatformCapabilities {
     supportsOAuthLoopback: true,
     supportsMcpLoopback: true,
     requiresSignedBuildForNotifications: false,
-    hasWaylandSession: process.env.XDG_SESSION_TYPE === "wayland",
-    hasPortalShortcutSupport: false
+    hasWaylandSession: globalShortcutSupport.hasWaylandSession,
+    hasPortalShortcutSupport: globalShortcutSupport.hasPortalShortcutSupport
   };
 
   return {
     platform: "linux",
     adapterId: "electron-linux-preview",
     notifications,
-    globalShortcuts: false,
+    globalShortcuts: globalShortcutSupport.supported,
     tray: false,
     deepLinks: false,
     updaterChecks: false,
@@ -83,8 +85,8 @@ export function capabilities(): NativePlatformCapabilities {
           message: "A Linux application menu has not been enabled for the technical preview scaffold."
         },
         globalShortcuts: {
-          state: "unsupported",
-          message: "Linux global shortcuts are disabled until X11, Wayland, and portal behavior is validated."
+          state: globalShortcutSupport.state,
+          message: globalShortcutSupport.message
         },
         notifications: {
           state: notifications ? "ready" : "unsupported",
@@ -153,8 +155,8 @@ export function capabilities(): NativePlatformCapabilities {
         ),
         capabilityDiagnostic(
           "globalShortcuts",
-          "info",
-          "Linux global shortcuts require X11, Wayland, and portal validation before support can be claimed."
+          globalShortcutSupport.supported ? "info" : "warning",
+          globalShortcutSupport.message
         ),
         capabilityDiagnostic(
           "notifications",

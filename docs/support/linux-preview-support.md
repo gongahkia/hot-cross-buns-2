@@ -35,8 +35,12 @@ visible.
 - AppImage is the only Linux package format.
 - In-place automatic Linux updates are not enabled.
 - `hotcrossbuns://` deep links are not registered for Linux yet.
-- Tray/status area, global shortcuts, and autostart remain disabled until their
-  dedicated Linux validation phases are complete.
+- Tray/status area and autostart remain disabled until their dedicated Linux
+  validation phases are complete.
+- Global shortcuts are adapter-gated: X11 can attempt Electron registration,
+  while Wayland requires the XDG Desktop Portal GlobalShortcuts interface.
+  Desktop-matrix validation is still required before claiming reliable global
+  hotkey support.
 - Local notifications are enabled only when Electron reports desktop
   notification support. GNOME/KDE delivery and notification click-through still
   require release validation.

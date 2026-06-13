@@ -140,7 +140,8 @@ The Linux preview is intentionally narrower than the macOS preview:
 - AppImage is the only package format in this phase.
 - In-place Linux auto-update is not enabled.
 - `hotcrossbuns://` protocol metadata is not registered for Linux until deep-link validation is complete.
-- Tray, global shortcuts, notifications, and autostart remain disabled unless their later phases validate them.
+- Tray and autostart remain disabled unless their later phases validate them.
+- Notifications and global shortcuts are capability-gated and remain technical-preview features until the Linux manual QA matrix validates them.
 - Credential storage requires Electron `safeStorage` with an OS-backed Linux provider such as GNOME Keyring/libsecret or KWallet; Electron `basic_text` plaintext fallback is rejected.
 
 Linux package metadata:

@@ -22,6 +22,7 @@ import {
   setAutostart
 } from "./electronLinux/appEnvironment";
 import { unsupported } from "./electronLinux/operationResults";
+import { LinuxGlobalShortcutRegistry } from "./electronLinux/globalShortcuts";
 import { LinuxNotificationScheduler } from "./electronLinux/notifications";
 
 export function createElectronLinuxNativeAdapter(): NativePlatformAdapter {
@@ -29,6 +30,7 @@ export function createElectronLinuxNativeAdapter(): NativePlatformAdapter {
 }
 
 class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
+  private readonly shortcuts = new LinuxGlobalShortcutRegistry();
   private readonly notifications = new LinuxNotificationScheduler();
 
   appPaths(): NativeAppPaths {
@@ -55,12 +57,12 @@ class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
     return undefined;
   }
 
-  registerGlobalShortcut(): NativeOperationResult {
-    return unsupported("Linux global shortcuts are pending X11, Wayland, and portal validation.");
+  registerGlobalShortcut(accelerator: string, action: () => void): NativeOperationResult {
+    return this.shortcuts.register(accelerator, action);
   }
 
-  unregisterGlobalShortcut(): void {
-    return undefined;
+  unregisterGlobalShortcut(accelerator?: string): void {
+    this.shortcuts.unregister(accelerator);
   }
 
   registerProtocolClient(scheme: typeof HCB_DEEP_LINK_SCHEME): NativeOperationResult {
@@ -114,6 +116,7 @@ class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
   }
 
   dispose(): void {
+    this.unregisterGlobalShortcut();
     this.clearScheduledNotifications();
   }
 }

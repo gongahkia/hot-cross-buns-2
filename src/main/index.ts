@@ -39,6 +39,10 @@ if (process.env.HCB_USER_DATA_DIR && !app.isPackaged) {
   app.setPath("userData", process.env.HCB_USER_DATA_DIR);
 }
 
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("enable-features", "GlobalShortcutsPortal");
+}
+
 app.setName(macAppDisplayName);
 app.setAboutPanelOptions({ applicationName: macAppDisplayName });
 

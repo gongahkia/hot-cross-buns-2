@@ -99,6 +99,16 @@ Rules:
 
 Electron documents a `GlobalShortcutsPortal` feature flag for Wayland sessions. XDG Desktop Portal global shortcuts are session-bound and user-mediated, so the UI must tolerate user denial or missing portal support.
 
+Current implementation:
+
+- Electron's `GlobalShortcutsPortal` feature switch is enabled before app ready
+  on Linux so Wayland sessions can use the portal path when available
+- X11 sessions can attempt Electron `globalShortcut` registration directly
+- Wayland sessions report shortcut support only when the XDG Desktop Portal
+  GlobalShortcuts interface is detected
+- registration conflicts, portal denial, or compositor blocks return explicit
+  recovery guidance while the in-app quick add path remains available
+
 ## Notifications
 
 Electron sends Linux notifications through `libnotify` on desktop environments following the Desktop Notifications Specification. The adapter must check support and expose failures as diagnostics.

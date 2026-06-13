@@ -57,6 +57,10 @@ const electronMock = vi.hoisted(() => {
       getName: vi.fn(() => "Hot Cross Buns 2"),
       getPath: vi.fn((name: string) => paths[name] ?? `/tmp/hcb-${name}`)
     },
+    globalShortcut: {
+      register: vi.fn((_accelerator: string, _action: () => void) => true),
+      unregister: vi.fn((_accelerator: string) => undefined)
+    },
     shell: {
       openExternal: vi.fn(async () => undefined),
       openPath: vi.fn(async () => "")
@@ -74,11 +78,17 @@ const electronMock = vi.hoisted(() => {
 vi.mock("electron", () => electronMock);
 
 const originalAppImage = process.env.APPIMAGE;
+const originalDisplay = process.env.DISPLAY;
+const originalGlobalShortcutsPortal = process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL;
+const originalSessionType = process.env.XDG_SESSION_TYPE;
 
 beforeEach(() => {
   electronMock.Notification.isSupported.mockReset();
   electronMock.Notification.isSupported.mockReturnValue(true);
   electronMock.notificationInstances.length = 0;
+  electronMock.globalShortcut.register.mockReset();
+  electronMock.globalShortcut.register.mockReturnValue(true);
+  electronMock.globalShortcut.unregister.mockReset();
   electronMock.app.isPackaged = false;
   electronMock.app.getPath.mockClear();
   electronMock.shell.openExternal.mockReset();
@@ -98,10 +108,32 @@ beforeEach(() => {
   } else {
     process.env.APPIMAGE = originalAppImage;
   }
+
+  process.env.DISPLAY = ":1";
+  delete process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL;
+  process.env.XDG_SESSION_TYPE = "x11";
 });
 
 afterEach(() => {
   vi.useRealTimers();
+
+  if (originalDisplay === undefined) {
+    delete process.env.DISPLAY;
+  } else {
+    process.env.DISPLAY = originalDisplay;
+  }
+
+  if (originalGlobalShortcutsPortal === undefined) {
+    delete process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL;
+  } else {
+    process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL = originalGlobalShortcutsPortal;
+  }
+
+  if (originalSessionType === undefined) {
+    delete process.env.XDG_SESSION_TYPE;
+  } else {
+    process.env.XDG_SESSION_TYPE = originalSessionType;
+  }
 });
 
 function defaultSettings(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
@@ -251,7 +283,7 @@ describe("native adapter contract", () => {
     expect(report.adapterId).not.toContain("mac");
     expect(response).toMatchObject({
       notifications: true,
-      globalShortcuts: false,
+      globalShortcuts: true,
       tray: false,
       deepLinks: false
     });
@@ -261,7 +293,7 @@ describe("native adapter contract", () => {
       supportsDiagnosticsCollection: true,
       supportsCredentialStorage: true,
       supportsTray: false,
-      supportsGlobalShortcut: false,
+      supportsGlobalShortcut: true,
       supportsNotifications: true,
       supportsProtocolRegistration: false,
       supportsAutostart: false,
@@ -281,8 +313,8 @@ describe("native adapter contract", () => {
         }),
         expect.objectContaining({
           key: "globalShortcuts",
-          supported: false,
-          state: "unsupported"
+          supported: true,
+          state: "pending"
         }),
         expect.objectContaining({
           key: "notifications",
@@ -319,6 +351,37 @@ describe("native adapter contract", () => {
     });
   });
 
+  it("gates Linux Wayland shortcuts behind XDG Desktop Portal support", () => {
+    process.env.XDG_SESSION_TYPE = "wayland";
+    delete process.env.DISPLAY;
+    process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL = "0";
+
+    const missingPortal = createElectronLinuxNativeAdapter();
+    const missingPortalReport = missingPortal.capabilities().capabilityReport;
+
+    expect(missingPortal.capabilities().globalShortcuts).toBe(false);
+    expect(missingPortalReport.flags).toMatchObject({
+      hasWaylandSession: true,
+      hasPortalShortcutSupport: false,
+      supportsGlobalShortcut: false
+    });
+    expect(missingPortal.registerGlobalShortcut("CommandOrControl+Shift+Space", vi.fn())).toMatchObject({
+      ok: false,
+      state: "unsupported"
+    });
+
+    process.env.HCB_LINUX_GLOBAL_SHORTCUTS_PORTAL = "1";
+
+    const portalReady = createElectronLinuxNativeAdapter();
+
+    expect(portalReady.capabilities().globalShortcuts).toBe(true);
+    expect(portalReady.capabilities().capabilityReport.flags).toMatchObject({
+      hasWaylandSession: true,
+      hasPortalShortcutSupport: true,
+      supportsGlobalShortcut: true
+    });
+  });
+
   it("maps Linux app path roles through Electron path APIs", () => {
     const adapter = createElectronLinuxNativeAdapter();
 
@@ -348,10 +411,6 @@ describe("native adapter contract", () => {
       ok: false,
       state: "unsupported"
     });
-    expect(adapter.registerGlobalShortcut("CommandOrControl+Shift+Space", vi.fn())).toMatchObject({
-      ok: false,
-      state: "unsupported"
-    });
     expect(adapter.registerProtocolClient("hotcrossbuns")).toMatchObject({
       ok: false,
       state: "unsupported"
@@ -366,6 +425,38 @@ describe("native adapter contract", () => {
     expect(adapter.collectDiagnostics()).toMatchObject({
       ok: true,
       state: "ready"
+    });
+  });
+
+  it("registers Linux global shortcuts through Electron on supported sessions", () => {
+    const adapter = createElectronLinuxNativeAdapter();
+    const action = vi.fn();
+
+    expect(adapter.registerGlobalShortcut("CommandOrControl+Shift+Space", action)).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+    expect(electronMock.globalShortcut.register).toHaveBeenCalledWith(
+      "CommandOrControl+Shift+Space",
+      action
+    );
+
+    adapter.unregisterGlobalShortcut("CommandOrControl+Shift+Space");
+
+    expect(electronMock.globalShortcut.unregister).toHaveBeenCalledWith(
+      "CommandOrControl+Shift+Space"
+    );
+  });
+
+  it("reports Linux global shortcut registration conflicts with recovery guidance", () => {
+    electronMock.globalShortcut.register.mockReturnValueOnce(false);
+
+    const adapter = createElectronLinuxNativeAdapter();
+
+    expect(adapter.registerGlobalShortcut("CommandOrControl+Shift+Space", vi.fn())).toMatchObject({
+      ok: false,
+      state: "conflict",
+      message: expect.stringContaining("Use in-app quick add")
     });
   });
 

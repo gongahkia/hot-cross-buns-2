@@ -51,6 +51,10 @@ claims until the implementation phases and release gates below are complete.
   `Notification.isSupported()`. Linux notification permission state remains
   non-queryable, and display failures are surfaced as sanitized native
   diagnostics without interrupting sync, tasks, or calendar state.
+- Linux global shortcut registration is adapter-gated: X11 sessions can attempt
+  Electron `globalShortcut` registration directly, while Wayland sessions require
+  Electron's `GlobalShortcutsPortal` feature switch and the XDG Desktop Portal
+  GlobalShortcuts interface before registration is attempted.
 - `createNoopNativeAdapter()` already reports unsupported Linux behavior without
   claiming support and should remain the unsupported-platform contract fixture.
 - `MacOsKeychainSecretStore` and `LinuxSecretServiceStore` are the OS-backed
@@ -357,6 +361,26 @@ Acceptance criteria:
 
 Goal: support quick capture/global shortcuts where Linux desktop infrastructure
 allows it, while treating denial and unsupported sessions as normal outcomes.
+
+Status: Adapter-level implementation complete as of 2026-06-13. Linux startup
+enables Electron's `GlobalShortcutsPortal` feature switch before app ready, the
+Linux adapter detects X11 versus Wayland with `XDG_SESSION_TYPE`, probes XDG
+Desktop Portal GlobalShortcuts availability for Wayland sessions, exposes
+Wayland/portal diagnostics in the native capability report, attempts
+`globalShortcut.register()` only for supported sessions, and returns conflict or
+unsupported recovery guidance without crashing. The in-app quick add path
+remains available when global registration is unavailable or denied.
+
+Verification completed:
+
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm test` (`60` Vitest files, `471` tests)
+
+Remaining manual release gates: Ubuntu GNOME Wayland portal registration and
+denial, Ubuntu GNOME X11 registration/conflict behavior, KDE Plasma Wayland
+behavior, and end-to-end quick-capture dispatch in a packaged AppImage session.
 
 Implementation tasks:
 
