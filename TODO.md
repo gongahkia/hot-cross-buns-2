@@ -974,6 +974,14 @@ collection is supported, redaction guarantees are exposed, and native path
 diagnostics omit raw `/Users`, `/home`, and `C:\Users\...` prefixes. Local
 `pnpm test:smoke` passed after this change.
 
+Linux/Windows CI MCP hardening on 2026-06-14: both platform preview workflows
+now run `pnpm hcb:smoke` before packaging, adding automated HCB CLI coverage for
+MCP loopback binding, bearer-token rejection/acceptance, resource reads, prompts,
+and representative read/write tool calls. The workflows also set
+`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` so GitHub JavaScript actions use the
+Node 24 action runtime while the project still installs and builds with Node 20.
+This does not replace packaged-AppImage or installed-NSIS live MCP manual QA.
+
 Implementation tasks:
 
 - [x] Decide preview scope: Windows 11 x64 first, NSIS installer first,

@@ -10,6 +10,7 @@ concurrency:
 env:
   CI: true
   CSC_IDENTITY_AUTO_DISCOVERY: false
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   windows-preview:
@@ -33,6 +34,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: HCB CLI MCP smoke on Windows
+        run: pnpm hcb:smoke
 
       - name: Build Windows preview installer
         run: pnpm release:win:preview
