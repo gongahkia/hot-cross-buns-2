@@ -204,13 +204,18 @@ artifacts/release/bundle-review.md
 The alias helper only accepts versioned `Hot-Cross-Buns-2-*-linux-*.AppImage`
 artifact names, so unrelated AppImage files in `release/` are ignored.
 
-Run the AppImage metadata smoke after packaging:
+Run the AppImage artifact smoke after packaging:
 
 ```sh
 pnpm release:smoke-appimage
 ```
 
-The smoke script verifies that the stable AppImage alias exists, is executable, can be extracted with `--appimage-extract`, contains expected desktop metadata, and does not register `hotcrossbuns://`. To also launch the AppImage with isolated user data and require startup logs, run:
+The smoke script verifies that the versioned Linux AppImage, stable Linux alias,
+stable Linux x64 alias, checksum manifest, and per-artifact `.sha256` sidecars
+agree. It also verifies that the AppImage is executable, can be extracted with
+`--appimage-extract`, contains expected desktop metadata, and does not register
+`hotcrossbuns://`. To also launch the AppImage with isolated user data and
+require startup logs, run:
 
 ```sh
 HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage

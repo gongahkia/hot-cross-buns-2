@@ -896,6 +896,12 @@ that runs `pnpm release:linux:preview`, checksum verification, AppImage metadata
 and launch smoke under Xvfb, Electron smoke, performance smoke, and artifact
 upload. Ubuntu GNOME desktop/manual QA remains a separate release gate.
 
+Linux AppImage smoke hardening on 2026-06-14: `pnpm release:smoke-appimage`
+now verifies the versioned AppImage, stable Linux aliases, executable bits,
+`SHASUMS256.txt`, and per-artifact `.sha256` sidecars before metadata
+extraction or optional launch smoke. The Linux alias helper also preserves the
+versioned AppImage executable mode on stable aliases.
+
 Implementation tasks:
 
 - [x] Decide preview scope: Windows 11 x64 first, NSIS installer first,

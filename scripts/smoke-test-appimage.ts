@@ -1,10 +1,18 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_RELEASE_DIR = "release";
+const stableAppImageName = "Hot-Cross-Buns-2-linux.AppImage";
+const stableX64AppImageName = "Hot-Cross-Buns-2-linux-x64.AppImage";
+const checksumManifestName = "SHASUMS256.txt";
 const launchTimeoutMs = 12_000;
+const minimumAppImageBytes = 20 * 1024 * 1024;
+const versionedAppImagePattern = /^Hot-Cross-Buns-2-\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?-linux-(x64|x86_64|arm64|aarch64)\.AppImage$/;
 const requiredDesktopFields = new Map([
   ["Name", "Hot Cross Buns 2"],
   ["Type", "Application"],
@@ -13,6 +21,18 @@ const requiredDesktopFields = new Map([
   ["GenericName", "Planner"],
   ["StartupWMClass", "hot-cross-buns-2"]
 ]);
+
+interface SmokeOptions {
+  artifact?: string;
+  launch?: boolean;
+  minimumBytes?: number;
+  releaseDir?: string;
+}
+
+interface ChecksumEntry {
+  hash: string;
+  path: string;
+}
 
 function argValue(name: string, fallback: string): string {
   const prefix = `${name}=`;
@@ -27,39 +47,100 @@ function argValue(name: string, fallback: string): string {
     ?.slice(prefix.length) ?? fallback;
 }
 
-async function main(): Promise<void> {
-  const releaseDir = resolve(process.argv[2] && !process.argv[2].startsWith("--")
-    ? process.argv[2]
-    : argValue("--dir", DEFAULT_RELEASE_DIR));
-  const artifact = resolve(argValue("--artifact", join(releaseDir, latestAppImageNameHint())));
-  const artifactStats = await stat(artifact);
+export async function smokeLinuxAppImageArtifact(options: SmokeOptions = {}): Promise<string[]> {
+  const releaseDir = resolve(options.releaseDir ?? DEFAULT_RELEASE_DIR);
+  const minimumBytes = options.minimumBytes ?? minimumAppImageBytes;
+  const requestedArtifact = options.artifact ? resolve(options.artifact) : undefined;
+  const versionedAppImage = requestedArtifact ?? await findVersionedAppImage(releaseDir);
+  const requiredArtifacts = uniquePaths([
+    versionedAppImage,
+    join(releaseDir, stableAppImageName),
+    join(releaseDir, stableX64AppImageName)
+  ]);
+  const manifestPath = join(releaseDir, checksumManifestName);
+  const manifestEntries = parseChecksumManifest(await readFile(manifestPath, "utf8"));
+  const messages: string[] = [];
 
-  if (!artifactStats.isFile()) {
-    throw new Error(`${artifact} is not a file`);
-  }
+  for (const artifact of requiredArtifacts) {
+    const artifactStats = await stat(artifact);
 
-  if ((artifactStats.mode & 0o111) === 0) {
-    throw new Error(`${basename(artifact)} is not executable; run chmod +x before smoke testing.`);
+    if (!artifactStats.isFile()) {
+      throw new Error(`${artifact} is not a file`);
+    }
+
+    if (artifactStats.size < minimumBytes) {
+      throw new Error(`${basename(artifact)} is unexpectedly small for a Linux AppImage.`);
+    }
+
+    if ((artifactStats.mode & 0o111) === 0) {
+      throw new Error(`${basename(artifact)} is not executable; run chmod +x before smoke testing.`);
+    }
+
+    const hash = await sha256File(artifact);
+    const relativePath = normalizedPath(relative(releaseDir, artifact));
+    const manifestEntry = manifestEntries.find((entry) => normalizedPath(entry.path) === relativePath);
+
+    if (!manifestEntry) {
+      throw new Error(`${checksumManifestName} is missing ${relativePath}`);
+    }
+
+    if (manifestEntry.hash !== hash) {
+      throw new Error(`${checksumManifestName} hash does not match ${relativePath}`);
+    }
+
+    const sidecarPath = `${artifact}.sha256`;
+    const sidecar = parseChecksumLine((await readFile(sidecarPath, "utf8")).trim(), sidecarPath);
+
+    if (sidecar.hash !== hash || sidecar.path !== basename(artifact)) {
+      throw new Error(`${basename(sidecarPath)} does not match ${basename(artifact)}`);
+    }
+
+    messages.push(`${basename(artifact)} exists, is executable, is ${artifactStats.size} bytes, and has matching SHA-256 metadata.`);
   }
 
   const workDir = await mkdtemp(join(tmpdir(), "hcb2-appimage-smoke-"));
 
   try {
-    await extractAppImage(artifact, workDir);
+    await extractAppImage(versionedAppImage, workDir);
     await verifyDesktopEntry(workDir);
 
-    if (process.env.HCB_APPIMAGE_SMOKE_LAUNCH === "1") {
-      await launchAppImage(artifact, workDir);
+    if (options.launch) {
+      await launchAppImage(versionedAppImage, workDir);
     } else {
-      console.log("Skipped AppImage launch; set HCB_APPIMAGE_SMOKE_LAUNCH=1 to launch with isolated user data.");
+      messages.push("Skipped AppImage launch; set HCB_APPIMAGE_SMOKE_LAUNCH=1 to launch with isolated user data.");
     }
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
+
+  return messages;
 }
 
-function latestAppImageNameHint(): string {
-  return "Hot-Cross-Buns-2-linux-x64.AppImage";
+async function findVersionedAppImage(releaseDir: string): Promise<string> {
+  const entries = await readdir(releaseDir, { withFileTypes: true });
+  const candidates = (
+    await Promise.all(
+      entries.map(async (entry) => {
+        const filePath = join(releaseDir, entry.name);
+
+        if (!entry.isFile() || extname(entry.name) !== ".AppImage" || !versionedAppImagePattern.test(entry.name)) {
+          return null;
+        }
+
+        return {
+          filePath,
+          mtimeMs: (await stat(filePath)).mtimeMs
+        };
+      })
+    )
+  ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  const latest = candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)[0];
+
+  if (!latest) {
+    throw new Error(`No versioned Linux AppImage artifact found in ${releaseDir}`);
+  }
+
+  return latest.filePath;
 }
 
 function runCommand(command: string, args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }): Promise<{
@@ -193,6 +274,27 @@ async function launchAppImage(artifact: string, workDir: string): Promise<void> 
   }
 }
 
+function parseChecksumManifest(source: string): ChecksumEntry[] {
+  return source
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => parseChecksumLine(line, checksumManifestName));
+}
+
+function parseChecksumLine(line: string, sourceName: string): ChecksumEntry {
+  const match = /^([a-fA-F0-9]{64})\s+\*?(.+)$/.exec(line);
+
+  if (!match) {
+    throw new Error(`${sourceName} has invalid SHA-256 metadata.`);
+  }
+
+  return {
+    hash: match[1].toLowerCase(),
+    path: match[2].trim()
+  };
+}
+
 function signalAppImage(pid: number | undefined, signal: NodeJS.Signals): void {
   if (pid === undefined) {
     return;
@@ -216,7 +318,48 @@ function signalAppImage(pid: number | undefined, signal: NodeJS.Signals): void {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+function uniquePaths(paths: string[]): string[] {
+  return [...new Set(paths.map((path) => resolve(path)))];
+}
+
+function normalizedPath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
+async function sha256File(filePath: string): Promise<string> {
+  return new Promise((resolveHash, rejectHash) => {
+    const hash = createHash("sha256");
+    const input = createReadStream(filePath);
+
+    input.on("error", rejectHash);
+    input.on("data", (chunk) => hash.update(chunk));
+    input.on("end", () => resolveHash(hash.digest("hex")));
+  });
+}
+
+async function main(): Promise<void> {
+  const releaseDir = resolve(process.argv[2] && !process.argv[2].startsWith("--")
+    ? process.argv[2]
+    : argValue("--dir", DEFAULT_RELEASE_DIR));
+  const artifact = argValue("--artifact", "");
+  const minimumBytes = Number.parseInt(argValue("--min-bytes", String(minimumAppImageBytes)), 10);
+  const messages = await smokeLinuxAppImageArtifact({
+    releaseDir,
+    ...(artifact ? { artifact } : {}),
+    launch: process.env.HCB_APPIMAGE_SMOKE_LAUNCH === "1",
+    minimumBytes: Number.isFinite(minimumBytes) ? minimumBytes : minimumAppImageBytes
+  });
+
+  for (const message of messages) {
+    console.log(message);
+  }
+}
+
+const isDirectRun = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
+
+if (isDirectRun) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

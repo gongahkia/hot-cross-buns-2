@@ -1,4 +1,4 @@
-import { copyFile, readdir, stat } from "node:fs/promises";
+import { chmod, copyFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +13,7 @@ interface PreviewArtifactOptions {
 interface CandidateArtifact {
   arch: "arm64" | "x64";
   filePath: string;
+  mode: number;
   mtimeMs: number;
   name: string;
 }
@@ -40,8 +41,10 @@ export async function writeLinuxPreviewArtifacts(
   const messages: string[] = [];
 
   await copyFile(latest.filePath, stablePath);
+  await chmod(stablePath, latest.mode);
   messages.push(`Wrote ${stablePath} from ${latest.name}`);
   await copyFile(latest.filePath, archPath);
+  await chmod(archPath, latest.mode);
   messages.push(`Wrote ${archPath} from ${latest.name}`);
 
   return messages;
@@ -63,6 +66,7 @@ async function findLatestLinuxAppImage(releaseDir: string): Promise<CandidateArt
         return {
           arch: normalizeArch(match[1]),
           filePath,
+          mode: stats.mode,
           mtimeMs: stats.mtimeMs,
           name: entry
         };

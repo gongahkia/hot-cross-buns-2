@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,7 +15,10 @@ describe("preview artifact aliases", () => {
 
     await writeFile(join(releaseDir, "helper-linux-x64.AppImage"), "wrong");
     await writeFile(join(releaseDir, "Hot-Cross-Buns-2-linux.AppImage"), "old stable");
-    await writeFile(join(releaseDir, "Hot-Cross-Buns-2-5.0.0-linux-x86_64.AppImage"), "linux appimage");
+    const versionedAppImage = join(releaseDir, "Hot-Cross-Buns-2-5.0.0-linux-x86_64.AppImage");
+
+    await writeFile(versionedAppImage, "linux appimage");
+    await chmod(versionedAppImage, 0o755);
 
     await expect(writeLinuxPreviewArtifacts({ releaseDir })).resolves.toHaveLength(2);
     await expect(readFile(join(releaseDir, "Hot-Cross-Buns-2-linux.AppImage"), "utf8")).resolves.toBe(
@@ -24,6 +27,8 @@ describe("preview artifact aliases", () => {
     await expect(readFile(join(releaseDir, "Hot-Cross-Buns-2-linux-x64.AppImage"), "utf8")).resolves.toBe(
       "linux appimage"
     );
+    expect((await stat(join(releaseDir, "Hot-Cross-Buns-2-linux.AppImage"))).mode & 0o111).not.toBe(0);
+    expect((await stat(join(releaseDir, "Hot-Cross-Buns-2-linux-x64.AppImage"))).mode & 0o111).not.toBe(0);
   });
 
   it("copies only versioned Windows installer artifacts into stable aliases", async () => {
