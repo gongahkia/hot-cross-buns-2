@@ -534,7 +534,7 @@ describe("App settings and onboarding", () => {
     });
   });
 
-  it("starts Google OAuth from first-run setup", async () => {
+  it("saves Google OAuth client from first-run setup", async () => {
     const { api } = onboardingHcb();
     installHcb(api);
     const user = userEvent.setup();
@@ -559,8 +559,27 @@ describe("App settings and onboarding", () => {
     await waitFor(() =>
       expect(within(dialog).getByRole("button", { name: "Connect Google" })).toBeEnabled()
     );
+    expect(api.google.beginOAuth).not.toHaveBeenCalled();
+  });
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Connect Google" }));
+  it("starts Google OAuth from first-run setup", async () => {
+    const { api } = onboardingHcb();
+    api.google.status = vi.fn(async () =>
+      ok(signedOutGoogleStatus({
+        oauthClientConfigured: true,
+        clientId: "desktop-client-id.apps.googleusercontent.com"
+      }))
+    );
+    installHcb(api);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "First-run setup" });
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Connect Google" })).toBeEnabled()
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Connect Google" }));
 
     await waitFor(() => {
       expect(api.google.beginOAuth).toHaveBeenCalled();
