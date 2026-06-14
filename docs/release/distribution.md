@@ -175,8 +175,8 @@ FUSE 2 compatibility package needed for AppImage launch smoke. The AppImage
 launch smoke passes `--no-sandbox` through an explicit CI-only environment gate
 because the hosted runner cannot set the extracted AppImage `chrome-sandbox`
 helper to root-owned mode `4755`; do not treat that CI flag as user install
-guidance. Run `27487088365` passed this gate on 2026-06-14 at commit
-`01b6d50`.
+guidance. Run `27487813321` passed this gate on 2026-06-14 at commit
+`9fdea28`.
 
 That command runs:
 
@@ -249,8 +249,8 @@ pnpm release:win:preview
 The manual GitHub Actions gate is `.github/workflows/windows-preview.yml`. It
 pins `windows-2022` so Node 20 native-module installs use the Visual Studio 2022
 toolchain instead of the Windows Server 2025 / Visual Studio 2026 image currently
-behind `windows-latest`. Run `27487088467` passed this gate on 2026-06-14 at
-commit `01b6d50`; it completed packaging, installer smoke, PowerShell checksum
+behind `windows-latest`. Run `27487813282` passed this gate on 2026-06-14 at
+commit `9fdea28`; it completed packaging, installer smoke, PowerShell checksum
 verification, Electron smoke, performance smoke, and artifact upload.
 
 Linux cross-packaging for the Windows NSIS target requires Wine. A Linux host

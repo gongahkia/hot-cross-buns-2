@@ -917,8 +917,8 @@ an explicit CI env gate. Windows run `27486500420` failed during dependency
 install because `windows-latest` redirected to the Windows Server 2025 / Visual
 Studio 2026 image and `node-gyp` could not detect that toolchain for
 `better-sqlite3`; the Windows preview workflow now pins `windows-2022`.
-Follow-up automated validation on 2026-06-14: Linux run `27487088365` and
-Windows run `27487088467` passed on commit `01b6d50`. Linux completed
+Follow-up automated validation on 2026-06-14: Linux run `27487813321` and
+Windows run `27487813282` passed on commit `9fdea28`. Linux completed
 `pnpm release:linux:preview`, `sha256sum -c SHASUMS256.txt`,
 AppImage metadata smoke, AppImage launch smoke under `xvfb`, Electron smoke,
 performance smoke, and artifact upload. Windows completed
@@ -963,7 +963,7 @@ Release documentation refresh on 2026-06-14: `docs/release/notes/v5.0.0.md`,
 `docs/support/windows-preview-support.md`,
 `docs/testing/manual-windows-native-shell.md`, and `docs/ports/linux-port.md`
 now distinguish Linux/Windows automated CI passes from target-desktop manual QA
-blockers. They record Linux run `27487088365`, Windows run `27487088467`, and
+blockers. They record Linux run `27487813321`, Windows run `27487813282`, and
 keep publish/upload guidance gated on Ubuntu GNOME and Windows 11 installed-app
 manual QA.
 

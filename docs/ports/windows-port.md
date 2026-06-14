@@ -43,8 +43,8 @@ validation:
 
 Windows CI evidence:
 
-- `Windows Preview Validation` run `27487088467` passed on 2026-06-14 at
-  commit `01b6d50`.
+- `Windows Preview Validation` run `27487813282` passed on 2026-06-14 at
+  commit `9fdea28`.
 - The run completed `pnpm release:win:preview`, `pnpm release:smoke-nsis`,
   PowerShell `Get-FileHash` verification for
   `Hot-Cross-Buns-2-windows-x64.exe`, Electron smoke, performance smoke, and
