@@ -272,7 +272,11 @@ export function useNotesController(source: CoreViewModelSource): {
     updateInspector
   ]);
 
-  function noteInspectorBody(note: NoteViewModel, mode = noteInspectorModeRef.current): ReactNode {
+  function noteInspectorBody(
+    note: NoteViewModel,
+    mode = noteInspectorModeRef.current,
+    error = noteActionError
+  ): ReactNode {
     if (mode === "view") {
       return (
         <NoteInspectorSummary
@@ -297,7 +301,7 @@ export function useNotesController(source: CoreViewModelSource): {
         source={source}
         templates={noteTemplateOptions}
         createMode={createNoteIds.current.has(note.id)}
-        error={noteActionError}
+        error={error}
         ref={noteInspectorBodyRef}
       />
     );
@@ -743,7 +747,25 @@ export function useNotesController(source: CoreViewModelSource): {
     });
 
     if (!result?.ok) {
-      setNoteActionError(result?.error.message ?? "Note duplicate was not saved.");
+      const message = result?.error.message ?? "Note duplicate was not saved.";
+      const failedDraft = {
+        ...note,
+        title: draft.title || "Untitled note",
+        body: draft.body,
+        preview: buildNotePreview(draft.body),
+        tags: draft.tags,
+        updatedLabel: "Edited"
+      };
+
+      setNoteActionError(message);
+      updateInspector({
+        actions: noteInspectorActions(failedDraft, "edit"),
+        body: noteInspectorBody(failedDraft, "edit", message),
+        dirty: true,
+        hideHeader: false,
+        subtitle: failedDraft.updatedLabel,
+        title: failedDraft.title || "Untitled note"
+      });
       return;
     }
 
