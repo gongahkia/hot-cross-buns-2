@@ -1,0 +1,80 @@
+name: Linux AppImage Preview Validation
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: linux-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  CSC_IDENTITY_AUTO_DISCOVERY: false
+
+jobs:
+  linux-preview:
+    name: AppImage package and runtime smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install Linux runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Linux preview AppImage
+        run: pnpm release:linux:preview
+
+      - name: Verify Linux AppImage checksums
+        run: |
+          cd release
+          sha256sum -c SHASUMS256.txt
+
+      - name: Smoke Linux AppImage metadata
+        run: pnpm release:smoke-appimage
+
+      - name: Smoke Linux AppImage launch
+        run: xvfb-run -a env HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage
+
+      - name: Electron smoke on Linux
+        run: xvfb-run -a pnpm test:smoke
+
+      - name: Performance smoke on Linux
+        run: xvfb-run -a pnpm test:perf
+
+      - name: Upload Linux preview artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-preview-artifacts-${{ github.run_id }}
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14
+          path: |
+            release/*.AppImage
+            release/*.sha256
+            release/SHASUMS256.txt
+            release/*.blockmap
+            release/*.yml
+            artifacts/release/**
+            artifacts/perf/**
+            output/playwright/**
+            test-results/**
+            playwright-report/**

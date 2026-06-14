@@ -92,12 +92,12 @@
 
     <article class="doc-card">
       <h2>Release integrity</h2>
-      <p>Each GitHub release publishes SHA-256 checksums for preview artifacts such as the DMG and AppImage. The macOS install script downloads both the DMG and checksum, verifies them locally, and refuses to install if they do not match. Linux users should verify the AppImage against the release checksum before running it.</p>
+      <p>Each GitHub release publishes SHA-256 checksums for uploaded preview artifacts. The macOS install script downloads both the DMG and checksum, verifies them locally, and refuses to install if they do not match. Linux AppImage and Windows NSIS preview artifacts are uploaded only after their platform QA gates pass, and users should verify them against the release checksum before running them.</p>
     </article>
 
     <article class="doc-card">
       <h2>Distribution model</h2>
-      <p>Preview DMGs are currently distributed outside the Mac App Store. They may be unsigned or not notarized, so macOS can require a one-time manual approval under System Settings &gt; Privacy &amp; Security. Linux builds are currently AppImage technical previews. Hot Cross Buns 2 can check GitHub Releases for a newer platform artifact, but installation is still manual rather than a silent in-place update.</p>
+      <p>Preview DMGs are currently distributed outside the Mac App Store. They may be unsigned or not notarized, so macOS can require a one-time manual approval under System Settings &gt; Privacy &amp; Security. Linux AppImage and Windows NSIS builds are technical previews gated by target-OS QA. Hot Cross Buns 2 can check GitHub Releases for a newer platform artifact, but installation is still manual rather than a silent in-place update.</p>
     </article>
   </section>
 </main>

@@ -1,7 +1,7 @@
 import { ElectronNotificationScheduler } from "../electronNotificationScheduler";
 
 export class NotificationScheduler extends ElectronNotificationScheduler {
-  constructor() {
-    super("darwin");
+  constructor(currentPlatform: NodeJS.Platform | string = process.platform) {
+    super("darwin", currentPlatform);
   }
 }

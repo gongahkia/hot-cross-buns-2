@@ -71,8 +71,10 @@ technical preview release.
 
 ## Deep Links
 
-- Open `hotcrossbuns://today` while the app is running.
-- Open `hotcrossbuns://today` while the app is closed.
+- Open `hotcrossbuns://today` while the app is running and confirm the existing
+  instance routes it.
+- Open `hotcrossbuns://today` while the app is closed and confirm launch argv
+  routes it after startup.
 - Test malformed links and confirm the app shows safe errors.
 - Confirm links do not expose filesystem paths or tokens.
 

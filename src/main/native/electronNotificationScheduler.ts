@@ -12,14 +12,17 @@ export class ElectronNotificationScheduler {
   private readonly notificationTimers = new Map<string, NodeJS.Timeout>();
   private readonly activeNotifications = new Map<string, Notification>();
 
-  constructor(private readonly platform: ElectronNotificationPlatform) {}
+  constructor(
+    private readonly platform: ElectronNotificationPlatform,
+    private readonly currentPlatform: NodeJS.Platform | string = process.platform
+  ) {}
 
   schedule(
     request: NativeNotificationRequest,
     onClick: () => void,
     onFailure?: (message: string) => void
   ): ScheduledNativeNotification | undefined {
-    if (process.platform !== this.platform || !Notification.isSupported()) {
+    if (this.currentPlatform !== this.platform || !Notification.isSupported()) {
       return undefined;
     }
 

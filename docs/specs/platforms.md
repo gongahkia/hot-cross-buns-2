@@ -68,35 +68,55 @@ Deferred:
 - Share Extension
 - signed/notarized release flow
 
-## Linux Future
+## Linux AppImage Technical Preview
 
-Required before Linux preview:
+Implemented scaffold:
 
-- credential storage decision, likely Secret Service/libsecret where available
-- tray behavior with desktop-environment caveats
-- global shortcut strategy with Wayland/X11 constraints documented
-- AppImage package target first
+- Secret Service/libsecret credential storage through Electron safeStorage,
+  with plaintext fallback rejected
+- capability-driven diagnostics for tray, global shortcuts, notifications,
+  deep links, autostart, updater checks, OAuth loopback, and MCP loopback
+- AppImage package target
 - desktop file metadata and icon/window association
-- custom protocol registration approach
-- notification support caveats through libnotify-compatible desktops
-- updater strategy that respects package managers where relevant
-- supported distro/desktop matrix
+- Linux AppImage release scripts, checksum generation, AppImage smoke, and
+  manual GitHub Actions validation workflow
+- update checks through GitHub Releases, without in-place auto-update
+
+Required before public Linux preview:
+
+- Ubuntu LTS GNOME AppImage launch from terminal and file manager
+- icon/window grouping verification
+- OAuth browser round trip
+- Secret Service ready, locked, and missing-state checks
+- live MCP localhost smoke
+- confirmation that notifications, global shortcuts, tray/status area,
+  `hotcrossbuns://`, autostart, and in-place updates remain explicitly
+  unsupported unless separately implemented and manually QA'd
+- supported distro/desktop matrix notes
 
 Linux support should start with a documented supported-distro matrix rather than claiming universal parity.
 
 See [Linux Port](../ports/linux-port.md).
 
-## Windows Future
+## Windows Technical Preview
 
-Required before Windows preview:
+Implemented scaffold:
 
-- Windows credential storage adapter
-- tray behavior for notification area
+- Windows safeStorage-backed credential storage adapter
+- notification-area tray behavior
 - global shortcut registration and conflict handling
-- Windows installer target
-- app user model id
-- custom protocol registration
-- Windows notification behavior
+- NSIS installer target
+- early AppUserModelID setup
+- custom protocol registration and argv/`second-instance` routing
+- Windows notification scheduling
+- GitHub release check for Windows installer assets
+
+Required before public Windows preview:
+
+- Windows 11 x64 NSIS packaging and artifact smoke
+- installed-app launch from installer, Start Menu, and desktop shortcut
+- SQLite, OAuth, MCP, tray, shortcuts, notifications, deep links, autostart,
+  and uninstall manual QA
 - code signing/SmartScreen plan
 
 Windows must use the same SQLite schema and Google sync services.

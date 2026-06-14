@@ -192,7 +192,7 @@ export function capabilities(): NativePlatformCapabilities {
 }
 
 export function credentialStorageStatus(): NativeOperationResult {
-  return linuxSecretServiceStatus(safeStorage);
+  return linuxSecretServiceStatus(safeStorage, "linux");
 }
 
 export function installAppMenu(): NativeOperationResult {

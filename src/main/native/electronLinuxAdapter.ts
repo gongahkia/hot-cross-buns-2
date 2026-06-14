@@ -26,13 +26,23 @@ import { LinuxGlobalShortcutRegistry } from "./electronLinux/globalShortcuts";
 import { LinuxNotificationScheduler } from "./electronLinux/notifications";
 import { isLinuxUnvalidatedNativeShellEnabled } from "./electronLinux/previewGates";
 
-export function createElectronLinuxNativeAdapter(): NativePlatformAdapter {
-  return new ElectronLinuxNativeAdapter();
+interface ElectronLinuxNativeAdapterOptions {
+  currentPlatform?: NodeJS.Platform | string;
+}
+
+export function createElectronLinuxNativeAdapter(
+  options: ElectronLinuxNativeAdapterOptions = {}
+): NativePlatformAdapter {
+  return new ElectronLinuxNativeAdapter(options);
 }
 
 class ElectronLinuxNativeAdapter implements NativePlatformAdapter {
   private readonly shortcuts = new LinuxGlobalShortcutRegistry();
-  private readonly notifications = new LinuxNotificationScheduler();
+  private readonly notifications: LinuxNotificationScheduler;
+
+  constructor(options: ElectronLinuxNativeAdapterOptions) {
+    this.notifications = new LinuxNotificationScheduler(options.currentPlatform);
+  }
 
   appPaths(): NativeAppPaths {
     return appPaths();

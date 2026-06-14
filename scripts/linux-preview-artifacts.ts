@@ -1,9 +1,21 @@
 import { copyFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_RELEASE_DIR = "release";
 const STABLE_PREFIX = "Hot-Cross-Buns-2-linux";
-const artifactExtensions = new Set([".AppImage"]);
+const linuxAppImagePattern = /^Hot-Cross-Buns-2-\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?-linux-(x64|x86_64|arm64|aarch64)\.AppImage$/;
+
+interface PreviewArtifactOptions {
+  releaseDir?: string;
+}
+
+interface CandidateArtifact {
+  arch: "arm64" | "x64";
+  filePath: string;
+  mtimeMs: number;
+  name: string;
+}
 
 function argValue(name: string, fallback: string): string {
   const prefix = `${name}=`;
@@ -18,57 +30,73 @@ function argValue(name: string, fallback: string): string {
     ?.slice(prefix.length) ?? fallback;
 }
 
-async function main(): Promise<void> {
-  const releaseDir = resolve(argValue("--dir", DEFAULT_RELEASE_DIR));
+export async function writeLinuxPreviewArtifacts(
+  options: PreviewArtifactOptions = {}
+): Promise<string[]> {
+  const releaseDir = resolve(options.releaseDir ?? DEFAULT_RELEASE_DIR);
+  const latest = await findLatestLinuxAppImage(releaseDir);
+  const stablePath = join(releaseDir, `${STABLE_PREFIX}.AppImage`);
+  const archPath = join(releaseDir, `${STABLE_PREFIX}-${latest.arch}.AppImage`);
+  const messages: string[] = [];
+
+  await copyFile(latest.filePath, stablePath);
+  messages.push(`Wrote ${stablePath} from ${latest.name}`);
+  await copyFile(latest.filePath, archPath);
+  messages.push(`Wrote ${archPath} from ${latest.name}`);
+
+  return messages;
+}
+
+async function findLatestLinuxAppImage(releaseDir: string): Promise<CandidateArtifact> {
   const entries = await readdir(releaseDir);
-  const artifacts = (
+  const candidates = (
     await Promise.all(
       entries.map(async (entry) => {
         const filePath = join(releaseDir, entry);
         const stats = await stat(filePath);
+        const match = linuxAppImagePattern.exec(basename(entry));
 
-        if (!stats.isFile() || !artifactExtensions.has(extname(entry))) {
-          return null;
-        }
-
-        if (basename(entry).startsWith(STABLE_PREFIX)) {
+        if (!stats.isFile() || extname(entry) !== ".AppImage" || !match) {
           return null;
         }
 
         return {
+          arch: normalizeArch(match[1]),
           filePath,
-          name: entry,
-          mtimeMs: stats.mtimeMs
+          mtimeMs: stats.mtimeMs,
+          name: entry
         };
       })
     )
-  ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-
-  const candidates = artifacts.sort((left, right) => right.mtimeMs - left.mtimeMs);
-  const latest = candidates[0];
+  ).filter((entry): entry is CandidateArtifact => entry !== null);
+  const latest = candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)[0];
 
   if (!latest) {
-    throw new Error(`No AppImage artifacts found in ${releaseDir}`);
+    throw new Error(`No versioned Linux AppImage artifacts found in ${releaseDir}`);
   }
 
-  const arch = latest.name.includes("arm64") || latest.name.includes("aarch64")
-    ? "arm64"
-    : latest.name.includes("x64") || latest.name.includes("x86_64")
-    ? "x64"
-    : null;
-  const stablePath = join(releaseDir, `${STABLE_PREFIX}.AppImage`);
+  return latest;
+}
 
-  await copyFile(latest.filePath, stablePath);
-  console.log(`Wrote ${stablePath} from ${latest.name}`);
+function normalizeArch(value: string): CandidateArtifact["arch"] {
+  return value === "arm64" || value === "aarch64" ? "arm64" : "x64";
+}
 
-  if (arch) {
-    const archPath = join(releaseDir, `${STABLE_PREFIX}-${arch}.AppImage`);
-    await copyFile(latest.filePath, archPath);
-    console.log(`Wrote ${archPath} from ${latest.name}`);
+async function main(): Promise<void> {
+  const messages = await writeLinuxPreviewArtifacts({
+    releaseDir: argValue("--dir", DEFAULT_RELEASE_DIR)
+  });
+
+  for (const message of messages) {
+    console.log(message);
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+const isDirectRun = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
+
+if (isDirectRun) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

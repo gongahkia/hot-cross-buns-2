@@ -16,6 +16,7 @@ import {
 } from "./createNativeAdapter";
 import type { LinuxSafeStorageBackendName } from "../credentials/secretStore";
 import { createElectronLinuxNativeAdapter } from "./electronLinuxAdapter";
+import { applyWindowsAppIdentity } from "./electronWindows/identity";
 import { createElectronWindowsNativeAdapter } from "./electronWindowsAdapter";
 import { createNoopNativeAdapter } from "./noopAdapter";
 import { NativeShellService } from "./service";
@@ -336,8 +337,24 @@ describe("native adapter factory", () => {
 });
 
 describe("native adapter contract", () => {
+  it("applies Windows AppUserModelID only for Windows startup", () => {
+    expect(applyWindowsAppIdentity("linux")).toMatchObject({
+      ok: false,
+      state: "unsupported"
+    });
+    expect(electronMock.app.setAppUserModelId).not.toHaveBeenCalled();
+
+    expect(applyWindowsAppIdentity("win32")).toMatchObject({
+      ok: true,
+      state: "ready"
+    });
+    expect(electronMock.app.setAppUserModelId).toHaveBeenCalledWith(
+      "dev.hotcrossbuns.hotcrossbuns2"
+    );
+  });
+
   it("reports schema-valid Linux preview capabilities", () => {
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
     const service = createContractService(adapter);
     const response = service.capabilities();
     const report = response.capabilityReport;
@@ -404,7 +421,7 @@ describe("native adapter contract", () => {
   it("reports Linux notifications unsupported when Electron cannot deliver them", () => {
     electronMock.Notification.isSupported.mockReturnValue(false);
 
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
     const response = createContractService(adapter).capabilities();
     const notificationCapability = response.capabilityReport.capabilities.find(
       (capability) => capability.key === "notifications"
@@ -461,7 +478,7 @@ describe("native adapter contract", () => {
   });
 
   it("maps Linux app path roles through Electron path APIs", () => {
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
 
     expect(adapter.appPaths()).toEqual({
       configDirectory: "/home/test/.config/Hot Cross Buns 2",
@@ -478,7 +495,7 @@ describe("native adapter contract", () => {
   });
 
   it("keeps Linux unsupported native features recoverable", () => {
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
 
     electronMock.safeStorage.getSelectedStorageBackend.mockReturnValueOnce("basic_text");
     expect(adapter.credentialStorageStatus()).toMatchObject({
@@ -511,7 +528,7 @@ describe("native adapter contract", () => {
 
   it("registers Linux global shortcuts through Electron on supported sessions", () => {
     process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
     const action = vi.fn();
 
     expect(adapter.registerGlobalShortcut("CommandOrControl+Shift+Space", action)).toMatchObject({
@@ -534,7 +551,7 @@ describe("native adapter contract", () => {
     process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
     electronMock.globalShortcut.register.mockReturnValueOnce(false);
 
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
 
     expect(adapter.registerGlobalShortcut("CommandOrControl+Shift+Space", vi.fn())).toMatchObject({
       ok: false,
@@ -546,7 +563,7 @@ describe("native adapter contract", () => {
   it("schedules Linux notifications through Electron and routes notification clicks", () => {
     process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
     vi.useFakeTimers();
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
     const onClick = vi.fn();
     const onFailure = vi.fn();
 
@@ -584,7 +601,7 @@ describe("native adapter contract", () => {
   it("reports Linux notification display failures to the caller", () => {
     process.env.HCB_LINUX_ENABLE_UNVALIDATED_NATIVE_SHELL = "1";
     vi.useFakeTimers();
-    const adapter = createElectronLinuxNativeAdapter();
+    const adapter = createElectronLinuxNativeAdapter({ currentPlatform: "linux" });
     const onFailure = vi.fn();
 
     adapter.scheduleNotification({

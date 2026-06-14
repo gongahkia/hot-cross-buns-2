@@ -16,25 +16,12 @@ import {
   type NativePlatformCapabilities
 } from "../types";
 import { sanitizedFailure, unsupported } from "./operationResults";
+import { applyWindowsAppIdentity, windowsAppUserModelId } from "./identity";
 
-export const windowsAppUserModelId = "dev.hotcrossbuns.hotcrossbuns2";
+export { windowsAppUserModelId };
 
 export function ensureWindowsAppIdentity(): NativeOperationResult {
-  try {
-    app.setAppUserModelId?.(windowsAppUserModelId);
-
-    return {
-      ok: true,
-      state: "ready",
-      message: `Windows AppUserModelID is set to ${windowsAppUserModelId}.`
-    };
-  } catch {
-    return {
-      ok: false,
-      state: "error",
-      message: "Windows AppUserModelID could not be set."
-    };
-  }
+  return applyWindowsAppIdentity("win32");
 }
 
 export function appPaths(): NativeAppPaths {

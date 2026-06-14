@@ -125,6 +125,9 @@ Later smoke tests:
 CI smoke artifact policy:
 
 - The tracked GitHub Actions smoke job runs on `macos-14`.
+- The manual `Linux AppImage Preview Validation` workflow runs on
+  `ubuntu-latest` and uploads Linux AppImage, checksum, bundle-review,
+  performance, and Playwright artifacts.
 - The manual `Windows Preview Validation` workflow runs on `windows-latest` and
   uploads Windows installer, checksum, bundle-review, performance, and
   Playwright artifacts.

@@ -165,6 +165,13 @@ Run the full Linux preview release gate on a Linux host or Linux CI runner:
 pnpm release:linux:preview
 ```
 
+The manual GitHub Actions gate is `.github/workflows/linux-preview.yml`. Run
+`Linux AppImage Preview Validation` from GitHub Actions after the workflow file
+is on a branch GitHub can see. The workflow builds the AppImage, verifies
+checksums, runs AppImage metadata and launch smoke under Xvfb, runs Electron
+smoke, runs performance smoke, and uploads preview artifacts for review. It does
+not replace Ubuntu GNOME desktop manual QA.
+
 That command runs:
 
 ```sh
@@ -193,6 +200,9 @@ release/*.sha256
 artifacts/release/bundle-review.json
 artifacts/release/bundle-review.md
 ```
+
+The alias helper only accepts versioned `Hot-Cross-Buns-2-*-linux-*.AppImage`
+artifact names, so unrelated AppImage files in `release/` are ignored.
 
 Run the AppImage metadata smoke after packaging:
 
@@ -262,15 +272,19 @@ artifacts/release/bundle-review.json
 artifacts/release/bundle-review.md
 ```
 
+The alias helper only accepts versioned `Hot-Cross-Buns-2-*-windows-*.exe`
+artifact names, so unrelated `.exe` files in `release/` are ignored.
+
 Run the Windows installer artifact smoke after packaging:
 
 ```sh
 pnpm release:smoke-nsis
 ```
 
-The smoke script verifies that the stable Windows x64 installer alias exists
-and is not unexpectedly small. It does not replace the installed-app manual
-checks in [Manual Windows Native Shell Checklist](../testing/manual-windows-native-shell.md).
+The smoke script verifies that the versioned Windows x64 installer, stable
+Windows alias, stable Windows x64 alias, checksum manifest, and per-artifact
+`.sha256` sidecars agree. It does not replace the installed-app manual checks
+in [Manual Windows Native Shell Checklist](../testing/manual-windows-native-shell.md).
 
 Verify checksums locally on Windows:
 
@@ -479,7 +493,7 @@ Linux preview uses check-for-new-version before in-place updates. The app's Linu
 
 See [Linux Port](../ports/linux-port.md).
 
-## Windows Future
+## Windows Technical Preview Gates
 
 Required before Windows preview:
 
@@ -492,7 +506,8 @@ Required before Windows preview:
 - Windows safeStorage token persistence verified across restart
 - OAuth browser round trip verified
 - MCP localhost smoke verified
-- tray, global shortcut, notification, protocol, and autostart behavior tested
+- tray, global shortcut, notification, protocol registration/routing, and
+  autostart behavior tested
 - update-check UI verified against Windows assets
 - uninstall behavior documented and tested
 - code signing plan and SmartScreen expectations documented

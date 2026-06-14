@@ -55,6 +55,8 @@ GitHub Actions runs:
 - `pnpm test`
 - macOS Electron smoke
 - scheduled/manual performance smoke
+- manual Linux AppImage preview validation
+- manual Windows NSIS preview validation
 
 Failed smoke and performance runs upload available Playwright and performance artifacts for diagnosis.
 

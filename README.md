@@ -6,7 +6,7 @@
 
 <h1 align="center">Hot Cross Buns 2</h1>
 
-<h3 align="center">Keyboard-first desktop planner for Google Tasks and Google Calendar, with a macOS preview and Linux AppImage technical preview.</h3>
+<h3 align="center">Keyboard-first desktop planner for Google Tasks and Google Calendar, with a macOS preview and gated Linux/Windows technical previews.</h3>
 
 <p align="center">
   <a href="https://gongahkia.github.io/hot-cross-buns-2/">Website</a> ·
@@ -19,9 +19,8 @@
   <a href="https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-macOS.dmg">
     <img src="https://img.shields.io/badge/Preview-DMG-F2B36D?style=for-the-badge&logo=apple&logoColor=white&labelColor=1f2430" alt="Preview DMG" />
   </a>
-  <a href="https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-linux-x64.AppImage">
-    <img src="https://img.shields.io/badge/Linux-AppImage%20Technical%20Preview-5E8C61?style=for-the-badge&logo=linux&logoColor=white&labelColor=1f2430" alt="Linux AppImage technical preview" />
-  </a>
+  <img src="https://img.shields.io/badge/Linux-AppImage%20QA%20Gate-5E8C61?style=for-the-badge&logo=linux&logoColor=white&labelColor=1f2430" alt="Linux AppImage QA gate" />
+  <img src="https://img.shields.io/badge/Windows-NSIS%20QA%20Gate-4F7DBD?style=for-the-badge&logo=windows&logoColor=white&labelColor=1f2430" alt="Windows NSIS QA gate" />
 </p>
 
 <p align="center">
@@ -29,12 +28,12 @@
     <img src="https://img.shields.io/github/v/release/gongahkia/hot-cross-buns-2?display_name=tag" alt="Latest release" />
   </a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black" alt="macOS 14 or later" />
-  <img src="https://img.shields.io/badge/Linux-AppImage%20Preview-black" alt="Linux AppImage technical preview" />
+  <img src="https://img.shields.io/badge/Linux%2FWindows-Preview%20Gated-black" alt="Linux and Windows preview gated" />
   <img src="https://img.shields.io/badge/Distribution-Unsigned%20Preview-orange" alt="Unsigned preview distribution" />
 </p>
 
 > [!IMPORTANT]
-> Preview downloads are not final public distribution builds. macOS currently ships as an unsigned DMG and may require `System Settings > Privacy & Security > Open Anyway` on first launch. Linux currently ships only as an AppImage technical preview with no in-place auto-update; tray/status-area surfaces, deep links, and autostart are intentionally unsupported.
+> Preview downloads are not final public distribution builds. macOS currently ships as an unsigned DMG and may require `System Settings > Privacy & Security > Open Anyway` on first launch. Linux AppImage and Windows NSIS artifacts are gated on target-OS manual QA before public upload; Linux tray/status-area surfaces, deep links, and autostart are intentionally unsupported.
 
 ## Table of Contents
 
@@ -71,7 +70,8 @@ Around those core surfaces, the app also includes:
 **Preview downloads**
 
 - macOS DMG: `https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-macOS.dmg`
-- Linux AppImage technical preview: `https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-linux-x64.AppImage`
+- Linux AppImage technical preview: gated until Ubuntu LTS GNOME QA passes.
+- Windows NSIS technical preview: gated until Windows 11 x64 installed-app QA passes.
 - Release page: `https://github.com/gongahkia/hot-cross-buns-2/releases/latest`
 - macOS one-line installer:
 
@@ -89,7 +89,7 @@ You should only need to do that once per Mac.
 
 **First launch on Linux**
 
-The Linux package is an AppImage technical preview. It is intended first for Ubuntu LTS on GNOME, with secondary manual checks on Fedora GNOME, KDE Plasma, Wayland, and X11 before broader claims.
+The Linux package is an AppImage technical preview. It is intended first for Ubuntu LTS on GNOME, with secondary manual checks on Fedora GNOME, KDE Plasma, Wayland, and X11 before broader claims. Public upload waits for that manual matrix.
 
 ```bash
 curl -LO https://github.com/gongahkia/hot-cross-buns-2/releases/latest/download/Hot-Cross-Buns-2-linux-x64.AppImage
@@ -200,7 +200,14 @@ pnpm release:mac:preview
 pnpm release:linux:preview
 pnpm release:smoke-appimage
 HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage
+pnpm release:win:preview
+pnpm release:smoke-nsis
 ```
+
+Manual GitHub Actions gates:
+
+- `Linux AppImage Preview Validation`
+- `Windows Preview Validation`
 
 Useful docs:
 

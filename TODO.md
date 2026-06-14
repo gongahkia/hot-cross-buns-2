@@ -861,6 +861,41 @@ Release script hardening on 2026-06-13: `build:release:*` now uses
 `scripts/electron-builder-preview.ts`, so Windows validation does not depend on
 POSIX inline environment assignment syntax.
 
+Windows artifact smoke hardening on 2026-06-14: `pnpm release:smoke-nsis`
+now verifies the versioned Windows x64 installer, stable Windows aliases,
+`SHASUMS256.txt`, and per-artifact `.sha256` sidecars agree before manual
+installed-app QA starts. The GitHub Actions workflow also fails on a stable
+installer checksum mismatch instead of only printing hashes.
+
+Windows identity hardening on 2026-06-14: the app now applies the stable
+AppUserModelID synchronously during main-process startup on `win32`, before
+`app.whenReady()` and before any window or notification setup. Installed-build
+Start Menu/taskbar/notification behavior still requires Windows 11 QA.
+
+Preview artifact alias hardening on 2026-06-14: Linux and Windows alias helpers
+now only copy versioned Hot Cross Buns release artifact names into stable aliases
+and ignore unrelated helper binaries in `release/`. Focused tests cover Linux
+AppImage aliases, Windows NSIS aliases, and missing versioned artifacts.
+
+Deep-link launch hardening on 2026-06-14: main-process startup now scans
+validated `hotcrossbuns://` argv entries for Windows/Linux cold starts and uses
+Electron's single-instance `second-instance` event for warm starts. The
+schema-backed parser still rejects malformed links before routing. Windows
+installer protocol registration and installed-app cold/warm link QA remain
+manual release gates.
+
+Public copy gate hardening on 2026-06-14: README, docs site copy, privacy copy,
+platform specs, and `v5.0.0` release notes now describe Linux AppImage and
+Windows NSIS artifacts as prepared but gated on target-OS manual QA before
+public upload. This does not complete the Ubuntu GNOME or Windows 11 manual
+release gates.
+
+Linux CI gate hardening on 2026-06-14: `.github/workflows/linux-preview.yml`
+adds a manual `Linux AppImage Preview Validation` workflow on `ubuntu-latest`
+that runs `pnpm release:linux:preview`, checksum verification, AppImage metadata
+and launch smoke under Xvfb, Electron smoke, performance smoke, and artifact
+upload. Ubuntu GNOME desktop/manual QA remains a separate release gate.
+
 Implementation tasks:
 
 - [x] Decide preview scope: Windows 11 x64 first, NSIS installer first,
@@ -892,7 +927,7 @@ Implementation tasks:
 Required automated gates before Windows-host validation:
 
 - `pnpm typecheck`
-- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts src/main/credentials/secretStore.test.ts scripts/linux-packaging-config.test.ts`
+- `pnpm exec vitest run --config vitest.config.ts src/main/native/adapterContract.test.ts src/main/credentials/secretStore.test.ts src/main/native/deepLinkLaunchArgs.test.ts scripts/linux-packaging-config.test.ts`
 - `pnpm build`
 - `pnpm release:review-bundle`
 
@@ -911,7 +946,8 @@ Required Windows manual checks:
 - Tray menu show/hide, quick capture, refresh, settings, and quit.
 - Global shortcut success and conflict handling.
 - Windows notifications display and click through.
-- `hotcrossbuns://` warm-start and cold-start links.
+- `hotcrossbuns://` warm-start links route through `second-instance`; cold-start
+  links route from validated launch argv.
 - Open-at-login enable/disable.
 - Settings check-for-updates finds Windows installer assets.
 - Uninstall behavior and retained data policy are documented.
@@ -938,6 +974,8 @@ Latest local validation evidence before pause:
 - Docker is installed, but this user cannot access `/var/run/docker.sock`, so
   Wine-in-Docker packaging is unavailable from this session.
 - `.github/workflows/windows-preview.yml` exists locally but has not been
+  committed/pushed in this worktree, so GitHub cannot dispatch it yet.
+- `.github/workflows/linux-preview.yml` exists locally but has not been
   committed/pushed in this worktree, so GitHub cannot dispatch it yet.
 
 Linux remaining work:
@@ -975,6 +1013,8 @@ Linux remaining work:
       `pnpm release:smoke-appimage`,
       `HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage`,
       `pnpm test:smoke`, and `pnpm test:perf`.
+- [ ] Dispatch the `Linux AppImage Preview Validation` workflow on GitHub
+      Actions after the workflow is committed/pushed.
 - [ ] Update `docs/release/notes/v5.0.0.md` with the final Linux QA result,
       unsupported feature list, artifact names, and checksum instructions.
 - [ ] Upload Linux AppImage artifacts only after the Ubuntu GNOME manual matrix

@@ -1,7 +1,7 @@
 import { ElectronNotificationScheduler } from "../electronNotificationScheduler";
 
 export class WindowsNotificationScheduler extends ElectronNotificationScheduler {
-  constructor() {
-    super("win32");
+  constructor(currentPlatform: NodeJS.Platform | string = process.platform) {
+    super("win32", currentPlatform);
   }
 }

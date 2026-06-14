@@ -5,6 +5,8 @@ import { appLogger } from "./diagnostics/appLogger";
 import { registerHcbIpc } from "./ipc";
 import { brandAssetPath } from "./native/brandAssets";
 import { createNativeAdapter } from "./native/createNativeAdapter";
+import { extractHotCrossBunsDeepLinksFromArgv } from "./native/deepLinkLaunchArgs";
+import { applyWindowsAppIdentity } from "./native/electronWindows/identity";
 import type { NativePlatformAdapter } from "./native/types";
 import {
   configureEmbeddedWebContentsLockdown,
@@ -43,6 +45,7 @@ if (process.platform === "linux") {
   app.commandLine.appendSwitch("enable-features", "GlobalShortcutsPortal");
 }
 
+applyWindowsAppIdentity();
 app.setName(macAppDisplayName);
 app.setAboutPanelOptions({ applicationName: macAppDisplayName });
 
@@ -52,16 +55,39 @@ appLogger.info("app launch", "misc", {
   launchMode: app.isPackaged ? "packaged" : "development"
 });
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  for (const url of extractHotCrossBunsDeepLinksFromArgv(process.argv)) {
+    queueOrHandleDeepLink(url);
+  }
+
+  app.on("second-instance", (_event, argv) => {
+    for (const url of extractHotCrossBunsDeepLinksFromArgv(argv)) {
+      queueOrHandleDeepLink(url);
+    }
+
+    if (nativeAdapter) {
+      showMainWindow();
+    }
+  });
+}
+
 app.on("open-url", (event, url) => {
   event.preventDefault();
+  queueOrHandleDeepLink(url);
+});
 
+function queueOrHandleDeepLink(url: string): void {
   if (!services) {
     pendingDeepLinks.push(url);
     return;
   }
 
   services.nativeShell.handleDeepLink(url);
-});
+}
 
 function requireNativeAdapter(): NativePlatformAdapter {
   if (!nativeAdapter) {
@@ -327,51 +353,53 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-app.whenReady().then(async () => {
-  markStartupTiming("appReadyMs");
-  const adapter = await createNativeAdapter();
-  nativeAdapter = adapter;
-  appLogger.configure({ logsDirectory: adapter.appPaths().logsDirectory });
-  appLogger.info("app ready", "misc");
-  configureSessionHardening(session.defaultSession, { isPackaged: app.isPackaged });
-  configureEmbeddedWebContentsLockdown(app);
-  services = createServiceContainer({
-    appPaths: adapter.appPaths(),
-    nativeAdapter: adapter,
-    nativeWindows: {
-      showMainWindow,
-      hideMainWindow,
-      showOrHideMainWindow,
-      quit: () => app.quit(),
-      dispatchAction: dispatchNativeAction
-    }
-  });
-  services.nativeShell.installAppMenu();
-  registerHcbIpc(services, {
-    onShellVisible: handleRendererShellVisible
-  });
-  mainWindow = createMainWindow();
+if (hasSingleInstanceLock) {
+  app.whenReady().then(async () => {
+    markStartupTiming("appReadyMs");
+    const adapter = await createNativeAdapter();
+    nativeAdapter = adapter;
+    appLogger.configure({ logsDirectory: adapter.appPaths().logsDirectory });
+    appLogger.info("app ready", "misc");
+    configureSessionHardening(session.defaultSession, { isPackaged: app.isPackaged });
+    configureEmbeddedWebContentsLockdown(app);
+    services = createServiceContainer({
+      appPaths: adapter.appPaths(),
+      nativeAdapter: adapter,
+      nativeWindows: {
+        showMainWindow,
+        hideMainWindow,
+        showOrHideMainWindow,
+        quit: () => app.quit(),
+        dispatchAction: dispatchNativeAction
+      }
+    });
+    services.nativeShell.installAppMenu();
+    registerHcbIpc(services, {
+      onShellVisible: handleRendererShellVisible
+    });
+    mainWindow = createMainWindow();
 
-  for (const url of pendingDeepLinks.splice(0)) {
-    services.nativeShell.handleDeepLink(url);
-  }
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = createMainWindow();
-    } else {
-      showMainWindow();
+    for (const url of pendingDeepLinks.splice(0)) {
+      services.nativeShell.handleDeepLink(url);
     }
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        mainWindow = createMainWindow();
+      } else {
+        showMainWindow();
+      }
+    });
+  }).catch((error) => {
+    appLogger.error("startup failed", "misc", {
+      message: error instanceof Error ? error.message : String(error)
+    });
+    quittingAfterSync = true;
+    void services?.close();
+    services = null;
+    app.quit();
   });
-}).catch((error) => {
-  appLogger.error("startup failed", "misc", {
-    message: error instanceof Error ? error.message : String(error)
-  });
-  quittingAfterSync = true;
-  void services?.close();
-  services = null;
-  app.quit();
-});
+}
 
 app.on("window-all-closed", () => {
   mainWindow = null;

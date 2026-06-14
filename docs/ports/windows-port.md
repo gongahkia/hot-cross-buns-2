@@ -21,7 +21,15 @@ validated. The repo now has an `electron-windows-preview` native adapter,
 Windows safeStorage-backed credential persistence, NSIS packaging config,
 Windows release scripts, stable installer alias generation, an installer
 artifact smoke script, a manual Windows native-shell checklist, and a manual
-Windows Preview Validation GitHub Actions workflow.
+Windows Preview Validation GitHub Actions workflow. The installer artifact smoke
+now verifies versioned and stable Windows x64 installers against
+`SHASUMS256.txt` and per-artifact `.sha256` sidecars before manual installed-app
+QA starts. The main process also applies the stable AppUserModelID during
+top-level Windows startup before `app.whenReady()`, while installed Start Menu,
+taskbar, and notification identity remain manual Windows 11 QA items. The main
+process now handles validated `hotcrossbuns://` launch argv for cold starts and
+Electron `second-instance` argv for warm starts; Windows installer protocol
+registration and installed-app routing still require Windows 11 QA.
 
 Automated validation that can run off-Windows must pass before Windows-host
 validation starts:
@@ -165,7 +173,8 @@ Advanced notification actions are out of scope for the first Windows preview unl
 Required behavior:
 
 - installer registers `hotcrossbuns://`
-- app handles cold-start and warm-start links
+- app handles cold-start links from validated launch argv
+- app handles warm-start links through Electron `second-instance`
 - malformed links show safe errors
 - deep link routing never exposes tokens or raw file paths
 - uninstall behavior for protocol registration is documented
