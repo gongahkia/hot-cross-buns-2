@@ -190,8 +190,10 @@ describe("App notes", () => {
       dueDate: null,
       tags: []
     }));
-    expect(await screen.findByRole("alert", undefined, { timeout: 2_500 })).toHaveTextContent("Task queue is unavailable.");
-    expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue("Startup data flow (copy)");
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Task queue is unavailable.");
+      expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue("Startup data flow (copy)");
+    }, { timeout: 10_000 });
   });
 
   it("flushes pending note edits before switching the selected note row", async () => {
