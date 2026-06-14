@@ -175,9 +175,8 @@ QA. The workflow installs the Ubuntu FUSE 2 compatibility package needed for
 AppImage launch smoke. The AppImage launch smoke passes `--no-sandbox` through
 an explicit CI-only environment gate because the hosted runner cannot set the
 extracted AppImage `chrome-sandbox` helper to root-owned mode `4755`; do not
-treat that CI flag as user install guidance. Run `27487813321` passed this gate
-on 2026-06-14 at commit `9fdea28`; rerun after the HCB CLI MCP smoke gate is
-added.
+treat that CI flag as user install guidance. Run `27488238932` passed this gate
+on 2026-06-14 at commit `121dfbf`.
 
 That command runs:
 
@@ -253,8 +252,8 @@ toolchain instead of the Windows Server 2025 / Visual Studio 2026 image currentl
 behind `windows-latest`. The workflow also runs the HCB CLI MCP loopback smoke
 before packaging and sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` so GitHub's
 JavaScript actions use the upcoming Node 24 action runtime while the project
-still builds/tests with Node 20. Run `27487813282` passed this gate on
-2026-06-14 at commit `9fdea28`; rerun after the HCB CLI MCP smoke gate is added.
+still builds/tests with Node 20. Run `27488239083` passed this gate on
+2026-06-14 at commit `121dfbf`.
 
 Linux cross-packaging for the Windows NSIS target requires Wine. A Linux host
 without Wine can still complete the release build and `win-unpacked` step, but

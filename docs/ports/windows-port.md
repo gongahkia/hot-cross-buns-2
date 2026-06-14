@@ -43,10 +43,10 @@ validation:
 
 Windows CI evidence:
 
-- `Windows Preview Validation` run `27487813282` passed on 2026-06-14 at
-  commit `9fdea28`.
+- `Windows Preview Validation` run `27488239083` passed on 2026-06-14 at
+  commit `121dfbf`.
 - The run completed `pnpm release:win:preview`, `pnpm release:smoke-nsis`,
-  PowerShell `Get-FileHash` verification for
+  HCB CLI MCP smoke, PowerShell `Get-FileHash` verification for
   `Hot-Cross-Buns-2-windows-x64.exe`, Electron smoke, performance smoke, and
   artifact upload.
 
