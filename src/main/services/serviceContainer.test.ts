@@ -88,7 +88,9 @@ describe("service container integration", () => {
         port: status.port
       });
       expect(runtimePath.startsWith(appPaths.configDirectory)).toBe(true);
-      expect(mode).toBe(0o600);
+      if (process.platform !== "win32") {
+        expect(mode).toBe(0o600);
+      }
       expect(JSON.stringify(parsed)).not.toMatch(/token|secret|bearer/i);
       expect(token).toEqual(expect.any(String));
     } finally {

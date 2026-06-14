@@ -1,5 +1,5 @@
 import { Notification, app, safeStorage, shell } from "electron";
-import { join } from "node:path";
+import { posix } from "node:path";
 import { linuxSecretServiceStatus } from "../../credentials/secretStore";
 import { detectLinuxGlobalShortcutSupport } from "./globalShortcuts";
 import {
@@ -21,17 +21,17 @@ import { isLinuxUnvalidatedNativeShellEnabled } from "./previewGates";
 
 export function appPaths(): NativeAppPaths {
   const userData = app.getPath("userData");
-  const sessionData = safeAppPath("sessionData", join(userData, "session"));
-  const logs = safeAppPath("logs", join(userData, "logs"));
+  const sessionData = safeAppPath("sessionData", posix.join(userData, "session"));
+  const logs = safeAppPath("logs", posix.join(userData, "logs"));
   const temp = safeAppPath("temp", "/tmp");
 
   return {
     configDirectory: userData,
-    dataDirectory: join(userData, "data"),
+    dataDirectory: posix.join(userData, "data"),
     cacheDirectory: sessionData,
     logsDirectory: logs,
-    diagnosticsDirectory: join(userData, "diagnostics"),
-    tempDirectory: join(temp, "hot-cross-buns-2")
+    diagnosticsDirectory: posix.join(userData, "diagnostics"),
+    tempDirectory: posix.join(temp, "hot-cross-buns-2")
   };
 }
 

@@ -9,6 +9,7 @@ const versionedAppImage = "Hot-Cross-Buns-2-5.0.0-linux-x86_64.AppImage";
 const stableAppImage = "Hot-Cross-Buns-2-linux.AppImage";
 const stableX64AppImage = "Hot-Cross-Buns-2-linux-x64.AppImage";
 const originalNoSandbox = process.env.HCB_APPIMAGE_SMOKE_NO_SANDBOX;
+const describeAppImageSmoke = process.platform === "win32" ? describe.skip : describe;
 
 afterEach(() => {
   if (originalNoSandbox === undefined) {
@@ -77,7 +78,7 @@ async function writeValidArtifacts(releaseDir: string, desktopExtra = "", launch
   return { stableHash, stableX64Hash, versionedHash };
 }
 
-describe("Linux AppImage smoke test", () => {
+describeAppImageSmoke("Linux AppImage smoke test", () => {
   it("verifies versioned and stable AppImage aliases with checksums and desktop metadata", async () => {
     const releaseDir = await createReleaseDir();
 

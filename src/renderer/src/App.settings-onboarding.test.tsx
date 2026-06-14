@@ -549,14 +549,18 @@ describe("App settings and onboarding", () => {
       "desktop-client-id.apps.googleusercontent.com"
     );
     await user.click(within(dialog).getByRole("button", { name: "Save OAuth Client" }));
-    await waitFor(() => expect(connectButton).toBeEnabled());
-
-    await user.click(connectButton);
 
     await waitFor(() => {
       expect(api.google.saveOAuthClient).toHaveBeenCalledWith({
         clientId: "desktop-client-id.apps.googleusercontent.com"
       });
+      expect(within(dialog).getByText("Google OAuth client saved.")).toBeInTheDocument();
+    });
+    await waitFor(() => expect(connectButton).toBeEnabled());
+
+    await user.click(connectButton);
+
+    await waitFor(() => {
       expect(api.google.beginOAuth).toHaveBeenCalled();
       expect(within(dialog).getByText("Google authorization opened in the browser.")).toBeInTheDocument();
       expect(within(dialog).getByRole("button", { name: "Finish setup" })).toBeDisabled();

@@ -27,8 +27,10 @@ describe("preview artifact aliases", () => {
     await expect(readFile(join(releaseDir, "Hot-Cross-Buns-2-linux-x64.AppImage"), "utf8")).resolves.toBe(
       "linux appimage"
     );
-    expect((await stat(join(releaseDir, "Hot-Cross-Buns-2-linux.AppImage"))).mode & 0o111).not.toBe(0);
-    expect((await stat(join(releaseDir, "Hot-Cross-Buns-2-linux-x64.AppImage"))).mode & 0o111).not.toBe(0);
+    if (process.platform !== "win32") {
+      expect((await stat(join(releaseDir, "Hot-Cross-Buns-2-linux.AppImage"))).mode & 0o111).not.toBe(0);
+      expect((await stat(join(releaseDir, "Hot-Cross-Buns-2-linux-x64.AppImage"))).mode & 0o111).not.toBe(0);
+    }
   });
 
   it("copies only versioned Windows installer artifacts into stable aliases", async () => {

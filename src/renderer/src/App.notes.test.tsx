@@ -183,7 +183,14 @@ describe("App notes", () => {
     expect(await screen.findByRole("textbox", { name: "Note title" })).toHaveValue("Startup data flow (copy)");
     await user.click(within(screen.getByTestId("inspector-actions")).getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Task queue is unavailable.");
+    await waitFor(() => expect(api.tasks.create).toHaveBeenCalledWith({
+      title: "Startup data flow (copy)",
+      notes: "Renderer paints from SQLite before fresh sync completes.",
+      listId: "list-inbox",
+      dueDate: null,
+      tags: []
+    }));
+    expect(await screen.findByRole("alert", undefined, { timeout: 2_500 })).toHaveTextContent("Task queue is unavailable.");
     expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue("Startup data flow (copy)");
   });
 

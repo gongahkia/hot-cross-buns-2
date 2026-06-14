@@ -8,7 +8,7 @@ import {
   statSync,
   writeFileSync
 } from "node:fs";
-import { basename, dirname, extname, join, normalize } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, shell } from "electron";
 import { z } from "zod";
@@ -1109,7 +1109,8 @@ function safeDirectoryEntries(path: string) {
 function safeChildPath(root: string, child: string): string | null {
   const normalizedRoot = normalize(root);
   const normalizedPath = normalize(join(root, child));
-  return normalizedPath.startsWith(`${normalizedRoot}/`) ? normalizedPath : null;
+  const relativePath = relative(normalizedRoot, normalizedPath);
+  return relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath) ? normalizedPath : null;
 }
 
 function safeFileName(value: string): string {
