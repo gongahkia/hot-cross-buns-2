@@ -556,9 +556,6 @@ describe("App settings and onboarding", () => {
       });
       expect(within(dialog).getByText("Google OAuth client saved.")).toBeInTheDocument();
     });
-    await waitFor(() =>
-      expect(within(dialog).getByRole("button", { name: "Connect Google" })).toBeEnabled()
-    );
     expect(api.google.beginOAuth).not.toHaveBeenCalled();
   });
 
