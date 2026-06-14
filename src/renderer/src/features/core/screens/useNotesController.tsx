@@ -297,7 +297,7 @@ export function useNotesController(source: CoreViewModelSource): {
         source={source}
         templates={noteTemplateOptions}
         createMode={createNoteIds.current.has(note.id)}
-        error={currentInspector?.id === note.id ? noteActionError : undefined}
+        error={noteActionError}
         ref={noteInspectorBodyRef}
       />
     );
