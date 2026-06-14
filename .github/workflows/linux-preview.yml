@@ -55,7 +55,10 @@ jobs:
         run: pnpm release:smoke-appimage
 
       - name: Smoke Linux AppImage launch
-        run: xvfb-run -a env HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage
+        env:
+          HCB_APPIMAGE_SMOKE_LAUNCH: "1"
+          HCB_APPIMAGE_SMOKE_NO_SANDBOX: "1"
+        run: xvfb-run -a pnpm release:smoke-appimage
 
       - name: Electron smoke on Linux
         run: xvfb-run -a pnpm test:smoke

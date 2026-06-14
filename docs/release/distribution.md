@@ -171,7 +171,11 @@ is on a branch GitHub can see. The workflow builds the AppImage, verifies
 checksums, runs AppImage metadata and launch smoke under Xvfb, runs Electron
 smoke, runs performance smoke, and uploads preview artifacts for review. It does
 not replace Ubuntu GNOME desktop manual QA. The workflow installs the Ubuntu
-FUSE 2 compatibility package needed for AppImage launch smoke.
+FUSE 2 compatibility package needed for AppImage launch smoke. The AppImage
+launch smoke passes `--no-sandbox` through an explicit CI-only environment gate
+because the hosted runner cannot set the extracted AppImage `chrome-sandbox`
+helper to root-owned mode `4755`; do not treat that CI flag as user install
+guidance.
 
 That command runs:
 
@@ -241,9 +245,11 @@ Windows CI runner:
 pnpm release:win:preview
 ```
 
-The manual GitHub Actions gate is `.github/workflows/windows-preview.yml`. Run
-`Windows Preview Validation` from GitHub Actions for the first Windows-host
-package and runtime pass.
+The manual GitHub Actions gate is `.github/workflows/windows-preview.yml`. It
+pins `windows-2022` so Node 20 native-module installs use the Visual Studio 2022
+toolchain instead of the Windows Server 2025 / Visual Studio 2026 image currently
+behind `windows-latest`. Run `Windows Preview Validation` from GitHub Actions
+for the first Windows-host package and runtime pass.
 
 Linux cross-packaging for the Windows NSIS target requires Wine. A Linux host
 without Wine can still complete the release build and `win-unpacked` step, but

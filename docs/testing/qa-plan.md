@@ -127,8 +127,9 @@ CI smoke artifact policy:
 - The tracked GitHub Actions smoke job runs on `macos-14`.
 - The manual `Linux AppImage Preview Validation` workflow runs on
   `ubuntu-latest` and uploads Linux AppImage, checksum, bundle-review,
-  performance, and Playwright artifacts.
-- The manual `Windows Preview Validation` workflow runs on `windows-latest` and
+  performance, and Playwright artifacts. Its AppImage launch smoke uses an
+  explicit CI-only `--no-sandbox` gate for hosted-runner sandbox limitations.
+- The manual `Windows Preview Validation` workflow runs on `windows-2022` and
   uploads Windows installer, checksum, bundle-review, performance, and
   Playwright artifacts.
 - On failure or cancellation it uploads Playwright traces, screenshots, and any release diagnostics under `output/playwright/`, `test-results/`, `playwright-report/`, and `artifacts/release/`.

@@ -221,10 +221,11 @@ async function verifyDesktopEntry(workDir: string): Promise<void> {
 
 async function launchAppImage(artifact: string, workDir: string): Promise<void> {
   const userDataDir = join(workDir, "user-data");
+  const launchArgs = process.env.HCB_APPIMAGE_SMOKE_NO_SANDBOX === "1" ? ["--no-sandbox"] : [];
 
   await mkdir(userDataDir, { recursive: true });
 
-  const child = spawn(artifact, [], {
+  const child = spawn(artifact, launchArgs, {
     cwd: workDir,
     detached: true,
     env: {

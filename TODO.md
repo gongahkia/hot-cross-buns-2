@@ -908,6 +908,16 @@ now uses a fail-closed `HCB_ALLOW_PACKAGED_USER_DATA_DIR=1` gate before honoring
 compatibility package needed for AppImage launch smoke, and early AppImage launch
 failures include captured stdout/stderr.
 
+Linux/Windows preview workflow rerun on 2026-06-14: both manual GitHub Actions
+workflows are active on `origin/main`. Linux run `27486500412` passed AppImage
+build, checksum, and metadata checks, then failed launch smoke because the
+AppImage `chrome-sandbox` helper is not setuid root on the hosted runner. The
+launch-smoke step now passes Electron's testing-only `--no-sandbox` flag through
+an explicit CI env gate. Windows run `27486500420` failed during dependency
+install because `windows-latest` redirected to the Windows Server 2025 / Visual
+Studio 2026 image and `node-gyp` could not detect that toolchain for
+`better-sqlite3`; the Windows preview workflow now pins `windows-2022`.
+
 Stable artifact alias hardening on 2026-06-14: Linux AppImage and Windows NSIS
 smoke tests now reject stable aliases that have internally valid checksums but do
 not byte-match the selected versioned release artifact.
@@ -945,7 +955,7 @@ Implementation tasks:
 - [x] Add Windows CI validation entry point:
       `.github/workflows/windows-preview.yml` runs the Windows preview release
       gate, installer artifact smoke, checksum output, Electron smoke, and
-      performance smoke on `windows-latest`.
+      performance smoke on `windows-2022`.
 - [x] Add Windows native adapter: app paths, AppUserModelID, tray,
       global shortcuts, notifications, protocol registration, autostart,
       manual GitHub release checks, external opens, diagnostics, and capability
@@ -1012,10 +1022,9 @@ Latest local validation evidence before pause:
 - `wine` is not installed on this host.
 - Docker is installed, but this user cannot access `/var/run/docker.sock`, so
   Wine-in-Docker packaging is unavailable from this session.
-- `.github/workflows/windows-preview.yml` exists locally but has not been
-  committed/pushed in this worktree, so GitHub cannot dispatch it yet.
-- `.github/workflows/linux-preview.yml` exists locally but has not been
-  committed/pushed in this worktree, so GitHub cannot dispatch it yet.
+- `.github/workflows/windows-preview.yml` and `.github/workflows/linux-preview.yml`
+  are committed on `main`/`origin/main` and visible as active GitHub Actions
+  workflows.
 
 Linux remaining work:
 
@@ -1053,8 +1062,8 @@ Linux remaining work:
       `pnpm release:smoke-appimage`,
       `HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage`,
       `pnpm test:smoke`, and `pnpm test:perf`.
-- [ ] Dispatch the `Linux AppImage Preview Validation` workflow on GitHub
-      Actions after the workflow is committed/pushed.
+- [ ] Re-dispatch the `Linux AppImage Preview Validation` workflow on GitHub
+      Actions after the CI AppImage launch-smoke fix is pushed.
 - [ ] Update `docs/release/notes/v5.0.0.md` with the final Linux QA result,
       unsupported feature list, artifact names, and checksum instructions.
 - [ ] Upload Linux AppImage artifacts only after the Ubuntu GNOME manual matrix
@@ -1062,11 +1071,11 @@ Linux remaining work:
 
 Windows remaining work:
 
-- [ ] Commit/push the Windows scaffold and `.github/workflows/windows-preview.yml`
-      to a branch so GitHub Actions can see the workflow, or run the same
-      commands on a real Windows 11 x64 machine.
-- [ ] Dispatch the `Windows Preview Validation` workflow on GitHub Actions, or
-      run these commands on Windows:
+- [x] Commit/push the Windows scaffold and `.github/workflows/windows-preview.yml`
+      to `main`/`origin/main` so GitHub Actions can see the workflow.
+- [ ] Re-dispatch the `Windows Preview Validation` workflow on GitHub Actions
+      after the `windows-2022` runner pin is pushed, or run these commands on
+      Windows:
       `pnpm release:win:preview`,
       `pnpm release:smoke-nsis`,
       `pnpm test:smoke`, and `pnpm test:perf`.

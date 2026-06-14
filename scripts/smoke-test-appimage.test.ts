@@ -2,12 +2,21 @@ import { createHash } from "node:crypto";
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { smokeLinuxAppImageArtifact } from "./smoke-test-appimage";
 
 const versionedAppImage = "Hot-Cross-Buns-2-5.0.0-linux-x86_64.AppImage";
 const stableAppImage = "Hot-Cross-Buns-2-linux.AppImage";
 const stableX64AppImage = "Hot-Cross-Buns-2-linux-x64.AppImage";
+const originalNoSandbox = process.env.HCB_APPIMAGE_SMOKE_NO_SANDBOX;
+
+afterEach(() => {
+  if (originalNoSandbox === undefined) {
+    delete process.env.HCB_APPIMAGE_SMOKE_NO_SANDBOX;
+  } else {
+    process.env.HCB_APPIMAGE_SMOKE_NO_SANDBOX = originalNoSandbox;
+  }
+});
 
 async function createReleaseDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "hcb2-appimage-smoke-"));
@@ -135,6 +144,23 @@ fi
 if [ ! -d "$HCB_USER_DATA_DIR" ]; then
   echo "missing user data dir" >&2
   exit 21
+fi
+echo "Hot Cross Buns 2 startup"`);
+
+    await expect(smokeLinuxAppImageArtifact({ launch: true, minimumBytes: 1, releaseDir })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(`${versionedAppImage} exists`)
+      ])
+    );
+  });
+
+  it("passes no-sandbox only when AppImage smoke opts into the CI launch workaround", async () => {
+    const releaseDir = await createReleaseDir();
+    process.env.HCB_APPIMAGE_SMOKE_NO_SANDBOX = "1";
+
+    await writeValidArtifacts(releaseDir, "", `if [ "$1" != "--no-sandbox" ]; then
+  echo "missing no-sandbox smoke arg" >&2
+  exit 22
 fi
 echo "Hot Cross Buns 2 startup"`);
 
