@@ -33,6 +33,7 @@ import {
   type PerfFixtureSize
 } from "./perf/fixtures";
 import {
+  requiredElectronLaunchFailure,
   writePerformanceReport,
   type PerfIpcRouteReport,
   type PerfLaunchCapture,
@@ -51,6 +52,7 @@ const fixtureSize = parsePerfFixtureSize(process.env.HCB_PERF_FIXTURE_SIZE);
 const perfFixture = generatePerfFixtureSet(fixtureSize);
 const skipUiFlows = process.env.HCB_PERF_SKIP_UI_FLOWS === "1";
 const skipElectronLaunch = process.env.HCB_PERF_SKIP_ELECTRON === "1";
+const requireElectronLaunch = process.env.HCB_PERF_REQUIRE_ELECTRON === "1";
 const appShellTimeoutMs = parsePositiveInteger(process.env.HCB_PERF_APP_SHELL_TIMEOUT_MS) ?? 45_000;
 type DiagnosticsHealthResult = HcbResult<DiagnosticsHealthResponse> | null;
 
@@ -1252,6 +1254,14 @@ async function main(): Promise<void> {
 
     console.log(`Wrote performance report to ${written.jsonPath}`);
     console.log(`Wrote performance markdown to ${written.markdownPath}`);
+
+    if (requireElectronLaunch) {
+      const launchFailure = requiredElectronLaunchFailure(report);
+
+      if (launchFailure) {
+        throw new Error(launchFailure);
+      }
+    }
   } finally {
     temp.cleanup();
   }

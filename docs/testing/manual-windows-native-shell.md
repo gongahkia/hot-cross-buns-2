@@ -15,6 +15,8 @@ technical preview release.
 - Install with the NSIS installer.
 - Record SmartScreen/Defender/browser warning text, if any, using
   [Windows Signing And SmartScreen](../release/windows-signing-smartscreen.md).
+- Keep [Windows Preview Support](../support/windows-preview-support.md) open
+  for install, checksum, and retained-data policy checks.
 
 ## Launch And Identity
 
@@ -91,7 +93,8 @@ technical preview release.
   Releases when a newer release exists.
 - Confirm the app does not claim in-place auto-update.
 - Uninstall through Windows Apps settings.
-- Confirm uninstall behavior and retained user-data policy are documented.
+- Confirm uninstall behavior matches the retained user-data policy in
+  [Windows Preview Support](../support/windows-preview-support.md).
 
 ## Performance
 

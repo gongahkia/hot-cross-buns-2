@@ -292,6 +292,9 @@ Windows alias, stable Windows x64 alias, checksum manifest, and per-artifact
 `.sha256` sidecars agree. It does not replace the installed-app manual checks
 in [Manual Windows Native Shell Checklist](../testing/manual-windows-native-shell.md).
 
+Windows preview support and uninstall/data-retention policy live in
+[Windows Preview Support](../support/windows-preview-support.md).
+
 Verify checksums locally on Windows:
 
 ```powershell
@@ -517,6 +520,7 @@ Required before Windows preview:
 - update-check UI verified against Windows assets
 - uninstall behavior documented and tested
 - code signing plan and SmartScreen expectations documented
+- Windows preview support and retained-data policy documented
 
 Windows preview may be unsigned only for local/internal testing. Public Windows distribution requires an explicit signing and SmartScreen plan.
 The unsigned-preview policy and SmartScreen evidence checklist live in

@@ -55,6 +55,8 @@ jobs:
         run: pnpm test:smoke
 
       - name: Performance smoke on Windows
+        env:
+          HCB_PERF_REQUIRE_ELECTRON: "1"
         run: pnpm test:perf
 
       - name: Upload Windows preview artifacts

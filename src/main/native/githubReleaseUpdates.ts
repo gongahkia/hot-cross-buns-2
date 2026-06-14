@@ -18,6 +18,12 @@ export const macReleaseAssetPreferences: GitHubReleaseAssetPreference[] = [
 
 export const linuxReleaseAssetPreferences: GitHubReleaseAssetPreference[] = [
   {
+    label: "Linux x64 AppImage",
+    matches: (asset) =>
+      assetMatchesExtension(asset, "AppImage") &&
+      assetMatchesPattern(asset, /linux-(?:x64|x86_64)\.AppImage(?:$|[?#])/i)
+  },
+  {
     label: "Linux AppImage",
     matches: (asset) => assetMatchesExtension(asset, "AppImage")
   }
@@ -25,7 +31,19 @@ export const linuxReleaseAssetPreferences: GitHubReleaseAssetPreference[] = [
 
 export const windowsReleaseAssetPreferences: GitHubReleaseAssetPreference[] = [
   {
+    label: "Windows x64 installer",
+    matches: (asset) =>
+      assetMatchesExtension(asset, "exe") &&
+      assetMatchesPattern(asset, /windows-(?:x64|x86_64)\.exe(?:$|[?#])/i)
+  },
+  {
     label: "Windows installer",
+    matches: (asset) =>
+      assetMatchesExtension(asset, "exe") &&
+      assetMatchesPattern(asset, /windows(?:[-.][A-Za-z0-9_]+)*\.exe(?:$|[?#])/i)
+  },
+  {
+    label: "Windows executable",
     matches: (asset) => assetMatchesExtension(asset, "exe")
   },
   {
@@ -166,6 +184,10 @@ function releaseCheckMessage(input: {
 function assetMatchesExtension(asset: GitHubReleaseAsset, extension: string): boolean {
   const pattern = new RegExp(`\\.${escapeRegExp(extension)}(?:$|[?#])`, "i");
 
+  return pattern.test(asset.name) || pattern.test(asset.browserDownloadUrl);
+}
+
+function assetMatchesPattern(asset: GitHubReleaseAsset, pattern: RegExp): boolean {
   return pattern.test(asset.name) || pattern.test(asset.browserDownloadUrl);
 }
 

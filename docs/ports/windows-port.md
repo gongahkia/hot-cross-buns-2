@@ -21,8 +21,9 @@ validated. The repo now has an `electron-windows-preview` native adapter,
 Windows safeStorage-backed credential persistence, NSIS packaging config,
 Windows release scripts, stable installer alias generation, an installer
 artifact smoke script, a manual Windows native-shell checklist, and a manual
-Windows Preview Validation GitHub Actions workflow. The installer artifact smoke
-now verifies versioned and stable Windows x64 installers against
+Windows Preview Validation GitHub Actions workflow. The Windows preview support
+doc records install, checksum, uninstall, and retained-user-data policy for QA.
+The installer artifact smoke now verifies versioned and stable Windows x64 installers against
 `SHASUMS256.txt` and per-artifact `.sha256` sidecars before manual installed-app
 QA starts. The main process also applies the stable AppUserModelID during
 top-level Windows startup before `app.whenReady()`, while installed Start Menu,
@@ -52,6 +53,9 @@ Remaining release blockers require a real Windows host or Windows CI runner:
 - tray, global shortcut, notification, protocol, and autostart behavior
 - uninstall and retained-user-data behavior
 - SmartScreen/code-signing decision for anything beyond internal preview
+
+Windows preview support guidance lives in
+[Windows Preview Support](../support/windows-preview-support.md).
 
 Linux cross-packaging note: a Fedora 43 attempt on 2026-06-13 reached
 `release/win-unpacked/Hot Cross Buns 2.exe`, then stopped before NSIS installer
@@ -196,6 +200,14 @@ Open-at-login is optional for Windows preview. Implement only through the platfo
 Use check-for-new-version first for technical preview.
 
 Electron's built-in `autoUpdater` supports Windows depending on package format. electron-builder's `electron-updater` supports NSIS as an auto-updatable target. Do not enable in-place auto-update until installer identity, code signing, release metadata, and rollback behavior are tested.
+
+Current implementation:
+
+- Windows uses the shared GitHub Releases check-for-new-version flow.
+- Windows release asset selection prefers x64 NSIS `.exe` assets before generic
+  Windows `.exe`, MSI, or ZIP fallbacks.
+- no Windows update is downloaded or installed automatically.
+- in-place NSIS auto-update remains explicitly unclaimed.
 
 ## OAuth, MCP, Firewall
 

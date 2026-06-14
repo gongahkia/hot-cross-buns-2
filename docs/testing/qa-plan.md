@@ -136,7 +136,7 @@ CI smoke artifact policy:
 
 ## Performance Smoke Tests
 
-Performance smoke tests must use generated local data and temporary app/database paths. They must not call Google or read a user's real application data.
+Performance smoke tests must use generated local data and temporary app/database paths. They must not call Google or read a user's real application data. Linux and Windows preview workflows set `HCB_PERF_REQUIRE_ELECTRON=1` so skipped Electron launch timings fail platform validation instead of producing only report artifacts.
 
 Required measured flows before Mac v1:
 

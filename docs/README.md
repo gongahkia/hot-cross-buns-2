@@ -79,7 +79,9 @@ Operational docs:
 - [Distribution](release/distribution.md)
 - [Mac Preview Support](support/mac-preview-support.md)
 - [Linux Preview Support](support/linux-preview-support.md)
+- [Windows Preview Support](support/windows-preview-support.md)
 - [Manual Linux Native Shell Checklist](testing/manual-linux-native-shell.md)
+- [Manual Windows Native Shell Checklist](testing/manual-windows-native-shell.md)
 - [Agent Workflow](agents/workflow.md)
 
 ## Historical Non-Goals For The Initial Documentation Pass

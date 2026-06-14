@@ -912,12 +912,28 @@ Stable artifact alias hardening on 2026-06-14: Linux AppImage and Windows NSIS
 smoke tests now reject stable aliases that have internally valid checksums but do
 not byte-match the selected versioned release artifact.
 
+Linux/Windows performance gate hardening on 2026-06-14: platform preview
+workflows set `HCB_PERF_REQUIRE_ELECTRON=1`, so `pnpm test:perf` still writes
+report artifacts but fails the validation job if cold or warm Electron launch
+timings are skipped.
+
+Linux/Windows update asset preference hardening on 2026-06-14: mocked GitHub
+Release metadata tests now cover Linux x64 AppImage preference and Windows x64
+NSIS `.exe` preference before generic installer fallbacks. Live Settings
+check-for-updates validation still requires published or draft release assets.
+
 Windows SmartScreen documentation on 2026-06-14:
 `docs/release/windows-signing-smartscreen.md` now documents the unsigned
 internal-preview policy, expected Microsoft Defender SmartScreen/browser warning
 classes, signing paths to evaluate, and evidence to capture during Windows 11
 manual QA. This does not verify actual SmartScreen behavior for this app's NSIS
 artifact.
+
+Windows preview support documentation on 2026-06-14:
+`docs/support/windows-preview-support.md` now documents checksum verification,
+expected NSIS install path, unsigned-preview warnings, diagnostics expectations,
+and retained user-data policy. Actual Windows uninstall cleanup remains a
+Windows 11 manual QA gate.
 
 Implementation tasks:
 

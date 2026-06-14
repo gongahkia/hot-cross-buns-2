@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkGitHubReleaseForUpdates,
   linuxReleaseAssetPreferences,
-  macReleaseAssetPreferences
+  macReleaseAssetPreferences,
+  windowsReleaseAssetPreferences
 } from "./githubReleaseUpdates";
 
 afterEach(() => {
@@ -17,6 +18,10 @@ describe("GitHub release update checks", () => {
       name: "5.1.0",
       assets: [
         asset("Hot-Cross-Buns-2-5.1.0.dmg", "https://example.test/Hot-Cross-Buns-2-5.1.0.dmg"),
+        asset(
+          "Hot-Cross-Buns-2-5.1.0-linux-arm64.AppImage",
+          "https://example.test/Hot-Cross-Buns-2-5.1.0-linux-arm64.AppImage"
+        ),
         asset(
           "Hot-Cross-Buns-2-5.1.0-linux-x86_64.AppImage",
           "https://example.test/Hot-Cross-Buns-2-5.1.0-linux-x86_64.AppImage"
@@ -42,6 +47,57 @@ describe("GitHub release update checks", () => {
         })
       })
     );
+  });
+
+  it("prefers Windows x64 NSIS installers for Windows update checks", async () => {
+    stubLatestRelease({
+      tag_name: "v5.1.0",
+      html_url: "https://github.com/gongahkia/hot-cross-buns-2/releases/tag/v5.1.0",
+      name: "5.1.0",
+      assets: [
+        asset(
+          "Hot-Cross-Buns-2-5.1.0-windows-arm64.exe",
+          "https://example.test/Hot-Cross-Buns-2-5.1.0-windows-arm64.exe"
+        ),
+        asset("Hot-Cross-Buns-2-windows.exe", "https://example.test/Hot-Cross-Buns-2-windows.exe"),
+        asset(
+          "Hot-Cross-Buns-2-5.1.0-windows-x64.exe",
+          "https://example.test/Hot-Cross-Buns-2-5.1.0-windows-x64.exe"
+        )
+      ]
+    });
+
+    await expect(checkGitHubReleaseForUpdates({
+      appVersion: "5.0.0",
+      assetPreferences: windowsReleaseAssetPreferences,
+      userAgentVersion: "5.0.0"
+    })).resolves.toMatchObject({
+      downloadUrl: "https://example.test/Hot-Cross-Buns-2-5.1.0-windows-x64.exe",
+      latestVersion: "5.1.0",
+      ok: true,
+      updateAvailable: true
+    });
+  });
+
+  it("falls back to stable Windows EXE aliases when no x64 installer exists", async () => {
+    stubLatestRelease({
+      tag_name: "v5.1.0",
+      html_url: "https://github.com/gongahkia/hot-cross-buns-2/releases/tag/v5.1.0",
+      name: "5.1.0",
+      assets: [
+        asset("Hot-Cross-Buns-2-5.1.0.msi", "https://example.test/Hot-Cross-Buns-2-5.1.0.msi"),
+        asset("Hot-Cross-Buns-2-windows.exe", "https://example.test/Hot-Cross-Buns-2-windows.exe")
+      ]
+    });
+
+    await expect(checkGitHubReleaseForUpdates({
+      appVersion: "5.0.0",
+      assetPreferences: windowsReleaseAssetPreferences,
+      userAgentVersion: "5.0.0"
+    })).resolves.toMatchObject({
+      downloadUrl: "https://example.test/Hot-Cross-Buns-2-windows.exe",
+      updateAvailable: true
+    });
   });
 
   it("prefers macOS DMG assets before ZIP assets", async () => {
@@ -125,7 +181,7 @@ describe("GitHub release update checks", () => {
     });
 
     expect(result).toMatchObject({
-      message: expect.stringContaining("no Linux AppImage asset was found"),
+      message: expect.stringContaining("no Linux x64 AppImage or Linux AppImage asset was found"),
       releaseUrl: "https://github.com/gongahkia/hot-cross-buns-2/releases/tag/v5.1.0",
       updateAvailable: true
     });

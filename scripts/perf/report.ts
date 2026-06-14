@@ -83,6 +83,24 @@ export function sanitizePerformanceReport(report: PerfReport): PerfReport {
   return redactLogValue(report) as PerfReport;
 }
 
+export function requiredElectronLaunchFailure(report: PerfReport): string | null {
+  const launches = report.launches ?? [];
+
+  if (launches.length === 0) {
+    return "Required Electron launch timings were not captured.";
+  }
+
+  const skippedLaunches = launches.filter((launch) => launch.status !== "collected" || !launch.timings);
+
+  if (skippedLaunches.length === 0) {
+    return null;
+  }
+
+  return `Required Electron launch timings were skipped for ${skippedLaunches
+    .map((launch) => `${launch.name}: ${launch.reason ?? "no timing data"}`)
+    .join("; ")}`;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;

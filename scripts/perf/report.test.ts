@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   renderPerformanceMarkdown,
+  requiredElectronLaunchFailure,
   sanitizePerformanceReport,
   type PerfReport
 } from "./report";
@@ -54,5 +55,50 @@ describe("performance report redaction", () => {
     expect(markdown).not.toMatch(
       /fake-access-token|fake-refresh-token|fake-client-secret|fake-mcp-token|\/Users\/example/
     );
+  });
+});
+
+describe("requiredElectronLaunchFailure", () => {
+  it("passes when all Electron launch timings are collected", () => {
+    expect(requiredElectronLaunchFailure({
+      ...reportWithSecrets,
+      launches: [
+        {
+          name: "cold",
+          status: "collected",
+          timings: { shellVisibleMs: 100 }
+        },
+        {
+          name: "warm",
+          status: "collected",
+          timings: { shellVisibleMs: 80 }
+        }
+      ]
+    })).toBeNull();
+  });
+
+  it("reports skipped Electron launch timings", () => {
+    expect(requiredElectronLaunchFailure({
+      ...reportWithSecrets,
+      launches: [
+        {
+          name: "cold",
+          status: "skipped",
+          reason: "App shell timeout."
+        },
+        {
+          name: "warm",
+          status: "collected",
+          timings: { shellVisibleMs: 80 }
+        }
+      ]
+    })).toContain("cold: App shell timeout.");
+  });
+
+  it("reports missing Electron launch timings", () => {
+    expect(requiredElectronLaunchFailure({
+      ...reportWithSecrets,
+      launches: []
+    })).toBe("Required Electron launch timings were not captured.");
   });
 });

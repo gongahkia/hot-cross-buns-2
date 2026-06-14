@@ -182,7 +182,8 @@ Electron's built-in `autoUpdater` does not support Linux. electron-builder's `el
 Current implementation:
 
 - Linux uses the shared GitHub Releases check-for-new-version flow
-- Linux release asset selection prefers `.AppImage` assets
+- Linux release asset selection prefers x64 `.AppImage` assets before generic
+  AppImage fallbacks
 - no Linux update is downloaded or installed automatically
 - in-place AppImage/DEB/RPM updates remain explicitly unclaimed
 
