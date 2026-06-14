@@ -47,6 +47,7 @@ export async function smokeWindowsNsisArtifact(options: SmokeOptions = {}): Prom
   ]);
   const manifestPath = join(releaseDir, checksumManifestName);
   const manifestEntries = parseChecksumManifest(await readFile(manifestPath, "utf8"));
+  const artifactHashes = new Map<string, string>();
   const messages: string[] = [];
 
   for (const artifact of requiredArtifacts) {
@@ -79,8 +80,12 @@ export async function smokeWindowsNsisArtifact(options: SmokeOptions = {}): Prom
       throw new Error(`${basename(sidecarPath)} does not match ${basename(artifact)}`);
     }
 
+    artifactHashes.set(resolve(artifact), hash);
     messages.push(`${basename(artifact)} exists, is ${stats.size} bytes, and has matching SHA-256 metadata.`);
   }
+
+  verifyStableAliasMatchesVersionedArtifact(artifactHashes, versionedInstaller, join(releaseDir, stableInstallerName));
+  verifyStableAliasMatchesVersionedArtifact(artifactHashes, versionedInstaller, join(releaseDir, stableX64InstallerName));
 
   return messages;
 }
@@ -131,6 +136,15 @@ function parseChecksumLine(line: string, sourceName: string): ChecksumEntry {
     hash: match[1].toLowerCase(),
     path: match[2].trim()
   };
+}
+
+function verifyStableAliasMatchesVersionedArtifact(hashes: Map<string, string>, versionedArtifact: string, aliasArtifact: string): void {
+  const versionedHash = hashes.get(resolve(versionedArtifact));
+  const aliasHash = hashes.get(resolve(aliasArtifact));
+
+  if (!versionedHash || !aliasHash || versionedHash !== aliasHash) {
+    throw new Error(`${basename(aliasArtifact)} does not match ${basename(versionedArtifact)}; regenerate Windows stable aliases.`);
+  }
 }
 
 function uniquePaths(paths: string[]): string[] {

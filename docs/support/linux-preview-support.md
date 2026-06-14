@@ -30,6 +30,10 @@ complete.
 Use a terminal launch for first-run support reports so startup errors are
 visible.
 
+Ubuntu hosts must have a FUSE 2 compatibility package installed to run
+AppImages. On Ubuntu 24.04 use `libfuse2t64`; on Ubuntu 22.04 use `libfuse2`.
+Install it alongside the existing FUSE setup.
+
 ## Known Preview Limits
 
 - AppImage is the only Linux package format.
@@ -81,7 +85,7 @@ Electron stores app data using the platform app paths exposed in Diagnostics.
 For a clean smoke run, launch with an isolated user data directory:
 
 ```sh
-HCB_USER_DATA_DIR="$(mktemp -d)" ./Hot-Cross-Buns-2-<version>-linux-x86_64.AppImage
+HCB_ALLOW_PACKAGED_USER_DATA_DIR=1 HCB_USER_DATA_DIR="$(mktemp -d)" ./Hot-Cross-Buns-2-<version>-linux-x86_64.AppImage
 ```
 
 Before deleting data directories, export any local data you need to keep and

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,6 +59,7 @@ export async function smokeLinuxAppImageArtifact(options: SmokeOptions = {}): Pr
   ]);
   const manifestPath = join(releaseDir, checksumManifestName);
   const manifestEntries = parseChecksumManifest(await readFile(manifestPath, "utf8"));
+  const artifactHashes = new Map<string, string>();
   const messages: string[] = [];
 
   for (const artifact of requiredArtifacts) {
@@ -95,8 +96,12 @@ export async function smokeLinuxAppImageArtifact(options: SmokeOptions = {}): Pr
       throw new Error(`${basename(sidecarPath)} does not match ${basename(artifact)}`);
     }
 
+    artifactHashes.set(resolve(artifact), hash);
     messages.push(`${basename(artifact)} exists, is executable, is ${artifactStats.size} bytes, and has matching SHA-256 metadata.`);
   }
+
+  verifyStableAliasMatchesVersionedArtifact(artifactHashes, versionedAppImage, join(releaseDir, stableAppImageName));
+  verifyStableAliasMatchesVersionedArtifact(artifactHashes, versionedAppImage, join(releaseDir, stableX64AppImageName));
 
   const workDir = await mkdtemp(join(tmpdir(), "hcb2-appimage-smoke-"));
 
@@ -216,11 +221,15 @@ async function verifyDesktopEntry(workDir: string): Promise<void> {
 
 async function launchAppImage(artifact: string, workDir: string): Promise<void> {
   const userDataDir = join(workDir, "user-data");
+
+  await mkdir(userDataDir, { recursive: true });
+
   const child = spawn(artifact, [], {
     cwd: workDir,
     detached: true,
     env: {
       ...process.env,
+      HCB_ALLOW_PACKAGED_USER_DATA_DIR: "1",
       HCB_USER_DATA_DIR: userDataDir,
       ELECTRON_ENABLE_LOGGING: "1"
     },
@@ -234,6 +243,19 @@ async function launchAppImage(artifact: string, workDir: string): Promise<void> 
   await new Promise<void>((resolveLaunch, rejectLaunch) => {
     let forceKillTimeout: NodeJS.Timeout | null = null;
     let settled = false;
+    let stopping = false;
+    const reject = (error: Error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout);
+      }
+      rejectLaunch(error);
+    };
     const settle = () => {
       if (settled) {
         return;
@@ -247,6 +269,7 @@ async function launchAppImage(artifact: string, workDir: string): Promise<void> 
       resolveLaunch();
     };
     const stopApp = () => {
+      stopping = true;
       signalAppImage(child.pid, "SIGTERM");
       forceKillTimeout = setTimeout(() => {
         signalAppImage(child.pid, "SIGKILL");
@@ -258,19 +281,43 @@ async function launchAppImage(artifact: string, workDir: string): Promise<void> 
     const timeout = setTimeout(stopApp, launchTimeoutMs);
 
     child.on("error", (error) => {
-      clearTimeout(timeout);
-      if (forceKillTimeout) {
-        clearTimeout(forceKillTimeout);
-      }
-      rejectLaunch(error);
+      reject(error);
     });
-    child.on("close", settle);
+    child.on("close", (code, signal) => {
+      if (!stopping && code !== 0) {
+        reject(new Error(
+          `AppImage launch exited with ${code ?? signal ?? "unknown"} before smoke timeout.${launchOutputSuffix(output)}`
+        ));
+        return;
+      }
+
+      settle();
+    });
   });
 
   const logs = Buffer.concat(output).toString("utf8");
 
   if (!logs.trim()) {
     throw new Error("AppImage launch produced no startup logs.");
+  }
+}
+
+function launchOutputSuffix(output: Buffer[]): string {
+  const logs = Buffer.concat(output).toString("utf8").trim();
+
+  if (!logs) {
+    return "";
+  }
+
+  return ` Output: ${logs.slice(0, 1_000)}`;
+}
+
+function verifyStableAliasMatchesVersionedArtifact(hashes: Map<string, string>, versionedArtifact: string, aliasArtifact: string): void {
+  const versionedHash = hashes.get(resolve(versionedArtifact));
+  const aliasHash = hashes.get(resolve(aliasArtifact));
+
+  if (!versionedHash || !aliasHash || versionedHash !== aliasHash) {
+    throw new Error(`${basename(aliasArtifact)} does not match ${basename(versionedArtifact)}; regenerate Linux stable aliases.`);
   }
 }
 

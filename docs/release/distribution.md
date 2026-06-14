@@ -170,7 +170,8 @@ The manual GitHub Actions gate is `.github/workflows/linux-preview.yml`. Run
 is on a branch GitHub can see. The workflow builds the AppImage, verifies
 checksums, runs AppImage metadata and launch smoke under Xvfb, runs Electron
 smoke, runs performance smoke, and uploads preview artifacts for review. It does
-not replace Ubuntu GNOME desktop manual QA.
+not replace Ubuntu GNOME desktop manual QA. The workflow installs the Ubuntu
+FUSE 2 compatibility package needed for AppImage launch smoke.
 
 That command runs:
 
@@ -214,8 +215,8 @@ The smoke script verifies that the versioned Linux AppImage, stable Linux alias,
 stable Linux x64 alias, checksum manifest, and per-artifact `.sha256` sidecars
 agree. It also verifies that the AppImage is executable, can be extracted with
 `--appimage-extract`, contains expected desktop metadata, and does not register
-`hotcrossbuns://`. To also launch the AppImage with isolated user data and
-require startup logs, run:
+`hotcrossbuns://`. To also launch the AppImage with the gated packaged
+`HCB_USER_DATA_DIR` override and require startup logs, run:
 
 ```sh
 HCB_APPIMAGE_SMOKE_LAUNCH=1 pnpm release:smoke-appimage
@@ -518,6 +519,8 @@ Required before Windows preview:
 - code signing plan and SmartScreen expectations documented
 
 Windows preview may be unsigned only for local/internal testing. Public Windows distribution requires an explicit signing and SmartScreen plan.
+The unsigned-preview policy and SmartScreen evidence checklist live in
+[Windows Signing And SmartScreen](windows-signing-smartscreen.md).
 
 See [Windows Port](../ports/windows-port.md).
 

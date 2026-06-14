@@ -31,8 +31,8 @@ describe("Windows NSIS smoke test", () => {
   it("verifies versioned and stable installer aliases with checksums", async () => {
     const releaseDir = await createReleaseDir();
     const versionedHash = await writeArtifact(releaseDir, versionedInstaller, "versioned installer");
-    const stableHash = await writeArtifact(releaseDir, stableInstaller, "stable installer");
-    const stableX64Hash = await writeArtifact(releaseDir, stableX64Installer, "stable x64 installer");
+    const stableHash = await writeArtifact(releaseDir, stableInstaller, "versioned installer");
+    const stableX64Hash = await writeArtifact(releaseDir, stableX64Installer, "versioned installer");
 
     await writeFile(
       join(releaseDir, "SHASUMS256.txt"),
@@ -49,8 +49,8 @@ describe("Windows NSIS smoke test", () => {
   it("fails when SHASUMS256.txt does not match an installer", async () => {
     const releaseDir = await createReleaseDir();
     const versionedHash = await writeArtifact(releaseDir, versionedInstaller, "versioned installer");
-    const stableHash = await writeArtifact(releaseDir, stableInstaller, "stable installer");
-    await writeArtifact(releaseDir, stableX64Installer, "stable x64 installer");
+    const stableHash = await writeArtifact(releaseDir, stableInstaller, "versioned installer");
+    await writeArtifact(releaseDir, stableX64Installer, "versioned installer");
 
     await writeFile(
       join(releaseDir, "SHASUMS256.txt"),
@@ -63,6 +63,26 @@ describe("Windows NSIS smoke test", () => {
 
     await expect(smokeWindowsNsisArtifact({ releaseDir, minimumBytes: 1 })).rejects.toThrow(
       "SHASUMS256.txt hash does not match Hot-Cross-Buns-2-windows-x64.exe"
+    );
+  });
+
+  it("fails when a stable installer alias does not match the versioned artifact", async () => {
+    const releaseDir = await createReleaseDir();
+    const versionedHash = await writeArtifact(releaseDir, versionedInstaller, "versioned installer");
+    const stableHash = await writeArtifact(releaseDir, stableInstaller, "wrong alias");
+    const stableX64Hash = await writeArtifact(releaseDir, stableX64Installer, "versioned installer");
+
+    await writeFile(
+      join(releaseDir, "SHASUMS256.txt"),
+      [
+        `${versionedHash}  ${versionedInstaller}`,
+        `${stableHash}  ${stableInstaller}`,
+        `${stableX64Hash}  ${stableX64Installer}`
+      ].join("\n") + "\n"
+    );
+
+    await expect(smokeWindowsNsisArtifact({ releaseDir, minimumBytes: 1 })).rejects.toThrow(
+      "Hot-Cross-Buns-2-windows.exe does not match Hot-Cross-Buns-2-5.0.0-windows-x64.exe"
     );
   });
 });

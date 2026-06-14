@@ -13,8 +13,8 @@ technical preview release.
   and compare with `release\SHASUMS256.txt`.
 - Run `pnpm release:smoke-nsis`.
 - Install with the NSIS installer.
-- Confirm SmartScreen/Defender behavior is documented for unsigned preview
-  artifacts.
+- Record SmartScreen/Defender/browser warning text, if any, using
+  [Windows Signing And SmartScreen](../release/windows-signing-smartscreen.md).
 
 ## Launch And Identity
 

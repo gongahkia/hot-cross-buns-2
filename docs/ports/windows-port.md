@@ -100,6 +100,9 @@ Microsoft's current guidance:
 
 Windows preview can start unsigned only for local/internal testing, with explicit documentation. Public Windows distribution requires a signing plan.
 
+Expected unsigned-preview behavior, signing options, and QA evidence to capture
+are documented in [Windows Signing And SmartScreen](../release/windows-signing-smartscreen.md).
+
 Signing options to evaluate:
 
 - Microsoft Store MSIX path

@@ -22,6 +22,7 @@ import {
   type SyncStatusTheme
 } from "./syncStatusOverlay";
 import { markStartupTiming } from "./startupTiming";
+import { resolveUserDataDirectoryOverride } from "./userDataOverride";
 
 let mainWindow: BrowserWindow | null = null;
 let services: ServiceContainer | null = null;
@@ -37,8 +38,10 @@ let startupSyncStarted = false;
 let syncStatusWindow: BrowserWindow | null = null;
 const macAppDisplayName = "Hot Cross Buns 2";
 
-if (process.env.HCB_USER_DATA_DIR && !app.isPackaged) {
-  app.setPath("userData", process.env.HCB_USER_DATA_DIR);
+const userDataDirectoryOverride = resolveUserDataDirectoryOverride(process.env, app.isPackaged);
+
+if (userDataDirectoryOverride) {
+  app.setPath("userData", userDataDirectoryOverride);
 }
 
 if (process.platform === "linux") {

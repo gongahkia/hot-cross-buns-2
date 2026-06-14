@@ -10,7 +10,8 @@ Supported preview target:
 
 - Ubuntu LTS on GNOME.
 - AppImage package.
-- Fresh app data path via `HCB_USER_DATA_DIR` for at least one pass.
+- Fresh app data path via `HCB_ALLOW_PACKAGED_USER_DATA_DIR=1` and
+  `HCB_USER_DATA_DIR=<absolute temp dir>` for at least one packaged-app pass.
 
 Secondary checks:
 
@@ -39,10 +40,13 @@ Confirm the current release candidate already passed:
 ## AppImage Launch
 
 - Verify the published AppImage checksum against `SHASUMS256.txt`.
+- Confirm the host has the FUSE 2 compatibility package required for AppImages:
+  `libfuse2t64` on Ubuntu 24.04 or `libfuse2` on Ubuntu 22.04.
 - Run `chmod +x` on the AppImage.
 - Launch from a terminal and record stdout/stderr.
 - Launch from the file manager.
-- Launch once with `HCB_USER_DATA_DIR` set to an empty temporary directory.
+- Launch once with `HCB_ALLOW_PACKAGED_USER_DATA_DIR=1` and
+  `HCB_USER_DATA_DIR` set to an empty absolute temporary directory.
 - Confirm the main window opens, closes, hides/shows, and quits cleanly.
 - Confirm icon and taskbar/window grouping behavior.
 - Open Settings and Diagnostics.

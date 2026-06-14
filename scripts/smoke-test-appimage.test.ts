@@ -17,7 +17,7 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function appImageScript(desktopExtra = ""): string {
+function appImageScript(desktopExtra = "", launchBody = 'echo "Hot Cross Buns 2 startup"'): string {
   return `#!/bin/sh
 if [ "$1" = "--appimage-extract" ]; then
   mkdir -p squashfs-root
@@ -31,7 +31,7 @@ StartupWMClass=hot-cross-buns-2
 ${desktopExtra}EOF
   exit 0
 fi
-echo "Hot Cross Buns 2 startup"
+${launchBody}
 `;
 }
 
@@ -46,14 +46,15 @@ async function writeArtifact(releaseDir: string, name: string, content: string):
   return hash;
 }
 
-async function writeValidArtifacts(releaseDir: string, desktopExtra = ""): Promise<{
+async function writeValidArtifacts(releaseDir: string, desktopExtra = "", launchBody?: string): Promise<{
   stableHash: string;
   stableX64Hash: string;
   versionedHash: string;
 }> {
-  const versionedHash = await writeArtifact(releaseDir, versionedAppImage, appImageScript(desktopExtra));
-  const stableHash = await writeArtifact(releaseDir, stableAppImage, appImageScript());
-  const stableX64Hash = await writeArtifact(releaseDir, stableX64AppImage, appImageScript());
+  const content = appImageScript(desktopExtra, launchBody);
+  const versionedHash = await writeArtifact(releaseDir, versionedAppImage, content);
+  const stableHash = await writeArtifact(releaseDir, stableAppImage, content);
+  const stableX64Hash = await writeArtifact(releaseDir, stableX64AppImage, content);
 
   await writeFile(
     join(releaseDir, "SHASUMS256.txt"),
@@ -94,6 +95,26 @@ describe("Linux AppImage smoke test", () => {
     );
   });
 
+  it("fails when a stable AppImage alias does not match the versioned artifact", async () => {
+    const releaseDir = await createReleaseDir();
+    const versionedHash = await writeArtifact(releaseDir, versionedAppImage, appImageScript());
+    const stableHash = await writeArtifact(releaseDir, stableAppImage, appImageScript("", 'echo "wrong alias"'));
+    const stableX64Hash = await writeArtifact(releaseDir, stableX64AppImage, appImageScript());
+
+    await writeFile(
+      join(releaseDir, "SHASUMS256.txt"),
+      [
+        `${versionedHash}  ${versionedAppImage}`,
+        `${stableHash}  ${stableAppImage}`,
+        `${stableX64Hash}  ${stableX64AppImage}`
+      ].join("\n") + "\n"
+    );
+
+    await expect(smokeLinuxAppImageArtifact({ releaseDir, minimumBytes: 1 })).rejects.toThrow(
+      "Hot-Cross-Buns-2-linux.AppImage does not match Hot-Cross-Buns-2-5.0.0-linux-x86_64.AppImage"
+    );
+  });
+
   it("fails if AppImage metadata registers the unsupported Linux protocol", async () => {
     const releaseDir = await createReleaseDir();
 
@@ -101,6 +122,37 @@ describe("Linux AppImage smoke test", () => {
 
     await expect(smokeLinuxAppImageArtifact({ releaseDir, minimumBytes: 1 })).rejects.toThrow(
       "AppImage desktop metadata must not register hotcrossbuns://"
+    );
+  });
+
+  it("launches with the packaged user-data override gate enabled", async () => {
+    const releaseDir = await createReleaseDir();
+
+    await writeValidArtifacts(releaseDir, "", `if [ "$HCB_ALLOW_PACKAGED_USER_DATA_DIR" != "1" ]; then
+  echo "missing packaged override flag" >&2
+  exit 20
+fi
+if [ ! -d "$HCB_USER_DATA_DIR" ]; then
+  echo "missing user data dir" >&2
+  exit 21
+fi
+echo "Hot Cross Buns 2 startup"`);
+
+    await expect(smokeLinuxAppImageArtifact({ launch: true, minimumBytes: 1, releaseDir })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(`${versionedAppImage} exists`)
+      ])
+    );
+  });
+
+  it("reports launch stderr when the AppImage exits early", async () => {
+    const releaseDir = await createReleaseDir();
+
+    await writeValidArtifacts(releaseDir, "", `echo "FUSE missing" >&2
+exit 2`);
+
+    await expect(smokeLinuxAppImageArtifact({ launch: true, minimumBytes: 1, releaseDir })).rejects.toThrow(
+      "Output: FUSE missing"
     );
   });
 });

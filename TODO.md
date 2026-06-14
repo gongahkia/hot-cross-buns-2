@@ -741,7 +741,8 @@ Required manual Linux checks:
 
 - Ubuntu LTS GNOME AppImage launch from terminal.
 - Ubuntu LTS GNOME AppImage launch from file manager.
-- AppImage launched with isolated `HCB_USER_DATA_DIR`.
+- AppImage launched with isolated `HCB_ALLOW_PACKAGED_USER_DATA_DIR=1` and
+  `HCB_USER_DATA_DIR`.
 - App icon and taskbar grouping.
 - Window open, close, hide/show, and quit.
 - OAuth browser round trip.
@@ -864,8 +865,9 @@ POSIX inline environment assignment syntax.
 Windows artifact smoke hardening on 2026-06-14: `pnpm release:smoke-nsis`
 now verifies the versioned Windows x64 installer, stable Windows aliases,
 `SHASUMS256.txt`, and per-artifact `.sha256` sidecars agree before manual
-installed-app QA starts. The GitHub Actions workflow also fails on a stable
-installer checksum mismatch instead of only printing hashes.
+installed-app QA starts, and stable aliases must byte-match the versioned
+installer. The GitHub Actions workflow also fails on a stable installer checksum
+mismatch instead of only printing hashes.
 
 Windows identity hardening on 2026-06-14: the app now applies the stable
 AppUserModelID synchronously during main-process startup on `win32`, before
@@ -900,7 +902,22 @@ Linux AppImage smoke hardening on 2026-06-14: `pnpm release:smoke-appimage`
 now verifies the versioned AppImage, stable Linux aliases, executable bits,
 `SHASUMS256.txt`, and per-artifact `.sha256` sidecars before metadata
 extraction or optional launch smoke. The Linux alias helper also preserves the
-versioned AppImage executable mode on stable aliases.
+versioned AppImage executable mode on stable aliases. Packaged QA data isolation
+now uses a fail-closed `HCB_ALLOW_PACKAGED_USER_DATA_DIR=1` gate before honoring
+`HCB_USER_DATA_DIR`. The Linux preview workflow now installs the Ubuntu FUSE 2
+compatibility package needed for AppImage launch smoke, and early AppImage launch
+failures include captured stdout/stderr.
+
+Stable artifact alias hardening on 2026-06-14: Linux AppImage and Windows NSIS
+smoke tests now reject stable aliases that have internally valid checksums but do
+not byte-match the selected versioned release artifact.
+
+Windows SmartScreen documentation on 2026-06-14:
+`docs/release/windows-signing-smartscreen.md` now documents the unsigned
+internal-preview policy, expected Microsoft Defender SmartScreen/browser warning
+classes, signing paths to evaluate, and evidence to capture during Windows 11
+manual QA. This does not verify actual SmartScreen behavior for this app's NSIS
+artifact.
 
 Implementation tasks:
 
@@ -993,8 +1010,9 @@ Linux remaining work:
       assumptions are required.
 - [ ] Verify the app icon, window title, and taskbar/window grouping on Ubuntu
       GNOME.
-- [ ] Run the app with an isolated `HCB_USER_DATA_DIR` and confirm no real user
-      data is touched during QA.
+- [ ] Run the app with
+      `HCB_ALLOW_PACKAGED_USER_DATA_DIR=1 HCB_USER_DATA_DIR=<absolute temp dir>`
+      and confirm no real user data is touched during QA.
 - [ ] Complete Google OAuth browser round trip on Ubuntu GNOME.
 - [ ] Validate Secret Service states on Ubuntu GNOME:
       ready/unlocked, locked, and missing/unavailable. Confirm there is no
@@ -1064,8 +1082,9 @@ Windows remaining work:
 - [ ] Verify Settings check-for-updates prefers Windows `.exe` assets.
 - [ ] Uninstall the app and document installer cleanup plus retained user-data
       behavior.
-- [ ] Document SmartScreen behavior for unsigned preview artifacts. Do not make
-      a public Windows support claim without an explicit code-signing plan.
+- [x] Document expected SmartScreen/signing behavior for unsigned preview
+      artifacts. Do not make a public Windows support claim without an explicit
+      code-signing plan.
 - [ ] Update `docs/release/notes/v5.0.0.md`,
       `docs/ports/windows-port.md`, `docs/release/distribution.md`, and
       `docs/testing/manual-windows-native-shell.md` with actual Windows runner
