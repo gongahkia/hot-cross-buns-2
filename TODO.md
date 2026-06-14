@@ -939,6 +939,11 @@ Linux/Windows update asset preference hardening on 2026-06-14: mocked GitHub
 Release metadata tests now cover Linux x64 AppImage preference and Windows x64
 NSIS `.exe` preference before generic installer fallbacks. Live Settings
 check-for-updates validation still requires published or draft release assets.
+Live release asset check on 2026-06-14: published `v5.0.0` contains macOS
+assets plus `SHASUMS256.txt` only, so Linux AppImage and Windows `.exe`
+Settings update-check verification remains blocked until a draft or published
+release contains those platform artifacts. No Linux/Windows upload should happen
+before the manual target-OS QA gates pass.
 
 Windows SmartScreen documentation on 2026-06-14:
 `docs/release/windows-signing-smartscreen.md` now documents the unsigned
@@ -952,6 +957,15 @@ Windows preview support documentation on 2026-06-14:
 expected NSIS install path, unsigned-preview warnings, diagnostics expectations,
 and retained user-data policy. Actual Windows uninstall cleanup remains a
 Windows 11 manual QA gate.
+
+Release documentation refresh on 2026-06-14: `docs/release/notes/v5.0.0.md`,
+`docs/release/distribution.md`, `docs/ports/windows-port.md`,
+`docs/support/windows-preview-support.md`,
+`docs/testing/manual-windows-native-shell.md`, and `docs/ports/linux-port.md`
+now distinguish Linux/Windows automated CI passes from target-desktop manual QA
+blockers. They record Linux run `27487088365`, Windows run `27487088467`, and
+keep publish/upload guidance gated on Ubuntu GNOME and Windows 11 installed-app
+manual QA.
 
 Implementation tasks:
 

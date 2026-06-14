@@ -175,7 +175,8 @@ FUSE 2 compatibility package needed for AppImage launch smoke. The AppImage
 launch smoke passes `--no-sandbox` through an explicit CI-only environment gate
 because the hosted runner cannot set the extracted AppImage `chrome-sandbox`
 helper to root-owned mode `4755`; do not treat that CI flag as user install
-guidance.
+guidance. Run `27487088365` passed this gate on 2026-06-14 at commit
+`01b6d50`.
 
 That command runs:
 
@@ -248,8 +249,9 @@ pnpm release:win:preview
 The manual GitHub Actions gate is `.github/workflows/windows-preview.yml`. It
 pins `windows-2022` so Node 20 native-module installs use the Visual Studio 2022
 toolchain instead of the Windows Server 2025 / Visual Studio 2026 image currently
-behind `windows-latest`. Run `Windows Preview Validation` from GitHub Actions
-for the first Windows-host package and runtime pass.
+behind `windows-latest`. Run `27487088467` passed this gate on 2026-06-14 at
+commit `01b6d50`; it completed packaging, installer smoke, PowerShell checksum
+verification, Electron smoke, performance smoke, and artifact upload.
 
 Linux cross-packaging for the Windows NSIS target requires Wine. A Linux host
 without Wine can still complete the release build and `win-unpacked` step, but
@@ -510,11 +512,16 @@ See [Linux Port](../ports/linux-port.md).
 
 ## Windows Technical Preview Gates
 
-Required before Windows preview:
+Automated Windows preview gates passed on 2026-06-14:
 
-- Windows host or CI run of `pnpm release:win:preview`
+- Windows CI run of `pnpm release:win:preview`
 - Manual run of the `Windows Preview Validation` GitHub Actions workflow
 - NSIS installer smoke with `pnpm release:smoke-nsis`
+- PowerShell checksum verification with `Get-FileHash`
+- Electron smoke and performance smoke
+
+Still required before publishing a Windows preview:
+
 - installed app launch from installer, Start Menu, and desktop shortcut if
   created
 - AppUserModelID and taskbar grouping verified

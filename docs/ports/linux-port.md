@@ -240,14 +240,12 @@ Before Linux technical preview:
 - launch from desktop entry if integrated
 - app icon appears correctly
 - window/taskbar grouping is correct
-- tray behavior on GNOME
-- tray behavior on KDE
-- global shortcut on X11
-- global shortcut on Wayland, if portal support is available
-- notification support detected
+- Settings and Diagnostics report tray/status-area as unsupported
+- Settings and Diagnostics report global shortcuts as unsupported
+- Settings and Diagnostics report notifications as unsupported
 - OAuth browser round trip
 - MCP localhost smoke test
-- custom protocol smoke test
+- Settings and Diagnostics report `hotcrossbuns://` registration as unsupported
 - package uninstall leaves user data policy documented
 
 ## Known Risks
